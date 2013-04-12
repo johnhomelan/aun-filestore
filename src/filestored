@@ -1,0 +1,39 @@
+#!/usr/bin/php
+<?
+
+include_once('include/system.inc.php');
+
+class filestored extends consoleapp {
+
+
+	function main()
+	{
+		//Main Loop
+		$oAunPacket = new AunPacket();
+		$oAunPacket->decode($sUdpData);
+		$sAck = $oAunPacket->buildAck();
+		if(strlen($sAck)>0){
+			$this->sendAck($sAck);
+		}
+		$sPort = $oAunPacket->getPortName();
+		switch($sPort){
+			case 'FileServerCommand':
+				$this->fileServerCommand($oAunPacket);
+				break;
+			default:
+				logger::log("Recived packet on un-handle port ".$sPort,LOG_DEBUG);
+				break;
+		}
+
+	}
+
+	public function fileServerCommand($oAunPacket)
+	{
+		$oFsRequest = new fspacket();
+		$oFsRequest->decode($oAunPacket->getData());
+		$this->oFileserver->processRequest(&$oFsRequest);
+	}
+}
+
+$oApp = new filestored();
+?>

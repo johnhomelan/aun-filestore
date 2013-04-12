@@ -5,10 +5,90 @@ include_once('include/system.inc.php');
 
 class filestored extends consoleapp {
 
+	protected $oAunSocket = NULL;
+	
+	protected $aAllReadableSockets = array();
 
 	function main()
 	{
+		$aOpts = getopt("dp:");
+		$bDaemonize = FALSE;
+		$sPidFile = "";
+
+		foreach($aOpts AS $sOpt => $sValue){
+			switch($sOpt){
+				case "d":
+					$bDaemonize = TRUE;
+					break;
+				case "p":
+					$sPidFile = $sValue;
+					break;
+			}
+		}
+
+		if($bDaemonize){
+			$this->daemonize($sPidFile);
+		}
+
+		$this->loop();
+	}
+
+	function daemonize($sPidFile)
+	{
+		$iPid=pcntl_fork();
+		if($iPid != 0){
+			//We are the parent 
+			if($sPidFile!=""){
+				//Write the child pid to the pid file
+				file_put_contents($sPidFile,$iPid);
+			}
+			exit(0);
+		}else{
+			//We are the child close stdin,stdout,stderr
+			fclose(STDIN);
+			fclose(STDOUT);
+			fclose(STDERR);
+		}
+	}
+
+	function bindSockets()
+	{
+		$this->oAunSocket = stream_socket_server('udp://'.config::getValue('aun_listen_address').':'.config::getValue('aun_listen_port'),$iErrno,$sErrstr,STREAM_SERVER_BIND);
+		if($this->oAunSocket===FALSE){
+			throw new Exception("Un-able to bind AUN socket (".$sErrstr.")",$iErrno);
+		}
+		$this->aAllReadableSockets=array($this->oAunSocket);
+	}
+
+	function loop()
+	{
+
+		$sErrstr=NULL;
+		$iErrno=NULL;
+		$bLoop=TRUE;
+		$aWriteSet=NULL;
+		$aAllExpSockets=array(NULL);
+
 		//Main Loop
+		while($bLoop){
+			$aReadSet=$this->aAllReadableSockets;
+			$aExpSet=$aAllExpSockets;
+			$iSockets = @stream_select($aReadSet,$aWriteSet,$aExpSet,NULL);
+			if($iSockets!==FALSE){
+				//Step through each socket we need to read from
+				foreach($aReadSet as  $iReadSocket){
+					if($iReadSocket == $this->oAunSocket){
+						$this->processAunPacket($this->oAunSocket);
+					}
+				}
+			}
+		}
+
+
+	}
+	
+	public function processAunPacket($oSocket)
+	{
 		$oAunPacket = new AunPacket();
 		$oAunPacket->decode($sUdpData);
 		$sAck = $oAunPacket->buildAck();

@@ -3,13 +3,13 @@
  * This file contains the aunpacket class
  *
  * @author John Brown <john@home-lan.co.uk>
- * @package coreprotocol
+ * @package corenet
 */
 
 /** 
  * This class is used to repressent and process aun network packets
  *
- * @package coreprotocol
+ * @package corenet
 */
 
 class aunpacket {

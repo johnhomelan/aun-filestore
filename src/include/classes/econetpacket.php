@@ -3,13 +3,13 @@
  * This file contains the econetpacket class
  *
  * @author John Brown <john@home-lan.co.uk>
- * @package coreprotocol
+ * @package corenet
 */
 
 /** 
  * This class is used to represcent an econet packet
  *
- * @package coreprotocol
+ * @package corenet
 */
 class econetpacket {
 

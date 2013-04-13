@@ -78,6 +78,7 @@ class filestored extends consoleapp {
 				//Step through each socket we need to read from
 				foreach($aReadSet as  $iReadSocket){
 					if($iReadSocket == $this->oAunSocket){
+						//We've received an AUN packet process it 
 						$this->processAunPacket($this->oAunSocket);
 					}
 				}
@@ -87,18 +88,45 @@ class filestored extends consoleapp {
 
 	}
 	
+
+	/**
+	 * This method reads a aun packet sends any acks (if needed)
+	 * and passes the resulting econet packet to processEconetPacket
+	 *
+	 * @param int $oSocket The socket to read the aun packet from
+	*/
 	public function processAunPacket($oSocket)
 	{
+		//Read the UDP data
+		$sUdpData= stream_socket_recvfrom($oSocket,$iReadSize,0,$sHost);
+		
+
+		//Decode the AUN packet
 		$oAunPacket = new AunPacket();
+		$oAunPacket->setSourceIP($sHost);
+		$oAunPacket->setDestinationIP(config::getValue('local_ip'));
 		$oAunPacket->decode($sUdpData);
+		
+		//Send an ack for the AUN packet if needed
 		$sAck = $oAunPacket->buildAck();
 		if(strlen($sAck)>0){
-			$this->sendAck($sAck);
+			stream_socket_sendto($oSocket,$sAck,0,$sHost);
+			$this->sendUdp($sHost,$sAck);
 		}
-		$sPort = $oAunPacket->getPortName();
+	
+		//Build an econet packet from the AUN packet an pass it to be processed
+		$oEconetPacket = $oAunPacket->buildEconetPacket();
+		$this->processEconetPacket($oEconetPacket);
+
+	}
+
+	public function processEconetPacket($oEconetPacket)
+	{
+	
+		$sPort = $oEconetPacket->getPortName();
 		switch($sPort){
 			case 'FileServerCommand':
-				$this->fileServerCommand($oAunPacket);
+				$this->fileServerCommand($oEconetPacket);
 				break;
 			default:
 				logger::log("Recived packet on un-handle port ".$sPort,LOG_DEBUG);
@@ -107,11 +135,10 @@ class filestored extends consoleapp {
 
 	}
 
-	public function fileServerCommand($oAunPacket)
+	public function fileServerCommand($oEconetPacket)
 	{
-		$oFsRequest = new fspacket();
-		$oFsRequest->decode($oAunPacket->getData());
-		$this->oFileserver->processRequest(&$oFsRequest);
+		$oFsRequest = new fspacket($oEconetPacket);
+		$this->oFileserver->processRequest($oFsRequest);
 	}
 }
 

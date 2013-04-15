@@ -3,7 +3,7 @@
 
 include_once('include/system.inc.php');
 
-class filestored extends consoleapp {
+class filestored  {
 
 	protected $oAunSocket = NULL;
 	
@@ -29,7 +29,7 @@ class filestored extends consoleapp {
 		if($bDaemonize){
 			$this->daemonize($sPidFile);
 		}
-
+		$this->bindSockets();
 		$this->loop();
 	}
 
@@ -143,4 +143,5 @@ class filestored extends consoleapp {
 }
 
 $oApp = new filestored();
+$oApp->main();
 ?>

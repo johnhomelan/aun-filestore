@@ -1,6 +1,6 @@
 <?
 
-class securtiy {
+class security {
 
 	protected static $aSessions = array();
 
@@ -10,7 +10,7 @@ class securtiy {
 	 * It also calls the init method of each one
 	 *
 	**/
-	protected function _getAuthPlugins()
+	protected static function _getAuthPlugins()
 	{
 		$aReturn = array();
 		$aAuthPlugis = explode(',',config::getValue('security_auth_plugins'));
@@ -43,10 +43,10 @@ class securtiy {
 		$aPlugins = security::_getAuthPlugins();
 		foreach($aPlugins as $sPlugin){
 			try {
-				if($sPlugin::login($iNetwork,$iStation,$sUser,$sPass)){
+				if($sPlugin::login($sUser,$sPass,$iNetwork,$iStation)){
 					logger::log("Security: Login for ".$sUser." using authplugin ".$sPlugin,LOG_INFO);
 					if(!array_key_exists($iNetwork,security::$aSessions)){
-						security::$aSessions[$iNetwork];
+						security::$aSessions[$iNetwork]=array();
 					}
 					security::$aSessions[$iNetwork][$iStation]=array('datetime'=>time(),'provider'=>$sPlugin,'user'=>$sPlugin::buildUserObject($sUser));
 					return TRUE;
@@ -62,14 +62,14 @@ class securtiy {
 
 	public static function getUser($iNetwork,$iStation)
 	{
-		if(array_key_exists($iNetwork,securtiy::$aSessions) AND array_key_exists($iStation,securtiy::$aSessions[$iNetwork])){
-			return securtiy::$aSessions[$iNetwork][$iStation]['user'];
+		if(array_key_exists($iNetwork,security::$aSessions) AND array_key_exists($iStation,security::$aSessions[$iNetwork])){
+			return security::$aSessions[$iNetwork][$iStation]['user'];
 		}
 	}
 
 	public static function isLoggedIn($iNetwork,$iStation)
 	{
-		if(array_key_exists($iNetwork,securtiy::$aSessions) AND array_key_exists($iStation,securtiy::$aSessions[$iNetwork])){
+		if(array_key_exists($iNetwork,security::$aSessions) AND array_key_exists($iStation,security::$aSessions[$iNetwork])){
 			return TRUE;
 		}
 		return FALSE;
@@ -77,10 +77,10 @@ class securtiy {
 
 	public static function setConnectedUsersPassword($iNetwork,$iStation,$sPassword)
 	{
-		if(array_key_exists($iNetwork,securtiy::$aSessions) AND array_key_exists($iStation,securtiy::$aSessions[$iNetwork])){
-			logger::log("Security: Changing password for ".securtiy::$aSessions[$iNetwork][$iStation]['user']->getUsername()." using authplugin ".securtiy::$aSessions[$iNetwork][$iStation]['provider'],LOG_INFO);
-			$sPlugin = securtiy::$aSessions[$iNetwork][$iStation]['provider'];
-			$sPlugin::setPassword(securtiy::$aSessions[$iNetwork][$iStation]['user']->getUsername(),$sPass);
+		if(array_key_exists($iNetwork,security::$aSessions) AND array_key_exists($iStation,security::$aSessions[$iNetwork])){
+			logger::log("Security: Changing password for ".security::$aSessions[$iNetwork][$iStation]['user']->getUsername()." using authplugin ".security::$aSessions[$iNetwork][$iStation]['provider'],LOG_INFO);
+			$sPlugin = security::$aSessions[$iNetwork][$iStation]['provider'];
+			$sPlugin::setPassword(security::$aSessions[$iNetwork][$iStation]['user']->getUsername(),$sPassword);
 		}
 	}
 }

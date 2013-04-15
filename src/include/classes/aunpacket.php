@@ -171,8 +171,12 @@ class aunpacket {
 		$oEconetPacket->setType($this->iPktType);
 		$oEconetPacket->setPort($this->iPort);
 		$oEconetPacket->setFlags($this->iCb);
-		$oEconetPacket->setSourceStation(aunmap::lookUpByIp($this->sSoruceIP));
-		$oEconetPacket->setDestinationStation(aunmap::lookUpByIp($this->$this->sDestinationIP));
+		$sNetworkStation = aunmap::ipAddrToEcoAddr($this->sSoruceIP);
+		$aEcoAddr = explode('.',$sNetworkStation);
+		if(array_key_exists(0,$aEcoAddr) AND array_key_exists(1,$aEcoAddr)){
+			$oEconetPacket->setSourceStation($aEcoAddr[0]);
+			$oEconetPacket->setDestinationStation($aEcoAddr[1]);
+		}
 		$oEconetPacket->setData($this->sData);
 	}
 

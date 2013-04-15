@@ -28,7 +28,7 @@ class aunmap {
 	//Cache of the reverse ip to network.station lookup
 	static $aIPLookupCache = array();
 
-	public static function lookUpByIp($sIP)
+	public static function ipAddrToEcoAddr($sIP)
 	{
 		if(array_key_exists($sIP,aunmap::$aIPLookupCache)){
 			return aunmap::$aIPLookupCache[$sIP];
@@ -50,6 +50,32 @@ class aunmap {
 				aunmap::$aIPLookupCache[$sIP]=$iNetworkNumber.'.'.$aIPParts[3];
 				return aunmap::$aIPLookupCache[$sIP];
 			}
+		}
+	}
+
+	public static function ecoAddrToIpAddr($iNetworkNumber,$iStationNumber)
+	{
+		//Test to see if we are in the cached index
+		$sIndex = array_search($iNetworkNumber.'.'.$iStationNumber,aunmap::$aIPLookupCache);
+		if($sIndex !==FALSE){
+			return $sIndex;
+		}
+
+		//Check the host map
+		if(array_key_exists($iNetworkNumber.'.'.$iStationNumber,aunmap::$aHostMap)){
+			//Update the cache
+			aunmap::$aIPLookupCache[aunmap::$aHostMap[$iNetworkNumber.'.'.$iStationNumber]]=$iNetworkNumber.'.'.$iStationNumber;
+			//Return the IP address
+			return aunmap::$aHostMap[$iNetworkNumber.'.'.$iStationNumber];	
+		}
+		//Check the subnet map
+		if(array_key_exists($iNetworkNumber,aunmap::$aSubnetMap)){
+			list($sIP,$sMask) = explode("/",aunmap::$aSubnetMap[$iNetworkNumber]);
+			$aIPParts = explode('.',$sIP);
+			//Update the cache
+			aunmap::$aIPLookupCache[$aIPParts[0].'.'.$aIPParts[1].'.'.$aIPParts[2].'.'.$iStationNumber]=$iNetworkNumber.'.'.$iStationNumber;
+			//Return the IP Address
+			return $aIPParts[0].'.'.$aIPParts[1].'.'.$aIPParts[2].'.'.$iStationNumber;
 		}
 	}
 

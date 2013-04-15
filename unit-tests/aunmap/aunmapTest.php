@@ -17,17 +17,31 @@ class aunmapTest extends PHPUnit_Framework_TestCase {
 	public function testLookUpByIp()
 	{
 		//Test subnet map
-		$this->assertEquals(aunmap::lookUpByIP('192.168.0.1'),'127.1');
-		$this->assertEquals(aunmap::lookUpByIP('192.168.0.2'),'127.2');
-		$this->assertEquals(aunmap::lookUpByIP('192.168.1.5'),'128.5');
-		$this->assertEquals(aunmap::lookUpByIP('192.168.1.55'),'128.55');
+		$this->assertEquals(aunmap::ipAddrToEcoAddr('192.168.0.1'),'127.1');
+		$this->assertEquals(aunmap::ipAddrToEcoAddr('192.168.0.2'),'127.2');
+		$this->assertEquals(aunmap::ipAddrToEcoAddr('192.168.1.5'),'128.5');
+		$this->assertEquals(aunmap::ipAddrToEcoAddr('192.168.1.55'),'128.55');
 
 		//Test host map
-		$this->assertEquals(aunmap::lookUpByIP('192.168.2.20'),'129.29');
+		$this->assertEquals(aunmap::ipAddrToEcoAddr('192.168.2.20'),'129.29');
 	
 		//Test host map overides subnet map
-		$this->assertEquals(aunmap::lookUpByIP('192.168.0.40'),'127.254');
+		$this->assertEquals(aunmap::ipAddrToEcoAddr('192.168.0.40'),'127.254');
 		
+	}
+
+	public function testEcoAddrToIpAddr()
+	{
+		//Test subnet map
+		$this->assertEquals(aunmap::ecoAddrToIpAddr('127','1'),'192.168.0.1');
+		$this->assertEquals(aunmap::ecoAddrToIpAddr('127','2'),'192.168.0.2');
+		$this->assertEquals(aunmap::ecoAddrToIpAddr('128','5'),'192.168.1.5');
+		
+		//Test host map
+		$this->assertEquals(aunmap::ecoAddrToIpAddr('129','29'),'192.168.2.20');
+		
+		//Test host map overides subnet map
+		$this->assertEquals(aunmap::ecoAddrToIpAddr('127','254'),'192.168.0.40');
 	}
 }
 ?>

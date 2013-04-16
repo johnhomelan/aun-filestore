@@ -144,6 +144,29 @@ class filestored  {
 	{
 		$oFsRequest = new fsrequest($oEconetPacket);
 		$this->oFileserver->processRequest($oFsRequest);
+		$aReplies = $this->oFileserver->getReplies();
+		foreach($aReplies as $oReply){
+			logger::log("filestore: Sending econet reply");
+			$oReplyEconetPacket = $oReply->buildEconetpacket();
+			$this->dispatchReply($oReplyEconetPacket);	
+		}
+	}
+
+	public function dispatchReply($oReplyEconetPacket)
+	{
+		$sIP = aunmap::ecoAddrToIpAddr($oReplyEconetPacket->getDestinationNetwork(),$oReplyEconetPacket->getDestinationStation());
+		if(strlen($sIP)>0){
+			$sPacket = $oReplyEconetPacket->getAunFrame();
+			logger_log("filestore: AUN packet to ".$sIP." (".$sPacket.")",LOG_DEBUG);
+			if(strlen($sPacket)>0){
+				if(strpos($sIP,':')===FALSE){
+					$sHost=$sIP.':'.config::getValue('aun_default_port');
+				}else{
+					$sHost=$sIP;
+				}
+				stream_socket_sendto($this->oAunSocket,$sPacket,0,$sHost);
+			}
+		}
 	}
 }
 

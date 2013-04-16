@@ -99,6 +99,12 @@ class econetpacket {
 		return $this->iSrcStn;
 	}
 
+	public function setDestinationNetwork($iNetwork)
+	{
+		$this->iDstNet=$iNetwork;
+
+	}
+
 	public function setDestinationStation($sStation)
 	{
 		if(strpos($sStation,'.')!==FALSE){
@@ -108,6 +114,44 @@ class econetpacket {
 		}else{
 			$this->iDstStn=$sStation;
 			$this->iDstNet=config::getValue('default_econet_network');
+		}
+
+	}
+
+	public function getDestinationStation()
+	{
+		return $this->iDstStn;
+	}
+
+	public function getDestinationNetwork()
+	{
+		return $this->iDstNet;
+	}
+
+	public function getAunFrame()
+	{
+		$sIP = aunmap::ecoAddrToIpAddr($this->getDestinationNetwork(),$this->getDestinationStation());
+		if(strlen($sIP)>0){
+			//Set the packet type to unicast
+			$sPacket = pack('C',2);
+		
+			//Set the port
+			$sPacket=$sPacket.pack('C',$this->iPort);
+
+		
+			//Set the flags
+			$sPacket=$sPacket.pack('C',$this->iCb);
+			
+			//Add the pad
+			$sPacket=$sPacket.pack('C',0);
+		
+			//Sequence 4 bytes little-endian
+			$sPacket=$sPacket.pack('V',aunmap::incAunCounter($sIP));
+
+			//Add the data
+			$sPacket=$sPacket.$this->sData;
+			
+			return $sPacket;	
 		}
 
 	}

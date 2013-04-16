@@ -19,7 +19,7 @@ class fsreply {
 
 	protected $aTypeMap = array('DONE'=>0,'SAVE'=>1,'LOAD'=>2,'CAT'=>3,'INFO'=>4,'LOGIN'=>5,'SDISC'=>6,'DIR'=>7,'UNREC'=>8,'LIB'=>9,'DISCS'=>10);
 
-	function __construct($oRequest)
+	public function __construct($oRequest)
 	{
 		if(is_object($oRequest) AND get_class($oRequest)=='fsrequest'){
 			$this->oRequest = $oRequest;
@@ -34,29 +34,40 @@ class fsreply {
 	 * @param int $iCode Error code 0-254
 	 * @param string $sMessage The message for the error
 	*/
-	function setError($iCode,$sMessage)
+	public function setError($iCode,$sMessage)
 	{
 		if(is_numeric($iCode) AND $iCode>0 AND $iCode<255){
-			$this->$sPkt = pack('CCa',$this->aTypeMap['DONE'],$iCode,$sMessage."\r");
+			$this->sPkt = pack('CCa',$this->aTypeMap['DONE'],$iCode,$sMessage."\r");
 		}else{
 			throw new Exception("Fsreply: Invaild error code ".$iCode);
 		}
 	}
 
-	function loginRespone($iUrd,$iCsd,$iLib,$iOpt)
+	public function loginRespone($iUrd,$iCsd,$iLib,$iOpt)
 	{
-		$this->$sPkt = pack('CCCCCC',$this->aTypeMap['LOGIN'],0,$iUrd,$iCsd,$iLib,$iOpt);
+		$this->sPkt = pack('CCCCCC',$this->aTypeMap['LOGIN'],0,$iUrd,$iCsd,$iLib,$iOpt);
 	}
 
-	function DoneOK()
+	public function DoneOK()
 	{
-		$this->$sPkt = pack('CC',$this->aTypeMap['DONE'],0);
+		$this->sPkt = pack('CC',$this->aTypeMap['DONE'],0);
 	}
 
-	function AppendByte($iByte)
+	public function AppendByte($iByte)
 	{
-		$this->$sPkt = $this->$sPkt.pack('C',$iByte);
+		$this->sPkt = $this->sPkt.pack('C',$iByte);
 	}
 
 
+	public function buildEconetpacket()
+	{
+		$oEconetPacket = new econetpacket();
+		$oEconetPacket->setPort($this->oRequest->getReplyPort());
+		$oEconetPacket->setFlags(0);
+		$oEconetPacket->setDestinationStation($this->oRequest->getSourceStation());
+		$oEconetPacket->setDestinationNetwork($this->oRequest->getSourceNetwork());
+		$oEconetPacket->setData($this->sData);
+
+		return $oEconetPacket;
+	}
 }

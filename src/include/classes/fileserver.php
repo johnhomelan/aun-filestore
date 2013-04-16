@@ -14,6 +14,20 @@
 class fileserver {
 
 	protected $aCommands = array('BYE','CAT','CDIR','DELETE','DIR','FSOPT','INFO','I AM','LIB','LOAD','LOGOFF','PASS','RENAME','SAVE','SDISC');
+	
+	protected $aReplyBuffer = array();
+
+	protected function _addReplyToBuffer($oReply)
+	{
+		$this->aReplyBuffer[]=$oReply;
+	}
+
+	public function getReplies()
+	{
+		$aReplies = $this->aReplyBuffer;
+		$this->aReplyBuffer = array();
+		return $aReplies;
+	}
 
 	public function processRequest($oFsRequest)
 	{
@@ -147,6 +161,7 @@ class fileserver {
 
 	public function login($oFsRequest,$sOptions)
 	{
+		logger::log("fileserver: Login called ".$sOptions,LOG_DEBUG);
 		$aOptions = explode(" ",$sOptions);
 		if(count($aOptions)>1){
 			//Creditials supplied, decode username and password
@@ -176,6 +191,7 @@ class fileserver {
 
 			//Send Wrong Password
 			$oReply->setError(0xbb,"Incorrect password");
+			$this->_addReplyToBuffer($oReply);
 			return;
 		}
 
@@ -187,12 +203,14 @@ class fileserver {
 			$oLib = vfs::createFsHandle($oFsRequest->getSoruceNetwork(),$oFsRequest->getSoruceStation(),config::getValue('library_path'));
 			$oReply = $oFsRequest->buildReply();
 			$oReply->loginRespone($oUrd->getId(),$oCsd->getId(),$oLib->getId(),$oUser->getValue('opt'));
+			$this->_addReplyToBuffer($oReply);
 		}else{
 			$oReply = $oFsRequest->buildReply();
 
 			logger::log("Login Failed: For user ".$sUser." invalid password/no such user",LOG_INFO);
 			//Send Wrong Password
 			$oReply->setError(0xbb,"Incorrect password");
+			$this->_addReplyToBuffer($oReply);
 		}
 			
 	}

@@ -28,6 +28,8 @@ class aunmap {
 	//Cache of the reverse ip to network.station lookup
 	static $aIPLookupCache = array();
 
+	static $aIpCounter = array();
+
 	public static function ipAddrToEcoAddr($sIP)
 	{
 		if(array_key_exists($sIP,aunmap::$aIPLookupCache)){
@@ -136,6 +138,20 @@ class aunmap {
 				aunmap::addHostMapping($aMatches[1],$aMatches[2],$aMatches[3]);
 			}
 		}
+	}
+
+	public static function setAunCounter($iCounter,$sIP)
+	{
+		aunmap::$aIpCounter[$sIP]=$iCounter;
+	}
+
+	public static function incAunCounter($sIP)
+	{
+		if(!array_key_exists($sIP,aunmap::$aIpCounter)){
+			aunmap::$aIpCounter[$sIP]=0;
+		}
+		aunmap::$aIpCounter[$sIP]=aunmap::$aIpCounter[$sIP]+4;
+		return aunmap::$aIpCounter[$sIP];
 	}
 }
 

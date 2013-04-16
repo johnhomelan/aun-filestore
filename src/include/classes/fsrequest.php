@@ -17,6 +17,10 @@ class fsrequest {
 
 	protected $iSourceStation = NULL;
 
+	protected $iDestinationNetwork = NULL;
+
+	protected $iDestinationStation = NULL;
+
 	protected $iReplyPort = NULL;
 	
 	protected $iFunction = NULL;
@@ -46,6 +50,11 @@ class fsrequest {
 	public function getSourceNetwork()
 	{
 		return $this->iSourceNetwork;
+	}
+
+	public function getReplyPort()
+	{
+		return $this->iReplyPort;
 	}
 
 	/**

@@ -43,8 +43,8 @@ class econetpacket {
 
 	public function getPortName()
 	{
-		if(array_key_exists(dechex($this->iPort),$this->aPortMap)){
-			return $this->aPortMap[dechex($this->iPort)];
+		if(array_key_exists($this->iPort,$this->aPortMap)){
+			return $this->aPortMap[$this->iPort];
 		}
 	}
 

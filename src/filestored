@@ -5,6 +5,8 @@ include_once('include/system.inc.php');
 
 class filestored  {
 
+	protected $oFileserver = NULL;
+
 	protected $oAunSocket = NULL;
 	
 	protected $aAllReadableSockets = array();
@@ -29,6 +31,7 @@ class filestored  {
 		if($bDaemonize){
 			$this->daemonize($sPidFile);
 		}
+		$this->oFileserver = new fileserver();
 		$this->bindSockets();
 		$this->loop();
 	}
@@ -98,8 +101,8 @@ class filestored  {
 	public function processAunPacket($oSocket)
 	{
 		//Read the UDP data
-		$sUdpData= stream_socket_recvfrom($oSocket,$iReadSize,0,$sHost);
-		
+		$sUdpData= stream_socket_recvfrom($oSocket,1500,0,$sHost);
+		logger::log("filestore: Aun packet recvieved from ".$sHost,LOG_DEBUG);	
 
 		//Decode the AUN packet
 		$oAunPacket = new AunPacket();
@@ -110,13 +113,15 @@ class filestored  {
 		//Send an ack for the AUN packet if needed
 		$sAck = $oAunPacket->buildAck();
 		if(strlen($sAck)>0){
+			logger::log("filestore: Sending Ack packet",LOG_DEBUG);
 			stream_socket_sendto($oSocket,$sAck,0,$sHost);
-			$this->sendUdp($sHost,$sAck);
 		}
 	
 		//Build an econet packet from the AUN packet an pass it to be processed
-		$oEconetPacket = $oAunPacket->buildEconetPacket();
-		$this->processEconetPacket($oEconetPacket);
+		if($oAunPacket->getPacketType()=='Unicast'){
+			$oEconetPacket = $oAunPacket->buildEconetPacket();
+			$this->processEconetPacket($oEconetPacket);
+		}
 
 	}
 
@@ -129,7 +134,7 @@ class filestored  {
 				$this->fileServerCommand($oEconetPacket);
 				break;
 			default:
-				logger::log("Recived packet on un-handle port ".$sPort,LOG_DEBUG);
+				logger::log("filestore: Recived packet on un-handle port (".$sPort.")".$sPort,LOG_DEBUG);
 				break;
 		}
 
@@ -137,7 +142,7 @@ class filestored  {
 
 	public function fileServerCommand($oEconetPacket)
 	{
-		$oFsRequest = new fspacket($oEconetPacket);
+		$oFsRequest = new fsrequest($oEconetPacket);
 		$this->oFileserver->processRequest($oFsRequest);
 	}
 }

@@ -100,7 +100,7 @@ class fileserver {
 			$sDataAsString = $sDataAsString.chr($iChar);
 		}
 
-		logger::log("Command: "$sDataAsString.".",LOG_DEBUG);
+		logger::log("Command: ".$sDataAsString.".",LOG_DEBUG);
 
 		foreach($this->aCommands as $sCommand){
 			$iPos = strpos($sDataAsString,$sCommand);
@@ -150,7 +150,7 @@ class fileserver {
 		$aOptions = explode(" ",$sOptions);
 		if(count($aOptions)>1){
 			//Creditials supplied, decode username and password
-			if(is_numeric($aOptions[1]){
+			if(is_numeric($aOptions[1])){
 				//station number supplied skip
 				if(array_key_exists(2,$aOptions)){
 					$sUser = $aOptions[2];
@@ -182,9 +182,9 @@ class fileserver {
 		//Do login
 		if(security::login($oFsRequest->getSoruceNetwork(),$oFsRequest->getSoruceStation(),$sUser,$sPass)){
 			$oUser = securtiy::getUser($oFsRequest->getSoruceNetwork(),$oFsRequest->getSoruceStation());
-			$oUrd = fshandle::createFsHandle($oFsRequest->getSoruceNetwork(),$oFsRequest->getSoruceStation(),$oUser,$oUser->getValue('homedir'));
-			$oCsd = fshandle::createFsHandle($oFsRequest->getSoruceNetwork(),$oFsRequest->getSoruceStation(),$oUser,$oUser->getValue('homedir'));
-			$oLib = fshandle::createFsHandle($oFsRequest->getSoruceNetwork(),$oFsRequest->getSoruceStation(),$oUser,config::getValue('library_path'));
+			$oUrd = vfs::createFsHandle($oFsRequest->getSoruceNetwork(),$oFsRequest->getSoruceStation(),$oUser->getValue('homedir'));
+			$oCsd = vfs::createFsHandle($oFsRequest->getSoruceNetwork(),$oFsRequest->getSoruceStation(),$oUser->getValue('homedir'));
+			$oLib = vfs::createFsHandle($oFsRequest->getSoruceNetwork(),$oFsRequest->getSoruceStation(),config::getValue('library_path'));
 			$oReply = $oFsRequest->buildReply();
 			$oReply->loginRespone($oUrd->getId(),$oCsd->getId(),$oLib->getId(),$oUser->getValue('opt'));
 		}else{
@@ -250,14 +250,14 @@ class fileserver {
 			case 0:
 				//EC_FS_ARG_PTR
 				$oReply = $oFsRequest->buildReply();
-				$oFd = fshandle::getFsHandle($oFsRequest->getSoruceNetwork(),$oFsRequest->getSoruceStation(),$iHandle);
+				$oFd = vfs::getFsHandle($oFsRequest->getSoruceNetwork(),$oFsRequest->getSoruceStation(),$iHandle);
 				$iPos = $oFd->fsFTell();
 				$oReply->DoneOk();
 				break;
 			case 1:
 				//EC_FS_ARG_EXT
 				$oReply = $oFsRequest->buildReply();
-				$oFd = fshandle::getFsHandle($oFsRequest->getSoruceNetwork(),$oFsRequest->getSoruceStation(),$iHandle);
+				$oFd = vfs::getFsHandle($oFsRequest->getSoruceNetwork(),$oFsRequest->getSoruceStation(),$iHandle);
 				$aStat = $oFd->fsFStat();
 				$iSize = $aStat['size'];
 				$oReply->DoneOk();
@@ -265,7 +265,7 @@ class fileserver {
 			case 2:
 				//EC_FS_ARG_SIZE
 				$oReply = $oFsRequest->buildReply();
-				$oFd = fshandle::getFsHandle($oFsRequest->getSoruceNetwork(),$oFsRequest->getSoruceStation(),$iHandle);
+				$oFd = vfs::getFsHandle($oFsRequest->getSoruceNetwork(),$oFsRequest->getSoruceStation(),$iHandle);
 				$aStat = $oFd->fsFStat();
 				$iSize = $aStat['blocks'];
 				$oReply->DoneOk();

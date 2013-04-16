@@ -45,7 +45,7 @@ class logger
 			}
 			$bLogStderr = config::getValue("logstderr");
 			if ($bLogStderr){
-				fwrite(STDERR,$sLogMsg);
+				fwrite(STDERR,$sLogMsg."\n");
 			}
 		}
 	}

@@ -3,7 +3,7 @@
  * This file contains the file descriptor class
  *
  * @author John Brown <john@home-lan.co.uk>
- * @package corefs
+ * @package corevfs
 */
 
 /** 
@@ -11,7 +11,7 @@
  * identitier is a single byte.  This class represents a single file description for the server 
  * and maps to a local file handle and remote user.
  *
- * @package corefs
+ * @package corevfs
 */
 class filedescriptor {
 
@@ -23,27 +23,36 @@ class filedescriptor {
 
 	protected $sFilePath = NULL;
 
-	protected  function _setUid()
+	protected $sVfsPlugin = NULL;
+
+	protected $iVfsHandle = NULL;
+
+	protected $bFile = NULL;
+
+	protected $bDir = NULL;
+
+	public function __construct($sVfsPlugin,$oUser,$sUnixFilePath,$sEconetFilePath,$iEconetHandel,$iVfsHandle,$bFile=FALSE,$bDir=FALSE)
 	{
-		if(config::getValue('security_mode')=='multiuser'){
-			posix_seteuid($this->oUser->getUnixUid());
-		}
+		$this->sVfsPlugin = $sVfsPlugin;
+		$this->oUser = $oUser;
+		$this->sUnixFilePath = $sUnixFilePath;
+		$this->sEconetFilePath = $sEconetFilePath;
+		$this->iVfsHandle = $iVfsHandle;
+		$this->bFile = $bFile;
+		$this->bDir = $bDir;
 	}
-	
-	protected function _returnUid()
+
+
+	public function getID()
 	{
-		if(config::getValue('security_mode')=='multiuser'){
-			 posix_seteuid(config::getValue('system_user_id'));
-		}
+		return $this->iHandle;
 	}
 
 	public function fsFTell()
 	{
 		if(!is_null($this->fLocalHandle)){
-			$this->_setUid();
-			$mResult = ftell($this->fLocalHandle);
-			$this->_returnUid();
-			return $mResult;
+			$sPlugin = $this->sVfsPlugin;
+			return $sPlugin::fsFTell($this->oUser,$this->fLocalHandle);
 		}
 		
 	}
@@ -51,10 +60,16 @@ class filedescriptor {
 	public function fsFStat()
 	{
 		if(!is_null($this->fLocalHandle)){
-			$this->_setUid();
-			$mResult = fstat($this->fLocalHandle);
-			$this->_returnUid();
-			return $mResult;
+			$sPlugin = $this->sVfsPlugin;
+			return $sPlugin::fsFStat($this->oUser,$this->fLocalHandle);
+		}
+	}
+
+	public function close()
+	{
+		if(!is_null($this->fLocalHandle)){
+			$sPlugin = $this->sVfsPlugin;
+			return $sPlugin::close($this->oUser,$this->fLocalHandle);
 		}
 	}
 }

@@ -122,7 +122,7 @@ class fileserver {
 				//Found cli command found
 				$iOptionsPos = $iPos+strlen($sCommand)+1;
 				$sOptions = substr($sDataAsString,$iOptionsPos);
-				$this->runCli($oFsRequest,$sCommand,$sOptions);
+				$this->runCli($oFsRequest,$sCommand,trim($sOptions));
 				break;
 			}			
 		}
@@ -163,22 +163,22 @@ class fileserver {
 	{
 		logger::log("fileserver: Login called ".$sOptions,LOG_DEBUG);
 		$aOptions = explode(" ",$sOptions);
-		if(count($aOptions)>1){
+		if(count($aOptions)>0){
 			//Creditials supplied, decode username and password
-			if(is_numeric($aOptions[1])){
+			if(is_numeric($aOptions[0])){
 				//station number supplied skip
-				if(array_key_exists(2,$aOptions)){
-					$sUser = $aOptions[2];
+				if(array_key_exists(1,$aOptions)){
+					$sUser = $aOptions[1];
 				}
-				if(array_key_exists(3,$aOptions)){
-					$sPass = $sOptions[3];
+				if(array_key_exists(2,$aOptions)){
+					$sPass = $sOptions[2];
 				}else{
 					$sPass = "";
 				}
 			}else{
-				$sUser = $aOptions[1];
-				if(array_key_exists(2,$aOptions)){
-					$sPass=$aOptions[2];
+				$sUser = $aOptions[0];
+				if(array_key_exists(1,$aOptions)){
+					$sPass=$aOptions[1];
 				}else{
 					$sPass="";
 				}
@@ -196,11 +196,11 @@ class fileserver {
 		}
 
 		//Do login
-		if(security::login($oFsRequest->getSoruceNetwork(),$oFsRequest->getSoruceStation(),$sUser,$sPass)){
-			$oUser = securtiy::getUser($oFsRequest->getSoruceNetwork(),$oFsRequest->getSoruceStation());
-			$oUrd = vfs::createFsHandle($oFsRequest->getSoruceNetwork(),$oFsRequest->getSoruceStation(),$oUser->getValue('homedir'));
-			$oCsd = vfs::createFsHandle($oFsRequest->getSoruceNetwork(),$oFsRequest->getSoruceStation(),$oUser->getValue('homedir'));
-			$oLib = vfs::createFsHandle($oFsRequest->getSoruceNetwork(),$oFsRequest->getSoruceStation(),config::getValue('library_path'));
+		if(security::login($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sUser,$sPass)){
+			$oUser = securtiy::getUser($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation());
+			$oUrd = vfs::createFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oUser->getValue('homedir'));
+			$oCsd = vfs::createFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oUser->getValue('homedir'));
+			$oLib = vfs::createFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),config::getValue('library_path'));
 			$oReply = $oFsRequest->buildReply();
 			$oReply->loginRespone($oUrd->getId(),$oCsd->getId(),$oLib->getId(),$oUser->getValue('opt'));
 			$this->_addReplyToBuffer($oReply);
@@ -222,18 +222,18 @@ class fileserver {
 
 	public function eof($oFsRequest)
 	{
-		if(!security::isLoggedIn($oFsRequest->getSoruceNetwork(),$oFsRequest->getSoruceStation())){
+		if(!security::isLoggedIn($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation())){
 			$oReply = $oFsRequest->buildReply();
 			$oReply->setError(0xbf,"Who are you?");
 			
 		}
-		logger::log("Eof Called by ".$oFsRequest->getSoruceNetwork().".".$oFsRequest->getSoruceStation(),LOG_DEBUG);
-		$oUser = securtiy::getUser($oFsRequest->getSoruceNetwork(),$oFsRequest->getSoruceStation());	
+		logger::log("Eof Called by ".$oFsRequest->getSourceNetwork().".".$oFsRequest->getSourceStation(),LOG_DEBUG);
+		$oUser = securtiy::getUser($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation());	
 	}
 
 	public function examine($oFsRequest)
 	{
-		if(!security::isLoggedIn($oFsRequest->getSoruceNetwork(),$oFsRequest->getSoruceStation())){
+		if(!security::isLoggedIn($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation())){
 			$oReply = $oFsRequest->buildReply();
 			$oReply->setError(0xbf,"Who are you?");
 			
@@ -257,7 +257,7 @@ class fileserver {
 
 	public function getArgs($oFsRequest)
 	{
-		if(!security::isLoggedIn($oFsRequest->getSoruceNetwork(),$oFsRequest->getSoruceStation())){
+		if(!security::isLoggedIn($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation())){
 			$oReply = $oFsRequest->buildReply();
 			$oReply->setError(0xbf,"Who are you?");
 			
@@ -268,14 +268,14 @@ class fileserver {
 			case 0:
 				//EC_FS_ARG_PTR
 				$oReply = $oFsRequest->buildReply();
-				$oFd = vfs::getFsHandle($oFsRequest->getSoruceNetwork(),$oFsRequest->getSoruceStation(),$iHandle);
+				$oFd = vfs::getFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$iHandle);
 				$iPos = $oFd->fsFTell();
 				$oReply->DoneOk();
 				break;
 			case 1:
 				//EC_FS_ARG_EXT
 				$oReply = $oFsRequest->buildReply();
-				$oFd = vfs::getFsHandle($oFsRequest->getSoruceNetwork(),$oFsRequest->getSoruceStation(),$iHandle);
+				$oFd = vfs::getFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$iHandle);
 				$aStat = $oFd->fsFStat();
 				$iSize = $aStat['size'];
 				$oReply->DoneOk();
@@ -283,7 +283,7 @@ class fileserver {
 			case 2:
 				//EC_FS_ARG_SIZE
 				$oReply = $oFsRequest->buildReply();
-				$oFd = vfs::getFsHandle($oFsRequest->getSoruceNetwork(),$oFsRequest->getSoruceStation(),$iHandle);
+				$oFd = vfs::getFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$iHandle);
 				$aStat = $oFd->fsFStat();
 				$iSize = $aStat['blocks'];
 				$oReply->DoneOk();

@@ -22,9 +22,11 @@ class user {
 
 	protected $iOpt = NULL;
 
+	protected $bIsAdmin = FALSE;
+
 	public function setUsername($sUsername)
 	{
-		$this->sUsername=$sUsername;
+		$this->sUsername=strtoupper($sUsername);
 	}
 
 	public function getUsername()
@@ -60,6 +62,36 @@ class user {
 	public function getBootOpt()
 	{
 		return $this->iOpt;
+	}
+
+	public function setPriv($sPriv)
+	{
+		switch(strtoupper($sPriv)){
+			case 'S':
+				$this->bIsAdmin = TRUE;
+				break;
+			default:
+				$this->bIsAdmin = FALSE;
+				break;
+		}
+	}
+
+	public function getPriv()
+	{
+		if($this->bIsAdmin){
+			return 'S';
+		}
+		return 'U';
+	}
+
+	/**
+	 * Get if this user is an admin user or not
+	 *
+	 * @return boolean
+	*/
+	public function isAdmin()
+	{
+		return $this->bIsAdmin;
 	}
 }
 ?>

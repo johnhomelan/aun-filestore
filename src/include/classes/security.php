@@ -60,6 +60,13 @@ class security {
 		return FALSE;
 	}
 
+	/**
+	 * Get the user object for the user logged in at the given network/station
+	 *
+	 * @param int $iNetwork
+	 * @param int $iStation
+	 * @return object user
+	*/
 	public static function getUser($iNetwork,$iStation)
 	{
 		if(array_key_exists($iNetwork,security::$aSessions) AND array_key_exists($iStation,security::$aSessions[$iNetwork])){
@@ -67,6 +74,13 @@ class security {
 		}
 	}
 
+	/**
+	 * Tests if auser is logged in on a give network/station
+	 * 
+	 * @param int $iNetwork
+	 * @param int $iStation
+	 * @return boolean
+	*/
 	public static function isLoggedIn($iNetwork,$iStation)
 	{
 		if(array_key_exists($iNetwork,security::$aSessions) AND array_key_exists($iStation,security::$aSessions[$iNetwork])){
@@ -75,6 +89,13 @@ class security {
 		return FALSE;
 	}
 
+	/**
+	 * Set the password for the user logged in using  network/station 
+	 *
+	 * @param int $iNetwork
+	 * @param int $iStation
+	 * @param string $sPassword
+	*/	 
 	public static function setConnectedUsersPassword($iNetwork,$iStation,$sPassword)
 	{
 		if(array_key_exists($iNetwork,security::$aSessions) AND array_key_exists($iStation,security::$aSessions[$iNetwork])){
@@ -82,6 +103,40 @@ class security {
 			$sPlugin = security::$aSessions[$iNetwork][$iStation]['provider'];
 			$sPlugin::setPassword(security::$aSessions[$iNetwork][$iStation]['user']->getUsername(),$sPassword);
 		}
+	}
+
+	/**
+	 * Creates a new user (assuming the user logged in on the given network/station has admin rights)
+	 *
+	 * @param int $iNetwork
+	 * @param int $iStation
+	 * @param object user $oUser
+	*/
+	public static function createUser($iNetwork,$iStation,$oUser)
+	{
+		if(!is_object($oUser) OR get_class($oUser)!='user'){
+			throw new Exception("Security: Invaild user supplied to createUser.\n");
+		}
+
+		if(!security::isLoggedIn($iNetwork,$iStation)){
+			throw new Exception("Security:  Unable to createUser, no user is logged in on ".$iNetwork.".".$iStation);
+		}
+
+		$oLoggedInUser = security::getUser($iNetwork,$iStation);
+		if(!$oLoggedInUser->isAdmin()){
+			throw new Exception("Security:  Unable to createUser, the user logged in on ".$iNetwork.".".$iStation." (".$oUser->getUsername().") does not have admin rights.");
+		}
+
+		$aPlugins = security::_getAuthPlugins();
+		foreach($aPlugins as $sPlugin){
+			try {
+				$sPlugin::createUser($oUser);
+				break;
+			}catch(Exception $oException){
+				logger::log("Security: Exception thrown by plugin ".$sPlugin." when attempting to create user ".$oUser->getUsername()." (".$oException->getMessage().")",LOG_DEBUG);
+			}
+		}
+	
 	}
 }
 

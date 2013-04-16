@@ -48,5 +48,15 @@ interface authplugininterface {
 	*/
 	static public function setPassword($sUsername,$sPassword);
 
+	/**
+	 * Creates a new user in the backend
+	 * 
+	 * This method should not dertain if a user can create another security does that
+	 * If the plugin can't create users in it backend (e.g. its read only) then it should throw an exception
+	 *
+	 * @param object user $oUser The user object that should be added to the backend
+	*/
+	static public function createUser($oUser);
+
 }
 ?>

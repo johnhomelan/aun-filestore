@@ -16,7 +16,7 @@ class securityTest extends PHPUnit_Framework_TestCase {
 
 	public function setup()
 	{
-		$sUser = "test:md5-".md5('testpw').":home.test:5000:0\ntest2:sha1-".sha1('testpw').":home.test:5000:0";
+		$sUser = "test:md5-".md5('testpw').":home.test:5000:0:S\ntest2:sha1-".sha1('testpw').":home.test:5000:0:U\ntest3:plain-week:home.test3:5000:3:s\ntest4::home.test3:5000:3:u";
 		authpluginfile::init($sUser);
 	}
 
@@ -27,6 +27,8 @@ class securityTest extends PHPUnit_Framework_TestCase {
 		$this->assertTrue(security::login(127,1,'TEST2','testpw'));
 		$this->assertTrue(security::login(127,1,'test','testpw'));
 		$this->assertTrue(security::login(127,1,'test2','testpw'));
+		$this->assertTrue(security::login(127,1,'test3','week'));
+		$this->assertTrue(security::login(127,1,'test4',''));
 		//Should fail	
 		$this->assertFalse(authpluginfile::login(127,1,'TEST','testpwrong'));
 
@@ -61,6 +63,46 @@ class securityTest extends PHPUnit_Framework_TestCase {
 		$this->assertFalse(authpluginfile::login(127,5,'TEST','testpw'));
 	}
 
+	public function testCreateUserShouldWork()
+	{
+		$oUser = new user();
+		$oUser->setUsername('createtest');
+		$oUser->setHomedir('home.createtest');
+		$oUser->setBootOpt(3);
+		$oUser->setUnixUid(5000);
+		$oUser->setPriv('U');
+		//Log in a user with admin rights
+		security::login(127,1,'TEST','testpw');
+
+		//This should not throw an exception
+		security::createUser(127,1,$oUser);
+
+		$bException=FALSE;
+		$this->assertTrue(security::login(127,1,'createtest',''));
+	}
+
+	public function testCreateUserShouldFail()
+	{
+		$oUser = new user();
+		$oUser->setUsername('createtest');
+		$oUser->setHomedir('home.createtest');
+		$oUser->setBootOpt(3);
+		$oUser->setUnixUid(5000);
+		$oUser->setPriv('U');
+		//Log in a user with out admin rights
+		security::login(127,1,'TEST2','testpw');
+
+		//This should throw an exception
+		$bException=FALSE;
+		try {
+			security::createUser(127,1,$oUser);
+		}catch(Exception $oException){
+			$bException=TRUE;
+		}
+		$this->assertTrue($bException);
+
+		$this->assertFalse(security::login(127,1,'createtest',''));
+	}
 
 }
 ?>

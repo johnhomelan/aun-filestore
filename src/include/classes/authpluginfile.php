@@ -23,6 +23,7 @@ class authpluginfile implements authplugininterface {
 	*/
 	static public function init($sUsers=NULL)
 	{
+		authpluginfile::$aUsers = array();
 		if(is_null($sUsers)){
 			if(!file_exists(config::getValue('security_plugin_file_user_file'))){
 				logger::log("authpluginfile: The user files does not exist.",LOG_INFO);
@@ -34,8 +35,13 @@ class authpluginfile implements authplugininterface {
 		foreach($aLines as $sLine){
 			$aMatches = array();
 			//The file format is username:pwhashtype-hash:homedir:unixuid:opt
-			if(preg_match('/([a-zA-Z0-9]+):([a-z0-9]+-[a-zA-Z0-9]+):([a-z0-9A-Z\-._]+):([0-9]+):([0-9])/',$sLine,$aMatches)>0){
-				authpluginfile::$aUsers[strtoupper($aMatches[1])]=array('username'=>strtoupper($aMatches[1]),'password'=>$aMatches[2],'homedir'=>$aMatches[3],'unixuid'=>$aMatches[4],'opt'=>$aMatches[5]);
+			if(preg_match('/([a-zA-Z0-9]+):([a-z0-9]+-[a-zA-Z0-9]+):([a-z0-9A-Z\-._]+):([0-9]+):([0-9]):([A-Za-z])/',$sLine,$aMatches)>0){
+				authpluginfile::$aUsers[strtoupper($aMatches[1])]=array('username'=>strtoupper($aMatches[1]),'password'=>$aMatches[2],'homedir'=>$aMatches[3],'unixuid'=>$aMatches[4],'opt'=>$aMatches[5],'priv'=>$aMatches[6]);
+			}
+			//Match with no password set
+			$aMatches=array();
+			if(preg_match('/([a-zA-Z0-9]+)::([a-z0-9A-Z\-._]+):([0-9]+):([0-9]):([A-Za-z])/',$sLine,$aMatches)>0){
+				authpluginfile::$aUsers[strtoupper($aMatches[1])]=array('username'=>strtoupper($aMatches[1]),'password'=>'','homedir'=>$aMatches[2],'unixuid'=>$aMatches[3],'opt'=>$aMatches[4],'priv'=>$aMatches[5]);
 			}
 		}
 	}
@@ -58,10 +64,14 @@ class authpluginfile implements authplugininterface {
 		if(strpos(authpluginfile::$aUsers[strtoupper($sUsername)]['password'],'-')!==FALSE){
 			list($sHashType,$sHash) = explode('-',authpluginfile::$aUsers[strtoupper($sUsername)]['password']);
 		}else{
-			$sHashType='md5';
+			$sHashType='plain';
 			$sHash = authpluginfile::$aUsers[strtoupper($sUsername)]['password'];
 		}
 		switch($sHashType){
+			case 'plain':
+				if($sPassword==$sHash){
+					return TRUE;
+				}
 			case 'sha1':
 				if(sha1($sPassword)==$sHash){
 					return TRUE;
@@ -90,6 +100,7 @@ class authpluginfile implements authplugininterface {
 			$oUser->setUnixUid(authpluginfile::$aUsers[strtoupper($sUsername)]['unixuid']);
 			$oUser->setHomedir(authpluginfile::$aUsers[strtoupper($sUsername)]['homedir']);
 			$oUser->setBootOpt(authpluginfile::$aUsers[strtoupper($sUsername)]['opt']);
+			$oUser->setPriv(authpluginfile::$aUsers[strtoupper($sUsername)]['priv']);
 		}
 		return $oUser;
 	}
@@ -105,6 +116,9 @@ class authpluginfile implements authplugininterface {
 	{
 		if(array_key_exists(strtoupper($sUsername),authpluginfile::$aUsers)){
 			switch(config::getValue('security_plugin_file_default_crypt')){
+				case 'plain':
+					authpluginfile::$aUsers[strtoupper($sUsername)]['password']='plain-'.$sPassword;
+					break;
 				case 'sha1':
 					authpluginfile::$aUsers[strtoupper($sUsername)]['password']='sha1-'.sha1($sPassword);
 					break;
@@ -115,6 +129,21 @@ class authpluginfile implements authplugininterface {
 			}
 		}
 		authpluginfile::_writeOutUserFile();
+	}
+
+	/**
+	 * Creates a new user in the backend
+	 * 
+	 * This method should not dertain if a user can create another security does that
+	 *
+	 * @param object user $oUser The user object that should be added to the backend
+	*/
+	static public function createUser($oUser)
+	{
+		if(!array_key_exists(strtoupper($oUser->getUsername()),authpluginfile::$aUsers)){
+			authpluginfile::$aUsers[strtoupper($oUser->getUsername())]=array('username'=>$oUser->getUsername(),'password'=>'','homedir'=>$oUser->getHomedir(),'unixuid'=>$oUser->getUnixUid(),'opt'=>$oUser->getBootOpt(),'priv'=>$oUser->getPriv());
+			authpluginfile::_writeOutUserFile();
+		}
 	}
 
 }

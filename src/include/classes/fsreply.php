@@ -37,7 +37,12 @@ class fsreply {
 	public function setError($iCode,$sMessage)
 	{
 		if(is_numeric($iCode) AND $iCode>0 AND $iCode<255){
-			$this->sPkt = pack('CCa',$this->aTypeMap['DONE'],$iCode,$sMessage."\r");
+			$this->sPkt = pack('CC',$this->aTypeMap['DONE'],$iCode);
+			$sMessage = $sMessage."\r";
+			$aMessage = str_split($sMessage);
+			foreach($aMessage as $sChar){
+				$this->sPkt = $this->sPkt.pack('C',ord($sChar));
+			}
 		}else{
 			throw new Exception("Fsreply: Invaild error code ".$iCode);
 		}
@@ -66,8 +71,7 @@ class fsreply {
 		$oEconetPacket->setFlags(0);
 		$oEconetPacket->setDestinationStation($this->oRequest->getSourceStation());
 		$oEconetPacket->setDestinationNetwork($this->oRequest->getSourceNetwork());
-		$oEconetPacket->setData($this->sData);
-
+		$oEconetPacket->setData($this->sPkt);
 		return $oEconetPacket;
 	}
 }

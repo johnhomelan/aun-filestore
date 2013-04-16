@@ -32,6 +32,7 @@ class aunmap {
 
 	public static function ipAddrToEcoAddr($sIP)
 	{
+		var_dump(aunmap::$aSubnetMap);
 		if(array_key_exists($sIP,aunmap::$aIPLookupCache)){
 			return aunmap::$aIPLookupCache[$sIP];
 		}

@@ -79,14 +79,12 @@ class econetpacket {
 
 	public function setSourceStation($sStation)
 	{
-		if(strpos($sStation,'.')!==FALSE){
-			$aStnParts = explode('.',$sStation);
-			$this->iSrcNet=$aStnParts[0];
-			$this->iSrcStn=$aStnParts[1];
-		}else{
-			$this->iSrcStn=$sStation;
-			$this->iSrcNet=config::getValue('default_econet_network');
-		}
+		$this->iSrcStn=$sStation;
+	}
+
+	public function setSourceNetwork($iNetwork)
+	{
+		$this->iSrcNet=$iNetwork;
 	}
 	
 	public function getSourceNetwork()
@@ -98,6 +96,8 @@ class econetpacket {
 	{
 		return $this->iSrcStn;
 	}
+
+
 
 	public function setDestinationNetwork($iNetwork)
 	{

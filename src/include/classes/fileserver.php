@@ -35,6 +35,7 @@ class fileserver {
 		logger::log("FS function ".$sFunction,LOG_DEBUG);
 		switch($sFunction){
 			case 'EC_FS_FUNC_CLI':
+				$this->cliDecode($oFsRequest);
 				break;
 			case 'EC_FS_FUNC_LOAD':
 				break;
@@ -50,7 +51,6 @@ class fileserver {
 			case 'EC_FS_FUNC_OPEN':
 				break;
 			case 'EC_FS_FUNC_CLOSE':
-				$this->cli($oFsRequest);
 				break;
 			case 'EC_FS_FUNC_GETBYTE':
 				break;
@@ -117,7 +117,7 @@ class fileserver {
 		logger::log("Command: ".$sDataAsString.".",LOG_DEBUG);
 
 		foreach($this->aCommands as $sCommand){
-			$iPos = strpos($sDataAsString,$sCommand);
+			$iPos = stripos($sDataAsString,$sCommand);
 			if($iPos!==FALSE){
 				//Found cli command found
 				$iOptionsPos = $iPos+strlen($sCommand)+1;

@@ -32,6 +32,7 @@ class filestored  {
 			$this->daemonize($sPidFile);
 		}
 		$this->oFileserver = new fileserver();
+		aunmap::loadMap();
 		$this->bindSockets();
 		$this->loop();
 	}
@@ -121,6 +122,12 @@ class filestored  {
 		if($oAunPacket->getPacketType()=='Unicast'){
 			$oEconetPacket = $oAunPacket->buildEconetPacket();
 			$this->processEconetPacket($oEconetPacket);
+		}elseif($oAunPacket->getPacketType()=='Broadcast'){
+			logger::log("filestore: Received broadcast packet ",LOG_DEBUG);
+			if($oAunPacket->getPortName()=='Bridge'){
+				$aPkt = unpack('C*',$oAunPacket->getData());
+				logger::log("filestore: Bridge packet received (".implode(":",$aPkt).")",LOG_DEBUG);
+			}
 		}
 
 	}
@@ -157,7 +164,7 @@ class filestored  {
 		$sIP = aunmap::ecoAddrToIpAddr($oReplyEconetPacket->getDestinationNetwork(),$oReplyEconetPacket->getDestinationStation());
 		if(strlen($sIP)>0){
 			$sPacket = $oReplyEconetPacket->getAunFrame();
-			logger_log("filestore: AUN packet to ".$sIP." (".$sPacket.")",LOG_DEBUG);
+			logger::log("filestore: AUN packet to ".$sIP." (".$sPacket.")",LOG_DEBUG);
 			if(strlen($sPacket)>0){
 				if(strpos($sIP,':')===FALSE){
 					$sHost=$sIP.':'.config::getValue('aun_default_port');

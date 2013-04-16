@@ -45,8 +45,8 @@ class aunpacket {
 
 	public function getPortName()
 	{
-		if(array_key_exists(dechex($this->iPort),$this->aPortMap)){
-			return $this->aPortMap[dechex($this->iPort)];
+		if(array_key_exists($this->iPort,$this->aPortMap)){
+			return $this->aPortMap[$this->iPort];
 		}
 	}
 
@@ -83,7 +83,6 @@ class aunpacket {
 		$aHeader=unpack('C',$sBinaryString);
 		$this->iPort = $aHeader[1];
 		$sBinaryString = substr($sBinaryString,1);
-		var_dump(dechex($this->iPort));
 		
 		//Read the flag 1 byte unsigned int
 		$aHeader=unpack('C',$sBinaryString);
@@ -109,7 +108,7 @@ class aunpacket {
 		if(!is_numeric($this->iPktType)){
 			return;
 		}
-
+		$sPtk = NULL;
 		if($this->aTypeMap[$this->iPktType]=='Unicast'){
 			//Set the type as Ack
 			$sPtk = pack('C',3);
@@ -150,7 +149,7 @@ class aunpacket {
 	{
 		if(strpos($sHost,':')!==FALSE){
 			$aIPParts = explode(':',$sHost);
-			$this->sDestinationIP=$aIPParts[0];
+			$this->sSoruceIP=$aIPParts[0];
 		}else{
 			$this->sSoruceIP=$sHost;
 		}
@@ -174,8 +173,8 @@ class aunpacket {
 		$sNetworkStation = aunmap::ipAddrToEcoAddr($this->sSoruceIP);
 		$aEcoAddr = explode('.',$sNetworkStation);
 		if(array_key_exists(0,$aEcoAddr) AND array_key_exists(1,$aEcoAddr)){
-			$oEconetPacket->setSourceStation($aEcoAddr[0]);
-			$oEconetPacket->setDestinationStation($aEcoAddr[1]);
+			$oEconetPacket->setSourceNetwork($aEcoAddr[0]);
+			$oEconetPacket->setSourceStation($aEcoAddr[1]);
 		}
 		$oEconetPacket->setData($this->sData);
 		return $oEconetPacket;

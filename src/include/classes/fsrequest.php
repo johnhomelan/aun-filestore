@@ -109,6 +109,6 @@ class fsrequest {
 
 	public function buildReply()
 	{
-		$oReply = new fsreply($this);
+		return new fsreply($this);
 	}
 }

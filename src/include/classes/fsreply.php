@@ -58,9 +58,18 @@ class fsreply {
 		$this->sPkt = pack('CC',$this->aTypeMap['DONE'],0);
 	}
 
-	public function AppendByte($iByte)
+	public function appendByte($iByte)
 	{
 		$this->sPkt = $this->sPkt.pack('C',$iByte);
+	}
+
+	public function appendString($sString)
+	{
+		$aChars = str_split($sString);
+		foreach($aChars as $sChar)
+		{
+			$this->sPkt = $this->sPkt.pack('C',ord($sChar));
+		}
 	}
 
 

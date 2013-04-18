@@ -95,11 +95,14 @@ class aunpacket {
 		
 		//Sequence 4 bytes little-endian
 		$aHeader=unpack('V',$sBinaryString);
+		$this->iSeq = $aHeader[1];
 		$sBinaryString = substr($sBinaryString,4);
 
 		//The reset is data
 		$this->sData = $sBinaryString;
-		
+
+		//Set the aun counter 		
+		aunmap::setAunCounter($this->sSoruceIP,$this->iSeq);
 	}
 
 	public function buildAck()
@@ -155,6 +158,11 @@ class aunpacket {
 		}
 	}
 
+	public function getSourceIP()
+	{
+		return $this->sSoruceIP;
+	}
+
 	public function setDestinationIP($sHost)
 	{
 		if(strpos($sHost,':')!==FALSE){
@@ -163,6 +171,11 @@ class aunpacket {
 		}else{
 			$this->sDestinationIP=$sHost;
 		}
+	}
+
+	public function getDestinationIP()
+	{
+		return $this->sDestinationIP;
 	}
 
 	public function buildEconetPacket()

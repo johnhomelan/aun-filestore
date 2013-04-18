@@ -140,7 +140,7 @@ class aunmap {
 		}
 	}
 
-	public static function setAunCounter($iCounter,$sIP)
+	public static function setAunCounter($sIP,$iCounter)
 	{
 		aunmap::$aIpCounter[$sIP]=$iCounter;
 	}

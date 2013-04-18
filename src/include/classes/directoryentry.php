@@ -69,6 +69,16 @@ class directoryentry {
 	{
 		return $this->bDir;
 	}
+
+	public function getEconetMode()
+	{
+		$sMode ="";
+		if($this->isDir()){
+			$sMode=$sMode."D";
+		}
+		$sMode=$sMode."WR/r";
+		return str_pad(substr($sMode,0,6),6,' ');
+	}
 }
 
 ?>

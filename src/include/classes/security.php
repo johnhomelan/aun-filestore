@@ -60,6 +60,19 @@ class security {
 		return FALSE;
 	}
 
+	public static function logout($iNetwork,$iStation)
+	{
+		if(security::isLoggedIn($iNetwork,$iStation)){
+			$oUser = security::getUser($iNetwork,$iStation);
+			logger::log("Security: Logout for ".$oUser->getUsername()." on ".$iNetwork.".".$iStation."",LOG_INFO);
+			//Drop the login from the session array
+			unset(security::$aSessions[$iNetwork][$iStation]);
+		}else{
+			throw new Exception("Security: No user logged in on ".$iNetwork.".".$iStation);
+		}
+		
+	}
+
 	/**
 	 * Get the user object for the user logged in at the given network/station
 	 *

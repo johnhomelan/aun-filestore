@@ -57,6 +57,21 @@ class fsrequest {
 		return $this->iReplyPort;
 	}
 
+	public function getUrd()
+	{
+		return $this->iUrd;
+	}
+
+	public function getCsd()
+	{
+		return $this->iCsd;
+	}
+
+	public function getLib()
+	{
+		return $this->iLib;
+	}
+
 	/**
 	 * Get the binary data from the fs packet
 	 *
@@ -92,7 +107,24 @@ class fsrequest {
 		$aHeader=unpack('C',$sBinaryString);
 		$this->iFunction = $aHeader[1];
 		$sBinaryString = substr($sBinaryString,1);
-		
+	
+		//Read the urd code 1 byte unsigned int
+		$aHeader=unpack('C',$sBinaryString);
+		$this->iUrd = $aHeader[1];
+		$sBinaryString = substr($sBinaryString,1);
+
+		//Read the csd code 1 byte unsigned int
+		$aHeader=unpack('C',$sBinaryString);
+		$this->iCsd = $aHeader[1];
+		$sBinaryString = substr($sBinaryString,1);
+
+		//Read the lib code 1 byte unsigned int
+		if(strlen($sBinaryString)>0){
+			$aHeader=unpack('C',$sBinaryString);
+			$this->iLib = $aHeader[1];
+			$sBinaryString = substr($sBinaryString,1);
+		}
+	
 		//The reset is data
 		$this->sData = $sBinaryString;
 		
@@ -100,11 +132,23 @@ class fsrequest {
 
 	public function getByte($iIndex)
 	{
-		$aBytes = unpack('C*',$this->sBinaryString);
+		$aBytes = unpack('C*',$this->sData);
 		if(array_key_exists($iIndex,$aBytes)){
 			return $aBytes[$iIndex];
 		}
 		return NULL;
+	}
+
+	public function getString($iStart)
+	{
+		$aBytes = unpack('C*',$this->sData);
+		$sRetstr = "";
+		for($i=$iStart;$i<count($aBytes);$i++){
+			if($aBytes[$i]!="\r" AND $aBytes[$i]!="\n"){
+				$sRetstr = $sRetstr.chr($aBytes[$i]);
+			}
+		}
+		return $sRetstr;
 	}
 
 	public function buildReply()

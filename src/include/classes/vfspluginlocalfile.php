@@ -70,14 +70,14 @@ class vfspluginlocalfile {
 		$sUnixPath = vfspluginlocalfile::_econetToUnix($sEconetPath);
 		$aFiles = scandir($sUnixPath);
 		foreach($aFiles as $sFile){
-			if($sFile=='..' or '.'){
+			if($sFile=='..' or $sFile=='.'){
 				//Skip 
 			}elseif(stripos($sFile,'.inf')!==FALSE){
 				//Files ending in .inf skip
 			}else{
 				if(!array_key_exists($sFile,$aDirectoryListing)){
-					$aStats = stat($sUnixPath.DIRECTORY_SEPARATOR.$sFile);
-					$aDirectoryListing[$sPrefix]=new directoryentry(str_replace('.','/',$sFile),$sFile,'vfspluginlocalfile',NULL,NULL,$aStat['size']);
+					$aStat = stat($sUnixPath.DIRECTORY_SEPARATOR.$sFile);
+					$aDirectoryListing[$sFile]=new directoryentry(str_replace('.','/',$sFile),$sFile,'vfspluginlocalfile',NULL,NULL,$aStat['size']);
 				}
 				if(is_null($aDirectoryListing[$sFile]) AND is_null($aDirectoryListing[$sFile]->getExecAddr())){
 					//If there is a .inf file use it toget the load exec addr

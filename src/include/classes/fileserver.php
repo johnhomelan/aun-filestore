@@ -361,14 +361,35 @@ class fileserver {
 				break;
 			case 3:
 				//EXAMINE_SHORTTXT
-				//Number of entries 1 Byte
+
+				$oReply->DoneOk();
+
+				//Get the directory listing
 				$oFd = vfs::getFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oFsRequest->getCsd());
 				$aDirEntries=vfs::getDirectoryListing($oFd);
+				logger::log("There are ".count($aDirEntries)." entries in dir ".$oFd->getEconetPath(),LOG_DEBUG);
+
+				//Return only the entries the client requested (works like sql limit and offset)
+				$aDirEntries = array_slice($aDirEntries,$iStart,$iCount);
+
+				//Number of entries 1 Byte
 				$oReply->appendByte(count($aDirEntries));
 				//Undefined but riscos needs it 
 				$oReply->appendByte(0);
-				
-				//Data
+
+				foreach($aDirEntries as $oFile){
+					//Append the file name (limit 10 chars)
+					$oReply->appendString(str_pad(substr($oFile->getEconetName(),0,10),10,' '));
+					//Add 0x20
+					$oReply->appendByte(0x20);
+					//Add the file mode e.g DRW/r   (alway 6 bytes space padded)
+					$oReply->appendString($oFile->getEconetMode());
+					//End this directory entry
+					$oReply->appendByte(0);
+					
+				}
+				//Close the set	with 0x80
+				$oReply->appendByte(0x80);
 				break;
 		}
 		$this->_addReplyToBuffer($oReply);

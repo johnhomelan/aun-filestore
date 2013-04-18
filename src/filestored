@@ -164,7 +164,7 @@ class filestored  {
 		$sIP = aunmap::ecoAddrToIpAddr($oReplyEconetPacket->getDestinationNetwork(),$oReplyEconetPacket->getDestinationStation());
 		if(strlen($sIP)>0){
 			$sPacket = $oReplyEconetPacket->getAunFrame();
-			logger::log("filestore: AUN packet to ".$sIP." (".$sPacket.")",LOG_DEBUG);
+			logger::log("filestore: AUN packet to ".$sIP." (".implode(':',unpack('C*',$sPacket)).")",LOG_DEBUG);
 			if(strlen($sPacket)>0){
 				if(strpos($sIP,':')===FALSE){
 					$sHost=$sIP.':'.config::getValue('aun_default_port');

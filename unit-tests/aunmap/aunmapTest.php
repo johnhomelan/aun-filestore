@@ -43,5 +43,17 @@ class aunmapTest extends PHPUnit_Framework_TestCase {
 		//Test host map overides subnet map
 		$this->assertEquals(aunmap::ecoAddrToIpAddr('127','254'),'192.168.0.40');
 	}
+
+	public function testCounter()
+	{
+		aunmap::setAunCounter('192.168.0.3',0);
+		$this->assertEquals(aunmap::incAunCounter('192.168.0.3'),4);
+		$this->assertEquals(aunmap::incAunCounter('192.168.0.3'),8);
+
+		$this->assertEquals(aunmap::incAunCounter('192.168.0.1'),4);
+
+		aunmap::setAunCounter('192.168.0.3',20);
+		$this->assertEquals(aunmap::incAunCounter('192.168.0.3'),24);
+	}
 }
 ?>

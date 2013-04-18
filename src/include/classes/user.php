@@ -24,6 +24,8 @@ class user {
 
 	protected $bIsAdmin = FALSE;
 
+	protected $sCwd = NULL;
+
 	public function setUsername($sUsername)
 	{
 		$this->sUsername=strtoupper($sUsername);
@@ -92,6 +94,14 @@ class user {
 	public function isAdmin()
 	{
 		return $this->bIsAdmin;
+	}
+
+	public function getCwd()
+	{
+		if(is_null($this->sCwd)){
+			$this->sCwd = $this->getHomedir();
+		}
+		return $this->sCwd;
 	}
 }
 ?>

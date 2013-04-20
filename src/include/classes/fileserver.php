@@ -22,6 +22,11 @@ class fileserver {
 		$this->aReplyBuffer[]=$oReply;
 	}
 
+	/**
+	 * Retreives all the reply objects built by the fileserver 
+	 *
+	 * This method removes the replies from the buffer 
+	*/
 	public function getReplies()
 	{
 		$aReplies = $this->aReplyBuffer;
@@ -29,10 +34,17 @@ class fileserver {
 		return $aReplies;
 	}
 
+	/**
+	 * This is the main entry point to this class 
+	 *
+	 * The fsrequest object contains the request the fileserver must process 
+	 * @param object fsrequest $oFsRequest
+	*/
 	public function processRequest($oFsRequest)
 	{
 		$sFunction = $oFsRequest->getFunction();
 		logger::log("FS function ".$sFunction,LOG_DEBUG);
+
 		//Function where you dont always need to be logged in
 		switch($sFunction){
 			case 'EC_FS_FUNC_CLI':
@@ -122,6 +134,13 @@ class fileserver {
 		}
 	}
 
+	/**
+	 * Decodes the cli request
+	 *
+	 * Once the decode is complete the decoded request is passedto the runCli method
+	 *
+	 * @param object $oFsRequest
+	*/
 	public function cliDecode($oFsRequest)
 	{
 		$sData = $oFsRequest->getData();
@@ -145,6 +164,13 @@ class fileserver {
 		}
 	}
 
+	/**
+	 * This method runs the cli command, or delegate to an approriate method
+	 *
+	 * @param object fsrequest $oFsRequest The fsrequest
+	 * @param string $sCommand The command to run
+	 * @param string $sOptions The command arguments
+	*/
 	public function runCli($oFsRequest,$sCommand,$sOptions)
 	{
 		switch($sCommand){
@@ -176,35 +202,26 @@ class fileserver {
 		}
 	}
 
+	/**
+	 * Handles login requests (*I AM)
+	 *
+	 * @param object fsrequest $oFsRequest
+	 * @param string $sOptions The arguments passed to *I AM (e.g. username password)
+	*/
 	public function login($oFsRequest,$sOptions)
 	{
 		logger::log("fileserver: Login called ".$sOptions,LOG_DEBUG);
 		$aOptions = explode(" ",$sOptions);
 		if(count($aOptions)>0){
 			//Creditials supplied, decode username and password
-			if(is_numeric($aOptions[0])){
-				//station number supplied skip
-				if(array_key_exists(1,$aOptions)){
-					$sUser = $aOptions[1];
-				}
-				if(array_key_exists(2,$aOptions)){
-					$sPass = trim($sOptions[2]);
-					if(substr_count($sPass,"\r")>0){
-						list($sPass) = explode("\r",$sPass);
-					}
-				}else{
-					$sPass = "";
+			$sUser = $aOptions[0];
+			if(array_key_exists(1,$aOptions)){
+				$sPass = trim($aOptions[1]);
+				if(substr_count($sPass,"\r")>0){
+					list($sPass) = explode("\r",$sPass);
 				}
 			}else{
-				$sUser = $aOptions[0];
-				if(array_key_exists(1,$aOptions)){
-					$sPass = trim($aOptions[1]);
-					if(substr_count($sPass,"\r")>0){
-						list($sPass) = explode("\r",$sPass);
-					}
-				}else{
-					$sPass="";
-				}
+				$sPass="";
 			}
 		}else{
 			//No creditials supplied
@@ -220,6 +237,9 @@ class fileserver {
 
 		//Do login
 		if(security::login($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sUser,$sPass)){
+			//Login success 
+
+			//Create the handles for the csd urd and lib
 			$oUser = security::getUser($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation());
 			try {
 				$oUrd = vfs::createFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oUser->getHomedir());
@@ -235,21 +255,29 @@ class fileserver {
 				logger::log("fileserver: Login unable to open library dir setting library to $ for user ".$oUser->getUnsername(),LOG_INFO);
 				$oLib = vfs::createFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),'');
 			}
+			//Handles are now build send the reply 
 			$oReply = $oFsRequest->buildReply();
 			logger::log("fileserver: Login ok urd:".$oUrd->getId()." csd:".$oCsd->getId()." lib:".$oLib->getId(),LOG_DEBUG);
 			$oReply->loginRespone($oUrd->getId(),$oCsd->getId(),$oLib->getId(),$oUser->getBootOpt());
 			$this->_addReplyToBuffer($oReply);
 		}else{
+			//Login failed
 			$oReply = $oFsRequest->buildReply();
 
-			logger::log("Login Failed: For user ".$sUser." invalid password/no such user",LOG_INFO);
 			//Send Wrong Password
+			logger::log("Login Failed: For user ".$sUser." invalid password/no such user",LOG_INFO);
 			$oReply->setError(0xbb,"Incorrect password");
 			$this->_addReplyToBuffer($oReply);
 		}
 			
 	}
 
+	/**
+	 * Handle logouts (*bye)
+	 *
+	 * We can be called as a cli command (*bye) and by its own function call
+	 * @param object fsrequest $oFsRequest
+	*/
 	public function logout($oFsRequest)
 	{
 		try{
@@ -263,6 +291,12 @@ class fileserver {
 		$this->_addReplyToBuffer($oReply);
 	}
 
+	/**
+	 * Handles requests for information on directories and files
+	 *
+	 * This method is called when the client uses *. to produce the directory header
+	 * @param objects fsrequest $oFsRequest
+	*/
 	public function getInfo($oFsRequest)
 	{
 		var_dump($oFsRequest->getByte(1));
@@ -324,9 +358,7 @@ class fileserver {
 				//EC_FS_GET_INFO_UID
 				break;
 			default:
-				$oReply = $oFsRequest->buildReply();
-				$oReply->setError(0x8e,"Bad INFO argument");
-				$this->_addReplyToBuffer($oReply);
+				//Don't do any thing fall to the bad info reply below
 				break;
 		}
 		$oReply = $oFsRequest->buildReply();
@@ -340,6 +372,12 @@ class fileserver {
 		$oUser = securtiy::getUser($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation());	
 	}
 
+	/**
+	 * Gets the details of a director/file 
+	 * 
+ 	 * This method produces the directory listing for *.
+	 * @param object fsrequest $oFsRequest
+	*/
 	public function examine($oFsRequest)
 	{
 		$oReply = $oFsRequest->buildReply();

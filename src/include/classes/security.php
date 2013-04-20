@@ -1,4 +1,17 @@
 <?
+/**
+ * File containing the security class
+ *
+ * @package coreauth
+*/
+
+/**
+ * This class controls securtiy with in the fileserver, perform login/out and
+ * all other security functions
+ * 
+ * @package coreauth
+ * @author John Brown <john@home-lan.co.uk>
+*/
 
 class security {
 

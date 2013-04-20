@@ -1,4 +1,17 @@
 <?
+/**
+ * File containing the authpluginfile class
+ *
+ * @package coreauth
+*/
+
+/**
+ * This class is a plugin for the auth system, it provides an auth backend
+ * based on using a simple plain text user file.
+ * 
+ * @package coreauth
+ * @author John Brown <john@home-lan.co.uk>
+*/
 
 class authpluginfile implements authplugininterface {
 

@@ -1,5 +1,16 @@
 <?
+/**
+ * This file contains the file directoryentry class
+ *
+ * @author John Brown <john@home-lan.co.uk>
+ * @package corevfs
+*/
 
+/** 
+ * This class is used to prepresent a files entry in the directory catalogue
+ *
+ * @package corevfs
+*/
 class directoryentry {
 
 	protected $sVfsPlugin = NULL;

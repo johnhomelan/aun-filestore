@@ -92,6 +92,11 @@ class filedescriptor {
 	{
 		return $this->iHandle;
 	}
+	
+	public function isDir()
+	{
+		return $this->bDir;
+	}
 
 	public function fsFTell()
 	{

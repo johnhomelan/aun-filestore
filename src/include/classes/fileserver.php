@@ -188,6 +188,8 @@ class fileserver {
 			case 'CDIR':
 			case 'DELETE':
 			case 'DIR':
+				$this->changeDirectory($oFsRequest,$sOptions);
+				break;
 			case 'FSOPT':
 			case 'INFO':
 			case 'LIB':
@@ -252,7 +254,7 @@ class fileserver {
 			try {
 				$oLib = vfs::createFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),config::getValue('library_path'));
 			}catch(Exception $oException){
-				logger::log("fileserver: Login unable to open library dir setting library to $ for user ".$oUser->getUnsername(),LOG_INFO);
+				logger::log("fileserver: Login unable to open library dir setting library to $ for user ".$oUser->getUsername(),LOG_INFO);
 				$oLib = vfs::createFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),'');
 			}
 			//Handles are now build send the reply 
@@ -299,8 +301,6 @@ class fileserver {
 	*/
 	public function getInfo($oFsRequest)
 	{
-		var_dump($oFsRequest->getByte(1));
-		var_dump($oFsRequest->getString(2));
 		$sDir = $oFsRequest->getString(2);
 		switch($oFsRequest->getByte(1)){
 			case 4:
@@ -384,9 +384,6 @@ class fileserver {
 		$iArg = $oFsRequest->getByte(1);
 		$iStart = $oFsRequest->getByte(2);
 		$iCount = $oFsRequest->getByte(3);
-		var_dump($iArg);
-		var_dump($iStart);
-		var_dump($iCount);
 		switch($iArg){
 			case 0:
 				//EXAMINE_ALL
@@ -492,10 +489,44 @@ class fileserver {
 
 		//lib leaf name String 10 bytes
 		$oLib = vfs::getFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oFsRequest->getLib());	
-		var_dump($oLib->getEconetDirName());
 		$oReply->appendString(str_pad(substr($oLib->getEconetDirName(),0,10),10,' '));
 
 		$this->_addReplyToBuffer($oReply);
+	}
+
+	public function changeDirectory($oFsRequest,$sOptions)
+	{
+		$oReply = $oFsRequest->buildReply();
+		
+		if(strlen($sOptions)>0){
+			try {
+				$oNewCsd = vfs::createFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sOptions);	
+				if(!$oNewCsd->isDir()){
+					logger::log("User tryed to change to directory ".$oNewCsd->getEconetDirName()." however its not a directory.",LOG_DEBUG);
+					throw new Exception("Not a directory");
+				}
+				vfs::closeFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oFsRequest->getCsd());
+				$oReply->DoneOk();
+				$oReply->appendByte($oNewCsd->getID());
+			}catch(Exception $oException){
+				//The directory did no exist
+				$oReply->setError(0xff,"No such directory.");	
+			}
+		}else{
+			//No directory selected, change to the users home dir
+			$oUser = security::getUser($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation());
+			try {
+				$oNewCsd = vfs::createFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oUser->getHomedir());
+				vfs::closeFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oFsRequest->getCsd());
+				$oReply->DoneOk();
+				$oReply->appendByte($oNewCsd->getID());
+			}catch(Exception $oException){
+				$oReply->setError(0xff,"No such directory.");	
+			}
+		}
+		$this->_addReplyToBuffer($oReply);
+
+
 	}
 }
 

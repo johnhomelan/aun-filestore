@@ -36,7 +36,7 @@ class fsreply {
 	*/
 	public function setError($iCode,$sMessage)
 	{
-		if(is_numeric($iCode) AND $iCode>0 AND $iCode<255){
+		if(is_numeric($iCode) AND $iCode>0 AND $iCode<256){
 			$this->sPkt = pack('CC',$this->aTypeMap['DONE'],$iCode);
 			$sMessage = $sMessage."\r";
 			$aMessage = str_split($sMessage);

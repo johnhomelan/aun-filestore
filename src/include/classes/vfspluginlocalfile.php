@@ -48,8 +48,11 @@ class vfspluginlocalfile {
 
 	public static function _buildFiledescriptorFromEconetPath($oUser,$sCwd,$sEconetPath)
 	{
-		$sUnixPath = vfspluginlocalfile::_econetToUnix($sEconetPath);
-		if(strlen($sUnixPath)<1){
+		if(strpos($sEconetPath,'$')===0){
+			//Absolute Path
+			$sUnixPath = vfspluginlocalfile::_econetToUnix($sEconetPath);
+		}else{
+			//Relative path
 			$sEconetPath = $sCwd.'.'.$sEconetPath;
 			$sUnixPath = vfspluginlocalfile::_econetToUnix($sEconetPath);
 		}

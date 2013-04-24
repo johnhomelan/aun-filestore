@@ -46,13 +46,13 @@ class vfs {
 		return $aReturn;
 	}
 	
-	static protected function _buildFiledescriptorFromEconetPath($oUser,$sCwd,$sEconetPath)
+	static protected function _buildFiledescriptorFromEconetPath($oUser,$sCsd,$sEconetPath)
 	{
 		$aPlugins = vfs::getVfsPlugins();
 		$oHandle=NULL;
 		foreach($aPlugins as $sPlugin){
 			try {
-				$oHandle = $sPlugin::_buildFiledescriptorFromEconetPath($oUser,$sCwd,$sEconetPath);
+				$oHandle = $sPlugin::_buildFiledescriptorFromEconetPath($oUser,$sCsd,$sEconetPath);
 			}catch(VfsException $oVfsException){
 				//If it's a hard error abort the operation
 				if($oVfsException->isHard()){
@@ -111,8 +111,8 @@ class vfs {
 			throw new Exception("vfs: Un-able to create a handle for a station that is not logged in (Who are you?)");
 		}
 		$oUser = security::getUser($iNetwork,$iStation);
-		$sCwd = $oUser->getCwd();
-		$oHandle = vfs::_buildFiledescriptorFromEconetPath($oUser,$sCwd,$sEconetPath);
+		$sCsd = $oUser->getCsd();
+		$oHandle = vfs::_buildFiledescriptorFromEconetPath($oUser,$sCsd,$sEconetPath);
 
 		//Store the handel for later use
 		if(!array_key_exists($iNetwork,vfs::$aHandles)){

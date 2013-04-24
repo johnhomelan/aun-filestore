@@ -248,8 +248,8 @@ class fileserver {
 				$oCsd = vfs::createFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oUser->getHomedir());	
 			}catch(Exception $oException){
 				logger::log("fileserver: Login unable to open homedirectory for user ".$oUser->getUsername(),LOG_INFO);
-				$oUrd = vfs::createFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),'');
-				$oCsd = vfs::createFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),'');
+				$oUrd = vfs::createFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),'$');
+				$oCsd = vfs::createFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),'$');
 			}
 			try {
 				$oLib = vfs::createFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),config::getValue('library_path'));
@@ -497,30 +497,37 @@ class fileserver {
 	public function changeDirectory($oFsRequest,$sOptions)
 	{
 		$oReply = $oFsRequest->buildReply();
+		$oUser = security::getUser($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation());
 		
 		if(strlen($sOptions)>0){
 			try {
 				$oNewCsd = vfs::createFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sOptions);	
 				if(!$oNewCsd->isDir()){
 					logger::log("User tryed to change to directory ".$oNewCsd->getEconetDirName()." however its not a directory.",LOG_DEBUG);
-					throw new Exception("Not a directory");
+					$oReply->setError(0xbe,"Not a directory");
+					$this->_addReplyToBuffer($oReply);
+					return;
 				}
 				vfs::closeFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oFsRequest->getCsd());
-				$oReply->DoneOk();
+				$oReply->DirOk();
+				//Send new csd handle
 				$oReply->appendByte($oNewCsd->getID());
+				$oUser->setCsd($oNewCsd->getEconetPath());
+
 			}catch(Exception $oException){
 				//The directory did no exist
 				$oReply->setError(0xff,"No such directory.");	
 			}
 		}else{
 			//No directory selected, change to the users home dir
-			$oUser = security::getUser($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation());
 			try {
 				$oNewCsd = vfs::createFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oUser->getHomedir());
 				vfs::closeFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oFsRequest->getCsd());
-				$oReply->DoneOk();
+				$oReply->DirOk();
 				$oReply->appendByte($oNewCsd->getID());
+				$oUser->setCsd($oNewCsd->getEconetPath());
 			}catch(Exception $oException){
+				var_dump($oException);
 				$oReply->setError(0xff,"No such directory.");	
 			}
 		}

@@ -33,6 +33,8 @@ class vfspluginlocalfile {
 
 	protected static function _econetToUnix($sEconetPath)
 	{
+		//Trim leading $.
+		$sEconetPath = substr($sEconetPath,2);
 		$aFileParts = explode('.',$sEconetPath);
 		$sUnixPath = "";
 		foreach($aFileParts as $sPart){
@@ -46,14 +48,14 @@ class vfspluginlocalfile {
 		}
 	}
 
-	public static function _buildFiledescriptorFromEconetPath($oUser,$sCwd,$sEconetPath)
+	public static function _buildFiledescriptorFromEconetPath($oUser,$sCsd,$sEconetPath)
 	{
 		if(strpos($sEconetPath,'$')===0){
 			//Absolute Path
 			$sUnixPath = vfspluginlocalfile::_econetToUnix($sEconetPath);
 		}else{
 			//Relative path
-			$sEconetPath = $sCwd.'.'.$sEconetPath;
+			$sEconetPath = $sCsd.'.'.$sEconetPath;
 			$sUnixPath = vfspluginlocalfile::_econetToUnix($sEconetPath);
 		}
 		if(strlen($sUnixPath)>0){

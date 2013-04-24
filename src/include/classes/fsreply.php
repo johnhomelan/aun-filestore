@@ -58,6 +58,11 @@ class fsreply {
 		$this->sPkt = pack('CC',$this->aTypeMap['DONE'],0);
 	}
 
+	public function DirOK()
+	{
+		$this->sPkt = pack('CC',$this->aTypeMap['DIR'],0);
+	}
+
 	public function appendByte($iByte)
 	{
 		$this->sPkt = $this->sPkt.pack('C',$iByte);

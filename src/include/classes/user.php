@@ -24,7 +24,7 @@ class user {
 
 	protected $bIsAdmin = FALSE;
 
-	protected $sCwd = NULL;
+	protected $sCsd = NULL;
 
 	public function setUsername($sUsername)
 	{
@@ -96,12 +96,17 @@ class user {
 		return $this->bIsAdmin;
 	}
 
-	public function getCwd()
+	public function setCsd($sCsd)
 	{
-		if(is_null($this->sCwd)){
-			$this->sCwd = $this->getHomedir();
+		$this->sCsd = $sCsd;
+	}
+
+	public function getCsd()
+	{
+		if(is_null($this->sCsd)){
+			$this->sCsd = $this->getHomedir();
 		}
-		return $this->sCwd;
+		return $this->sCsd;
 	}
 }
 ?>

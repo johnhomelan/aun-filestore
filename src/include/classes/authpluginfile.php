@@ -48,12 +48,12 @@ class authpluginfile implements authplugininterface {
 		foreach($aLines as $sLine){
 			$aMatches = array();
 			//The file format is username:pwhashtype-hash:homedir:unixuid:opt
-			if(preg_match('/([a-zA-Z0-9]+):([a-z0-9]+-[a-zA-Z0-9]+):([a-z0-9A-Z\-._]+):([0-9]+):([0-9]):([A-Za-z])/',$sLine,$aMatches)>0){
+			if(preg_match('/([a-zA-Z0-9]+):([a-z0-9]+-[a-zA-Z0-9]+):([$a-z0-9A-Z\-._]+):([0-9]+):([0-9]):([A-Za-z])/',$sLine,$aMatches)>0){
 				authpluginfile::$aUsers[strtoupper($aMatches[1])]=array('username'=>strtoupper($aMatches[1]),'password'=>$aMatches[2],'homedir'=>$aMatches[3],'unixuid'=>$aMatches[4],'opt'=>$aMatches[5],'priv'=>$aMatches[6]);
 			}
 			//Match with no password set
 			$aMatches=array();
-			if(preg_match('/([a-zA-Z0-9]+)::([a-z0-9A-Z\-._]+):([0-9]+):([0-9]):([A-Za-z])/',$sLine,$aMatches)>0){
+			if(preg_match('/([a-zA-Z0-9]+)::([$a-z0-9A-Z\-._]+):([0-9]+):([0-9]):([A-Za-z])/',$sLine,$aMatches)>0){
 				authpluginfile::$aUsers[strtoupper($aMatches[1])]=array('username'=>strtoupper($aMatches[1]),'password'=>'','homedir'=>$aMatches[2],'unixuid'=>$aMatches[3],'opt'=>$aMatches[4],'priv'=>$aMatches[5]);
 			}
 		}

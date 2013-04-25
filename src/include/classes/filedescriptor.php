@@ -62,6 +62,21 @@ class filedescriptor {
 		}
 	}
 
+	public function getEconetParentPath()
+	{
+		//Build the path with out the last dir
+		$aPathParts = explode('.',$this->sEconetFilePath);
+		$sParentPath = "";
+		for($i=0;$i<(count($aPathParts)-1);$i++){
+			$sParentPath = $sParentPath.$aPathParts[$i].".";
+		}
+		if(strlen($sParentPath)>0){
+			//Our parent is not $ return the parent path but trim the trailing .
+			return trim($sParentPath,'.');
+		}
+		return '$';
+	}
+
 	public function changeVfs()
 	{
 		$aPlugins = vfs::getVfsPlugins();

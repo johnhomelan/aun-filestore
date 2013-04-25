@@ -63,6 +63,11 @@ class fsreply {
 		$this->sPkt = pack('CC',$this->aTypeMap['DIR'],0);
 	}
 
+	public function LibOK()
+	{
+		$this->sPkt = pack('CC',$this->aTypeMap['LIB'],0);
+	}
+
 	public function appendByte($iByte)
 	{
 		$this->sPkt = $this->sPkt.pack('C',$iByte);

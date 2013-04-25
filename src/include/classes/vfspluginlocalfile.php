@@ -109,6 +109,24 @@ class vfspluginlocalfile {
 		return $aReturn;
 	}
 
+	public static function createDirectory($oUser,$sCsd,$sEconetPath)
+	{
+		if(strpos($sEconetPath,'$')===0){
+			//Absolute path
+			$aPath = explode('.',$sEconetPath);
+		}else{
+			//Relative path
+			$aPath = explode('.',trim($sCsd,'.').'.'.$sEconetPath);
+		}
+		$sDir = array_pop($aPath);
+		$sDirPath = implode('.',$aPath);
+		$sUnixDirPath = vfspluginlocalfile::_econetToUnix($sDirPath);
+		if(is_dir($sUnixDirPath)){
+			return mkdir(rtrim($sUnixDirPath,DIRECTORY_SEPARATOR).DIRECTORY_SEPARATOR.$sDir);
+		}
+		return FALSE;
+	}
+
 	public static function fsFtell($oUser,$fLocalHandle)
 	{
 		vfspluginlocalfile::_setUid($oUser);
@@ -124,7 +142,7 @@ class vfspluginlocalfile {
 		vfspluginlocalfile::_returnUid();
 		return $mReturn;
 	}
-	
+
 	public static function close($oUser,$fLocalHandle)
 	{
 		vfspluginlocalfile::_setUid($oUser);

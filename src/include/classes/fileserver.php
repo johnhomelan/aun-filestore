@@ -122,6 +122,8 @@ class fileserver {
 			case 'EC_FS_FUNC_GET_DISC_FREE':
 				break;
 			case 'EC_FS_FUNC_CDIRN':
+				$sDir = $oFsRequest->getString(2);
+				$this->createDirectory($oFsRequest,$sDir);
 				break;
 			case 'EC_FS_FUNC_CREATE':
 				break;
@@ -185,17 +187,28 @@ class fileserver {
 				$this->setPassword($oFsRequest,$sOptions);
 				break;
 			case 'CAT':
+				break;
 			case 'CDIR':
+				$this->createDirectory($oFsRequest,$sOptions);
+				break;
 			case 'DELETE':
+				break;
 			case 'DIR':
 				$this->changeDirectory($oFsRequest,$sOptions);
 				break;
 			case 'FSOPT':
+				break;
 			case 'INFO':
+				break;
 			case 'LIB':
+				$this->changeLibrary($oFsRequest,$sOptions);
+				break;
 			case 'LOAD':
+				break;
 			case 'RENAME':
+				break;
 			case 'SAVE':
+				break;
 			case 'SDISC':
 				break;
 			default:
@@ -501,12 +514,19 @@ class fileserver {
 		
 		if(strlen($sOptions)>0){
 			try {
-				$oNewCsd = vfs::createFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sOptions);	
-				if(!$oNewCsd->isDir()){
-					logger::log("User tryed to change to directory ".$oNewCsd->getEconetDirName()." however its not a directory.",LOG_DEBUG);
-					$oReply->setError(0xbe,"Not a directory");
-					$this->_addReplyToBuffer($oReply);
-					return;
+				if($sOptions=="^"){
+					//Change to parent dir
+					$oCsd = vfs::getFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oFsRequest->getCsd());
+					$sParentPath = $oCsd->getEconetParentPath();
+					$oNewCsd = vfs::createFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sParentPath);
+				}else{
+					$oNewCsd = vfs::createFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sOptions);	
+					if(!$oNewCsd->isDir()){
+						logger::log("User tryed to change to directory ".$oNewCsd->getEconetDirName()." however its not a directory.",LOG_DEBUG);
+						$oReply->setError(0xbe,"Not a directory");
+						$this->_addReplyToBuffer($oReply);
+						return;
+					}
 				}
 				vfs::closeFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oFsRequest->getCsd());
 				$oReply->DirOk();
@@ -527,13 +547,64 @@ class fileserver {
 				$oReply->appendByte($oNewCsd->getID());
 				$oUser->setCsd($oNewCsd->getEconetPath());
 			}catch(Exception $oException){
-				var_dump($oException);
 				$oReply->setError(0xff,"No such directory.");	
 			}
 		}
 		$this->_addReplyToBuffer($oReply);
 
 
+	}
+
+	public function changeLibrary($oFsRequest,$sOptions)
+	{
+		$oReply = $oFsRequest->buildReply();
+		
+		if(strlen($sOptions)>0){
+			try {
+				$oNewLib = vfs::createFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sOptions);	
+				if(!$oNewLib->isDir()){
+					logger::log("User tryed to change the library to ".$oNewLib->getEconetDirName()." however its not a directory.",LOG_DEBUG);
+					$oReply->setError(0xbe,"Not a directory");
+					$this->_addReplyToBuffer($oReply);
+					return;
+				}
+				vfs::closeFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oFsRequest->getLib());
+				$oReply->LibOk();
+				//Send new csd handle
+				$oReply->appendByte($oNewLib->getID());
+			}catch(Exception $oException){
+				//The directory did no exist
+				$oReply->setError(0xff,"No such directory.");	
+			}
+		}else{
+			$oReply->setError(0xff,"Syntax ?");	
+		}
+		$this->_addReplyToBuffer($oReply);
+
+
+	}
+
+	public function createDirectory($oFsRequest,$sOptions)
+	{
+		$oReply = $oFsRequest->buildReply();
+		if(strlen($sOptions)<1){
+			$oReply->setError(0xff,"Syntax");
+			$this->_addReplyToBuffer($oReply);
+			return;
+		}
+		if(strlen($sOptions)>10){
+			$oReply->setError(0xff,"Maximum directory name length is 10");
+			$this->_addReplyToBuffer($oReply);
+			return;
+		}
+
+		try {
+			vfs::createDirectory($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sOptions);
+			$oReply->DoneOk();
+		}catch(Exception $oException){
+			$oReply->setError(0xff,"Unable to create directory");
+		}
+		$this->_addReplyToBuffer($oReply);
 	}
 }
 

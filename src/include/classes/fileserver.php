@@ -13,7 +13,7 @@
 */
 class fileserver {
 
-	protected $aCommands = array('BYE','CAT','CDIR','DELETE','DIR','FSOPT','INFO','I AM','LIB','LOAD','LOGOFF','PASS','RENAME','SAVE','SDISC');
+	protected $aCommands = array('BYE','CAT','CDIR','DELETE','DIR','FSOPT','INFO','I AM','LIB','LOAD','LOGOFF','PASS','RENAME','SAVE','SDISC','NEWUSER','PRIV');
 	
 	protected $aReplyBuffer = array();
 
@@ -116,6 +116,8 @@ class fileserver {
 			case 'EC_FS_FUNC_SET_OPT4':
 				break;
 			case 'EC_FS_FUNC_DELETE':
+				$sFile = $oFsRequest->getString(1);
+				$this->deleteFile($oFsRequest,$sFile);
 				break;
 			case 'EC_FS_FUNC_GET_VERSION':
 				break;
@@ -161,9 +163,13 @@ class fileserver {
 				$iOptionsPos = $iPos+strlen($sCommand)+1;
 				$sOptions = substr($sDataAsString,$iOptionsPos);
 				$this->runCli($oFsRequest,$sCommand,trim($sOptions));
+				return;
 				break;
 			}			
 		}
+		$oReply = $oFsRequest->buildReply();
+		$oReply->setError(0x99,"No such command");
+		$this->_addReplyToBuffer($oReply);
 	}
 
 	/**
@@ -192,6 +198,7 @@ class fileserver {
 				$this->createDirectory($oFsRequest,$sOptions);
 				break;
 			case 'DELETE':
+				$this->delete($oFsRequest,$sOptions);
 				break;
 			case 'DIR':
 				$this->changeDirectory($oFsRequest,$sOptions);
@@ -211,8 +218,17 @@ class fileserver {
 				break;
 			case 'SDISC':
 				break;
+			case 'PRIV':
+				$this->privUser($oFsRequest,$sOptions);
+				break;
+			case 'NEWUSER':
+				$this->createUser($oFsRequest,$sOptions);
+				break;
 			default:
 				logger::log("Un-handled command ".$sCommand,LOG_DEBUG);
+				$oReply = $oFsRequest->buildReply();
+				$oReply->setError(0x99,"Un-implemented command");
+				$this->_addReplyToBuffer($oReply);
 				break;
 		}
 	}
@@ -603,6 +619,77 @@ class fileserver {
 			$oReply->DoneOk();
 		}catch(Exception $oException){
 			$oReply->setError(0xff,"Unable to create directory");
+		}
+		$this->_addReplyToBuffer($oReply);
+	}
+
+	public function deleteFile($oFsRequest,$sOptions)
+	{
+		$oReply = $oFsRequest->buildReply();
+		if(strlen($sOptions)<1){
+			$oReply->setError(0xff,"Syntax");
+		}else{
+			try{
+				vfs::deleteFile($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sOptions);
+				$oReply->DoneOk();
+			}catch(Exception $oException){
+				$oReply->setError(0xff,"Unable to delete");
+			}
+		}
+		$this->_addReplyToBuffer($oReply);
+	}
+
+	public function createUser($oFsRequest,$sOptions)
+	{
+		$oReply = $oFsRequest->buildReply();
+		if(strlen($sOptions)<1){
+			$oReply->setError(0xff,"Syntax");
+		}else{
+			$aOptions = explode(' ',$sOptions);
+			if(strlen($aOptions[0])>3 AND strlen($aOptions[0])<11 AND ctype_upper($aOptions[0]) AND ctype_alpha($aOptions[0])){
+				$oUser = new user();
+				$oUser->setUsername($aOptions[0]);
+				if(!is_null(config::getValue('vfs_home_dir_path'))){
+					$oUser->setHomedir(config::getValue('vfs_home_dir_path').'.'.$aOptions[0]);
+					vfs::createDirectory($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),config::getValue('vfs_home_dir_path').'.'.$aOptions[0]);
+				}else{
+					$oUser->setHomedir('$');
+				}
+				$oUser->setUnixUid(config::getValue('security_default_unix_uid'));
+				$oUser->setPriv('U');
+				try{
+					security::createUser($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oUser);
+					$oReply->DoneOk();
+				}catch(Exception $oException){
+					$oReply->setError(0xff,$oException->getMessage());
+				}
+			}else{
+				$oReply->setError(0xff,"Username must be between 3-10 chars and only contain the chars A-Z");
+			}
+		
+		}
+		$this->_addReplyToBuffer($oReply);
+	}
+
+	public function privUser($oFsRequest,$sOptions)
+	{
+		$aOptions = explode(' ',$sOptions);
+		$oReply = $oFsRequest->buildReply();
+		if(count($aOptions)!=2){
+			$oReply->setError(0xff,"Syntax");
+		}else{
+			$oMyUser = security::getUser($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation());
+			if($oMyUser->isAdmin()){
+				if($aOptions[1]!='S' AND $aOptions[1]!='U'){
+					$oReply->setError(0xff,"The only valid priv is S or U");
+				}else{
+					security::setPriv($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$aOptions[0],$aOptions[1]);
+					$oReply->DoneOk();
+				}
+			}else{
+				$oReply->setError(0xff,"Only user with priv S can use *PRIV");
+			}
+			
 		}
 		$this->_addReplyToBuffer($oReply);
 	}

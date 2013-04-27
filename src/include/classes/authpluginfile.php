@@ -22,7 +22,7 @@ class authpluginfile implements authplugininterface {
 		$sUserFileContents = "";
 		if(strlen(config::getValue('security_plugin_file_user_file'))>0){
 			foreach(authpluginfile::$aUsers as $aUserInfo){
-				$sUserFileContents = $sUserFileContents . $aUserInfo['username'].':'.$aUserInfo['password'].':'.$aUserInfo['homedir'].':'.$aUserInfo['unixuid'].':'.$aUserInfo['opt']."\n";
+				$sUserFileContents = $sUserFileContents . $aUserInfo['username'].':'.$aUserInfo['password'].':'.$aUserInfo['homedir'].':'.$aUserInfo['unixuid'].':'.$aUserInfo['opt'].":".$aUserInfo['priv']."\n";
 			}
 			file_put_contents(config::getValue('security_plugin_file_user_file'),$sUserFileContents);
 		}
@@ -155,6 +155,16 @@ class authpluginfile implements authplugininterface {
 	{
 		if(!array_key_exists(strtoupper($oUser->getUsername()),authpluginfile::$aUsers)){
 			authpluginfile::$aUsers[strtoupper($oUser->getUsername())]=array('username'=>$oUser->getUsername(),'password'=>'','homedir'=>$oUser->getHomedir(),'unixuid'=>$oUser->getUnixUid(),'opt'=>$oUser->getBootOpt(),'priv'=>$oUser->getPriv());
+			authpluginfile::_writeOutUserFile();
+		}else{
+			throw new Exception("User exists");
+		}
+	}
+
+	static public function setPriv($sUsername,$sPriv)
+	{
+		if(array_key_exists(strtoupper($sUsername),authpluginfile::$aUsers)){
+			authpluginfile::$aUsers[strtoupper($sUsername)]['priv']=$sPriv;
 			authpluginfile::_writeOutUserFile();
 		}
 	}

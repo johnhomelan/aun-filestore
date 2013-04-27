@@ -51,12 +51,21 @@ interface authplugininterface {
 	/**
 	 * Creates a new user in the backend
 	 * 
-	 * This method should not dertain if a user can create another security does that
+	 * This method should not determin if a user can create another, the class security does that
 	 * If the plugin can't create users in it backend (e.g. its read only) then it should throw an exception
 	 *
 	 * @param object user $oUser The user object that should be added to the backend
 	*/
 	static public function createUser($oUser);
 
+	/**
+	 * Sets the priv for a given user
+	 *
+	 * This method should not determin if a user can change priv of another, the class security does that 
+	 *
+	 * @param string $sUsername
+	 * @param string $sPriv
+	*/
+	static public function setPriv($sUsername,$sPriv);
 }
 ?>

@@ -164,6 +164,38 @@ class security {
 		}
 	
 	}
+
+	/**
+	 * Creates a new user (assuming the user logged in on the given network/station has admin rights)
+	 *
+	 * @param int $iNetwork
+	 * @param int $iStation
+	 * @param string $sUsername
+	 * @param string $sPriv (S|U)
+	*/
+	public static function setPriv($iNetwork,$iStation,$sUsername,$sPriv)
+	{
+		if(!security::isLoggedIn($iNetwork,$iStation)){
+			throw new Exception("Security:  Unable to setPriv, no user is logged in on ".$iNetwork.".".$iStation);
+		}
+
+		$oLoggedInUser = security::getUser($iNetwork,$iStation);
+		if(!$oLoggedInUser->isAdmin()){
+			throw new Exception("Security:  Unable to setPriv, the user logged in on ".$iNetwork.".".$iStation." (".$oUser->getUsername().") does not have admin rights.");
+		}
+
+		$aPlugins = security::_getAuthPlugins();
+		foreach($aPlugins as $sPlugin){
+			try {
+				$sPlugin::setPriv($sUsername,$sPriv);
+				break;
+			}catch(Exception $oException){
+				logger::log("Security: Exception thrown by plugin ".$sPlugin." when attempting to create user ".$oUser->getUsername()." (".$oException->getMessage().")",LOG_DEBUG);
+			}
+		}
+	
+	}
+
 }
 
 ?>

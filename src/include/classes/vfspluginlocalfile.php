@@ -127,6 +127,26 @@ class vfspluginlocalfile {
 		return FALSE;
 	}
 
+	public static function deleteFile($oUser,$sCsd,$sEconetPath)
+	{
+		if(strpos($sEconetPath,'$')===0){
+			//Absolute path
+			$aPath = explode('.',$sEconetPath);
+		}else{
+			//Relative path
+			$aPath = explode('.',trim($sCsd,'.').'.'.$sEconetPath);
+		}
+		$sFile = array_pop($aPath);
+		$sFilePath = implode('.',$aPath);
+		$sUnixDirPath = vfspluginlocalfile::_econetToUnix($sFilePath);
+		if(is_dir($sUnixDirPath)){
+			if(file_exists(rtrim($sUnixDirPath,DIRECTORY_SEPARATOR).DIRECTORY_SEPARATOR.$sFile)){
+				return unlink(rtrim($sUnixDirPath,DIRECTORY_SEPARATOR).DIRECTORY_SEPARATOR.$sFile);
+			}
+		}
+		return FALSE;
+	}
+
 	public static function fsFtell($oUser,$fLocalHandle)
 	{
 		vfspluginlocalfile::_setUid($oUser);

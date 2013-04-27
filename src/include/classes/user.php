@@ -20,7 +20,7 @@ class user {
 
 	protected $sHomedir = NULL;
 
-	protected $iOpt = NULL;
+	protected $iOpt = 0;
 
 	protected $bIsAdmin = FALSE;
 

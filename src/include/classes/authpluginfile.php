@@ -171,6 +171,24 @@ class authpluginfile implements authplugininterface {
 		}
 	}
 
+	/**
+	 * Removes a user from the backend
+	 * 
+	 * This method should not dertain if a user can remove another security does that
+	 *
+	 * @param string username
+	*/
+	static public function removeUser($sUsername)
+	{
+		if(array_key_exists(strtoupper($sUsername),authpluginfile::$aUsers)){
+			unset(authpluginfile::$aUsers[strtoupper($sUsername)]);
+			authpluginfile::_writeOutUserFile();
+			return TRUE;
+		}else{
+			throw new Exception("User does not exists");
+		}
+	}
+
 	static public function setPriv($sUsername,$sPriv)
 	{
 		if(array_key_exists(strtoupper($sUsername),authpluginfile::$aUsers)){

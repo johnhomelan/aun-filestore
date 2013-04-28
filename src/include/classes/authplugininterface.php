@@ -59,6 +59,17 @@ interface authplugininterface {
 	static public function createUser($oUser);
 
 	/**
+	 * Removes a given user
+	 *
+	 * This method should not determin if a user can remove another user, the class security does that 
+	 *
+	 * @throws Exception If the user does not exist
+	 * @param string $sUsername
+	 * @return boolean
+	*/
+	static public function removeUser($sUsername);
+
+	/**
 	 * Sets the priv for a given user
 	 *
 	 * This method should not determin if a user can change priv of another, the class security does that 

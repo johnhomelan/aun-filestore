@@ -168,6 +168,37 @@ class security {
 	}
 
 	/**
+	 * Removes a user (assuming the user logged in on the given network/station has admin rights)
+	 *
+	 * @param int $iNetwork
+	 * @param int $iStation
+	 * @param string $sUsername
+	*/
+	public static function removeUser($iNetwork,$iStation,$sUsername)
+	{
+		if(!security::isLoggedIn($iNetwork,$iStation)){
+			throw new Exception("Security:  Unable to remove the user, no user is logged in on ".$iNetwork.".".$iStation);
+		}
+
+		$oLoggedInUser = security::getUser($iNetwork,$iStation);
+		if(!$oLoggedInUser->isAdmin()){
+			throw new Exception("Security:  Unable to remove a user, the user logged in on ".$iNetwork.".".$iStation." does not have admin rights.");
+		}
+
+		$aPlugins = security::_getAuthPlugins();
+		logger::log("Security: Removing user ".$sUsername,LOG_INFO);
+		foreach($aPlugins as $sPlugin){
+			try {
+				return $sPlugin::removeUser($sUsername);
+				break;
+			}catch(Exception $oException){
+				logger::log("Security: Exception thrown by plugin ".$sPlugin." when attempting to remove user ".$sUsername." (".$oException->getMessage().")",LOG_DEBUG);
+			}
+		}
+	
+	}
+
+	/**
 	 * Creates a new user (assuming the user logged in on the given network/station has admin rights)
 	 *
 	 * @param int $iNetwork
@@ -191,7 +222,7 @@ class security {
 		}
 
 		$aPlugins = security::_getAuthPlugins();
-		logger::log("Security: Setting priv for ".$sUsername." to ".$sPriv);
+		logger::log("Security: Setting priv for ".$sUsername." to ".$sPriv,LOG_INFO);
 		foreach($aPlugins as $sPlugin){
 			try {
 				$sPlugin::setPriv($sUsername,$sPriv);

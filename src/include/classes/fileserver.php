@@ -398,7 +398,7 @@ class fileserver {
 	public function eof($oFsRequest)
 	{
 		logger::log("Eof Called by ".$oFsRequest->getSourceNetwork().".".$oFsRequest->getSourceStation(),LOG_DEBUG);
-		$oUser = securtiy::getUser($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation());	
+		$oUser = security::getUser($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation());	
 	}
 
 	/**
@@ -523,6 +523,11 @@ class fileserver {
 		$this->_addReplyToBuffer($oReply);
 	}
 
+	/**
+	 * Changes the csd
+	 *
+	 * This method is invoked by the *DIR command
+	*/
 	public function changeDirectory($oFsRequest,$sOptions)
 	{
 		$oReply = $oFsRequest->buildReply();
@@ -571,6 +576,11 @@ class fileserver {
 
 	}
 
+	/**
+	 * Changes the library
+	 *
+	 * This method is invoked by the *LIB command
+	*/
 	public function changeLibrary($oFsRequest,$sOptions)
 	{
 		$oReply = $oFsRequest->buildReply();
@@ -600,6 +610,11 @@ class fileserver {
 
 	}
 
+	/**
+	 * Creates a new directory
+	 *
+	 * This method in invoked by the *CDIR command
+	*/
 	public function createDirectory($oFsRequest,$sOptions)
 	{
 		$oReply = $oFsRequest->buildReply();
@@ -623,6 +638,11 @@ class fileserver {
 		$this->_addReplyToBuffer($oReply);
 	}
 
+	/**
+	 * Deletes a given file
+	 *
+	 * This method is invoked as either a cli or a file server command depending on the nfs version
+	*/
 	public function deleteFile($oFsRequest,$sOptions)
 	{
 		$oReply = $oFsRequest->buildReply();
@@ -639,6 +659,56 @@ class fileserver {
 		$this->_addReplyToBuffer($oReply);
 	}
 
+	/**
+	 * Set the current users password
+	 *
+	 * This method is invoked by the *PASS command
+	*/
+	public function setPassword($oFsRequest,$sOptions)
+	{
+		$aOptions = explode(' ',$sOptions);
+		$oReply = $oFsRequest->buildReply();
+		if(count($aOptions)!=2){
+			$oReply->setError(0xff,"Syntax");
+		}else{
+			//Filter out the string added by the use of *pass :
+			if(substr_count($aOptions[0],"\r")>0){
+				list($aOptions[0]) = explode("\r",$aOptions[0]);
+			}
+			if(substr_count($aOptions[1],"\r")>0){
+				list($aOptions[1]) = explode("\r",$aOptions[1]);
+			}
+
+
+			//Get the old password
+			if($aOptions[0]=='""'){
+				$sOldPassword = NULL;
+			}else{
+				$sOldPassword = $aOptions[0];
+			}
+
+			//Get the new password
+			if($aOptions[1]=='""'){
+				$sPassword = NULL;
+			}else{
+				$sPassword = $aOptions[1];
+			}
+
+			try {
+				//Change the password
+				security::setConnectedUsersPassword($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sOldPassword,$sPassword);
+				$oReply->DoneOk();
+			}catch(Exception $oException){
+				$oReply->setError(0xff,$oException->getMessage());
+			}
+		}
+		$this->_addReplyToBuffer($oReply);
+	}
+
+	/**
+	 * Creates a new user (*NEWUSER)
+	 *
+	*/
 	public function createUser($oFsRequest,$sOptions)
 	{
 		$oReply = $oFsRequest->buildReply();
@@ -671,6 +741,10 @@ class fileserver {
 		$this->_addReplyToBuffer($oReply);
 	}
 
+	/**
+	 * Set the privalage of a given user
+	 *
+	*/
 	public function privUser($oFsRequest,$sOptions)
 	{
 		$aOptions = explode(' ',$sOptions);

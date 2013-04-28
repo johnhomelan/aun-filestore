@@ -145,6 +145,31 @@ class vfs {
 		throw new Exception("vfs: Unable to delete file (".$sEconetPath.")");
 	}
 
+	static public function moveFile($iNetwork,$iStation,$sEconetPathFrom,$sEconetPathTo)
+	{
+		if(!security::isLoggedIn($iNetwork,$iStation)){
+			logger::log("vfs: Un-able to create a handle for a station that is not logged in (Who are you?)",LOG_DEBUG);
+			throw new Exception("vfs: Un-able to create a handle for a station that is not logged in (Who are you?)");
+		}
+		$oUser = security::getUser($iNetwork,$iStation);
+		$sCsd = $oUser->getCsd();
+		$aPlugins = vfs::getVfsPlugins();
+		$oHandle=NULL;
+		foreach($aPlugins as $sPlugin){
+			try {
+				if($sPlugin::moveFile($oUser,$sCsd,$sEconetPathFrom,$sEconetPathTo)){
+					return;
+				}
+			}catch(VfsException $oVfsException){
+				//If it's a hard error abort the operation
+				if($oVfsException->isHard()){
+					throw $oVfsException;
+				}
+			}
+		}
+		throw new Exception("vfs: Unable to move file (".$sEconetPathFrom.")");
+	}
+
 	/**
 	 * Creates file handle for a given network/station to a given file path
 	 *

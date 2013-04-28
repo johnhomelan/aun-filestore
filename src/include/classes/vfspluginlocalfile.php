@@ -31,7 +31,7 @@ class vfspluginlocalfile {
 		}
 	}
 
-	protected static function _econetToUnix($sEconetPath)
+	protected static function _econetToUnix($sEconetPath,$bAllowCreate=FALSE)
 	{
 		//Trim leading $.
 		$sEconetPath = substr($sEconetPath,2);
@@ -42,7 +42,7 @@ class vfspluginlocalfile {
 		}
 		$sUnixPath = trim($sUnixPath,DIRECTORY_SEPARATOR);
 		$sUnixPath = config::getValue('vfs_plugin_localfile_root').DIRECTORY_SEPARATOR.$sUnixPath;
-		if(file_exists($sUnixPath)){
+		if(file_exists($sUnixPath) OR $bAllowCreate){
 			logger::log("vfspluginlocalfile: Converted econet path ".$sEconetPath. " to ".$sUnixPath,LOG_DEBUG);
 			return $sUnixPath;
 		}
@@ -121,7 +121,7 @@ class vfspluginlocalfile {
 		$sDir = array_pop($aPath);
 		$sDirPath = implode('.',$aPath);
 		$sUnixDirPath = vfspluginlocalfile::_econetToUnix($sDirPath);
-		if(is_dir($sUnixDirPath)){
+		if(is_dir($sUnixDirPath) AND !file_exists(rtrim($sUnixDirPath,DIRECTORY_SEPARATOR).DIRECTORY_SEPARATOR.$sDir)){
 			return mkdir(rtrim($sUnixDirPath,DIRECTORY_SEPARATOR).DIRECTORY_SEPARATOR.$sDir);
 		}
 		return FALSE;
@@ -145,6 +145,36 @@ class vfspluginlocalfile {
 			}
 		}
 		return FALSE;
+	}
+
+	public static function moveFile($oUser,$sCsd,$sEconetPathFrom,$sEconetPathTo)
+	{
+		if(strpos($sEconetPathFrom,'$')===0){
+			//Absolute path
+			$sPathFrom = $sEconetPathFrom;
+		}else{
+			//Relative path
+			$sPathFrom = trim($sCsd,'.').'.'.$sEconetPathFrom;
+		}
+		if(strpos($sEconetPathTo,'$')===0){
+			//Absolute path
+			$sPathTo = $sEconetPathTo;
+		}else{
+			//Relative path
+			$sPathTo = trim($sCsd,'.').'.'.$sEconetPathTo;
+		}
+		var_dump($sPathFrom);
+		var_dump($sPathTo);
+		$sUnixFrom = vfspluginlocalfile::_econetToUnix($sPathFrom);
+		$sUnixTo = vfspluginlocalfile::_econetToUnix($sPathTo,TRUE);
+		if(!file_exists($sUnixFrom)){
+			throw new Exception("No such file");
+		}
+		if(file_exists($sUnixTo)){
+			throw new Exception("Target exisits");
+		}
+
+		return rename($sUnixFrom,$sUnixTo);
 	}
 
 	public static function fsFtell($oUser,$fLocalHandle)

@@ -13,7 +13,7 @@
 */
 class fileserver {
 
-	protected $aCommands = array('BYE','CAT','CDIR','DELETE','DIR','FSOPT','INFO','I AM','LIB','LOAD','LOGOFF','PASS','RENAME','SAVE','SDISC','NEWUSER','PRIV');
+	protected $aCommands = array('BYE','CAT','CDIR','DELETE','DIR','FSOPT','INFO','I AM','LIB','LOAD','LOGOFF','PASS','RENAME','SAVE','SDISC','NEWUSER','PRIV','REMUSER');
 	
 	protected $aReplyBuffer = array();
 
@@ -223,6 +223,9 @@ class fileserver {
 				break;
 			case 'NEWUSER':
 				$this->createUser($oFsRequest,$sOptions);
+				break;
+			case 'REMUSER':
+				$this->removeUser($oFsRequest,$sOptions);
 				break;
 			default:
 				logger::log("Un-handled command ".$sCommand,LOG_DEBUG);
@@ -721,7 +724,10 @@ class fileserver {
 				$oUser->setUsername($aOptions[0]);
 				if(!is_null(config::getValue('vfs_home_dir_path'))){
 					$oUser->setHomedir(config::getValue('vfs_home_dir_path').'.'.$aOptions[0]);
-					vfs::createDirectory($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),config::getValue('vfs_home_dir_path').'.'.$aOptions[0]);
+					try {
+						vfs::createDirectory($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),config::getValue('vfs_home_dir_path').'.'.$aOptions[0]);
+					}catch(Exception $oException){
+					}
 				}else{
 					$oUser->setHomedir('$');
 				}
@@ -737,6 +743,29 @@ class fileserver {
 				$oReply->setError(0xff,"Username must be between 3-10 chars and only contain the chars A-Z");
 			}
 		
+		}
+		$this->_addReplyToBuffer($oReply);
+	}
+
+	/**
+	 * Removes a user (*REMUSER)
+	 *
+	*/
+	public function removeUser($oFsRequest,$sOptions)
+	{
+		$oReply = $oFsRequest->buildReply();
+		if(strlen($sOptions)<1 OR !ctype_alnum($sOptions)){
+			$oReply->setError(0xff,"Syntax");
+		}else{
+			try {
+				if(security::removeUser($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sOptions)){
+					$oReply->DoneOk();
+				}else{
+					$oReply->setError(0xff,"No such user");
+				}
+			}catch(Exception $oException){
+				$oReply->setError(0xff,"You do not have admin rights");
+			}
 		}
 		$this->_addReplyToBuffer($oReply);
 	}

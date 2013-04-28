@@ -158,7 +158,7 @@ class fileserver {
 
 		foreach($this->aCommands as $sCommand){
 			$iPos = stripos($sDataAsString,$sCommand);
-			if($iPos!==FALSE){
+			if($iPos===0){
 				//Found cli command found
 				$iOptionsPos = $iPos+strlen($sCommand)+1;
 				$sOptions = substr($sDataAsString,$iOptionsPos);
@@ -213,6 +213,7 @@ class fileserver {
 			case 'LOAD':
 				break;
 			case 'RENAME':
+				$this->renameFile($oFsRequest,$sOptions);
 				break;
 			case 'SAVE':
 				break;
@@ -663,6 +664,30 @@ class fileserver {
 	}
 
 	/**
+	 * Renames a given file
+	 *
+	 * This method is invoked as the cli command *RENAME
+	*/ 
+	public function renameFile($oFsRequest,$sOptions)
+	{
+		$oReply = $oFsRequest->buildReply();
+		if(strlen($sOptions)<2){
+			$oReply->setError(0xff,"Syntax");
+		}else{
+			try{
+				list($sFrom,$sTo) = explode(' ',$sOptions);
+				vfs::moveFile($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sFrom,$sTo);
+				$oReply->DoneOk();
+			}catch(Exception $oException){
+				var_dump($oException);
+				$oReply->setError(0xff,"No such file");
+			}
+		}
+		$this->_addReplyToBuffer($oReply);
+		
+	}
+
+	/**
 	 * Set the current users password
 	 *
 	 * This method is invoked by the *PASS command
@@ -744,7 +769,7 @@ class fileserver {
 			}
 		
 		}
-		$this->_addReplyToBuffer($oReply);
+		$this->_addReplyoBuffer($oReply);
 	}
 
 	/**

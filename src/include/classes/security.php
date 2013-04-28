@@ -120,14 +120,15 @@ class security {
 	 *
 	 * @param int $iNetwork
 	 * @param int $iStation
+	 * @param string $sOldPassword
 	 * @param string $sPassword
 	*/	 
-	public static function setConnectedUsersPassword($iNetwork,$iStation,$sPassword)
+	public static function setConnectedUsersPassword($iNetwork,$iStation,$sOldPassword,$sPassword)
 	{
 		if(array_key_exists($iNetwork,security::$aSessions) AND array_key_exists($iStation,security::$aSessions[$iNetwork])){
 			logger::log("Security: Changing password for ".security::$aSessions[$iNetwork][$iStation]['user']->getUsername()." using authplugin ".security::$aSessions[$iNetwork][$iStation]['provider'],LOG_INFO);
 			$sPlugin = security::$aSessions[$iNetwork][$iStation]['provider'];
-			$sPlugin::setPassword(security::$aSessions[$iNetwork][$iStation]['user']->getUsername(),$sPassword);
+			$sPlugin::setPassword(security::$aSessions[$iNetwork][$iStation]['user']->getUsername(),$sOldPassword,$sPassword);
 		}
 	}
 
@@ -154,6 +155,7 @@ class security {
 		}
 
 		$aPlugins = security::_getAuthPlugins();
+		logger::log("Security: Creating new user ".$oUser->getUsername(),LOG_INFO);
 		foreach($aPlugins as $sPlugin){
 			try {
 				$sPlugin::createUser($oUser);
@@ -184,7 +186,12 @@ class security {
 			throw new Exception("Security:  Unable to setPriv, the user logged in on ".$iNetwork.".".$iStation." (".$oUser->getUsername().") does not have admin rights.");
 		}
 
+		if($sPriv!='S' AND $sPriv!='U'){
+			throw new Exception("Security:  ".$sPriv." is an invalid priv setting.");
+		}
+
 		$aPlugins = security::_getAuthPlugins();
+		logger::log("Security: Setting priv for ".$sUsername." to ".$sPriv);
 		foreach($aPlugins as $sPlugin){
 			try {
 				$sPlugin::setPriv($sUsername,$sPriv);

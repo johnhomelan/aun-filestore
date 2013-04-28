@@ -46,7 +46,7 @@ interface authplugininterface {
 	 * @param string $sUsername
 	 * @param string $sPassword
 	*/
-	static public function setPassword($sUsername,$sPassword);
+	static public function setPassword($sUsername,$sOldPassword,$sPassword);
 
 	/**
 	 * Creates a new user in the backend

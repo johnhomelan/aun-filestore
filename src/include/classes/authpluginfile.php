@@ -123,22 +123,32 @@ class authpluginfile implements authplugininterface {
 	 *
 	 * This causes the on disk password file to be updated
 	 * @param string $sUsername
+	 * @param string $sOldPassword Can be null if the old password is blank
 	 * @param string $sPassword
 	*/
-	static public function setPassword($sUsername,$sPassword)
+	static public function setPassword($sUsername,$sOldPassword,$sPassword)
 	{
+		//Test old password
+		if(!authpluginfile::login($sUsername,$sOldPassword,NULL,NULL)){
+			throw new Exception("Old password was incorrect.");
+		}	
+		//Set new password 
 		if(array_key_exists(strtoupper($sUsername),authpluginfile::$aUsers)){
-			switch(config::getValue('security_plugin_file_default_crypt')){
-				case 'plain':
-					authpluginfile::$aUsers[strtoupper($sUsername)]['password']='plain-'.$sPassword;
-					break;
-				case 'sha1':
-					authpluginfile::$aUsers[strtoupper($sUsername)]['password']='sha1-'.sha1($sPassword);
-					break;
-				case 'md5':
-				default:
-					authpluginfile::$aUsers[strtoupper($sUsername)]['password']='md5-'.md5($sPassword);
-					break;
+			if(is_null($sPassword)){
+				authpluginfile::$aUsers[strtoupper($sUsername)]['password']=NULL;
+			}else{
+				switch(config::getValue('security_plugin_file_default_crypt')){
+					case 'plain':
+						authpluginfile::$aUsers[strtoupper($sUsername)]['password']='plain-'.$sPassword;
+						break;
+					case 'sha1':
+						authpluginfile::$aUsers[strtoupper($sUsername)]['password']='sha1-'.sha1($sPassword);
+						break;
+					case 'md5':
+					default:
+						authpluginfile::$aUsers[strtoupper($sUsername)]['password']='md5-'.md5($sPassword);
+						break;
+				}
 			}
 		}
 		authpluginfile::_writeOutUserFile();

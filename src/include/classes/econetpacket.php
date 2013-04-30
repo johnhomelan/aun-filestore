@@ -113,7 +113,6 @@ class econetpacket {
 			$this->iDstStn=$aStnParts[1];
 		}else{
 			$this->iDstStn=$sStation;
-			$this->iDstNet=config::getValue('default_econet_network');
 		}
 
 	}

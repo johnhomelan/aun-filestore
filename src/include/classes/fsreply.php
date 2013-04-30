@@ -82,6 +82,11 @@ class fsreply {
 		}
 	}
 
+	public function append16bitIntLittleEndian($iInt)
+	{
+		$this->sPkt = $this->sPkt.pack('v',$iInt);
+	}
+
 
 	public function buildEconetpacket()
 	{

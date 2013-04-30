@@ -151,6 +151,20 @@ class fsrequest {
 		return $sRetstr;
 	}
 
+	public function get32bitIntLittleEndian($iStart)
+	{
+		$sStr = substr($this->sData,$iStart-1,4);
+		$aInt = unpack('V',$sStr);
+		return $aInt[1];
+	}
+
+	public function get24bitIntLittleEndian($iStart)
+	{
+		$aBytes = unpack('C*',$this->sData);
+		$sHexString= dechex($aBytes[$iStart+2]).dechex($aBytes[$iStart+1]).dechex($aBytes[$iStart]);
+		return hexdec($sHexString);
+	}
+
 	public function buildReply()
 	{
 		return new fsreply($this);

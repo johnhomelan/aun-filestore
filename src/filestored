@@ -31,7 +31,8 @@ class filestored  {
 		if($bDaemonize){
 			$this->daemonize($sPidFile);
 		}
-		$this->oFileserver = new fileserver();
+		$this->oFileserver = new fileserver($this);
+		$this->oFileserver->init();
 		aunmap::loadMap();
 		$this->bindSockets();
 		$this->loop();
@@ -161,6 +162,7 @@ class filestored  {
 
 	public function dispatchReply($oReplyEconetPacket)
 	{
+		usleep(200);
 		$sIP = aunmap::ecoAddrToIpAddr($oReplyEconetPacket->getDestinationNetwork(),$oReplyEconetPacket->getDestinationStation());
 		if(strlen($sIP)>0){
 			$sPacket = $oReplyEconetPacket->getAunFrame();
@@ -173,6 +175,69 @@ class filestored  {
 				}
 				stream_socket_sendto($this->oAunSocket,$sPacket,0,$sHost);
 			}
+		}
+	}
+
+	/**
+	 * This method is to allow for the file server to break out of the main loop breifly and
+	 * accept a direct stream from the client
+	 *
+	 * @param int $iPort the econet port to accept the stream on
+	*/
+	public function directStream($iNetwork,$iStation,$iPort,$iRecursion=0)
+	{
+		if($iRecursion>20){
+			throw new Exception("No direct stream recevied in 20 packets");
+		}
+		$aReadSet=$this->aAllReadableSockets;
+		$aWriteSet=NULL;
+		$aAllExpSockets=array(NULL);
+		$aExpSet=$aAllExpSockets;
+
+		//Wait for an aun packet
+		$iSockets = @stream_select($aReadSet,$aWriteSet,$aExpSet,4);
+		var_dump($iSockets);
+		if($iSockets!=FALSE){
+			//Step through each socket we need to read from
+			foreach($aReadSet as  $iReadSocket){
+				if($iReadSocket == $this->oAunSocket){
+					//We've received an AUN packet process it 
+					$sUdpData= stream_socket_recvfrom($this->oAunSocket,1500,0,$sHost);
+					logger::log("filestore: Aun packet recvieved from ".$sHost,LOG_DEBUG);	
+
+					//Decode the AUN packet
+					$oAunPacket = new AunPacket();
+					$oAunPacket->setSourceIP($sHost);
+					$oAunPacket->setDestinationIP(config::getValue('local_ip'));
+					$oAunPacket->decode($sUdpData);
+					
+					//Send an ack for the AUN packet if needed
+					$sAck = $oAunPacket->buildAck();
+					if(strlen($sAck)>0){
+						logger::log("filestore: Sending Ack packet",LOG_DEBUG);
+						stream_socket_sendto($this->oAunSocket,$sAck,0,$sHost);
+					}
+				
+					//Build an econet packet from the AUN packet and see if it's the direct stream we are waiting for 
+					if($oAunPacket->getPacketType()=='Unicast'){
+						$oEconetPacket = $oAunPacket->buildEconetPacket();
+						if($oEconetPacket->getSourceNetwork()==$iNetwork AND $oEconetPacket->getSourceStation()==$iStation AND $oEconetPacket->getPort()==$iPort){
+							//It's the frame we are waiting for.
+							return $oEconetPacket;
+						}else{
+							//Not the direct data stream we are waiting for but the packet must be processed in the normal way
+							$this->processEconetPacket();
+							//Go back to listening for the direct stream
+							return $this->directStream($iNetwork,$iStation,$iPort,$iRecursion+1);
+						}
+					}else{
+						return $this->directStream($iNetwork,$iStation,$iPort,$iRecursion+1);
+					}
+				}
+			}
+		
+		}else{
+			throw new Exception("Direct stream timeout");
 		}
 	}
 }

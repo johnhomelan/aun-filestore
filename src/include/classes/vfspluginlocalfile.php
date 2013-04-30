@@ -102,7 +102,7 @@ class vfspluginlocalfile {
 		//Rip out and .inf files from the list
 		$aReturn = array();
 		foreach($aDirectoryListing as $sFile => $oFile){
-			if(stripos($sFile,'.inf')===FALSE){
+			if(stripos($sFile,"\/inf")===FALSE){
 				$aReturn[$sFile]=$oFile;
 			}
 		}
@@ -141,7 +141,10 @@ class vfspluginlocalfile {
 		$sUnixDirPath = vfspluginlocalfile::_econetToUnix($sFilePath);
 		if(is_dir($sUnixDirPath)){
 			if(file_exists(rtrim($sUnixDirPath,DIRECTORY_SEPARATOR).DIRECTORY_SEPARATOR.$sFile)){
-				return unlink(rtrim($sUnixDirPath,DIRECTORY_SEPARATOR).DIRECTORY_SEPARATOR.$sFile);
+				$bReturn =  unlink(rtrim($sUnixDirPath,DIRECTORY_SEPARATOR).DIRECTORY_SEPARATOR.$sFile);
+			}
+			if($bReturn AND file_exists(rtrim($sUnixDirPath,DIRECTORY_SEPARATOR).DIRECTORY_SEPARATOR.$sFile).'.inf'){
+				unlink(rtrim($sUnixDirPath,DIRECTORY_SEPARATOR).DIRECTORY_SEPARATOR.$sFile.'.inf');
 			}
 		}
 		return FALSE;
@@ -163,8 +166,6 @@ class vfspluginlocalfile {
 			//Relative path
 			$sPathTo = trim($sCsd,'.').'.'.$sEconetPathTo;
 		}
-		var_dump($sPathFrom);
-		var_dump($sPathTo);
 		$sUnixFrom = vfspluginlocalfile::_econetToUnix($sPathFrom);
 		$sUnixTo = vfspluginlocalfile::_econetToUnix($sPathTo,TRUE);
 		if(!file_exists($sUnixFrom)){
@@ -173,8 +174,31 @@ class vfspluginlocalfile {
 		if(file_exists($sUnixTo)){
 			throw new Exception("Target exisits");
 		}
+		$bReturn = rename($sUnixFrom,$sUnixTo);
+		if($bReturn AND file_exists($sUnixFrom.'.inf') AND !file_exists($sUnixTo.'.inf')){
+			rename(sUnixFrom.'.inf',$sUnixTo.'.inf');
+		}
+		return $bReturn;
+	}
 
-		return rename($sUnixFrom,$sUnixTo);
+	public static function saveFile($oUser,$sCsd,$sEconetPath,$sData,$iLoadAddr,$iExecAddr)
+	{
+		if(strpos($sEconetPath,'$')===0){
+			//Absolute path
+			$aPath = explode('.',$sEconetPath);
+		}else{
+			//Relative path
+			$aPath = explode('.',trim($sCsd,'.').'.'.$sEconetPath);
+		}
+		$sFile = array_pop($aPath);
+		$sFilePath = implode('.',$aPath);
+		$sUnixDirPath = vfspluginlocalfile::_econetToUnix($sFilePath);
+		if(is_dir($sUnixDirPath)){
+			file_put_contents($sUnixDirPath.DIRECTORY_SEPARATOR.$sFile,$sData);
+			file_put_contents($sUnixDirPath.DIRECTORY_SEPARATOR.$sFile.'.inf',"TAPE file ".str_pad(dechex($iLoadAddr),8,0,STR_PAD_LEFT)." ".str_pad(dechex($iExecAddr),8,0,STR_PAD_LEFT));
+			return TRUE;
+		}
+
 	}
 
 	public static function fsFtell($oUser,$fLocalHandle)

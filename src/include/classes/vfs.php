@@ -20,6 +20,11 @@ class vfs {
 
 	static protected $aFileHandleIDs = array();
 
+	public static function init()
+	{
+		$aPlugins = vfs::getVfsPlugins();
+	}
+
 	/**
 	 * Get a list of all the vfsplugin we should be using 
 	 *
@@ -168,6 +173,31 @@ class vfs {
 			}
 		}
 		throw new Exception("vfs: Unable to move file (".$sEconetPathFrom.")");
+	}
+
+	static public function saveFile($iNetwork,$iStation,$sEconetPath,$sData,$iLoadAddr,$iExecAddr)
+	{
+		if(!security::isLoggedIn($iNetwork,$iStation)){
+			logger::log("vfs: Un-able to create a handle for a station that is not logged in (Who are you?)",LOG_DEBUG);
+			throw new Exception("vfs: Un-able to create a handle for a station that is not logged in (Who are you?)");
+		}
+		$oUser = security::getUser($iNetwork,$iStation);
+		$sCsd = $oUser->getCsd();
+		$aPlugins = vfs::getVfsPlugins();
+		$oHandle=NULL;
+		foreach($aPlugins as $sPlugin){
+			try {
+				if($sPlugin::saveFile($oUser,$sCsd,$sEconetPath,$sData,$iLoadAddr,$iExecAddr)){
+					return;
+				}
+			}catch(VfsException $oVfsException){
+				//If it's a hard error abort the operation
+				if($oVfsException->isHard()){
+					throw $oVfsException;
+				}
+			}
+		}
+		throw new Exception("vfs: Unable to save file (".$sEconetPath.")");
 	}
 
 	/**

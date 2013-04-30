@@ -13,6 +13,8 @@
 */
 class fileserver {
 
+	protected $oMainApp = NULL ;
+
 	protected $aCommands = array('BYE','CAT','CDIR','DELETE','DIR','FSOPT','INFO','I AM','LIB','LOAD','LOGOFF','PASS','RENAME','SAVE','SDISC','NEWUSER','PRIV','REMUSER');
 	
 	protected $aReplyBuffer = array();
@@ -20,6 +22,17 @@ class fileserver {
 	protected function _addReplyToBuffer($oReply)
 	{
 		$this->aReplyBuffer[]=$oReply;
+	}
+
+	public function __construct($oMainApp)
+	{
+		$this->oMainApp = $oMainApp;
+	}
+
+	public function init()
+	{
+		vfs::init();
+		security::init();
 	}
 
 	/**
@@ -66,6 +79,7 @@ class fileserver {
 			case 'EC_FS_FUNC_LOAD':
 				break;
 			case 'EC_FS_FUNC_SAVE':
+				$this->saveFile($oFsRequest);
 				break;
 			case 'EC_FS_FUNC_EXAMINE':
 				$this->examine($oFsRequest);
@@ -684,6 +698,82 @@ class fileserver {
 			}
 		}
 		$this->_addReplyToBuffer($oReply);
+		
+	}
+
+	/**
+	 * Saves data to a file
+	 *
+	 * This method if invoked by the use saving a basic program 
+	*/
+	public function saveFile($oFsRequest)
+	{
+		//For save operation the urd is replaced with the ackport
+		$iAckPort = $oFsRequest->getUrd();
+
+		//Load 4 bytes
+		$iLoad = $oFsRequest->get32bitIntLittleEndian(1);
+
+		//Exec 4 bytes
+		$iExec =  $oFsRequest->get32bitIntLittleEndian(5);
+
+		//Size
+		$iSize = $oFsRequest->get24bitIntLittleEndian(9);
+
+		//Path
+		$sPath = $oFsRequest->getString(12);
+
+
+		//Set port for the client to stream data to
+		$oReply = $oFsRequest->buildReply();
+		$oReply->DoneOk();
+		$oReply->appendByte(config::getValue('econet_data_stream_port'));
+		$oReply->append16bitIntLittleEndian(1400);
+
+		//Send reply directly
+		$oReplyEconetPacket = $oReply->buildEconetpacket();
+		$this->oMainApp->dispatchReply($oReplyEconetPacket);	
+		$sData = '';
+
+		//Get the data from the cleint
+		while(strlen($sData)<$iSize){
+			try {
+				//We now need to take over the receving of packets breifly going to our streaming port
+				$oEconetPacket = $this->oMainApp->directStream($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),config::getValue('econet_data_stream_port'));
+
+				//Build and send the ack packet 
+				$oEconetAck = new econetpacket();
+				$oEconetAck->setPort($iAckPort);
+				$oEconetAck->setDestinationNetwork($oFsRequest->getSourceNetwork());
+				$oEconetAck->setDestinationStation($oFsRequest->getSourceStation());
+				$oEconetAck->setData(pack('C',0).pack('C',0));
+				var_dump($oEconetAck);
+				$this->oMainApp->dispatchReply($oEconetAck);
+
+			}catch(Exception $oException){
+				logger::log("Client failed to send direct stream during save operation",LOG_DEBUG);
+				$oFailReply=$oFsRequest->buildReply();
+				$oFailReply->setError(0xff,"Timeout");
+				$this->_addReplyToBuffer($oReply);
+				return;
+			}
+			$sData=$sData.$oEconetPacket->getData();
+		}
+		vfs::saveFile($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sPath,$sData,$iLoad,$iExec);
+	
+		//File is saved 	
+		$oReply2 = $oFsRequest->buildReply();
+		$oReply2->DoneOk();
+		$oReply2->appendByte(15);
+		//Add current date
+		$iDay = date('j',time());
+		$oReply2->appendByte($iDay);
+		//The last byte is month and year, first 4 bits year, last 4 bits month
+		$iYear= date('y',time());
+		$iYear << 4;
+		$iYear = $iYear+date('n',time());
+		$oReply2->appendByte($iYear);
+		$this->_addReplyToBuffer($oReply2);
 		
 	}
 

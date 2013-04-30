@@ -6,7 +6,7 @@
 */
 
 /**
- * This class controls securtiy with in the fileserver, perform login/out and
+ * This class controls security with in the fileserver, perform login/out and
  * all other security functions
  * 
  * @package coreauth
@@ -17,6 +17,12 @@ class security {
 
 	protected static $aSessions = array();
 
+
+	public static function init()
+	{
+		$aPlugins = security::_getAuthPlugins();
+
+	}
 	/**
 	 * Get a list of all the authplugs we should be using 
 	 *

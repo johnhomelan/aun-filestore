@@ -77,6 +77,7 @@ class fileserver {
 	
 		switch($sFunction){
 			case 'EC_FS_FUNC_LOAD':
+				$this->loadFile($oFsRequest);
 				break;
 			case 'EC_FS_FUNC_SAVE':
 				$this->saveFile($oFsRequest);
@@ -727,7 +728,9 @@ class fileserver {
 		//Set port for the client to stream data to
 		$oReply = $oFsRequest->buildReply();
 		$oReply->DoneOk();
+		//Add the port to stream to
 		$oReply->appendByte(config::getValue('econet_data_stream_port'));
+		//Add max block size
 		$oReply->append16bitIntLittleEndian(1400);
 
 		//Send reply directly
@@ -740,6 +743,7 @@ class fileserver {
 			try {
 				//We now need to take over the receving of packets breifly going to our streaming port
 				$oEconetPacket = $this->oMainApp->directStream($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),config::getValue('econet_data_stream_port'));
+				usleep(config::getValue('bbc_default_pkg_sleep'));
 
 				//Build and send the ack packet 
 				$oEconetAck = new econetpacket();
@@ -747,7 +751,6 @@ class fileserver {
 				$oEconetAck->setDestinationNetwork($oFsRequest->getSourceNetwork());
 				$oEconetAck->setDestinationStation($oFsRequest->getSourceStation());
 				$oEconetAck->setData(pack('C',0).pack('C',0));
-				var_dump($oEconetAck);
 				$this->oMainApp->dispatchReply($oEconetAck);
 
 			}catch(Exception $oException){
@@ -775,6 +778,67 @@ class fileserver {
 		$oReply2->appendByte($iYear);
 		$this->_addReplyToBuffer($oReply2);
 		
+	}
+
+	/**
+	 * Loads data from a file
+	 *
+	 * This methos is invoked by the use of LOAD "filename"
+	*/
+	public function loadFile($oFsRequest)
+	{
+		//The urd handle in the request is not the urd when load is called but denotes the port to stream the data to
+		$iDataPort = $oFsRequest->getUrd();
+		$sPath = $oFsRequest->getString(1);
+
+		$oReply = $oFsRequest->buildReply();
+		
+		try {
+			$sFileData = vfs::getFile($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sPath);
+			$oMeta = vfs::getMeta($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sPath);
+		}catch(Exception $oException){
+			$oReply->setError(0x99,"No such file");
+			$this->_addReplyToBuffer($oReply);
+			return;			
+		}
+
+		//Send the first reply 
+		$oReply->DoneOk();
+		$oReply->append32bitIntLittleEndian($oMeta->getLoadAddr());
+		$oReply->append32bitIntLittleEndian($oMeta->getExecAddr());
+		$oReply->append24bitIntLittleEndian($oMeta->getSize());
+		$oReply->appendByte(15);
+		//Add current date
+		$iDay = date('j',time());
+		$oReply->appendByte($iDay);
+		//The last byte is month and year, first 4 bits year, last 4 bits month
+		$iYear= date('y',time());
+		$iYear << 4;
+		$iYear = $iYear+date('n',time());
+		$oReply->appendByte($iYear);
+		$oReplyEconetPacket = $oReply->buildEconetpacket();
+		$this->oMainApp->dispatchReply($oReplyEconetPacket);	
+
+		//Break the data into blocks and send it
+		while(strlen($sFileData)>0){
+			
+			usleep(config::getValue('bbc_default_pkg_sleep'));
+			//Build a 1024 byte block
+			$sBlock = substr($sFileData,0,1024);
+			//Remote 1400 byte from the string
+			$sFileData=substr($sFileData,1024);
+			$oEconetPacket = new econetpacket();
+			$oEconetPacket->setDestinationNetwork($oFsRequest->getSourceNetwork());
+			$oEconetPacket->setDestinationStation($oFsRequest->getSourceStation());
+			$oEconetPacket->setPort($iDataPort);
+			$oEconetPacket->setData($sBlock);
+			$this->oMainApp->dispatchReply($oEconetPacket);
+		}
+
+		$oReply2 = $oFsRequest->buildReply();
+		$oReply2->DoneOk();
+		$this->_addReplyToBuffer($oReply2);
+
 	}
 
 	/**

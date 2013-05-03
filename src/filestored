@@ -162,7 +162,7 @@ class filestored  {
 
 	public function dispatchReply($oReplyEconetPacket)
 	{
-		usleep(200);
+		usleep(config::getValue('bbc_default_pkg_sleep'));
 		$sIP = aunmap::ecoAddrToIpAddr($oReplyEconetPacket->getDestinationNetwork(),$oReplyEconetPacket->getDestinationStation());
 		if(strlen($sIP)>0){
 			$sPacket = $oReplyEconetPacket->getAunFrame();
@@ -195,7 +195,7 @@ class filestored  {
 		$aExpSet=$aAllExpSockets;
 
 		//Wait for an aun packet
-		$iSockets = @stream_select($aReadSet,$aWriteSet,$aExpSet,4);
+		$iSockets = @stream_select($aReadSet,$aWriteSet,$aExpSet,1);
 		var_dump($iSockets);
 		if($iSockets!=FALSE){
 			//Step through each socket we need to read from

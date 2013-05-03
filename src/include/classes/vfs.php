@@ -200,6 +200,75 @@ class vfs {
 		throw new Exception("vfs: Unable to save file (".$sEconetPath.")");
 	}
 
+	static public function getFile($iNetwork,$iStation,$sEconetPath)
+	{
+		if(!security::isLoggedIn($iNetwork,$iStation)){
+			logger::log("vfs: Un-able to create a handle for a station that is not logged in (Who are you?)",LOG_DEBUG);
+			throw new Exception("vfs: Un-able to create a handle for a station that is not logged in (Who are you?)");
+		}
+		$oUser = security::getUser($iNetwork,$iStation);
+		$sCsd = $oUser->getCsd();
+		$aPlugins = vfs::getVfsPlugins();
+		$oHandle=NULL;
+		foreach($aPlugins as $sPlugin){
+			try {
+				return $sPlugin::getFile($oUser,$sCsd,$sEconetPath);
+			}catch(VfsException $oVfsException){
+				//If it's a hard error abort the operation
+				if($oVfsException->isHard()){
+					throw $oVfsException;
+				}
+			}
+		}
+		throw new Exception("vfs: Unable to get file (".$sEconetPath.")");
+
+	}
+
+	/**
+	 * Gets the meta data for a given file
+	 *
+	 * @param int $iNetwork
+	 * @param int $iStation
+	 * @param string $sEconetPath	
+	*/
+	static public function getMeta($iNetwork,$iStation,$sEconetPath)
+	{	
+		if(!security::isLoggedIn($iNetwork,$iStation)){
+			logger::log("vfs: Un-able to create a handle for a station that is not logged in (Who are you?)",LOG_DEBUG);
+			throw new Exception("vfs: Un-able to create a handle for a station that is not logged in (Who are you?)");
+		}
+		if(strpos($sEconetPath,'$')===0){
+			//Absolute path
+			$aPath = explode('.',$sEconetPath);
+			$sFile = array_pop($aPath);
+			$sDir = join('.',$aPath);
+		}elseif(strpos($sEconetPath,'.')!==FALSE){
+			//Relitive path
+			$oUser = security::getUser($iNetwork,$iStation);
+			$aPath = explode('.',$sEconetPath);
+			$sFile = array_pop($aPath);
+			$sDir = $oUser->getCsd().'.'.join('.',$aPath);
+		}else{
+			//No path
+			$oUser = security::getUser($iNetwork,$iStation);
+			$sFile = $sEconetPath;
+			$sDir = $oUser->getCsd();
+		}
+
+		$aDirectoryListing = array();
+		$aPlugins = vfs::getVfsPlugins();
+		foreach($aPlugins as $sPlugin){
+			try {
+				$aDirectoryListing = $sPlugin::getDirectoryListing($sDir,$aDirectoryListing);	
+			}catch(VfsException $oVfsException){	
+				if($oVfsException->isHard()){
+					throw $oVfsException;
+				}
+			}
+		}
+		return $aDirectoryListing[$sFile];
+	}
+
 	/**
 	 * Creates file handle for a given network/station to a given file path
 	 *

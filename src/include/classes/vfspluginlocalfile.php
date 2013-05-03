@@ -169,10 +169,10 @@ class vfspluginlocalfile {
 		$sUnixFrom = vfspluginlocalfile::_econetToUnix($sPathFrom);
 		$sUnixTo = vfspluginlocalfile::_econetToUnix($sPathTo,TRUE);
 		if(!file_exists($sUnixFrom)){
-			throw new Exception("No such file");
+			throw new VfsException("No such file");
 		}
 		if(file_exists($sUnixTo)){
-			throw new Exception("Target exisits");
+			throw new VfsException("Target exisits");
 		}
 		$bReturn = rename($sUnixFrom,$sUnixTo);
 		if($bReturn AND file_exists($sUnixFrom.'.inf') AND !file_exists($sUnixTo.'.inf')){
@@ -199,6 +199,27 @@ class vfspluginlocalfile {
 			return TRUE;
 		}
 
+	}
+
+	/**
+	 * Get the contents of a given file
+	 *
+	 * @throws VfsException if the file does not exist
+	*/
+	public static function getFile($oUser,$sCsd,$sEconetPath)
+	{
+		if(strpos($sEconetPath,'$')===0){
+			//Absolute path
+			$sPath = $sEconetPath;
+		}else{
+			//Relative path
+			$sPath = trim($sCsd,'.').'.'.$sEconetPath;
+		}
+		$sUnixPath = vfspluginlocalfile::_econetToUnix($sPath);
+		if(is_file($sUnixPath)){
+			return file_get_contents($sUnixPath);
+		}
+		throw new VfsException("No such file");
 	}
 
 	public static function fsFtell($oUser,$fLocalHandle)

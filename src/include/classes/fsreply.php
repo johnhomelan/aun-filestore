@@ -87,6 +87,16 @@ class fsreply {
 		$this->sPkt = $this->sPkt.pack('v',$iInt);
 	}
 
+	public function append24bitIntLittleEndian($iInt)
+	{
+		$this->sPkt = $this->sPkt.pack('v',$iInt).pack('C',0);
+	}
+
+	public function append32bitIntLittleEndian($iInt)
+	{
+		$this->sPkt = $this->sPkt.pack('V',$iInt);
+	}
+
 
 	public function buildEconetpacket()
 	{

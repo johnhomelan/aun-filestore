@@ -25,6 +25,8 @@ class directoryentry {
 
 	protected $iSize = NULL;
 
+	protected $iAccess = 15;
+
 	public function __construct($sEconetName,$sUnixName,$sVfsPlugin,$iLoadAddr,$iExecAddr,$iSize,$bDir=FALSE)
 	{
 		$this->sEconetName=$sEconetName;
@@ -74,6 +76,16 @@ class directoryentry {
 	public function getSize()
 	{
 		return $this->iSize;
+	}
+
+	public function setAccess($iAccess)
+	{
+		$this->iAccess = $iAccess;
+	}
+
+	public function getAccess()
+	{
+		return $this->iAccess;
 	}
 
 	public function isDir()

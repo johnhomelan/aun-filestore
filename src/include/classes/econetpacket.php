@@ -77,6 +77,11 @@ class econetpacket {
 		$this->iCb = $iCb;
 	}
 
+	public function getFlags()
+	{
+		return $this->iCb;
+	}
+
 	public function setSourceStation($sStation)
 	{
 		$this->iSrcStn=$sStation;

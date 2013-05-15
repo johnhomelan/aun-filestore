@@ -17,12 +17,16 @@ class fsreply {
 	
 	protected $oRequest = NULL;
 
+	protected $iFlags = NULL;
+
+
 	protected $aTypeMap = array('DONE'=>0,'SAVE'=>1,'LOAD'=>2,'CAT'=>3,'INFO'=>4,'LOGIN'=>5,'SDISC'=>6,'DIR'=>7,'UNREC'=>8,'LIB'=>9,'DISCS'=>10);
 
 	public function __construct($oRequest)
 	{
 		if(is_object($oRequest) AND get_class($oRequest)=='fsrequest'){
 			$this->oRequest = $oRequest;
+			$this->iFlags = $oRequest->getFlags();
 		}else{
 			throw new Exception("An fsreply object was created with out suppling an fsrequest object");
 		}
@@ -97,12 +101,21 @@ class fsreply {
 		$this->sPkt = $this->sPkt.pack('V',$iInt);
 	}
 
+	public function setFlags($iFlags)
+	{
+		$this->iFlags = $iFlags;
+	}
+
+	public function getFlags()
+	{
+		return $this->iFlags;
+	}
 
 	public function buildEconetpacket()
 	{
 		$oEconetPacket = new econetpacket();
 		$oEconetPacket->setPort($this->oRequest->getReplyPort());
-		$oEconetPacket->setFlags(0);
+		$oEconetPacket->setFlags($this->iFlags);
 		$oEconetPacket->setDestinationStation($this->oRequest->getSourceStation());
 		$oEconetPacket->setDestinationNetwork($this->oRequest->getSourceNetwork());
 		$oEconetPacket->setData($this->sPkt);

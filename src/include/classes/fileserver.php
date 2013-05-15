@@ -74,7 +74,7 @@ class fileserver {
 			$this->_addReplyToBuffer($oReply);
 			return;
 		}
-	
+
 		switch($sFunction){
 			case 'EC_FS_FUNC_LOAD':
 				$this->loadFile($oFsRequest);
@@ -90,16 +90,20 @@ class fileserver {
 			case 'EC_FS_FUNC_LOAD_COMMAND':
 				break;
 			case 'EC_FS_FUNC_OPEN':
+				$this->openFile($oFsRequest);
 				break;
 			case 'EC_FS_FUNC_CLOSE':
+				$this->closeFile($oFsRequest);
 				break;
 			case 'EC_FS_FUNC_GETBYTE':
 				break;
 			case 'EC_FS_FUNC_PUTBYTE':
 				break;
 			case 'EC_FS_FUNC_GETBYTES':
+				$this->getBytes($oFsRequest);
 				break;
 			case 'EC_FS_FUNC_PUTBYTES':
+				$this->putBytes($oFsRequest);
 				break;
 			case 'EC_FS_FUNC_GET_ARGS':
 				$this->getArgs($oFsRequest);
@@ -115,6 +119,7 @@ class fileserver {
 				$this->getInfo($oFsRequest);
 				break;
 			case 'EC_FS_FUNC_SET_INFO':
+				$this->setInfo($oFsRequest);
 				break;
 			case 'EC_FS_FUNC_GET_UENV':
 				$this->getUenv($oFsRequest);
@@ -349,13 +354,68 @@ class fileserver {
 	*/
 	public function getInfo($oFsRequest)
 	{
+		var_dump($oFsRequest->getByte(1));
+		var_dump($oFsRequest->getString(2));
 		$sDir = $oFsRequest->getString(2);
 		switch($oFsRequest->getByte(1)){
 			case 4:
 				//EC_FS_GET_INFO_ACCESS
+				$oReply = $oFsRequest->buildReply();
+				try {
+					$oMeta = vfs::getMeta($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sDir);
+					$oReply->DoneOk();
+					//Append Type
+					if($oMeta->isDir()){
+						$oReply->appendByte(0x02);
+					}else{
+						$oReply->appendByte(0x01);
+					}
+					$oReply->appendByte($oMeta->getAccess());
+				}catch(Exception $oException){
+					$oReply->DoneOk();
+					$oReply->appendByte(0x00);
+					$oReply->appendByte(0x00);
+					$oReply->appendByte(0x00);
+				}
+				$this->_addReplyToBuffer($oReply);
+				return;
 				break;
 			case 5:
 				//EC_FS_GET_INFO_ALL
+				$oReply = $oFsRequest->buildReply();
+				try {
+					$oMeta = vfs::getMeta($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sDir);
+					$oReply->DoneOk();
+					//Append Type
+					if($oMeta->isDir()){
+						$oReply->appendByte(0x02);
+					}else{
+						$oReply->appendByte(0x01);
+					}
+					$oReply->append32bitIntLittleEndian($oMeta->getLoadAddr());
+					$oReply->append32bitIntLittleEndian($oMeta->getExecAddr());
+					$oReply->append24bitIntLittleEndian($oMeta->getSize());
+					$oReply->appendByte($oMeta->getAccess());
+					//Add current date
+					$iDay = date('j',time());
+					$oReply->appendByte($iDay);
+					//The last byte is month and year, first 4 bits year, last 4 bits month
+					$iYear= date('y',time());
+					$iYear << 4;
+					$iYear = $iYear+date('n',time());
+					$oReply->appendByte($iYear);
+				}catch(Exception $oException){
+					$oReply->DoneOk();
+					$oReply->appendByte(0x00);
+					$oReply->append32bitIntLittleEndian(0x0);
+					$oReply->append32bitIntLittleEndian(0x0);
+					$oReply->append24bitIntLittleEndian(0x0);
+					$oReply->appendByte(0x00);
+					$oReply->appendByte(0x00);
+					$oReply->appendByte(0x00);
+				}	
+				$this->_addReplyToBuffer($oReply);
+				return;
 				break;
 			case 1:
 				//EC_FS_GET_INFO_CTIME
@@ -411,6 +471,42 @@ class fileserver {
 		}
 		$oReply = $oFsRequest->buildReply();
 		$oReply->setError(0x8e,"Bad INFO argument");
+		$this->_addReplyToBuffer($oReply);
+	}
+
+	public function setInfo($oFsRequest)
+	{
+		$iArg = $oFsRequest->getByte(1);
+		$oReply = $oFsRequest->buildReply();
+		switch($iArg){
+			case 1:
+				//EC_FS_SET_INFO_ALL
+				$iLoad = $oFsRequest->get32bitIntLittleEndian(2);
+				$iExec = $oFsRequest->get32bitIntLittleEndian(6);
+				$iAccess =$oFsRequest->getByte(7);
+				$sPath = $oFsRequest->getString(8);
+				vfs::setMeta($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sPath,$iLoad,$iExec,$iAccess);
+				break;
+			case 2:
+				//EC_FS_SET_INFO_LOAD
+				$iLoad = $oFsRequest->get32bitIntLittleEndian(2);
+				$sPath = $oFsRequest->getString(6);
+				vfs::setMeta($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sPath,$iLoad,NULL,NULL);
+				break;
+			case 3:
+				//EC_FS_SET_INFO_EXEC
+				$iExec = $oFsRequest->get32bitIntLittleEndian(2);
+				$sPath = $oFsRequest->getString(6);
+				vfs::setMeta($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sPath,NULL,$iExec,NULL);
+				break;
+			case 4:
+				//EC_FS_SET_INFO_ACCESS
+				$iAccess =$oFsRequest->getByte(1);
+				$sPath = $oFsRequest->getString(2);
+				vfs::setMeta($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sPath,NULL,NULL,$iAccess);
+				break;
+		}
+		$oReply->DoneOk();
 		$this->_addReplyToBuffer($oReply);
 	}
 
@@ -482,6 +578,7 @@ class fileserver {
 	{
 		$iHandle = $oFsRequest->getByte(1);
 		$iArg = $oFsRequest->getByte(2);
+		
 		switch($iArg){
 			case 0:
 				//EC_FS_ARG_PTR
@@ -489,6 +586,7 @@ class fileserver {
 				$oFd = vfs::getFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$iHandle);
 				$iPos = $oFd->fsFTell();
 				$oReply->DoneOk();
+				$oReply->append24bitIntLittleEndian($iPos);
 				break;
 			case 1:
 				//EC_FS_ARG_EXT
@@ -497,14 +595,16 @@ class fileserver {
 				$aStat = $oFd->fsFStat();
 				$iSize = $aStat['size'];
 				$oReply->DoneOk();
+				$oReply->append24bitIntLittleEndian($iSize);
 				break;
 			case 2:
 				//EC_FS_ARG_SIZE
 				$oReply = $oFsRequest->buildReply();
 				$oFd = vfs::getFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$iHandle);
 				$aStat = $oFd->fsFStat();
-				$iSize = $aStat['blocks'];
+				$iSize = $aStat['size'];
 				$oReply->DoneOk();
+				$oReply->append24bitIntLittleEndian($iSize);
 				break;
 			default:
 				$oReply = $oFsRequest->buildReply();
@@ -694,12 +794,196 @@ class fileserver {
 				vfs::moveFile($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sFrom,$sTo);
 				$oReply->DoneOk();
 			}catch(Exception $oException){
-				var_dump($oException);
 				$oReply->setError(0xff,"No such file");
 			}
 		}
 		$this->_addReplyToBuffer($oReply);
 		
+	}
+
+	/**
+	 * Opens a file
+	 *
+	*/
+	public function openFile($oFsRequest)
+	{
+		$iMustExist = $oFsRequest->getByte(1);
+		$iReadOnly = $oFsRequest->getByte(2);
+		$sPath = $oFsRequest->getString(3);
+		$oReply = $oFsRequest->buildReply();
+		if($iMustExist===0){
+			$bMustExist = FALSE;
+		}else{
+			$bMustExist = TRUE;
+		}
+		if($iReadOnly===0){
+			$bReadOnly = FALSE;
+		}else{
+			$bReadOnly = TRUE;
+		}
+		try {
+			$oFsHandle = vfs::createFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sPath,$bMustExist,$bReadOnly);
+			$oReply->DoneOk();
+			$oReply->appendByte($oFsHandle->getID());
+		}catch(Exception $oException){
+			$oReply->setError(0xff,"No such file");
+		}
+		$this->_addReplyToBuffer($oReply);
+	}
+
+	/**
+	 * Closes a file
+	 *
+	*/
+	public function closeFile($oFsRequest)
+	{
+		$iHandle = $oFsRequest->getByte(1);
+		vfs::closeFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$iHandle);
+		$oReply = $oFsRequest->buildReply();
+		$oReply->DoneOk();
+		$this->_addReplyToBuffer($oReply);
+	}
+
+	public function getBytes($oFsRequest)
+	{
+		//The urd becomes the port to send the data to
+		$iDataPort = $oFsRequest->getUrd();
+		//File handle
+		$iHandle = $oFsRequest->getByte(1);
+		//Use pointer
+		$iUserPtr = $oFsRequest->getByte(2);
+		//Number of bytes to get 
+		$iBytes = $oFsRequest->get24bitIntLittleEndian(3);
+		//Offset (only use if $iUserPtr!=0)
+		$iOffset = $oFsRequest->get24bitIntLittleEndian(6);
+	
+		logger::log("Getbytes handle ".$iHandle." size ".$iBytes." prt ".$iUserPtr." offset ".$iOffset.".",LOG_DEBUG);
+
+		$oFsHandle = vfs::getFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$iHandle);	
+		
+		$oReply = $oFsRequest->buildReply();
+		$oReply->DoneOk();
+		//Send reply directly
+		$oReplyEconetPacket = $oReply->buildEconetpacket();
+		$this->oMainApp->dispatchReply($oReplyEconetPacket);	
+		try {
+			$this->oMainApp->waitForAck($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation());
+		}catch(Exception $oException){
+			return;
+		}
+
+		//Break the data into blocks and send it
+//		if($iUserPtr!=0){
+			echo "Use offset\n";
+			//Move the file pointer to offset
+			$oFsHandle->setPos($iOffset);
+//		}
+		$bLoop = TRUE;
+		$iFullBlocks = round($iBytes/256,0,PHP_ROUND_HALF_DOWN);
+		$iBytesToRead = $iBytes;
+		while($bLoop){
+			if($iFullBlocks>1){
+				$sBlock = $oFsHandle->read(256);
+				$iFullBlocks--;
+				$iBytesToRead=$iBytesToRead-256;
+			}else{
+				$sBlock = $oFsHandle->read($iBytesToRead);
+				$iBytesToRead = $iBytesToRead-strlen($sBlock);
+			}
+			$oEconetPacket = new econetpacket();
+			$oEconetPacket->setDestinationNetwork($oFsRequest->getSourceNetwork());
+			$oEconetPacket->setDestinationStation($oFsRequest->getSourceStation());
+			$oEconetPacket->setPort($iDataPort);
+			$oEconetPacket->setData($sBlock);
+			$this->oMainApp->dispatchReply($oEconetPacket);
+			try {
+				logger::log("Waitinig for ack",LOG_DEBUG);
+				$oAck = $this->oMainApp->waitForAck($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation());
+			}catch(Exception $oException){
+				return;
+			}
+
+			if($iBytesToRead==0 OR $oFsHandle->isEof()){
+				$bLoop=FALSE;
+			}
+		}
+		$oReply2 = $oFsRequest->buildReply();
+		$oReply2->DoneOk();
+		//Flag
+		if($oFsHandle->isEof()){
+			//As we have hit EOF the number of bytes sent has fallen short of the ammount requested send the remaining bytes
+			$iOutstandingBytes = $iBytes - strlen($sBlock);
+			$oEconetPacket->setData(str_pad("",$iOutstandingBytes,0));
+			$this->oMainApp->dispatchReply($oEconetPacket);
+			$oReply2->appendByte(0x80);
+		}else{
+			$oReply2->appendByte(0);
+		}
+		//Number of bytes sent
+		$oReply2->append24bitIntLittleEndian($iBytes-$iBytesToRead);
+		$oReply2->setFlags($oAck->getFlags());
+		$this->_addReplyToBuffer($oReply2);
+	}
+
+	public function putBytes($oFsRequest)
+	{
+		//File handle
+		$iHandle = $oFsRequest->getByte(1);
+		//Use pointer
+		$iUserPtr = $oFsRequest->getByte(2);
+		//Number of bytes to get 
+		$iBytes = $oFsRequest->get24bitIntLittleEndian(3);
+		//Offset (only use if $iUserPtr!=0)
+		$iOffset = $oFsRequest->get24bitIntLittleEndian(6);
+		logger::log("Putbytes handle ".$iHandle." size ".$iBytes." prt ".$iUserPtr." offset ".$iOffset.".",LOG_DEBUG);
+
+		$oFsHandle = vfs::getFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$iHandle);	
+
+//		if($iUserPtr!=0){
+			echo "Use offset\n";
+			//Move the file pointer to offset
+			$oFsHandle->setPos($iOffset);
+//		}
+		
+		$oReply = $oFsRequest->buildReply();
+		$oReply->DoneOk();
+		$oReply->appendByte(config::getValue('econet_data_stream_port'));
+		//Add max block size
+		$oReply->append16bitIntLittleEndian(1400);
+
+		//Send reply directly
+		$oReplyEconetPacket = $oReply->buildEconetpacket();
+		$this->oMainApp->dispatchReply($oReplyEconetPacket);	
+
+		while(strlen($sData)<$iBytes){
+			try {
+				//We now need to take over the receving of packets breifly going to our streaming port
+				$oEconetPacket = $this->oMainApp->directStream($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),config::getValue('econet_data_stream_port'));
+				usleep(config::getValue('bbc_default_pkg_sleep'));
+
+				//Build and send the ack packet 
+				$oEconetAck = new econetpacket();
+				$oEconetAck->setPort($iAckPort);
+				$oEconetAck->setDestinationNetwork($oFsRequest->getSourceNetwork());
+				$oEconetAck->setDestinationStation($oFsRequest->getSourceStation());
+				$oEconetAck->setData(pack('C',0).pack('C',0));
+				$this->oMainApp->dispatchReply($oEconetAck);
+
+			}catch(Exception $oException){
+				logger::log("Client failed to send direct stream during save operation",LOG_DEBUG);
+				$oFailReply=$oFsRequest->buildReply();
+				$oFailReply->setError(0xff,"Timeout");
+				$this->_addReplyToBuffer($oReply);
+				return;
+			}
+			$sData=$sData.$oEconetPacket->getData();
+		}
+		$oFsHandle->write($sData);
+		$oReply2 = $oFsRequest->buildReply();
+		$oReply2->DoneOk();
+		$oReply2->appendByte(0);
+		$oReply2->append24bitIntLittleEndian(strlen($sData));
+		$this->_addReplyToBuffer($oReply2);
 	}
 
 	/**
@@ -807,7 +1091,7 @@ class fileserver {
 		$oReply->append32bitIntLittleEndian($oMeta->getLoadAddr());
 		$oReply->append32bitIntLittleEndian($oMeta->getExecAddr());
 		$oReply->append24bitIntLittleEndian($oMeta->getSize());
-		$oReply->appendByte(15);
+		$oReply->appendByte($oMeta->getAccess());
 		//Add current date
 		$iDay = date('j',time());
 		$oReply->appendByte($iDay);

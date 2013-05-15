@@ -196,7 +196,6 @@ class filestored  {
 
 		//Wait for an aun packet
 		$iSockets = @stream_select($aReadSet,$aWriteSet,$aExpSet,1);
-		var_dump($iSockets);
 		if($iSockets!=FALSE){
 			//Step through each socket we need to read from
 			foreach($aReadSet as  $iReadSocket){
@@ -239,6 +238,64 @@ class filestored  {
 		}else{
 			throw new Exception("Direct stream timeout");
 		}
+	}
+
+	public function waitForAck($iNetwork,$iStation,$iRecursion=0)
+	{
+		if($iRecursion>20){
+			throw new Exception("No direct stream recevied in 20 packets");
+		}
+
+		$aReadSet=$this->aAllReadableSockets;
+		$aWriteSet=NULL;
+		$aAllExpSockets=array(NULL);
+		$aExpSet=$aAllExpSockets;
+
+		//Wait for an aun packet
+		$iSockets = @stream_select($aReadSet,$aWriteSet,$aExpSet,1);
+		if($iSockets!=FALSE){
+			//Step through each socket we need to read from
+			foreach($aReadSet as  $iReadSocket){
+				if($iReadSocket == $this->oAunSocket){
+					//We've received an AUN packet process it 
+					$sUdpData= stream_socket_recvfrom($this->oAunSocket,1500,0,$sHost);
+					logger::log("filestore: Aun packet recvieved from ".$sHost,LOG_DEBUG);	
+
+					//Decode the AUN packet
+					$oAunPacket = new AunPacket();
+					$oAunPacket->setSourceIP($sHost);
+					$oAunPacket->setDestinationIP(config::getValue('local_ip'));
+					$oAunPacket->decode($sUdpData);
+					
+					//Send an ack for the AUN packet if needed
+					$sAck = $oAunPacket->buildAck();
+					if(strlen($sAck)>0){
+						logger::log("filestore: Sending Ack packet",LOG_DEBUG);
+						stream_socket_sendto($this->oAunSocket,$sAck,0,$sHost);
+					}
+				
+					//Build an econet packet from the AUN packet and see if it's the direct stream we are waiting for 
+					if($oAunPacket->getPacketType()=='Ack'){
+						$oEconetPacket = $oAunPacket->buildEconetPacket();
+						if($oEconetPacket->getSourceNetwork()==$iNetwork AND $oEconetPacket->getSourceStation()==$iStation){
+							//It's the frame we are waiting for.
+							return $oEconetPacket;
+						}else{
+							//Not the direct data stream we are waiting for but the packet must be processed in the normal way
+							$this->processEconetPacket();
+							//Go back to listening for the direct stream
+							return $this->waitForAck($iNetwork,$iStation,$iRecursion+1);
+						}
+					}else{
+						return $this->waitForAck($iNetwork,$iStation,$iRecursion+1);
+					}
+				}
+			}
+		
+		}else{
+			throw new Exception("Waiting for ack timeout");
+		}
+
 	}
 }
 

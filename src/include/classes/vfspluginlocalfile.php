@@ -17,7 +17,7 @@ class vfspluginlocalfile {
 	{
 	}
 
-	protected  function _setUid($oUser)
+	protected  static function _setUid($oUser)
 	{
 		if(config::getValue('security_mode')=='multiuser'){
 			posix_seteuid($this->oUser->getUnixUid());
@@ -31,7 +31,7 @@ class vfspluginlocalfile {
 		}
 	}
 
-	protected static function _econetToUnix($sEconetPath,$bAllowCreate=FALSE)
+	protected static function _econetToUnix($sEconetPath)
 	{
 		//Trim leading $.
 		$sEconetPath = substr($sEconetPath,2);
@@ -42,13 +42,11 @@ class vfspluginlocalfile {
 		}
 		$sUnixPath = trim($sUnixPath,DIRECTORY_SEPARATOR);
 		$sUnixPath = config::getValue('vfs_plugin_localfile_root').DIRECTORY_SEPARATOR.$sUnixPath;
-		if(file_exists($sUnixPath) OR $bAllowCreate){
-			logger::log("vfspluginlocalfile: Converted econet path ".$sEconetPath. " to ".$sUnixPath,LOG_DEBUG);
-			return $sUnixPath;
-		}
+		logger::log("vfspluginlocalfile: Converted econet path ".$sEconetPath. " to ".$sUnixPath,LOG_DEBUG);
+		return $sUnixPath;
 	}
 
-	public static function _buildFiledescriptorFromEconetPath($oUser,$sCsd,$sEconetPath)
+	public static function _buildFiledescriptorFromEconetPath($oUser,$sCsd,$sEconetPath,$bMustExist,$bReadOnly)
 	{
 		if(strpos($sEconetPath,'$')===0){
 			//Absolute Path
@@ -60,8 +58,20 @@ class vfspluginlocalfile {
 		}
 		if(strlen($sUnixPath)>0){
 			if(is_file($sUnixPath)){
-				$iVfsHandle = fopen($sUnixPath,'r+');
+				if($bReadOnly){
+					$iVfsHandle = fopen($sUnixPath,'r');
+				}else{
+					$iVfsHandle = fopen($sUnixPath,'c+');
+				}
+			}elseif(!$bMustExist){
+				if($bReadOnly){
+					echo "read only\n";
+					$iVfsHandle = NULL;
+				}else{
+					$iVfsHandle = fopen($sUnixPath,'c+');
+				}
 			}else{
+				echo "Must exist but does not\n";
 				$iVfsHandle = NULL;
 			}
 			$iEconetHandle = vfs::getFreeFileHandleID($oUser);
@@ -222,6 +232,32 @@ class vfspluginlocalfile {
 		throw new VfsException("No such file");
 	}
 
+	public static function setMeta($sEconetPath,$iLoad,$iExec,$iAccess)
+	{
+		$sUnixPath = vfspluginlocalfile::_econetToUnix($sEconetPath);
+		if(file_exists($sUnixPath) AND file_exists($sUnixPath.'.inf')){
+			$sInf = file_get_contents($sUnixPath.".inf");				
+			$aMatches = array();
+			if(preg_match('/^TAPE file ([0-9a-fA-F]+) ([0-9a-fA-F]+)/',$sInf,$aMatches)>0){
+				//Update load / exec addr
+				$aMata=array('load'=>$aMatches[1],'exec'=>$aMatches[2]);
+			}else{
+				$aMata=array('load'=>'ffff0000','exec'=>'ffff0000');
+			}
+		}else{
+			$aMata=array('load'=>'ffff0000','exec'=>'ffff0000');
+		}
+		if(file_exists($sUnixPath)){
+			if(!is_null($iLoad)){
+				$aMata['load']=str_pad(dechex($iLoad),8,'f',STR_PAD_LEFT);
+			}
+			if(!is_null($iExec)){
+				$aMata['exec']=str_pad(dechex($iExec),8,'f',STR_PAD_LEFT);;
+			}
+			file_put_contents($sUnixPath.".inf","TAPE file ".$aMata['load']." ".$aMata['exec']);
+		}
+	}
+
 	public static function fsFtell($oUser,$fLocalHandle)
 	{
 		vfspluginlocalfile::_setUid($oUser);
@@ -232,13 +268,48 @@ class vfspluginlocalfile {
 
 	public static function fsFStat($oUser,$fLocalHandle)
 	{
+		logger::log("vfspluginlocalfile: Get fstat on ".$fLocalHandle,LOG_DEBUG);
 		vfspluginlocalfile::_setUid($oUser);
 		$mReturn =  fstat($fLocalHandle);
 		vfspluginlocalfile::_returnUid();
 		return $mReturn;
 	}
+	public static function isEof($oUser,$fLocalHandle)
+	{
+		vfspluginlocalfile::_setUid($oUser);
+		$mReturn =  feof($fLocalHandle);
+		vfspluginlocalfile::_returnUid();
+		return $mReturn;
+	}
 
-	public static function close($oUser,$fLocalHandle)
+	public static function setPos($oUser,$fLocalHandle,$iPos)
+	{
+		logger::log("vfspluginlocalfile: Moving file off-set to ".$iPos." bytes for file handle ".$fLocalHandle.LOG_DEBUG);
+		vfspluginlocalfile::_setUid($oUser);
+		$mReturn =  fseek($fLocalHandle,$iPos,SEEK_SET);
+		vfspluginlocalfile::_returnUid();
+		return $mReturn;
+	}
+	
+	public static function read($oUser,$fLocalHandle,$iLength)
+	{
+		logger::log("vfspluginlocalfile: Reading ".$iLength." bytes from file handle ".$fLocalHandle.LOG_DEBUG);
+		vfspluginlocalfile::_setUid($oUser);
+		$mReturn =  fread($fLocalHandle,$iLength);
+		vfspluginlocalfile::_returnUid();
+		return $mReturn;
+	}
+
+	public static function write($oUser,$fLocalHandle,$sData)
+	{
+		logger::log("vfspluginlocalfile: Write bytes to file handle ".$fLocalHandle.LOG_DEBUG);
+		vfspluginlocalfile::_setUid($oUser);
+		$mReturn =  fwrite($fLocalHandle,$sData);
+		vfspluginlocalfile::_returnUid();
+		return $mReturn;
+	}
+
+	public static function fsClose($oUser,$fLocalHandle)
 	{
 		vfspluginlocalfile::_setUid($oUser);
 		$mReturn = fclose($fLocalHandle);

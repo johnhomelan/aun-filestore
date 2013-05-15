@@ -21,6 +21,8 @@ class fsrequest {
 
 	protected $iDestinationStation = NULL;
 
+	protected $iFlags = NULL;
+
 	protected $iReplyPort = NULL;
 	
 	protected $iFunction = NULL;
@@ -39,6 +41,7 @@ class fsrequest {
 	{
 		$this->iSourceNetwork = $oEconetPacket->getSourceNetwork();
 		$this->iSourceStation = $oEconetPacket->getSourceStation();
+		$this->iFlags = $oEconetPacket->getFlags();
 		$this->decode($oEconetPacket->getData());
 	}	
 
@@ -50,6 +53,11 @@ class fsrequest {
 	public function getSourceNetwork()
 	{
 		return $this->iSourceNetwork;
+	}
+
+	public function getFlags()
+	{
+		return $this->iFlags;
 	}
 
 	public function getReplyPort()
@@ -161,8 +169,8 @@ class fsrequest {
 	public function get24bitIntLittleEndian($iStart)
 	{
 		$aBytes = unpack('C*',$this->sData);
-		$sHexString= dechex($aBytes[$iStart+2]).dechex($aBytes[$iStart+1]).dechex($aBytes[$iStart]);
-		return hexdec($sHexString);
+		$iInt= bindec(str_pad(decbin($aBytes[$iStart+2]),8,"0",STR_PAD_LEFT).str_pad(decbin($aBytes[$iStart+1]),8,"0",STR_PAD_LEFT).str_pad(decbin($aBytes[$iStart]),8,"0",STR_PAD_LEFT));
+		return $iInt;
 	}
 
 	public function buildReply()

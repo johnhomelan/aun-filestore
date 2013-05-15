@@ -51,13 +51,13 @@ class vfs {
 		return $aReturn;
 	}
 	
-	static protected function _buildFiledescriptorFromEconetPath($oUser,$sCsd,$sEconetPath)
+	static protected function _buildFiledescriptorFromEconetPath($oUser,$sCsd,$sEconetPath,$bMustExist,$bReadOnly)
 	{
 		$aPlugins = vfs::getVfsPlugins();
 		$oHandle=NULL;
 		foreach($aPlugins as $sPlugin){
 			try {
-				$oHandle = $sPlugin::_buildFiledescriptorFromEconetPath($oUser,$sCsd,$sEconetPath);
+				$oHandle = $sPlugin::_buildFiledescriptorFromEconetPath($oUser,$sCsd,$sEconetPath,$bMustExist,$bReadOnly);
 			}catch(VfsException $oVfsException){
 				//If it's a hard error abort the operation
 				if($oVfsException->isHard()){
@@ -266,7 +266,48 @@ class vfs {
 				}
 			}
 		}
-		return $aDirectoryListing[$sFile];
+		if(array_key_exists($sFile,$aDirectoryListing)){
+			return $aDirectoryListing[$sFile];
+		}else{
+			throw new Exception("No such file");
+		}
+	}
+
+	/**
+	 * Sets the meta data for a given file
+	 *
+	 * As all files must have a load exec and access mode setting the values to NULL means leave unchanged
+	 * @param int $iNetwork
+	 * @param int $iStation
+	 * @param string $sEconetPath	
+	 * @param int $iLoad
+	 * @param int $iExec
+	 * @param int $iAccess
+	*/
+	static public function setMeta($iNetwork,$iStation,$sEconetPath,$iLoad,$iExec,$iAccess)
+	{	
+		if(!security::isLoggedIn($iNetwork,$iStation)){
+			logger::log("vfs: Un-able to create a handle for a station that is not logged in (Who are you?)",LOG_DEBUG);
+			throw new Exception("vfs: Un-able to create a handle for a station that is not logged in (Who are you?)");
+		}
+		if(strpos($sEconetPath,'$')===0){
+			//Absolute path
+			$sPath = $sEconetPath;
+		}else{
+			$oUser = security::getUser($iNetwork,$iStation);
+			$sPath = $oUser->getCsd().'.'.trim($sEconetPath,'.');
+		}
+
+		$aPlugins = vfs::getVfsPlugins();
+		foreach($aPlugins as $sPlugin){
+			try {
+				$sPlugin::setMeta($sPath,$iLoad,$iExec,$iAccess);	
+			}catch(VfsException $oVfsException){	
+				if($oVfsException->isHard()){
+					throw $oVfsException;
+				}
+			}
+		}
 	}
 
 	/**
@@ -277,8 +318,10 @@ class vfs {
 	 * @param int $iNetwork
 	 * @param int $iStation
 	 * @param string $sEconetPath
+	 * @param boolean $bMustExist
+	 * @param boolean $bReadOnly
 	*/
-	static public function createFsHandle($iNetwork,$iStation,$sEconetPath)
+	static public function createFsHandle($iNetwork,$iStation,$sEconetPath,$bMustExist=TRUE,$bReadOnly=TRUE)
 	{
 		if(!security::isLoggedIn($iNetwork,$iStation)){
 			logger::log("vfs: Un-able to create a handle for a station that is not logged in (Who are you?)",LOG_DEBUG);
@@ -286,7 +329,7 @@ class vfs {
 		}
 		$oUser = security::getUser($iNetwork,$iStation);
 		$sCsd = $oUser->getCsd();
-		$oHandle = vfs::_buildFiledescriptorFromEconetPath($oUser,$sCsd,$sEconetPath);
+		$oHandle = vfs::_buildFiledescriptorFromEconetPath($oUser,$sCsd,$sEconetPath,$bMustExist,$bReadOnly);
 
 		//Store the handel for later use
 		if(!array_key_exists($iNetwork,vfs::$aHandles)){

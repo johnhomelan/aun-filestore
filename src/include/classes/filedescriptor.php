@@ -81,6 +81,7 @@ class filedescriptor {
 	{
 		$aPlugins = vfs::getVfsPlugins();
 		$iIndex = array_search($this->sVfsPlugin,$aPlugins);
+		$this->iVfsHandle = NULL;
 		if($iIndex!==FALSE){
 			$iIndex--;
 			if(!array_key_exists($iIndex,$aPlugins)){
@@ -133,24 +134,94 @@ class filedescriptor {
 	public function fsFStat()
 	{
 		if(!is_null($this->iVfsHandle)){
-			try {
+	//		try {
 				$sPlugin = $this->sVfsPlugin;
 				return $sPlugin::fsFStat($this->oUser,$this->iVfsHandle);
+	//		}catch(VfsException $oVfsException){
+	//			if($oVfsException->isHard()){
+	//				throw $oVfsException;
+	//			}
+	//			$this->changeVfs();
+	//			return $this->fsTell();
+	//		}
+		}
+	}
+
+	public function isEof()
+	{
+		if(!is_null($this->iVfsHandle)){
+			try {
+				$sPlugin = $this->sVfsPlugin;
+				return $sPlugin::isEof($this->oUser,$this->iVfsHandle);
 			}catch(VfsException $oVfsException){
 				if($oVfsException->isHard()){
 					throw $oVfsException;
 				}
 				$this->changeVfs();
-				return $this->fsTell();
+				return $this->isEof();
 			}
 		}
+
+	}
+
+	public function setPos($iPos)
+	{
+		if(!is_null($this->iVfsHandle)){
+			try {
+				$sPlugin = $this->sVfsPlugin;
+				return $sPlugin::setPos($this->oUser,$this->iVfsHandle,$iPos);
+			}catch(VfsException $oVfsException){
+				if($oVfsException->isHard()){
+					throw $oVfsException;
+				}
+				$this->changeVfs();
+				return $this->setPos($this->oUser,$this->iVfsHandle,$iPos);
+			}
+		}
+
+	}
+
+	public function read($iLength)
+	{
+		if(!is_null($this->iVfsHandle)){
+			try {
+				$sPlugin = $this->sVfsPlugin;
+				return $sPlugin::read($this->oUser,$this->iVfsHandle,$iLength);
+			}catch(VfsException $oVfsException){
+				var_dump($oVfsException);
+				if($oVfsException->isHard()){
+					throw $oVfsException;
+				}
+				$this->changeVfs();
+				return $this->read($this->oUser,$this->iVfsHandle,$iLength);
+			}
+		}
+
+	}
+
+	public function write($sData)
+	{
+		if(!is_null($this->iVfsHandle)){
+			try {
+				$sPlugin = $this->sVfsPlugin;
+				return $sPlugin::write($this->oUser,$this->iVfsHandle,$sData);
+			}catch(VfsException $oVfsException){
+				var_dump($oVfsException);
+				if($oVfsException->isHard()){
+					throw $oVfsException;
+				}
+				$this->changeVfs();
+				return $this->write($this->oUser,$this->iVfsHandle,$sData);
+			}
+		}
+
 	}
 
 	public function close()
 	{
 		if(!is_null($this->iVfsHandle)){
 			$sPlugin = $this->sVfsPlugin;
-			return $sPlugin::close($this->oUser,$this->iVfsHandle);
+			return $sPlugin::fsClose($this->oUser,$this->iVfsHandle);
 		}
 	}
 }

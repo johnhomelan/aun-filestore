@@ -29,7 +29,7 @@ class vfsexception extends Exception {
 	public function __construct($sMessage,$bHardError=FALSE)
 	{
 		parent::__construct($sMessage);
-		$this->bHard=$bHard;
+		$this->bHard=$bHardError;
 	}
 
 	/**

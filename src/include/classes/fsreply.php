@@ -72,6 +72,11 @@ class fsreply {
 		$this->sPkt = pack('CC',$this->aTypeMap['LIB'],0);
 	}
 
+	public function UnrecognisedOk()
+	{
+		$this->sPkt = pack('CC',$this->aTypeMap['UNREC'],0);
+	}
+
 	public function appendByte($iByte)
 	{
 		$this->sPkt = $this->sPkt.pack('C',$iByte);

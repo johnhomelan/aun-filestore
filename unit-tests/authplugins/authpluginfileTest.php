@@ -36,7 +36,7 @@ class authpluginfileTest extends PHPUnit_Framework_TestCase {
 
 	public function testChangePassword()
 	{
-		authpluginfile::setPassword('TEST','testpwchanged');
+		authpluginfile::setPassword('TEST','testpw','testpwchanged');
 
 		//Should now work
 		$this->assertTrue(authpluginfile::login('TEST','testpwchanged'));
@@ -69,7 +69,7 @@ class authpluginfileTest extends PHPUnit_Framework_TestCase {
 		authpluginfile::createUser($oUser);
 		$this->assertTrue(authpluginfile::login('createtest',''));
 
-		authpluginfile::setPassword('createtest','haspassnow');
+		authpluginfile::setPassword('createtest','','haspassnow');
 		$this->assertTrue(authpluginfile::login('createtest','haspassnow'));
 		$this->assertFalse(authpluginfile::login('createtest',''));
 	}

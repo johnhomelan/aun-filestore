@@ -88,6 +88,7 @@ class fileserver {
 			case 'EC_FS_FUNC_CAT_HEADER':
 				break;
 			case 'EC_FS_FUNC_LOAD_COMMAND':
+				$this->loadCommand($oFsRequest);
 				break;
 			case 'EC_FS_FUNC_OPEN':
 				$this->openFile($oFsRequest);
@@ -188,7 +189,8 @@ class fileserver {
 			}			
 		}
 		$oReply = $oFsRequest->buildReply();
-		$oReply->setError(0x99,"No such command");
+		$oReply->UnrecognisedOk();
+		$oReply->appendString($sCommand);
 		$this->_addReplyToBuffer($oReply);
 	}
 
@@ -238,6 +240,7 @@ class fileserver {
 			case 'SAVE':
 				break;
 			case 'SDISC':
+				$this->sDisc($oFsRequest,$sOptions);
 				break;
 			case 'PRIV':
 				$this->privUser($oFsRequest,$sOptions);
@@ -255,6 +258,16 @@ class fileserver {
 				$this->_addReplyToBuffer($oReply);
 				break;
 		}
+	}
+
+	/**
+	 * Handles loading *COMMANDs stored on the server
+	 * 
+	 * @param object fsrequest $oFsRequest
+	*/
+	public function loadCommand($oFsRequest)
+	{
+		$this->loadFile($oFsRequest);
 	}
 
 	/**
@@ -354,8 +367,6 @@ class fileserver {
 	*/
 	public function getInfo($oFsRequest)
 	{
-		var_dump($oFsRequest->getByte(1));
-		var_dump($oFsRequest->getString(2));
 		$sDir = $oFsRequest->getString(2);
 		switch($oFsRequest->getByte(1)){
 			case 4:
@@ -419,12 +430,72 @@ class fileserver {
 				break;
 			case 1:
 				//EC_FS_GET_INFO_CTIME
+				$oReply = $oFsRequest->buildReply();
+				try {
+					$oMeta = vfs::getMeta($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sDir);
+					$oReply->DoneOk();
+					//Append Type
+					if($oMeta->isDir()){
+						$oReply->appendByte(0x02);
+					}else{
+						$oReply->appendByte(0x01);
+					}
+					$oReply->appendByte($oMeta->getCTime());
+				}catch(Exception $oException){
+					$oReply->DoneOk();
+					$oReply->appendByte(0x00);
+					$oReply->appendByte(0x00);
+					$oReply->appendByte(0x00);
+				}
+				$this->_addReplyToBuffer($oReply);
+				return;
 				break;
 			case 2:
 				//EC_FS_GET_INFO_META
+				$oReply = $oFsRequest->buildReply();
+				try {
+					$oMeta = vfs::getMeta($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sDir);
+					$oReply->DoneOk();
+					//Append Type
+					if($oMeta->isDir()){
+						$oReply->appendByte(0x02);
+					}else{
+						$oReply->appendByte(0x01);
+					}
+					$oReply->append32bitIntLittleEndian($oMeta->getLoadAddr());
+					$oReply->append32bitIntLittleEndian($oMeta->getExecAddr());
+				}catch(Exception $oException){
+					$oReply->DoneOk();
+					$oReply->appendByte(0x00);
+					$oReply->appendByte(0x00);
+					$oReply->appendByte(0x00);
+				}
+				$this->_addReplyToBuffer($oReply);
+				return;
+	
 				break;
 			case 3:
 				//EC_FS_GET_INFO_SIZE
+				$oReply = $oFsRequest->buildReply();
+				try {
+					$oMeta = vfs::getMeta($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sDir);
+					$oReply->DoneOk();
+					//Append Type
+					if($oMeta->isDir()){
+						$oReply->appendByte(0x02);
+					}else{
+						$oReply->appendByte(0x01);
+					}
+					$oReply->append24bitIntLittleEndian($oMeta->getSize());
+				}catch(Exception $oException){
+					$oReply->DoneOk();
+					$oReply->appendByte(0x00);
+					$oReply->appendByte(0x00);
+					$oReply->appendByte(0x00);
+				}
+				$this->_addReplyToBuffer($oReply);
+				return;
+				
 				break;
 			case 6:
 				//EC_FS_GET_INFO_DIR
@@ -949,25 +1020,18 @@ class fileserver {
 		$oReply->DoneOk();
 		$oReply->appendByte(config::getValue('econet_data_stream_port'));
 		//Add max block size
-		$oReply->append16bitIntLittleEndian(1400);
+		$oReply->append16bitIntLittleEndian(256);
 
 		//Send reply directly
 		$oReplyEconetPacket = $oReply->buildEconetpacket();
 		$this->oMainApp->dispatchReply($oReplyEconetPacket);	
+		$sData = "";
 
 		while(strlen($sData)<$iBytes){
 			try {
 				//We now need to take over the receving of packets breifly going to our streaming port
-				$oEconetPacket = $this->oMainApp->directStream($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),config::getValue('econet_data_stream_port'));
 				usleep(config::getValue('bbc_default_pkg_sleep'));
-
-				//Build and send the ack packet 
-				$oEconetAck = new econetpacket();
-				$oEconetAck->setPort($iAckPort);
-				$oEconetAck->setDestinationNetwork($oFsRequest->getSourceNetwork());
-				$oEconetAck->setDestinationStation($oFsRequest->getSourceStation());
-				$oEconetAck->setData(pack('C',0).pack('C',0));
-				$this->oMainApp->dispatchReply($oEconetAck);
+				$oEconetPacket = $this->oMainApp->directStream($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),config::getValue('econet_data_stream_port'));
 
 			}catch(Exception $oException){
 				logger::log("Client failed to send direct stream during save operation",LOG_DEBUG);
@@ -979,6 +1043,7 @@ class fileserver {
 			$sData=$sData.$oEconetPacket->getData();
 		}
 		$oFsHandle->write($sData);
+		usleep(config::getValue('bbc_default_pkg_sleep'));
 		$oReply2 = $oFsRequest->buildReply();
 		$oReply2->DoneOk();
 		$oReply2->appendByte(0);
@@ -1026,19 +1091,12 @@ class fileserver {
 		while(strlen($sData)<$iSize){
 			try {
 				//We now need to take over the receving of packets breifly going to our streaming port
+				logger::log("Direct stream (".strlen($sData)."/".$iSize.")",LOG_DEBUG);
 				$oEconetPacket = $this->oMainApp->directStream($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),config::getValue('econet_data_stream_port'));
 				usleep(config::getValue('bbc_default_pkg_sleep'));
 
-				//Build and send the ack packet 
-				$oEconetAck = new econetpacket();
-				$oEconetAck->setPort($iAckPort);
-				$oEconetAck->setDestinationNetwork($oFsRequest->getSourceNetwork());
-				$oEconetAck->setDestinationStation($oFsRequest->getSourceStation());
-				$oEconetAck->setData(pack('C',0).pack('C',0));
-				$this->oMainApp->dispatchReply($oEconetAck);
-
 			}catch(Exception $oException){
-				logger::log("Client failed to send direct stream during save operation",LOG_DEBUG);
+				logger::log("Client failed to send direct stream during save operation (".$oException->getMessage().")",LOG_DEBUG);
 				$oFailReply=$oFsRequest->buildReply();
 				$oFailReply->setError(0xff,"Timeout");
 				$this->_addReplyToBuffer($oReply);
@@ -1074,6 +1132,8 @@ class fileserver {
 		//The urd handle in the request is not the urd when load is called but denotes the port to stream the data to
 		$iDataPort = $oFsRequest->getUrd();
 		$sPath = $oFsRequest->getString(1);
+		echo "Path is \n";
+		var_dump($sPath);
 
 		$oReply = $oFsRequest->buildReply();
 		
@@ -1257,6 +1317,21 @@ class fileserver {
 			}
 			
 		}
+		$this->_addReplyToBuffer($oReply);
+	}
+
+	/**
+	 * Implements the commnad sdisc
+	 *
+	*/
+	public function sDisc($oFsRequest,$sOptions)
+	{
+		//As we can only ever have one disc this command has rather little todo
+		$oReply = $oFsRequest->buildReply();
+		$oReply->DoneOk();
+		$oReply->appendByte($oFsRequest->getUrd());
+		$oReply->appendByte($oFsRequest->getCsd());
+		$oReply->appendByte($oFsRequest->getLib());
 		$this->_addReplyToBuffer($oReply);
 	}
 }

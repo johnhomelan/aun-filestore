@@ -58,7 +58,7 @@ class securityTest extends PHPUnit_Framework_TestCase {
 	{
 
 		security::login(127,1,'TEST','testpw');
-		security::setConnectedUsersPassword(127,1,'testpwchanged');
+		security::setConnectedUsersPassword(127,1,'testpw','testpwchanged');
 		$this->assertTrue(security::login(127,4,'TEST','testpwchanged'));
 		$this->assertFalse(authpluginfile::login(127,5,'TEST','testpw'));
 	}

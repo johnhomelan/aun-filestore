@@ -27,6 +27,8 @@ class directoryentry {
 
 	protected $iAccess = 15;
 
+	protected $iCTime = NULL;
+
 	public function __construct($sEconetName,$sUnixName,$sVfsPlugin,$iLoadAddr,$iExecAddr,$iSize,$bDir=FALSE)
 	{
 		$this->sEconetName=$sEconetName;
@@ -36,6 +38,7 @@ class directoryentry {
 		$this->iExecAddr=$iExecAddr;
 		$this->iSize=$iSize;
 		$this->bDir=$bDir;
+		$this->iCTime = time();
 	}
 
 	public function getVfsPlugin()
@@ -86,6 +89,24 @@ class directoryentry {
 	public function getAccess()
 	{
 		return $this->iAccess;
+	}
+
+	public function getCTime()
+	{
+		//Add current date
+		$iDay = date('j',$this->iCTime);
+		$sDate = pack('C',$iDay);
+		//The last byte is month and year, first 4 bits year, last 4 bits month
+		$iYear= date('y',time());
+		$iYear << 4;
+		$iYear = $iYear+date('n',$this->iCTime);
+		$sDate = $sDate.pack('C',$iYear);
+		return $sDate;
+	}
+
+	public function setCTime($iDataTime)
+	{
+		$this->iCTime = $iDataTime;
 	}
 
 	public function isDir()

@@ -152,8 +152,10 @@ class fsrequest {
 		$aBytes = unpack('C*',$this->sData);
 		$sRetstr = "";
 		for($i=$iStart;$i<count($aBytes);$i++){
-			if($aBytes[$i]!="\r" AND $aBytes[$i]!="\n"){
+			if(chr($aBytes[$i])!="\r" AND chr($aBytes[$i])!="\n"){
 				$sRetstr = $sRetstr.chr($aBytes[$i]);
+			}else{
+				break;
 			}
 		}
 		return $sRetstr;

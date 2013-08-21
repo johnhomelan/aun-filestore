@@ -237,6 +237,7 @@ class vfs {
 			logger::log("vfs: Un-able to create a handle for a station that is not logged in (Who are you?)",LOG_DEBUG);
 			throw new Exception("vfs: Un-able to create a handle for a station that is not logged in (Who are you?)");
 		}
+		logger::log("vfs: getMeta for ".$sEconetPath,LOG_DEBUG);
 		if(strpos($sEconetPath,'$')===0){
 			//Absolute path
 			$aPath = explode('.',$sEconetPath);

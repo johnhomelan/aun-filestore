@@ -1080,7 +1080,7 @@ class fileserver {
 		//Add the port to stream to
 		$oReply->appendByte(config::getValue('econet_data_stream_port'));
 		//Add max block size
-		$oReply->append16bitIntLittleEndian(1400);
+		$oReply->append16bitIntLittleEndian(968);
 
 		//Send reply directly
 		$oReplyEconetPacket = $oReply->buildEconetpacket();
@@ -1094,7 +1094,13 @@ class fileserver {
 				logger::log("Direct stream (".strlen($sData)."/".$iSize.")",LOG_DEBUG);
 				$oEconetPacket = $this->oMainApp->directStream($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),config::getValue('econet_data_stream_port'));
 				usleep(config::getValue('bbc_default_pkg_sleep'));
-
+				$oReply = $oFsRequest->buildReply();
+				$oReply->DoneOk();
+				$oReplyEconetPacket = $oReply->buildEconetpacket();
+				//Set the port to be the requested ack port
+				$oReplyEconetPacket->setPort($iAckPort);
+				$this->oMainApp->dispatchReply($oReplyEconetPacket);	
+				$this->oMainApp->waitForAck($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation());
 			}catch(Exception $oException){
 				logger::log("Client failed to send direct stream during save operation (".$oException->getMessage().")",LOG_DEBUG);
 				$oFailReply=$oFsRequest->buildReply();

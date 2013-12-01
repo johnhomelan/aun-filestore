@@ -139,6 +139,29 @@ class security {
 	}
 
 	/**
+	 * Get an error of the users logged in
+	 *
+	 * @return array
+	*/
+	public static function getUsersOnline()
+	{
+		return  security::$aSessions;
+	}
+
+	public static function getUsersStation($sUsername)
+	{
+		foreach($aUsers as $iNetwork=>$aStationUsers){
+			foreach($aStationUsers as $iStation=>$aData){
+				$oUser = $aData['user'];
+				if(strtoupper($oUser->getUsername())==trim(strtoupper($sUsername))){
+					return array('station'=>$iStation,'network'=>$iNetwork);	
+				}
+			}
+		}
+		return array();	
+	}
+
+	/**
 	 * Creates a new user (assuming the user logged in on the given network/station has admin rights)
 	 *
 	 * @param int $iNetwork

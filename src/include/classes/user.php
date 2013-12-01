@@ -26,6 +26,8 @@ class user {
 
 	protected $sCsd = NULL;
 
+	protected $sLib = NULL;
+
 	public function setUsername($sUsername)
 	{
 		$this->sUsername=strtoupper($sUsername);
@@ -107,6 +109,19 @@ class user {
 			$this->sCsd = $this->getHomedir();
 		}
 		return $this->sCsd;
+	}
+
+	public function setLib($sLib)
+	{
+		$this->sLib = $sLib;
+	}
+
+	public function getLib()
+	{
+		if(is_null($this->sLib)){
+			$this->sLib = config::getValue('library_path');
+		}
+		return $this->sLib;
 	}
 }
 ?>

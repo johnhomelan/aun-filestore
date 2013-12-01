@@ -15,7 +15,7 @@ class fileserver {
 
 	protected $oMainApp = NULL ;
 
-	protected $aCommands = array('BYE','CAT','CDIR','DELETE','DIR','FSOPT','INFO','I AM','LIB','LOAD','LOGOFF','PASS','RENAME','SAVE','SDISC','NEWUSER','PRIV','REMUSER');
+	protected $aCommands = array('BYE','CAT','CDIR','DELETE','DIR','FSOPT','INFO','I AM','LIB','LOAD','LOGOFF','PASS','RENAME','SAVE','SDISC','NEWUSER','PRIV','REMUSER','i.');
 	
 	protected $aReplyBuffer = array();
 
@@ -58,6 +58,7 @@ class fileserver {
 		$sFunction = $oFsRequest->getFunction();
 		logger::log("FS function ".$sFunction,LOG_DEBUG);
 
+
 		//Function where you dont always need to be logged in
 		switch($sFunction){
 			case 'EC_FS_FUNC_CLI':
@@ -75,6 +76,11 @@ class fileserver {
 			return;
 		}
 
+		//Has the handles for Lib and Csd can be swaped on a per command basis (e.g. *FLIP) every
+		//call needs to update the current users csd and lib based on which handle is used in the requests
+		//csd and lib byte
+		$this->updateCsdLib($oFsRequest);
+
 		switch($sFunction){
 			case 'EC_FS_FUNC_LOAD':
 				$this->loadFile($oFsRequest);
@@ -86,6 +92,7 @@ class fileserver {
 				$this->examine($oFsRequest);
 				break;
 			case 'EC_FS_FUNC_CAT_HEADER':
+				logger::log("Call to obsolete unimplemented function EC_FS_FUNC_CAT_HEADER",LOG_INFO);
 				break;
 			case 'EC_FS_FUNC_LOAD_COMMAND':
 				$this->loadCommand($oFsRequest);
@@ -97,8 +104,10 @@ class fileserver {
 				$this->closeFile($oFsRequest);
 				break;
 			case 'EC_FS_FUNC_GETBYTE':
+				$this->getByte($oFsRequest);
 				break;
 			case 'EC_FS_FUNC_PUTBYTE':
+				$this->putByte($oFsRequest);
 				break;
 			case 'EC_FS_FUNC_GETBYTES':
 				$this->getBytes($oFsRequest);
@@ -115,6 +124,7 @@ class fileserver {
 				$this->eof($oFsRequest);
 				break;
 			case 'EC_FS_FUNC_GET_DISCS':
+				$this->getDiscs($oFsRequest);
 				break;
 			case 'EC_FS_FUNC_GET_INFO':
 				$this->getInfo($oFsRequest);
@@ -129,10 +139,13 @@ class fileserver {
 				$this->logout($oFsRequest);
 				break;
 			case 'EC_FS_FUNC_GET_USERS_ON':
+				$this->usersOnline($oFsRequest);
 				break;
 			case 'EC_FS_FUNC_GET_USER':
+				$this->getUsersStation($oFsRequest);
 				break;
 			case 'EC_FS_FUNC_GET_TIME':
+				$this->getTime($oFsRequest);
 				break;
 			case 'EC_FS_FUNC_SET_OPT4':
 				break;
@@ -141,22 +154,56 @@ class fileserver {
 				$this->deleteFile($oFsRequest,$sFile);
 				break;
 			case 'EC_FS_FUNC_GET_VERSION':
+				$this->getVersion($oFsRequest);
 				break;
 			case 'EC_FS_FUNC_GET_DISC_FREE':
+				$this->getDiscFree($oFsRequest);
 				break;
 			case 'EC_FS_FUNC_CDIRN':
 				$sDir = $oFsRequest->getString(2);
 				$this->createDirectory($oFsRequest,$sDir);
 				break;
 			case 'EC_FS_FUNC_CREATE':
+				$this->createFile($oFsRequest);
 				break;
 			case 'EC_FS_FUNC_GET_USER_FREE':
+				$this->getUserDiscFree($oFsRequest);
 				break;
 			default:
 				logger::log("Un-handled fs function ".$sFunction,LOG_DEBUG);
 				break;
 				
 		}
+	}
+
+	/**
+	 * Reads which file handle is stored in the requests csd and lib byte, and updates the users csd and lib 
+	*/
+	public function updateCsdLib($oFsRequest)
+	{
+		$oUser = security::getUser($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation());
+		try {
+			if(!is_null($oFsRequest->getCsd())){
+				$oCsd = vfs::getFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oFsRequest->getCsd());
+				if(is_object($oCsd)){
+					$oUser->setCsd($oCsd->getEconetPath());
+				}
+			}	
+		}catch(Exception $oException){
+			logger::log("fileserver: Unable to set users csd to handle ".$oFsRequest->getCsd()." (".$oException->getMessage().")",LOG_DEBUG);
+		}
+
+		try {
+			if(!is_null($oFsRequest->getLib())){
+				$oLib = vfs::getFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oFsRequest->getLib());
+				if(is_object($oLib)){
+					$oUser->setLib($oLib->getEconetPath());
+				}
+			}	
+		}catch(Exception $oException){
+			logger::log("fileserver: Unable to set users lib to handle ".$oFsRequest->getLib()." (".$oException->getMessage().")",LOG_DEBUG);
+		}
+	
 	}
 
 	/**
@@ -181,7 +228,7 @@ class fileserver {
 			$iPos = stripos($sDataAsString,$sCommand);
 			if($iPos===0){
 				//Found cli command found
-				$iOptionsPos = $iPos+strlen($sCommand)+1;
+				$iOptionsPos = $iPos+strlen($sCommand);
 				$sOptions = substr($sDataAsString,$iOptionsPos);
 				$this->runCli($oFsRequest,$sCommand,trim($sOptions));
 				return;
@@ -203,8 +250,8 @@ class fileserver {
 	*/
 	public function runCli($oFsRequest,$sCommand,$sOptions)
 	{
-		switch($sCommand){
-			case 'BYE':
+		switch(strtoupper($sCommand)){
+				case 'BYE':
 			case 'LOGOFF':
 				$this->logout($oFsRequest);
 				break;
@@ -228,6 +275,8 @@ class fileserver {
 			case 'FSOPT':
 				break;
 			case 'INFO':
+			case 'I.':
+				$this->cmdInfo($oFsRequest,$sOptions);
 				break;
 			case 'LIB':
 				$this->changeLibrary($oFsRequest,$sOptions);
@@ -267,7 +316,22 @@ class fileserver {
 	*/
 	public function loadCommand($oFsRequest)
 	{
-		$this->loadFile($oFsRequest);
+		$oReply = $oFsRequest->buildReply();
+		$sPath = $oFsRequest->getString(1);
+		try {
+			$sFileData = vfs::getFile($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sPath);
+			$oMeta = vfs::getMeta($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sPath);
+		}catch(Exception $oException){
+			$oReply->setError(0x99,"No such file");
+			$this->_addReplyToBuffer($oReply);
+			return;			
+		}
+		$oReply->DoneOk();
+		$oReply->append24bitIntLittleEndian($oMeta->getLoadAddr());
+		$oReply->appendByte(0xff);
+		$oReply->appendString($sPath);
+		$this->_addReplyToBuffer($oReply);
+		$this->loadFile($oFsRequest);	
 	}
 
 	/**
@@ -318,7 +382,7 @@ class fileserver {
 				$oCsd = vfs::createFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),'$');
 			}
 			try {
-				$oLib = vfs::createFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),config::getValue('library_path'));
+				$oLib = vfs::createFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oUser->getLib());
 			}catch(Exception $oException){
 				logger::log("fileserver: Login unable to open library dir setting library to $ for user ".$oUser->getUsername(),LOG_INFO);
 				$oLib = vfs::createFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),'');
@@ -358,6 +422,28 @@ class fileserver {
 		}
 		$this->_addReplyToBuffer($oReply);
 	}
+	/**
+	 * Handles the *info command
+	 *
+	 * @param object fsrequest $oFsRequest
+	 * @param string 
+	*/
+	public function cmdInfo($oFsRequest,$sFile)
+	{
+		logger::log("cmdInfo for path ".$sFile."",LOG_DEBUG);
+		$oReply = $oFsRequest->buildReply();
+		try {
+			$oMeta = vfs::getMeta($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sFile);
+			$sReplyData =  sprintf("%-10.10s %08lX %08lX   %06jX   \n%-6.6s     \r\x80",$sFile,$oMeta->getLoadAddr(),$oMeta->getExecAddr(),$oMeta->getSize(),"RW/RW");
+			logger::log("INFO ".$sFile." Load: ".$oMeta->getLoadAddr()." Exec: ".$oMeta->getExecAddr()." Size:".$oMeta->getSize(),LOG_DEBUG);
+			$oReply->InfoOk();
+			//Append Type
+			$oReply->appendString($sReplyData);
+		}catch(Exception $oException){
+			$oReply->setError(0xff,"No such file");
+		}
+		$this->_addReplyToBuffer($oReply);
+	}
 
 	/**
 	 * Handles requests for information on directories and files
@@ -368,6 +454,7 @@ class fileserver {
 	public function getInfo($oFsRequest)
 	{
 		$sDir = $oFsRequest->getString(2);
+		logger::log("getInfo for path ".$sDir."",LOG_DEBUG);
 		switch($oFsRequest->getByte(1)){
 			case 4:
 				//EC_FS_GET_INFO_ACCESS
@@ -458,8 +545,10 @@ class fileserver {
 					$oReply->DoneOk();
 					//Append Type
 					if($oMeta->isDir()){
+						logger::log("isDir",LOG_DEBUG);
 						$oReply->appendByte(0x02);
 					}else{
+						logger::log("isFile",LOG_DEBUG);
 						$oReply->appendByte(0x01);
 					}
 					$oReply->append32bitIntLittleEndian($oMeta->getLoadAddr());
@@ -584,7 +673,19 @@ class fileserver {
 	public function eof($oFsRequest)
 	{
 		logger::log("Eof Called by ".$oFsRequest->getSourceNetwork().".".$oFsRequest->getSourceStation(),LOG_DEBUG);
-		$oUser = security::getUser($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation());	
+		//Get the file handle id
+		$iHandle = $oFsHandle->getByte(1);
+		$oReply = $oFsHandle->buildReply();
+		$oReply->DoneOk();
+	
+		//Get the file handle
+		$oFsHandle = vfs::getFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$iHandle);	
+		if($oFsHandle->isEof()){
+			$oReply->appendByte(0xFF);
+		}else{
+			$oReply->appendByte(0);
+		}
+		$this->_addReplyToBuffer($oReply);
 	}
 
 	/**
@@ -629,7 +730,7 @@ class fileserver {
 
 				foreach($aDirEntries as $oFile){
 					//Append the file name (limit 10 chars)
-					$oReply->appendString(str_pad(substr($oFile->getEconetName(),0,10),10,' '));
+					$oReply->appendString(str_pad(substr($oFile->getEconetName(),0,11),11,' '));
 					//Add 0x20
 					$oReply->appendByte(0x20);
 					//Add the file mode e.g DRW/r   (alway 6 bytes space padded)
@@ -701,14 +802,18 @@ class fileserver {
 
 		//csd Disc name String 16 bytes
 		$oReply->appendString(str_pad(substr(config::getValue('vfs_disc_name'),0,16),16,' '));
-		
-		//csd Leaf name String 10 bytes
-		$oCsd = vfs::getFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oFsRequest->getCsd());	
-		$oReply->appendString(str_pad(substr($oCsd->getEconetDirName(),0,10),10,' '));
+		try {	
+			//csd Leaf name String 10 bytes
+			$oCsd = vfs::getFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oFsRequest->getCsd());	
+			$oReply->appendString(str_pad(substr($oCsd->getEconetDirName(),0,10),10,' '));
 
-		//lib leaf name String 10 bytes
-		$oLib = vfs::getFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oFsRequest->getLib());	
-		$oReply->appendString(str_pad(substr($oLib->getEconetDirName(),0,10),10,' '));
+			//lib leaf name String 10 bytes
+			$oLib = vfs::getFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oFsRequest->getLib());	
+			$oReply->appendString(str_pad(substr($oLib->getEconetDirName(),0,10),10,' '));
+		}catch(Exception $oException){
+			$oReply = $oFsRequest->buildReply();
+			$oReply->setError(0xff,$oException->getMessage());
+		}
 
 		$this->_addReplyToBuffer($oReply);
 	}
@@ -1010,11 +1115,11 @@ class fileserver {
 
 		$oFsHandle = vfs::getFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$iHandle);	
 
-//		if($iUserPtr!=0){
-			echo "Use offset\n";
+		if($iUserPtr!=0){
+			logger::log("Moving point ".$iOffset." bytes along the file ",LOG_DEBUG);
 			//Move the file pointer to offset
 			$oFsHandle->setPos($iOffset);
-//		}
+		}
 		
 		$oReply = $oFsRequest->buildReply();
 		$oReply->DoneOk();
@@ -1029,18 +1134,29 @@ class fileserver {
 
 		while(strlen($sData)<$iBytes){
 			try {
-				//We now need to take over the receving of packets breifly going to our streaming port
 				usleep(config::getValue('bbc_default_pkg_sleep'));
+				//We now need to take over the receving of packets breifly going to our streaming port
 				$oEconetPacket = $this->oMainApp->directStream($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),config::getValue('econet_data_stream_port'));
 
 			}catch(Exception $oException){
-				logger::log("Client failed to send direct stream during save operation",LOG_DEBUG);
-				$oFailReply=$oFsRequest->buildReply();
-				$oFailReply->setError(0xff,"Timeout");
-				$this->_addReplyToBuffer($oReply);
-				return;
+				logger::log("Putbytes timed out waiting for data",LOG_DEBUG);
+				var_dump($oException);
+				//$oFailReply=$oFsRequest->buildReply();
+				//$oFailReply->setError(0xff,"Timeout");
+				//$this->_addReplyToBuffer($oReply);
+				//return;
 			}
+			//We got the data send a reply
+			usleep(config::getValue('bbc_default_pkg_sleep'));
+			$oAck = $oFsRequest->buildReply();
+			$oAck->DoneOk();
+			$oAckPackage = $oAck->buildEconetpacket();
+			$oAckPackage->setPort(0x91);
+			$this->oMainApp->dispatchReply($oAckPackage);
+
 			$sData=$sData.$oEconetPacket->getData();
+			var_dump(strlen($sData));
+			var_dump($iBytes);
 		}
 		$oFsHandle->write($sData);
 		usleep(config::getValue('bbc_default_pkg_sleep'));
@@ -1049,6 +1165,43 @@ class fileserver {
 		$oReply2->appendByte(0);
 		$oReply2->append24bitIntLittleEndian(strlen($sData));
 		$this->_addReplyToBuffer($oReply2);
+	}
+
+	public function getByte($oFsRequest)
+	{
+		$iHandle = $oFsRequest->getByte(1);
+		$oReply = $oFsRequest->buildReply();
+		$oReply->DoneOk();
+
+		logger::log("Getbyte handle ".$iHandle." ",LOG_DEBUG);
+		//Reads a byte from the file handle
+		$oFsHandle = vfs::getFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$iHandle);	
+		if($oFsHandle->isEof()){
+			$oReply->appendByte(0);
+			$oReply->appendByte(0x80);
+		}else{
+			$oReply->appendByte($oFsRequest->read(1));
+			$oReply->appendByte(0);
+		}
+
+		$oReply->appendByte($iByte);
+		$this->_addReplyToBuffer($oReply);
+		
+	}
+
+	public function putByte($oFsRequest)
+	{
+		$iHandle = $oFsRequest->getByte(1);
+		$iByte = $oFsRequest->getByte(2);
+		$oReply = $oFsRequest->buildReply();
+
+		logger::log("Putbyte handle ".$iHandle." ",LOG_DEBUG);
+		//Writes a byte to the file handle
+		$oFsHandle = vfs::getFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$iHandle);	
+		$oFsRequest->write($iByte);
+
+		$oReply->DoneOk();
+		$this->_addReplyToBuffer($oReply);
 	}
 
 	/**
@@ -1082,6 +1235,7 @@ class fileserver {
 		//Add max block size
 		$oReply->append16bitIntLittleEndian(968);
 
+		logger::log("Save File ".$sPath." of size ".$iSize,LOG_DEBUG);
 		//Send reply directly
 		$oReplyEconetPacket = $oReply->buildEconetpacket();
 		$this->oMainApp->dispatchReply($oReplyEconetPacket);	
@@ -1093,20 +1247,24 @@ class fileserver {
 				//We now need to take over the receving of packets breifly going to our streaming port
 				logger::log("Direct stream (".strlen($sData)."/".$iSize.")",LOG_DEBUG);
 				$oEconetPacket = $this->oMainApp->directStream($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),config::getValue('econet_data_stream_port'));
-				usleep(config::getValue('bbc_default_pkg_sleep'));
-				$oReply = $oFsRequest->buildReply();
-				$oReply->DoneOk();
-				$oReplyEconetPacket = $oReply->buildEconetpacket();
-				//Set the port to be the requested ack port
-				$oReplyEconetPacket->setPort($iAckPort);
-				$this->oMainApp->dispatchReply($oReplyEconetPacket);	
-				$this->oMainApp->waitForAck($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation());
 			}catch(Exception $oException){
 				logger::log("Client failed to send direct stream during save operation (".$oException->getMessage().")",LOG_DEBUG);
 				$oFailReply=$oFsRequest->buildReply();
 				$oFailReply->setError(0xff,"Timeout");
 				$this->_addReplyToBuffer($oReply);
 				return;
+			}
+			$oReply = $oFsRequest->buildReply();
+			$oReply->DoneOk();
+			$oReplyEconetPacket = $oReply->buildEconetpacket();
+			//Set the port to be the requested ack port
+			$oReplyEconetPacket->setPort($iAckPort);
+			$this->oMainApp->dispatchReply($oReplyEconetPacket);	
+			logger::log("Replay sent for block of ".strlen($oEconetPacket->getData()),LOG_DEBUG);
+			try {
+				$this->oMainApp->waitForAck($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation());
+			}catch(Exception $oException){
+				logger::log($oException->getMessage(),LOG_DEBUG);
 			}
 			$sData=$sData.$oEconetPacket->getData();
 		}
@@ -1338,6 +1496,184 @@ class fileserver {
 		$oReply->appendByte($oFsRequest->getUrd());
 		$oReply->appendByte($oFsRequest->getCsd());
 		$oReply->appendByte($oFsRequest->getLib());
+		$this->_addReplyToBuffer($oReply);
+	}
+
+	/**
+	 * Lists the users logged in
+	 *
+	*/
+	public function usersOnline($oFsRequest)
+	{
+		$iStart = $oFsRequest->getByte(1);
+		$iCount	= $oFsRequest->getByte(2);
+		$oReply = $oFsRequest->buildReply();
+		$aUsers = security::getUsersOnline();
+		$i = 0;
+		foreach($aUsers as $iNetwork=>$aStationUsers){
+			foreach($aStationUsers as $iStation=>$aData){
+				if($iStart <= $i AND $i <= ($iStart+$iCount)){
+					$oUser = $aData['user'];
+					$oReply->appendByte($iNetwork);
+					$oReply->appendByte($iStation);
+					$oReply->appendString(substr($oUser->getUsername(),0,10));
+					if($oUser->isAdmin()){
+						$oReply->appendByte(1);
+					}else{
+						$oReply->appendByte(0);
+					}
+				}
+				if($i>($iStart+$iCount)){
+					$this->_addReplyToBuffer($oReply);
+					return;
+				}
+			}
+		}
+		$this->_addReplyToBuffer($oReply);
+	}
+
+	/**
+	 * Get the network and station number for a given user
+	*/
+	public function getUsersStation($oFsRequest)
+	{
+		$sUser = $oFsRequest->getString(1);
+		$oReply = $oFsRequest->buildReply();
+
+		$aStation = security::getUsersStation($sUser);
+		if(array_key_exists('network',$aStation) AND array_key_exists('station',$aStation)){
+			$oUser = security::getUser($aStation['network'],$aStation['station']);
+			if(is_object($oUser) AND $oUser->isAdmin()){
+				$oReply->appendByte(1);
+			}else{
+				$oReply->appendByte(0);
+			}
+			$oReply->appendByte($aStation['network']);
+			$oReply->appendByte($aStation['station']);	
+		}else{
+			$oReply->DoneNoton();
+		}
+		$this->_addReplyToBuffer($oReply);	
+	}
+
+	/**
+	 * Gets a list of discs
+	*/
+	public function getDiscs($oFsRequest)
+	{
+		$iDrive = $oFsRequest->getByte(1);
+		$iNDrives = $oFsRequest->getByte(2);
+
+		$oReply = $oFsRequest->buildReply();
+		$oReply->DiscsOk();
+		if($iDrive == 0 AND $iNDrives > 0){
+			$oReply->appendByte(0);
+			$oReply->appendString(str_pad(substr(config::getValue('vfs_disc_name'),0,16),16,' '));
+		}
+		$this->_addReplyToBuffer($oReply);	
+	}
+
+	/**
+	 * Gets the free space for a disc
+	 * 
+	 * The answer is fake a BBCs can't handle the same sizes as Linux
+	*/
+	public function getDiscFree($oFsRequest)
+	{
+		$sDisc = $oFsRequest->getString(1);
+		$oReply = $oFsRequest->buildReply();
+
+		$oReply->DoneOk();
+		$oReply->append32bitIntLittleEndian(config::getValue('vfs_default_disc_free'));
+		$oReply->append32bitIntLittleEndian(config::getValue('vfs_default_disc_size'));
+		$this->_addReplyToBuffer($oReply);
+	}
+
+	/**
+	 * Gets the version of the server
+	 *
+	*/
+	public function getVersion($oFsRequest)
+	{
+		$oReply = $oFsRequest->buildReply();
+		$oReply->DoneOk();
+		$oReply->appendString("aunfs_srv ".config::getValue('version'));
+		$this->_addReplyToBuffer($oReply);
+	}
+
+	/**
+	 * Gets the time
+	*/
+	public function getTime($oFsRequest)
+	{
+		$oReply = $oFsRequest->buildReply();
+		$iTime = time();
+
+		$oReply->DoneOk();
+		//Hour
+		$oReply->appendByte(date('G',$iTime));
+		//Min
+		$oReply->appendByte(ltrim(date('i',$iTime),0));
+		//Sec
+		$oReply->appendByte(ltrim(date('s',$iTime),0));
+
+		$this->_addReplyToBuffer($oReply);
+	}
+
+	/**
+	 * Creates a file
+	 *
+	*/
+	public function createFile($oFsRequest)
+	{
+		$iAckPort = $oFsRequest->getUrd();
+
+		//Load 4 bytes
+		$iLoad = $oFsRequest->get32bitIntLittleEndian(1);
+
+		//Exec 4 bytes
+		$iExec =  $oFsRequest->get32bitIntLittleEndian(5);
+
+		//Size
+		$iSize = $oFsRequest->get24bitIntLittleEndian(9);
+
+		//Path
+		$sPath = $oFsRequest->getString(12);
+
+		//Create the file
+		vfs::createFile($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sPath,$iSize,$iLoad,$iExec);
+
+		$oReply = $oFsRequest->buildReply();
+		$oReply->DoneOk();
+		$oReply->appendByte(15);
+		
+		//Add current date
+		$iDay = date('j',time());
+		$oReply->appendByte($iDay);
+		//The last byte is month and year, first 4 bits year, last 4 bits month
+		$iYear= date('y',time());
+		$iYear << 4;
+		$iYear = $iYear+date('n',time());
+		$oReply->appendByte($iYear);
+		
+		$this->_addReplyToBuffer($oReply);
+	}
+
+	/**
+	 * Gets the disk space free value for a user
+	 *
+	 * Given we can't map the scale of Linux storage sizes to bbc storage sizes, the amount of free space is just a constant.
+	 * Maybe at some point this could be mapped to a unix users quota if the system has quotas setup
+	*/
+	public function getUserDiscFree($oFsRequest)
+	{
+		//Username
+		$sUsername = $oFsRequest->getString(1);
+
+		$oReply = $oFsRequest->buildReply();
+		$oReply->DoneOk();
+		$oReply->append24bitIntLittleEndian(config::getValue('vfs_default_disc_free'));
+
 		$this->_addReplyToBuffer($oReply);
 	}
 }

@@ -77,6 +77,21 @@ class fsreply {
 		$this->sPkt = pack('CC',$this->aTypeMap['UNREC'],0);
 	}
 
+	public function DiscsOk()
+	{
+		$this->sPkt = pack('CC',$this->aTypeMap['DISCS'],0);
+	}
+	
+	public function DoneNoton()
+	{
+		$this->sPkt = pack('CC',$this->aTypeMap['DONE'],0xAE);
+	}
+
+	public function InfoOk()
+	{
+		$this->sPkt = pack('CC',$this->aTypeMap['INFO'],0);
+	}
+
 	public function appendByte($iByte)
 	{
 		$this->sPkt = $this->sPkt.pack('C',$iByte);

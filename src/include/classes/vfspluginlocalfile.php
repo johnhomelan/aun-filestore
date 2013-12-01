@@ -38,11 +38,28 @@ class vfspluginlocalfile {
 		$aFileParts = explode('.',$sEconetPath);
 		$sUnixPath = "";
 		foreach($aFileParts as $sPart){
-			$sUnixPath = $sUnixPath.str_replace('/','.',$sPart).DIRECTORY_SEPARATOR;
+			$sUnixPath = $sUnixPath.str_replace(DIRECTORY_SEPARATOR ,'.',$sPart).DIRECTORY_SEPARATOR;
 		}
 		$sUnixPath = trim($sUnixPath,DIRECTORY_SEPARATOR);
 		$sUnixPath = config::getValue('vfs_plugin_localfile_root').DIRECTORY_SEPARATOR.$sUnixPath;
-		logger::log("vfspluginlocalfile: Converted econet path ".$sEconetPath. " to ".$sUnixPath,LOG_DEBUG);
+		if(file_exists($sUnixPath)){
+			logger::log("vfspluginlocalfile: Converted econet path ".$sEconetPath. " to ".$sUnixPath,LOG_DEBUG);
+		}else{
+			//The file does not exists see if a case insenstive version of this files exists
+			$sDir = dirname($sUnixPath);
+			$sTestFileName = strtolower(basename($sUnixPath));
+			if(is_dir($sDir)){
+				$aFiles = scandir($sDir);
+				foreach($aFiles as $sFile){
+					if(strtolower($sFile)==$sTestFileName){
+						logger::log("vfspluginlocalfile: Converted econet path ".$sEconetPath. " to ".$sDir.DIRECTORY_SEPARATOR.$sFile,LOG_DEBUG);
+						return $sDir.DIRECTORY_SEPARATOR.$sFile;
+					}
+				}
+			}else{
+				//The directroy does not exist so walk the directory tree in a case insensitve way an try to find the real dir	
+			}
+		}
 		return $sUnixPath;
 	}
 
@@ -94,15 +111,15 @@ class vfspluginlocalfile {
 					$aStat = stat($sUnixPath.DIRECTORY_SEPARATOR.$sFile);
 					$aDirectoryListing[$sFile]=new directoryentry(str_replace('.','/',$sFile),$sFile,'vfspluginlocalfile',NULL,NULL,$aStat['size'],is_dir($sUnixPath.DIRECTORY_SEPARATOR.$sFile));
 				}
-				if(is_null($aDirectoryListing[$sFile]) AND is_null($aDirectoryListing[$sFile]->getExecAddr())){
+				if(is_null($aDirectoryListing[$sFile]) OR is_null($aDirectoryListing[$sFile]->getExecAddr())){
 					//If there is a .inf file use it toget the load exec addr
 					if(file_exists($sUnixPath.DIRECTORY_SEPARATOR.$sFile.".inf")){
-						$sInf = file_get_contents($sUnixPath.DIRECTORY_SEPARATOR.$sFile.".inf");				
+						$sInf = file_get_contents($sUnixPath.DIRECTORY_SEPARATOR.$sFile.".inf");
 						$aMatches = array();
 						if(preg_match('/^TAPE file ([0-9a-fA-F]+) ([0-9a-fA-F]+)/',$sInf,$aMatches)>0){
 							//Update load / exec addr
-							$aDirectoryListing[$sPrefix]->setLoadAddr($aMatches[1]);
-							$aDirectoryListing[$sPrefix]->setExecAddr($aMatches[2]);
+							$aDirectoryListing[$sFile]->setLoadAddr($aMatches[1]);
+							$aDirectoryListing[$sFile]->setExecAddr($aMatches[2]);
 						}
 					}
 				}
@@ -205,6 +222,28 @@ class vfspluginlocalfile {
 		$sUnixDirPath = vfspluginlocalfile::_econetToUnix($sFilePath);
 		if(is_dir($sUnixDirPath)){
 			file_put_contents($sUnixDirPath.DIRECTORY_SEPARATOR.$sFile,$sData);
+			file_put_contents($sUnixDirPath.DIRECTORY_SEPARATOR.$sFile.'.inf',"TAPE file ".str_pad(dechex($iLoadAddr),8,0,STR_PAD_LEFT)." ".str_pad(dechex($iExecAddr),8,0,STR_PAD_LEFT));
+			return TRUE;
+		}
+
+	}
+
+	public static function createFile($oUser,$sCsd,$sEconetPath,$iSize,$iLoadAddr,$iExecAddr)
+	{
+		if(strpos($sEconetPath,'$')===0){
+			//Absolute path
+			$aPath = explode('.',$sEconetPath);
+		}else{
+			//Relative path
+			$aPath = explode('.',trim($sCsd,'.').'.'.$sEconetPath);
+		}
+		$sFile = array_pop($aPath);
+		$sFilePath = implode('.',$aPath);
+		$sUnixDirPath = vfspluginlocalfile::_econetToUnix($sFilePath);
+		if(is_dir($sUnixDirPath)){
+			$hFile = fopen($sUnixDirPath.DIRECTORY_SEPARATOR.$sFile,'r+');
+			ftruncate($hFile,$iSize);
+			fclose($hFile);
 			file_put_contents($sUnixDirPath.DIRECTORY_SEPARATOR.$sFile.'.inf',"TAPE file ".str_pad(dechex($iLoadAddr),8,0,STR_PAD_LEFT)." ".str_pad(dechex($iExecAddr),8,0,STR_PAD_LEFT));
 			return TRUE;
 		}

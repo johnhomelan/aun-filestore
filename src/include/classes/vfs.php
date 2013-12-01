@@ -161,6 +161,7 @@ class vfs {
 		$aPlugins = vfs::getVfsPlugins();
 		$oHandle=NULL;
 		foreach($aPlugins as $sPlugin){
+
 			try {
 				if($sPlugin::moveFile($oUser,$sCsd,$sEconetPathFrom,$sEconetPathTo)){
 					return;
@@ -188,6 +189,31 @@ class vfs {
 		foreach($aPlugins as $sPlugin){
 			try {
 				if($sPlugin::saveFile($oUser,$sCsd,$sEconetPath,$sData,$iLoadAddr,$iExecAddr)){
+					return;
+				}
+			}catch(VfsException $oVfsException){
+				//If it's a hard error abort the operation
+				if($oVfsException->isHard()){
+					throw $oVfsException;
+				}
+			}
+		}
+		throw new Exception("vfs: Unable to save file (".$sEconetPath.")");
+	}
+
+	static public function createFile($iNetwork,$iStation,$sEconetPath,$iSize,$iLoadAddr,$iExecAddr)
+	{
+		if(!security::isLoggedIn($iNetwork,$iStation)){
+			logger::log("vfs: Un-able to create a handle for a station that is not logged in (Who are you?)",LOG_DEBUG);
+			throw new Exception("vfs: Un-able to create a handle for a station that is not logged in (Who are you?)");
+		}
+		$oUser = security::getUser($iNetwork,$iStation);
+		$sCsd = $oUser->getCsd();
+		$aPlugins = vfs::getVfsPlugins();
+		$oHandle=NULL;
+		foreach($aPlugins as $sPlugin){
+			try {
+				if($sPlugin::createFile($oUser,$sCsd,$sEconetPath,$iSize,$iLoadAddr,$iExecAddr)){
 					return;
 				}
 			}catch(VfsException $oVfsException){
@@ -270,6 +296,7 @@ class vfs {
 		if(array_key_exists($sFile,$aDirectoryListing)){
 			return $aDirectoryListing[$sFile];
 		}else{
+			logger::log("VFS: getMeta no such file ".$sFile." in dir ".$sDir."",LOG_DEBUG);
 			throw new Exception("No such file");
 		}
 	}

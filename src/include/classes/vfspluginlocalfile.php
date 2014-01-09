@@ -109,7 +109,7 @@ class vfspluginlocalfile {
 			}else{
 				if(!array_key_exists($sFile,$aDirectoryListing)){
 					$aStat = stat($sUnixPath.DIRECTORY_SEPARATOR.$sFile);
-					$aDirectoryListing[$sFile]=new directoryentry(str_replace('.','/',$sFile),$sFile,'vfspluginlocalfile',NULL,NULL,$aStat['size'],is_dir($sUnixPath.DIRECTORY_SEPARATOR.$sFile));
+					$aDirectoryListing[$sFile]=new directoryentry(str_replace('.','/',$sFile),$sFile,'vfspluginlocalfile',NULL,NULL,$aStat['size'],is_dir($sUnixPath.DIRECTORY_SEPARATOR.$sFile),$sEconetPath.'.'.str_replace('.','/',$sFile));
 				}
 				if(is_null($aDirectoryListing[$sFile]) OR is_null($aDirectoryListing[$sFile]->getExecAddr())){
 					//If there is a .inf file use it toget the load exec addr
@@ -118,8 +118,8 @@ class vfspluginlocalfile {
 						$aMatches = array();
 						if(preg_match('/^TAPE file ([0-9a-fA-F]+) ([0-9a-fA-F]+)/',$sInf,$aMatches)>0){
 							//Update load / exec addr
-							$aDirectoryListing[$sFile]->setLoadAddr($aMatches[1]);
-							$aDirectoryListing[$sFile]->setExecAddr($aMatches[2]);
+							$aDirectoryListing[$sFile]->setLoadAddr(hexdec($aMatches[1]));
+							$aDirectoryListing[$sFile]->setExecAddr(hexdec($aMatches[2]));
 						}
 					}
 				}
@@ -203,7 +203,7 @@ class vfspluginlocalfile {
 		}
 		$bReturn = rename($sUnixFrom,$sUnixTo);
 		if($bReturn AND file_exists($sUnixFrom.'.inf') AND !file_exists($sUnixTo.'.inf')){
-			rename(sUnixFrom.'.inf',$sUnixTo.'.inf');
+			rename($sUnixFrom.'.inf',$sUnixTo.'.inf');
 		}
 		return $bReturn;
 	}
@@ -288,10 +288,10 @@ class vfspluginlocalfile {
 		}
 		if(file_exists($sUnixPath)){
 			if(!is_null($iLoad)){
-				$aMata['load']=str_pad(dechex($iLoad),8,'f',STR_PAD_LEFT);
+				$aMata['load']=str_pad(dechex($iLoad),8,'0',STR_PAD_LEFT);
 			}
 			if(!is_null($iExec)){
-				$aMata['exec']=str_pad(dechex($iExec),8,'f',STR_PAD_LEFT);;
+				$aMata['exec']=str_pad(dechex($iExec),8,'0',STR_PAD_LEFT);;
 			}
 			file_put_contents($sUnixPath.".inf","TAPE file ".$aMata['load']." ".$aMata['exec']);
 		}

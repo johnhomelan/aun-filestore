@@ -316,21 +316,6 @@ class fileserver {
 	*/
 	public function loadCommand($oFsRequest)
 	{
-		$oReply = $oFsRequest->buildReply();
-		$sPath = $oFsRequest->getString(1);
-		try {
-			$sFileData = vfs::getFile($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sPath);
-			$oMeta = vfs::getMeta($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sPath);
-		}catch(Exception $oException){
-			$oReply->setError(0x99,"No such file");
-			$this->_addReplyToBuffer($oReply);
-			return;			
-		}
-		$oReply->DoneOk();
-		$oReply->append24bitIntLittleEndian($oMeta->getLoadAddr());
-		$oReply->appendByte(0xff);
-		$oReply->appendString($sPath);
-		$this->_addReplyToBuffer($oReply);
 		$this->loadFile($oFsRequest);	
 	}
 
@@ -434,7 +419,7 @@ class fileserver {
 		$oReply = $oFsRequest->buildReply();
 		try {
 			$oMeta = vfs::getMeta($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sFile);
-			$sReplyData =  sprintf("%-10.10s %08lX %08lX   %06jX   \n%-6.6s     \r\x80",$sFile,$oMeta->getLoadAddr(),$oMeta->getExecAddr(),$oMeta->getSize(),"RW/RW");
+			$sReplyData =  sprintf("%-10.10s %08X %08X   %06X   %-6.6s  %02d:%02d:%02d %06x\r\x80",$sFile,$oMeta->getLoadAddr(),$oMeta->getExecAddr(),$oMeta->getSize(),"RW/RW",$oMeta->getDay(),$oMeta->getMonth(),$oMeta->getYear(),$oMeta->getSin());
 			logger::log("INFO ".$sFile." Load: ".$oMeta->getLoadAddr()." Exec: ".$oMeta->getExecAddr()." Size:".$oMeta->getSize(),LOG_DEBUG);
 			$oReply->InfoOk();
 			//Append Type
@@ -454,7 +439,7 @@ class fileserver {
 	public function getInfo($oFsRequest)
 	{
 		$sDir = $oFsRequest->getString(2);
-		logger::log("getInfo for path ".$sDir."",LOG_DEBUG);
+		logger::log("getInfo for path ".$sDir." (".$oFsRequest->getByte(1).")",LOG_DEBUG);
 		switch($oFsRequest->getByte(1)){
 			case 4:
 				//EC_FS_GET_INFO_ACCESS
@@ -700,6 +685,7 @@ class fileserver {
 		$iArg = $oFsRequest->getByte(1);
 		$iStart = $oFsRequest->getByte(2);
 		$iCount = $oFsRequest->getByte(3);
+		logger::log("Examine Type ".$iArg." (only 3 is implemented)",LOG_DEBUG);
 		switch($iArg){
 			case 0:
 				//EXAMINE_ALL
@@ -1280,6 +1266,7 @@ class fileserver {
 		//The last byte is month and year, first 4 bits year, last 4 bits month
 		$iYear= date('y',time());
 		$iYear << 4;
+
 		$iYear = $iYear+date('n',time());
 		$oReply2->appendByte($iYear);
 		$this->_addReplyToBuffer($oReply2);
@@ -1331,10 +1318,10 @@ class fileserver {
 		while(strlen($sFileData)>0){
 			
 			usleep(config::getValue('bbc_default_pkg_sleep'));
-			//Build a 1024 byte block
-			$sBlock = substr($sFileData,0,1024);
-			//Remote 1400 byte from the string
-			$sFileData=substr($sFileData,1024);
+			//Build a 256 byte block
+			$sBlock = substr($sFileData,0,256);
+			//Remote 256 byte from the string
+			$sFileData=substr($sFileData,256);
 			$oEconetPacket = new econetpacket();
 			$oEconetPacket->setDestinationNetwork($oFsRequest->getSourceNetwork());
 			$oEconetPacket->setDestinationStation($oFsRequest->getSourceStation());
@@ -1508,7 +1495,15 @@ class fileserver {
 		$iStart = $oFsRequest->getByte(1);
 		$iCount	= $oFsRequest->getByte(2);
 		$oReply = $oFsRequest->buildReply();
+		$oReply->DoneOK();
 		$aUsers = security::getUsersOnline();
+		logger::log("usersOnline: There are ".count($aUsers)." on-line, the clients request details of (".$iStart."/".$iCount.")",LOG_DEBUG);
+		$iUsersRemaining = count($aUsers)-$iStart;
+		if($iUsersRemaining>0){
+			$oReply->appendByte($iUsersRemaining);
+		}else{
+			$oReply->appendByte(0);
+		}
 		$i = 0;
 		foreach($aUsers as $iNetwork=>$aStationUsers){
 			foreach($aStationUsers as $iStation=>$aData){
@@ -1517,6 +1512,7 @@ class fileserver {
 					$oReply->appendByte($iNetwork);
 					$oReply->appendByte($iStation);
 					$oReply->appendString(substr($oUser->getUsername(),0,10));
+					$oReply->appendByte(0x0d);
 					if($oUser->isAdmin()){
 						$oReply->appendByte(1);
 					}else{
@@ -1566,9 +1562,17 @@ class fileserver {
 
 		$oReply = $oFsRequest->buildReply();
 		$oReply->DiscsOk();
+
 		if($iDrive == 0 AND $iNDrives > 0){
+			//Add the number of discs 
+			$oReply->appendByte(1);
+			//Add the drive number
 			$oReply->appendByte(0);
+			//Add the drive name
 			$oReply->appendString(str_pad(substr(config::getValue('vfs_disc_name'),0,16),16,' '));
+		}else{
+			//Indicate that no more discs are present
+			$oReply->appendByte(0);
 		}
 		$this->_addReplyToBuffer($oReply);	
 	}

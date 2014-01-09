@@ -28,8 +28,10 @@ class directoryentry {
 	protected $iAccess = 15;
 
 	protected $iCTime = NULL;
+	
+	protected $sEconetFullFilePath = NULL;
 
-	public function __construct($sEconetName,$sUnixName,$sVfsPlugin,$iLoadAddr,$iExecAddr,$iSize,$bDir=FALSE)
+	public function __construct($sEconetName,$sUnixName,$sVfsPlugin,$iLoadAddr,$iExecAddr,$iSize,$bDir=FALSE,$sEconetFullFilePath)
 	{
 		$this->sEconetName=$sEconetName;
 		$this->sUnixName=$sUnixName;
@@ -39,6 +41,7 @@ class directoryentry {
 		$this->iSize=$iSize;
 		$this->bDir=$bDir;
 		$this->iCTime = time();
+		$this->sEconetFullFilePath = $sEconetFullFilePath;
 	}
 
 	public function getVfsPlugin()
@@ -109,9 +112,29 @@ class directoryentry {
 		$this->iCTime = $iDataTime;
 	}
 
+	public function getDay()
+	{
+		return date('j',$this->iCTime);
+	}
+
+	public function getMonth()
+	{
+		return date('n',$this->iCTime);
+	}
+
+	public function getYear()
+	{
+		return date('y',$this->iCTime) << 4;
+	}
+
 	public function isDir()
 	{
 		return $this->bDir;
+	}
+
+	public function getSin()
+	{
+		return vfs::getSin($this->sEconetFullFilePath);
 	}
 
 	public function getEconetMode()

@@ -57,6 +57,11 @@ class fsreply {
 		$this->sPkt = pack('CCCCCC',$this->aTypeMap['LOGIN'],0,$iUrd,$iCsd,$iLib,$iOpt);
 	}
 
+	public function Done()
+	{
+		$this->sPkt = pack('C',$this->aTypeMap['DONE']);
+	}
+
 	public function DoneOK()
 	{
 		$this->sPkt = pack('CC',$this->aTypeMap['DONE'],0);

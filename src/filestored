@@ -195,7 +195,7 @@ class filestored  {
 		$aExpSet=$aAllExpSockets;
 
 		//Wait for an aun packet
-		$iSockets = @stream_select($aReadSet,$aWriteSet,$aExpSet,1);
+		$iSockets = @stream_select($aReadSet,$aWriteSet,$aExpSet,4);
 		if($iSockets!=FALSE){
 			//Step through each socket we need to read from
 			foreach($aReadSet as  $iReadSocket){
@@ -203,7 +203,6 @@ class filestored  {
 					//We've received an AUN packet process it 
 					$sUdpData= stream_socket_recvfrom($this->oAunSocket,1500,0,$sHost);
 					logger::log("filestore: Aun packet recvieved from ".$sHost,LOG_DEBUG);	
-
 					//Decode the AUN packet
 					$oAunPacket = new AunPacket();
 					$oAunPacket->setSourceIP($sHost);
@@ -225,7 +224,7 @@ class filestored  {
 							return $oEconetPacket;
 						}else{
 							//Not the direct data stream we are waiting for but the packet must be processed in the normal way
-							$this->processEconetPacket();
+							$this->processEconetPacket($oEconetPacket);
 							//Go back to listening for the direct stream
 							return $this->directStream($iNetwork,$iStation,$iPort,$iRecursion+1);
 						}
@@ -243,7 +242,7 @@ class filestored  {
 	public function waitForAck($iNetwork,$iStation,$iRecursion=0)
 	{
 		if($iRecursion>20){
-			throw new Exception("No direct stream recevied in 20 packets");
+			throw new Exception("No ack recevied in 20 packets");
 		}
 
 		$aReadSet=$this->aAllReadableSockets;

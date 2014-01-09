@@ -20,6 +20,10 @@ class vfs {
 
 	static protected $aFileHandleIDs = array();
 
+	static protected $aSinMapping = array();
+
+	static protected $iSin = 1;
+
 	public static function init()
 	{
 		$aPlugins = vfs::getVfsPlugins();
@@ -401,6 +405,22 @@ class vfs {
 			vfs::$aHandles[$iNetwork][$iStation][$iHandle]->close();
 			unset(vfs::$aHandles[$iNetwork][$iStation][$iHandle]);
 		}
+	}
+
+
+	/**
+	 * Gets a sin for a full econet file path
+	 *
+	 * @param string $sEconetFullFilePath
+	 * @return int A uniqe 24bit int for a file
+	*/
+	static public function getSin($sEconetFullFilePath)
+	{
+		if(!array_key_exists($sEconetFullFilePath,vfs::$aSinMapping)){
+			vfs::$iSin++;
+			vfs::$aSinMapping[$sEconetFullFilePath]=vfs::$iSin;
+		}
+		return vfs::$aSinMapping[$sEconetFullFilePath];
 	}
 
 

@@ -17,6 +17,11 @@ class vfspluginlocalfile {
 	{
 	}
 
+	public static function houseKeeping()
+	{
+
+	}
+
 	protected  static function _setUid($oUser)
 	{
 		if(config::getValue('security_mode')=='multiuser'){
@@ -97,9 +102,27 @@ class vfspluginlocalfile {
 		}
 	}
 
+	public static function _getAccessMode($iGid,$iUid,$iMode)
+	{
+		$sAccess = "";
+		$sAccess .= (($iMode & 0x0080) ? 'w' : '-');
+		$sAccess .= (($iMode & 0x0100) ? 'r' : '-');
+		$sAccess .= "/";
+		$sAccess .= (($iMode & 0x0002) ? 'w' : '-');
+		$sAccess .= (($iMode & 0x0004) ? 'r' : '-');
+		return $sAccess;
+	}
+
 	public static function getDirectoryListing($sEconetPath,$aDirectoryListing)
 	{
 		$sUnixPath = vfspluginlocalfile::_econetToUnix($sEconetPath);
+
+		//If the path is not a valid dir return an empty list 
+		if(!is_dir($sUnixPath)){
+			return array();
+		}
+
+		//Scan the unix dir, and build a directoryentry for each file
 		$aFiles = scandir($sUnixPath);
 		foreach($aFiles as $sFile){
 			if($sFile=='..' or $sFile=='.'){
@@ -109,7 +132,7 @@ class vfspluginlocalfile {
 			}else{
 				if(!array_key_exists($sFile,$aDirectoryListing)){
 					$aStat = stat($sUnixPath.DIRECTORY_SEPARATOR.$sFile);
-					$aDirectoryListing[$sFile]=new directoryentry(str_replace('.','/',$sFile),$sFile,'vfspluginlocalfile',NULL,NULL,$aStat['size'],is_dir($sUnixPath.DIRECTORY_SEPARATOR.$sFile),$sEconetPath.'.'.str_replace('.','/',$sFile));
+					$aDirectoryListing[$sFile]=new directoryentry(str_replace('.','/',$sFile),$sFile,'vfspluginlocalfile',NULL,NULL,$aStat['size'],is_dir($sUnixPath.DIRECTORY_SEPARATOR.$sFile),$sEconetPath.'.'.str_replace('.','/',$sFile),$aStat['ctime'],self::_getAccessMode($aStat['uid'],$aStat['gid'],$aStat['mode']));
 				}
 				if(is_null($aDirectoryListing[$sFile]) OR is_null($aDirectoryListing[$sFile]->getExecAddr())){
 					//If there is a .inf file use it toget the load exec addr

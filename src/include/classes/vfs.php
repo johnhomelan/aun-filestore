@@ -29,6 +29,43 @@ class vfs {
 		$aPlugins = vfs::getVfsPlugins();
 	}
 
+
+	/**
+	 * Runs the house keeping functions for all the vfs plugins
+	 *
+	 *
+	*/
+	public static function houseKeeping()
+	{
+		//Call house keeping on each plugin 
+		$aPlugins = vfs::getVfsPlugins();
+		foreach($aPlugins as $sPlugin){
+			$sPlugin::houseKeeping();
+		}
+
+		//Clean up any file handles for session that are nolonger logged in
+		foreach(self::$aHandles as $iNetwork=>$aStations){
+			foreach($aStations as $iStation=>$aHandles){
+				foreach($aHandles as $iHandle=>$oHandle){
+					$oUser = security::getUser($iNetwork,$iStation);
+					if(!is_object($oUser)){
+						logger::log("vfs: Removing handle ".$iHandle." for station ".$iNetwork.":".$iStation." as the session has expired",LOG_DEBUG);
+						$oHandle->close();
+						unset(self::$aHandles[$iNetwork][$iStation][$iHandle]);
+					}
+				}
+			}
+		}
+
+		//Clear up sin history
+		$aUsers = security::getUsersOnline();
+		if(count($aUsers)==0){
+			logger::log("vfs: No users logged in resetting sin history",LOG_DEBUG);
+			self::$aSinMapping = array();
+			self::$iSin = 1;
+		}
+	}
+
 	/**
 	 * Get a list of all the vfsplugin we should be using 
 	 *
@@ -300,6 +337,12 @@ class vfs {
 		if(array_key_exists($sFile,$aDirectoryListing)){
 			return $aDirectoryListing[$sFile];
 		}else{
+			//Try case insensative search
+			foreach($aDirectoryListing as $sTestFileName => $oFile){
+				if(trim(strtolower($sTestFileName))==trim(strtolower($sFile))){
+					return $oFile;
+				}
+			}
 			logger::log("VFS: getMeta no such file ".$sFile." in dir ".$sDir."",LOG_DEBUG);
 			throw new Exception("No such file");
 		}

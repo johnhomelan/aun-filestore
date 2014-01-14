@@ -23,6 +23,23 @@ class security {
 		$aPlugins = security::_getAuthPlugins();
 
 	}
+
+	/**
+	 * Cleans up any sessions that have been idle for too long
+	*/
+	public static function houseKeeping()
+	{
+		$iTime = time();
+		foreach(security::$aSessions as $iNetwork=>$aStations){
+			foreach($aStations as $iStation=>$aData){
+				if($aData['idle']<time()-config::getValue('security_max_session_idle')){
+					security::logout($iNetwork,$iStation);
+				}
+			}
+		}	
+	}
+
+
 	/**
 	 * Get a list of all the authplugs we should be using 
 	 *
@@ -48,7 +65,18 @@ class security {
 		}
 		return $aReturn;
 	}
+
+	/**
+	 * Updates the last idle time for a connection
+	*/
+	public static function updateIdleTimer($iNetwork,$iStation)
+	{
+		if(array_key_exists($iNetwork,security::$aSessions) AND array_key_exists($iStation,security::$aSessions[$iNetwork])){
+			security::$aSessions[$iNetwork][$iStation]['idle']=time();
+		}
 	
+	}
+
 	/**
 	 * Performs the login operation for a give user on a network and station
 	 *
@@ -67,7 +95,7 @@ class security {
 					if(!array_key_exists($iNetwork,security::$aSessions)){
 						security::$aSessions[$iNetwork]=array();
 					}
-					security::$aSessions[$iNetwork][$iStation]=array('datetime'=>time(),'provider'=>$sPlugin,'user'=>$sPlugin::buildUserObject($sUser));
+					security::$aSessions[$iNetwork][$iStation]=array('idle'=>time(),'datetime'=>time(),'provider'=>$sPlugin,'user'=>$sPlugin::buildUserObject($sUser));
 					return TRUE;
 				}else{
 					logger::log("Security: Login failed for ".$sUser." using authplugin ".$sPlugin,LOG_INFO);

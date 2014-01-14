@@ -1,6 +1,6 @@
 #!/usr/bin/php
 <?
-
+declare(ticks = 1);
 include_once('include/system.inc.php');
 
 class filestored  {
@@ -31,13 +31,59 @@ class filestored  {
 		if($bDaemonize){
 			$this->daemonize($sPidFile);
 		}
+		//Setup signle handler
+		pcntl_signal(SIGCHLD,array($this,'sigHandler'));
+		pcntl_signal(SIGALRM, array($this, 'sigHandler'));
+		pcntl_signal(SIGTERM,array($this,'sigHandler'));
+		$this->registerNextAlarm();
+
+		//Create a file server instance and start it
 		$this->oFileserver = new fileserver($this);
 		$this->oFileserver->init();
+
+		//Load the aunmap that maps econet network/station numbers to ip addresses and ports
 		aunmap::loadMap();
+		
+		//Setup listening sockets
 		$this->bindSockets();
+
+		//Enter main loop
 		$this->loop();
 	}
 
+	public function sigHandler($iSigno)
+	{
+		switch($iSigno){
+			case SIGALRM:
+				//On sigalarm perform any house keeping tasks
+				logger::log("Got sig alarm",LOG_DEBUG);
+				security::houseKeeping();
+				vfs::houseKeeping();
+				$this->registerNextAlarm();
+				break;
+			case SIGTERM:
+				logger::log("Shutting down filestored",LOG_INFO);
+				break;
+			case SIGCHLD:
+			default:
+				//Ignore
+				break;
+		}
+	}
+
+	protected function registerNextAlarm()
+	{
+		pcntl_alarm(config::getValue('housekeeping_interval'));
+	}
+
+
+	/**
+	 * Cause the program to daemonize 
+	 *
+	 * The current pid starts a child (that continues and becomes the running server) while the parent pid exits
+	 *
+	 * @param string $sPidFile The file to write the pid of the child to
+	*/
 	function daemonize($sPidFile)
 	{
 		$iPid=pcntl_fork();
@@ -56,6 +102,10 @@ class filestored  {
 		}
 	}
 
+	/**
+	 * Sets up a UDP sockets listening on the port used for aun packets 
+	 *
+	*/	
 	function bindSockets()
 	{
 		$this->oAunSocket = stream_socket_server('udp://'.config::getValue('aun_listen_address').':'.config::getValue('aun_listen_port'),$iErrno,$sErrstr,STREAM_SERVER_BIND);
@@ -65,6 +115,11 @@ class filestored  {
 		$this->aAllReadableSockets=array($this->oAunSocket);
 	}
 
+	/**
+	 * The main code loop
+	 *
+	 * Reads any aun packets, decodes them, acks them, sends them to the fileserver class (if they are file server packets) and dispatches any replys
+	*/
 	function loop()
 	{
 
@@ -133,6 +188,11 @@ class filestored  {
 
 	}
 
+	/**
+	 * Read the econet packet and passes it to the class to deal with that type of packet
+	 *
+	 * Only the file server is implemented at the moment so only file server packets are processed 
+	*/
 	public function processEconetPacket($oEconetPacket)
 	{
 	
@@ -148,6 +208,13 @@ class filestored  {
 
 	}
 
+	/**
+	 * Deals with a econet packet on the file server port
+	 *
+	 * It build an fsrequest from the econet packet and dispatches it to the fileserver class to be dealt with
+	 * Any reply packets produced by the file server class at this point are dispatched	
+	 * @param object econetpacket $oEconetPacket
+	*/
 	public function fileServerCommand($oEconetPacket)
 	{
 		$oFsRequest = new fsrequest($oEconetPacket);
@@ -160,6 +227,11 @@ class filestored  {
 		}
 	}
 
+	/**
+	 * Sends a replay packet to a remote machine
+	 *
+	 * @param object econetpacket $oReplyEconetPacket
+	*/
 	public function dispatchReply($oReplyEconetPacket)
 	{
 		usleep(config::getValue('bbc_default_pkg_sleep'));
@@ -239,6 +311,15 @@ class filestored  {
 		}
 	}
 
+	/**
+	 * This method keaps waiting for an ack from a given econet address
+	 *
+	 * If a none ack packet arrives while waiting for an ack that packet is processed
+	 *
+	 * @param int $iNetwork
+	 * @param int $iStation
+	 * @param int $iRecursion
+	*/
 	public function waitForAck($iNetwork,$iStation,$iRecursion=0)
 	{
 		if($iRecursion>20){

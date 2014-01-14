@@ -35,6 +35,7 @@ class fileserver {
 		security::init();
 	}
 
+
 	/**
 	 * Retreives all the reply objects built by the fileserver 
 	 *
@@ -57,6 +58,9 @@ class fileserver {
 	{
 		$sFunction = $oFsRequest->getFunction();
 		logger::log("FS function ".$sFunction,LOG_DEBUG);
+
+		//Update the idle timer for this station
+		security::updateIdleTimer($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation());
 
 
 		//Function where you dont always need to be logged in
@@ -685,13 +689,69 @@ class fileserver {
 		$iArg = $oFsRequest->getByte(1);
 		$iStart = $oFsRequest->getByte(2);
 		$iCount = $oFsRequest->getByte(3);
-		logger::log("Examine Type ".$iArg." (only 3 is implemented)",LOG_DEBUG);
+		logger::log("Examine Type ".$iArg." (only 3,1 is implemented)",LOG_DEBUG);
 		switch($iArg){
 			case 0:
 				//EXAMINE_ALL
+				$oReply->DoneOk();
+
+				//Get the directory listing
+				$oFd = vfs::getFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oFsRequest->getCsd());
+				$aDirEntries=vfs::getDirectoryListing($oFd);
+				logger::log("There are ".count($aDirEntries)." entries in dir ".$oFd->getEconetPath(),LOG_DEBUG);
+
+				//Return only the entries the client requested (works like sql limit and offset)
+				$aDirEntries = array_slice($aDirEntries,$iStart,$iCount);
+
+				//Number of entries 1 Byte
+				$oReply->appendByte(count($aDirEntries));
+
+				foreach($aDirEntries as $oFile){
+					//Append the file name (limit 10 chars)
+					$oReply->appendString(str_pad(substr($oFile->getEconetName(),0,11),11,' '));
+					$oReply->append32bitIntLittleEndian($oFile->getLoadAddr());
+					$oReply->append32bitIntLittleEndian($oFile->getExecAddr());
+					//Access mode
+					$oReply->appendByte(0);
+					//Day
+					$oReply->appendByte($oFile->getDay());
+					// 4bits year since 81, month 4 bits
+					$oReply->appendByte((($oFile->getYear()<<4)+$oFile->getMonth()));
+					$oReply->append24bitIntLittleEndian($oFile->getSin());
+					$oReply->append24bitIntLittleEndian($oFile->getSize());
+				}
+				//Close the set	with 0x80
+				$oReply->appendByte(0x80);
 				break;
 			case 1:
 				//EXAMINE_LONGTXT
+				$oReply->DoneOk();
+
+				//Get the directory listing
+				$oFd = vfs::getFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oFsRequest->getCsd());
+				$aDirEntries=vfs::getDirectoryListing($oFd);
+				logger::log("There are ".count($aDirEntries)." entries in dir ".$oFd->getEconetPath(),LOG_DEBUG);
+
+				//Return only the entries the client requested (works like sql limit and offset)
+				$aDirEntries = array_slice($aDirEntries,$iStart,$iCount);
+
+				//Number of entries 1 Byte
+				$oReply->appendByte(count($aDirEntries));
+				//Undefined but riscos needs it 
+				$oReply->appendByte(0);
+
+				foreach($aDirEntries as $oFile){
+					//Append the file name (limit 10 chars)
+					$oReply->appendString(str_pad(substr($oFile->getEconetName(),0,11),11,' '));
+					$oReply->appendString(sprintf("%08X %08X   %06X   %-6.6s  %02d:%02d:%02d %06x",$oFile->getLoadAddr(),$oFile->getExecAddr(),$oFile->getSize(),$oFile->getEconetMode(),$oFile->getDay(),$oFile->getMonth(),$oFile->getYear(),$oFile->getSin()));
+					//End this directory entry
+					$oReply->appendByte(0);
+					
+				}
+				//Close the set	with 0x80
+				$oReply->appendByte(0x80);
+				break;
+	
 				break;
 			case 2:
 				//EXAMINE_NAME
@@ -1418,7 +1478,7 @@ class fileserver {
 			}
 		
 		}
-		$this->_addReplyoBuffer($oReply);
+		$this->_addReplyToBuffer($oReply);
 	}
 
 	/**
@@ -1614,12 +1674,14 @@ class fileserver {
 		$iTime = time();
 
 		$oReply->DoneOk();
+		//Day
+		$oReply->appendByte(date('j',$iTime));
+		//Hi 4bits year, low 4bits Month
+		$oReply->appendByte( ((date('y',$iTime)<<4)+date('n',$iTime)) );
 		//Hour
 		$oReply->appendByte(date('G',$iTime));
 		//Min
 		$oReply->appendByte(ltrim(date('i',$iTime),0));
-		//Sec
-		$oReply->appendByte(ltrim(date('s',$iTime),0));
 
 		$this->_addReplyToBuffer($oReply);
 	}

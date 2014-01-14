@@ -31,7 +31,7 @@ class directoryentry {
 	
 	protected $sEconetFullFilePath = NULL;
 
-	public function __construct($sEconetName,$sUnixName,$sVfsPlugin,$iLoadAddr,$iExecAddr,$iSize,$bDir=FALSE,$sEconetFullFilePath)
+	public function __construct($sEconetName,$sUnixName,$sVfsPlugin,$iLoadAddr,$iExecAddr,$iSize,$bDir=FALSE,$sEconetFullFilePath,$iCTime,$sMode)
 	{
 		$this->sEconetName=$sEconetName;
 		$this->sUnixName=$sUnixName;
@@ -40,8 +40,9 @@ class directoryentry {
 		$this->iExecAddr=$iExecAddr;
 		$this->iSize=$iSize;
 		$this->bDir=$bDir;
-		$this->iCTime = time();
+		$this->iCTime = $iCTime;
 		$this->sEconetFullFilePath = $sEconetFullFilePath;
+		$this->setAccessByStr($sMode);
 	}
 
 	public function getVfsPlugin()
@@ -84,6 +85,30 @@ class directoryentry {
 		return $this->iSize;
 	}
 
+	public function setAccessByStr($sAccess)
+	{
+		$iMode = 0;
+		if(substr($sAccess,0,1)=='w'){
+			$iMode = $iMode+8;
+		}else{
+			//Mark unwriteable files as Locked
+			$iMode = $iMode+16;
+		}
+		if(substr($sAccess,1,1)=='r'){
+			$iMode = $iMode+4;
+		}
+		if(substr($sAccess,3,1)=='w'){
+			$iMode = $iMode+2;
+		}
+		if(substr($sAccess,4,1)=='r'){
+			$iMode = $iMode+1;
+		}
+		if($this->isDir()){
+			$iMode = $iMode+32;
+		}
+		$this->iAccess = $iMode;	
+	}
+
 	public function setAccess($iAccess)
 	{
 		$this->iAccess = $iAccess;
@@ -124,7 +149,7 @@ class directoryentry {
 
 	public function getYear()
 	{
-		return date('y',$this->iCTime) << 4;
+		return date('y',$this->iCTime);
 	}
 
 	public function isDir()
@@ -143,7 +168,12 @@ class directoryentry {
 		if($this->isDir()){
 			$sMode=$sMode."D";
 		}
-		$sMode=$sMode."WR/r";
+		$sMode .= (($this->iAccess & 16) ? 'L' : '');
+		$sMode .= (($this->iAccess & 8) ? 'W' : '');
+		$sMode .= (($this->iAccess & 4) ? 'R' : '');
+		$sMode .= "/";
+		$sMode .= (($this->iAccess & 2) ? 'W' : '');
+		$sMode .= (($this->iAccess & 1) ? 'R' : '');
 		return str_pad(substr($sMode,0,6),6,' ');
 	}
 }

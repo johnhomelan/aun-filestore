@@ -167,8 +167,17 @@ class dfsreader {
 		return $this->aCatalogue;
 	}
 
-	public function getFile($sDir,$sFileName){
+	public function getFile($sFilePath){
 		$aCat = $this->getCatalogue();
+		$aParts = explode('.',$sFilePath);
+		if(count($aParts)==2){
+			$sDir = $aParts[0];
+			$sFileName = $aParts[1];
+		}else{
+			$sDir = '$';	
+			$sFileName = $sFilePath;
+		}
+		
 		if(!array_key_exists($sDir,$aCat)){
 			throw new Exception("No such dir ".$sDir);
 		}
@@ -177,6 +186,63 @@ class dfsreader {
 		}
 		return $this->_getRawData($aCat[$sDir][$sFileName]['startsector'],$aCat[$sDir][$sFileName]['size']);
 	}
+
+	public function getStat($sFilePath)
+	{
+		$aCat = $this->getCatalogue();
+		$aParts = explode('.',$sFilePath);
+		if(count($aParts)==2){
+			$sDir = $aParts[0];
+			$sFileName = $aParts[1];
+		}else{
+			$sDir = '$';	
+			$sFileName = $sFilePath;
+		}
+		
+		if(!array_key_exists($sDir,$aCat)){
+			throw new Exception("No such dir ".$sDir);
+		}
+		if(!array_key_exists($sFileName,$aCat[$sDir])){
+			throw new Exception("No such file ".$sFileName);
+		}
+		return array('size'=>$aCat[$sDir][$sFile]['size'],'sector'=>$aCat[$sDir][$sFile]['startsector']);
+	}
+
+	public function isFile($sFilePath)
+	{
+		$aCat = $this->getCatalogue();
+		$aParts = explode('.',$sFilePath);
+		if(count($aParts)==2){
+			$sDir = $aParts[0];
+			$sFileName = $aParts[1];
+			if(array_key_exists($sDir,$aCat) AND array_key_exists($sFileName,$aCat[$sDir])){
+				return TRUE;
+			}
+		}else{
+			$sDir = '$';	
+			$sFileName = $sFilePath;
+			if(array_key_exists($sDir,$aCat) AND array_key_exists($sFileName,$aCat[$sDir])){
+				return TRUE;
+			}
+		}
+		return FALSE;
+	}
+
+	public function isDir($sFilePath)
+	{
+		$aCat = $this->getCatalogue();
+		$aParts = explode('.',$sFilePath);
+		if(count($aParts)==2){
+			return FALSE;
+		}else{
+			$sFileName = $sFilePath;
+			if(array_key_exists($sFilePath,$aCat)){
+				return TRUE;
+			}
+		}
+		return FALSE;
+	}
+
 
 }
 ?>

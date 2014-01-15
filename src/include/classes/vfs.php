@@ -99,6 +99,9 @@ class vfs {
 		foreach($aPlugins as $sPlugin){
 			try {
 				$oHandle = $sPlugin::_buildFiledescriptorFromEconetPath($oUser,$sCsd,$sEconetPath,$bMustExist,$bReadOnly);
+				if(is_object($oHandle)){
+					break;
+				}
 			}catch(VfsException $oVfsException){
 				//If it's a hard error abort the operation
 				if($oVfsException->isHard()){

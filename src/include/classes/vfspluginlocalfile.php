@@ -6,7 +6,7 @@
 
 /**
  * The vfspluginlocalfile class acts as a vfs plugin to provide access to local files using the same on disk 
- * format as aund.
+ * sprows ethernet card uses with a samba server
  *
  * @package corevfs
  * @authour John Brown <john@home-lan.co.uk>
@@ -119,7 +119,7 @@ class vfspluginlocalfile {
 
 		//If the path is not a valid dir return an empty list 
 		if(!is_dir($sUnixPath)){
-			return array();
+			return $aDirectoryListing;
 		}
 
 		//Scan the unix dir, and build a directoryentry for each file

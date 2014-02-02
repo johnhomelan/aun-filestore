@@ -9,7 +9,7 @@
  * @author John Brown <john@home-lan.co.uk>
  * @package coreutils
 */
-openlog("log", LOG_PID | LOG_PERROR, LOG_LOCAL0);
+openlog("log", LOG_PID , LOG_LOCAL0);
 
 class logger
 {

@@ -7,6 +7,8 @@ class filestored  {
 
 	protected $oFileserver = NULL;
 
+	protected $oPrintServer = NULL;
+
 	protected $oAunSocket = NULL;
 	
 	protected $aAllReadableSockets = array();
@@ -40,6 +42,10 @@ class filestored  {
 		//Create a file server instance and start it
 		$this->oFileserver = new fileserver($this);
 		$this->oFileserver->init();
+
+		//Create a print server instance and start it
+		$this->oPrintServer = new printserver($this);
+		$this->oPrintServer->init();
 
 		//Load the aunmap that maps econet network/station numbers to ip addresses and ports
 		aunmap::loadMap();
@@ -201,8 +207,14 @@ class filestored  {
 			case 'FileServerCommand':
 				$this->fileServerCommand($oEconetPacket);
 				break;
+			case 'PrinterServerEnquiry':
+				$this->printServerEnquiry($oEconetPacket);
+				break;
+			case 'PrinterServerData':
+				$this->PrinterServerData($oEconetPacket);
+				break;
 			default:
-				logger::log("filestore: Recived packet on un-handle port (".$sPort.")".$sPort,LOG_DEBUG);
+				logger::log("filestore: Recived packet on un-handle port (".$sPort.")",LOG_DEBUG);
 				break;
 		}
 
@@ -221,7 +233,32 @@ class filestored  {
 		$this->oFileserver->processRequest($oFsRequest);
 		$aReplies = $this->oFileserver->getReplies();
 		foreach($aReplies as $oReply){
-			logger::log("filestore: Sending econet reply");
+			logger::log("filestore: Sending econet reply",LOG_DEBUG);
+			$oReplyEconetPacket = $oReply->buildEconetpacket();
+			$this->dispatchReply($oReplyEconetPacket);	
+		}
+	}
+
+	public function printServerEnquiry($oEconetPacket)
+	{
+		$oPrintServerEnquiry = new printserverenquiry($oEconetPacket);
+		$this->oPrintServer->processEnquiry($oPrintServerEnquiry);
+		$this->sendPrinterReplies();
+		
+	}
+
+	public function printerServerData($oEconetPacket)
+	{
+		$oPrintServerData = new printserverdata($oEconetPacket);
+		$this->oPrintServer->processData($oPrintServerData);
+		$this->sendPrinterReplies();
+	}
+
+	public function sendPrinterReplies()
+	{
+		$aReplies = $this->oPrintServer->getReplies();
+		foreach($aReplies as $oReply){
+			logger::log("filestore: Sending econet reply",LOG_DEBUG);
 			$oReplyEconetPacket = $oReply->buildEconetpacket();
 			$this->dispatchReply($oReplyEconetPacket);	
 		}

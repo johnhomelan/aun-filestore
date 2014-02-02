@@ -484,13 +484,7 @@ class fileserver {
 					$oReply->append24bitIntLittleEndian($oMeta->getSize());
 					$oReply->appendByte($oMeta->getAccess());
 					//Add current date
-					$iDay = date('j',time());
-					$oReply->appendByte($iDay);
-					//The last byte is month and year, first 4 bits year, last 4 bits month
-					$iYear= date('y',time());
-					$iYear << 4;
-					$iYear = $iYear+date('n',time());
-					$oReply->appendByte($iYear);
+					$oeply->appendRaw($oMeta->getCTime());
 				}catch(Exception $oException){
 					$oReply->DoneOk();
 					$oReply->appendByte(0x00);
@@ -516,7 +510,7 @@ class fileserver {
 					}else{
 						$oReply->appendByte(0x01);
 					}
-					$oReply->appendByte($oMeta->getCTime());
+					$oeply->appendRaw($oMeta->getCTime());
 				}catch(Exception $oException){
 					$oReply->DoneOk();
 					$oReply->appendByte(0x00);
@@ -713,10 +707,8 @@ class fileserver {
 					$oReply->append32bitIntLittleEndian($oFile->getExecAddr());
 					//Access mode
 					$oReply->appendByte(0);
-					//Day
-					$oReply->appendByte($oFile->getDay());
-					// 4bits year since 81, month 4 bits
-					$oReply->appendByte((($oFile->getYear()<<4)+$oFile->getMonth()));
+					//Append 2 byte ctime Day,year+month
+					$oReply->appendRaw($oFile->getCTime());
 					$oReply->append24bitIntLittleEndian($oFile->getSin());
 					$oReply->append24bitIntLittleEndian($oFile->getSize());
 				}
@@ -873,6 +865,13 @@ class fileserver {
 	{
 		$oReply = $oFsRequest->buildReply();
 		$oUser = security::getUser($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation());
+
+		//Chech the user is logged in
+		if(!is_object($oUser)){
+			$oReply->setError(0xbf,"Who are you?");
+			$this->_addReplyToBuffer($oReply);
+			return;
+		}
 		
 		if(strlen($sOptions)>0){
 			try {
@@ -1096,7 +1095,6 @@ class fileserver {
 
 		//Break the data into blocks and send it
 //		if($iUserPtr!=0){
-			echo "Use offset\n";
 			//Move the file pointer to offset
 			$oFsHandle->setPos($iOffset);
 //		}
@@ -1186,7 +1184,6 @@ class fileserver {
 
 			}catch(Exception $oException){
 				logger::log("Putbytes timed out waiting for data",LOG_DEBUG);
-				var_dump($oException);
 				//$oFailReply=$oFsRequest->buildReply();
 				//$oFailReply->setError(0xff,"Timeout");
 				//$this->_addReplyToBuffer($oReply);
@@ -1201,8 +1198,6 @@ class fileserver {
 			$this->oMainApp->dispatchReply($oAckPackage);
 
 			$sData=$sData.$oEconetPacket->getData();
-			var_dump(strlen($sData));
-			var_dump($iBytes);
 		}
 		$oFsHandle->write($sData);
 		usleep(config::getValue('bbc_default_pkg_sleep'));
@@ -1321,6 +1316,7 @@ class fileserver {
 		$oReply2->DoneOk();
 		$oReply2->appendByte(15);
 		//Add current date
+		
 		$iDay = date('j',time());
 		$oReply2->appendByte($iDay);
 		//The last byte is month and year, first 4 bits year, last 4 bits month
@@ -1343,8 +1339,6 @@ class fileserver {
 		//The urd handle in the request is not the urd when load is called but denotes the port to stream the data to
 		$iDataPort = $oFsRequest->getUrd();
 		$sPath = $oFsRequest->getString(1);
-		echo "Path is \n";
-		var_dump($sPath);
 
 		$oReply = $oFsRequest->buildReply();
 		
@@ -1363,14 +1357,8 @@ class fileserver {
 		$oReply->append32bitIntLittleEndian($oMeta->getExecAddr());
 		$oReply->append24bitIntLittleEndian($oMeta->getSize());
 		$oReply->appendByte($oMeta->getAccess());
-		//Add current date
-		$iDay = date('j',time());
-		$oReply->appendByte($iDay);
-		//The last byte is month and year, first 4 bits year, last 4 bits month
-		$iYear= date('y',time());
-		$iYear << 4;
-		$iYear = $iYear+date('n',time());
-		$oReply->appendByte($iYear);
+		//Add ctime 2 bytes day,year+month
+		$oReply->appendRaw($oMeta->getCTime());
 		$oReplyEconetPacket = $oReply->buildEconetpacket();
 		$this->oMainApp->dispatchReply($oReplyEconetPacket);	
 

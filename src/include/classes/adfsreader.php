@@ -77,50 +77,19 @@ class adfsreader {
 		return $sBlock;
 	}
 
-
-	protected function _decode18bitAddr($iLowByte,$iMidByte,$iHighByte,$iFirstBit,$iSecondBit)
-	{
-		$sLowByte = str_pad(decbin($iLowByte),8,"0",STR_PAD_LEFT);
-		$sMidByte = str_pad(decbin($iMidByte),8,"0",STR_PAD_LEFT);
-		$sHighByte = str_pad(decbin($iHighByte),8,"0",STR_PAD_LEFT);
-		$sBin = substr($sHighByte,8-$iSecondBit,1).substr($sHighByte,8-$iFirstBit,1).$sMidByte.$sLowByte;
-		return bindec($sBin);
-	}
-
-	protected function _decode10bitAddr($iLowByte,$iHighByte,$iFirstBit,$iSecondBit)
-	{
-		$sLowByte = str_pad(decbin($iLowByte),8,"0",STR_PAD_LEFT);
-		$sHighByte = str_pad(decbin($iHighByte),8,"0",STR_PAD_LEFT);
-		$sBin = substr($sHighByte,8-$iSecondBit,1).substr($sHighByte,8-$iFirstBit,1).$sLowByte;
-		return bindec($sBin);
-	}
-
 	protected function _decode7bit($iByte)
 	{
-		$sByte = str_pad(decbin($iByte),8,"0",STR_PAD_LEFT);
-		//Chop of the left most bit
-		$sBin = substr($sByte,1,7);
-		return bindec($sBin);	
+		return $iByte & 127;
 	}
 
 	protected function _decode32bitAddr($iByte1,$iByte2,$iByte3,$iByte4)
 	{
-		$sByte1 = str_pad(decbin($iByte1),8,"0",STR_PAD_LEFT);
-		$sByte2 = str_pad(decbin($iByte2),8,"0",STR_PAD_LEFT);
-		$sByte3 = str_pad(decbin($iByte3),8,"0",STR_PAD_LEFT);
-		$sByte4 = str_pad(decbin($iByte4),8,"0",STR_PAD_LEFT);
-		$sBin =  $sByte4.$sByte3.$sByte2.$sByte1;
-		//$sBin =  $sByte1+$sByte2+$sByte3+$sByte4;
-		return bindec($sBin);
+		return ($iByte4 << 24) + ($iByte3 << 16) + ($iByte2 << 8) + $iByte1;
 	}
 
 	protected function _decode24bitAddr($iByte1,$iByte2,$iByte3)
 	{
-		$sByte1 = str_pad(decbin($iByte1),8,"0",STR_PAD_LEFT);
-		$sByte2 = str_pad(decbin($iByte2),8,"0",STR_PAD_LEFT);
-		$sByte3 = str_pad(decbin($iByte3),8,"0",STR_PAD_LEFT);
-		$sBin =  $sByte3.$sByte2.$sByte1;
-		return bindec($sBin);
+		return ($iByte3 << 16) + ($iByte2 << 8) + $iByte1;
 	}
 
 	/**
@@ -161,7 +130,6 @@ class adfsreader {
 				
 				//Grab a block of file metadata
 				$aMeta = array_slice($aSectors,$iStart,self::METADATA_SIZE);
-				//echo "Block starts at ".$iStart."\n";
 
 				//Decode the file name
 				$sFileName = '';
@@ -170,7 +138,6 @@ class adfsreader {
 					break;
 				}
 				for($x=0;$x<self::FILE_NAME_LEN;$x++){
-					//echo $x.": ".$this->_decode7bit($aMeta[$x])." = " .chr($this->_decode7bit($aMeta[$x]))." ".decbin($this->_decode7bit($aMeta[$x]))."\n";
 					if($this->_decode7bit($aMeta[$x])!==13 ){
 						$sFileName .=chr($this->_decode7bit($aMeta[$x]));
 					}else{
@@ -181,10 +148,8 @@ class adfsreader {
 
 				//The high bit of the 4th byte of the file name is used to denote if an entry is a directory
 				if($aMeta[3] & 128){
-					//echo "Dir\n";
 					$sType = "dir";
 				}else{
-					//echo "File\n";
 					$sType = "file";
 				}
 
@@ -227,17 +192,115 @@ class adfsreader {
 		$aCat = $this->getCatalogue();
 		$aParts = explode('.',$sFileName);
 		foreach($aParts as $sPart){
-			if(array_key_exists($sPart,$aCat)){
-				if($aCat[$sPart]['type']=='file'){
-					return $this->getBlocks($aCat[$sPart]['startsector'],$aCat[$sPart]['size']);
+			$aKeys = array_keys($aCat);
+			$bFound = FALSE;
+			foreach($aKeys as $sTestKey){
+				if(strtolower($sTestKey)==strtolower($sPart)){
+					$bFound=TRUE;
+					break;
 				}
-				if($aCat[$sPart]['type']=='dir'){
-					$aCat = $aCat[$sPart];
+			}
+			if($bFound){
+				if($aCat[$sTestKey]['type']=='file'){
+					return $this->getBlocks($aCat[$sTestKey]['startsector'],$aCat[$sTestKey]['size']);
+				}
+				if($aCat[$sTestKey]['type']=='dir'){
+					$aCat = $aCat[$sTestKey];
 				}
 			}
 		}
 	}
 
+	public function getStat($sFileName)
+	{
+		$aCat = $this->getCatalogue();
+		$aParts = explode('.',$sFileName);
+		foreach($aParts as $sPart){
+			$aKeys = array_keys($aCat);
+			$bFound = FALSE;
+			foreach($aKeys as $sTestKey){
+				if(strtolower($sTestKey)==strtolower($sPart)){
+					$bFound=TRUE;
+					break;
+				}
+			}
+			if($bFound){
+				if($aCat[$sTestKey]['type']=='file'){
+					return array('size'=>$aCat[$sTestKey]['size'],'sector'=>$aCat[$sTestKey]['startsector']);
+				}
+				if($aCat[$sTestKey]['type']=='dir'){
+					$aCat = $aCat[$sTestKey];
+				}
+			}
+		}
+	}
+
+	public function isFile($sFileName)
+	{
+		$aCat = $this->getCatalogue();
+		$aParts = explode('.',$sFileName);
+		$iParts = count($aParts);
+		
+		foreach($aParts as $iIndex => $sPart){
+				$aKeys = array_keys($aCat);
+				$bFound = FALSE;
+				foreach($aKeys as $sTestKey){
+					if(strtolower($sTestKey)==strtolower($sPart)){
+						$bFound=TRUE;
+						break;
+					}
+				}
+				if($iIndex+1 == $iParts){
+					//last entry 
+				
+					if($bFound){
+						if($aCat[$sTestKey]['type']=='file'){
+							return TRUE;
+						}
+					}
+				}
+				if($bFound){
+					if($aCat[$sPart]['type']=='dir'){
+						$aCat = $aCat[$sTestKey];
+					}else{
+						return FALSE;
+					}
+				}
+		}
+		return FALSE;
+	}
+
+	public function isDir($sFileName)
+	{
+		$aCat = $this->getCatalogue();
+		$aParts = explode('.',$sFileName);
+		$iParts = count($aParts);
+		foreach($aParts as $iIndex => $sPart){
+			$aKeys = array_keys($aCat);
+			$bFound = FALSE;
+			foreach($aKeys as $sTestKey){
+				if(strtolower($sTestKey)==strtolower($sPart)){
+					$bFound=TRUE;
+					break;
+				}
+			}if($iIndex+1 == $iParts){
+				//last entry 
+				if($bFound){
+					if($aCat[$sTestKey]['type']=='dir'){
+						return TRUE;
+					}
+				}
+			}
+			if($bFound){
+				if($aCat[$sPart]['type']=='dir'){
+					$aCat = $aCat[$sTestKey];
+				}else{
+					return FALSE;
+				}
+			}
+		}
+		return FALSE;
+	}
 }
 
 ?>

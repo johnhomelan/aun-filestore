@@ -62,7 +62,30 @@ class vfspluginlocalfile {
 					}
 				}
 			}else{
-				//The directroy does not exist so walk the directory tree in a case insensitve way an try to find the real dir	
+				//The directroy does not exist so walk the directory tree in a case insensitve way an try to find the real dir/file
+				$aDirParts = explode(DIRECTORY_SEPARATOR,$sUnixPath);
+				$sNewDirPath = "";
+				$iMatches = 0;
+				foreach($aDirParts as $sDirPart){
+					if(is_dir($sNewDirPath.DIRECTORY_SEPARATOR.$sDirPart)){
+						$sNewDirPath .= DIRECTORY_SEPARATOR.$sDirPart;
+						$iMatches++;
+						continue;
+					}else{
+						$aFiles = scandir($sNewDirPath);
+						foreach($aFiles as $sFile){
+							if(strtolower($sFile)==strtolower($sDirPart)){
+								$iMatches++;
+								$sNewDirPath .= DIRECTORY_SEPARATOR.$sFile;
+								continue;
+							}
+						}
+					}
+				}
+				if($iMatches==count($aDirParts)){
+					return $sNewDirPath;
+				}
+				
 			}
 		}
 		return $sUnixPath;
@@ -87,13 +110,11 @@ class vfspluginlocalfile {
 				}
 			}elseif(!$bMustExist){
 				if($bReadOnly){
-					echo "read only\n";
 					$iVfsHandle = NULL;
 				}else{
 					$iVfsHandle = fopen($sUnixPath,'c+');
 				}
 			}else{
-				echo "Must exist but does not\n";
 				$iVfsHandle = NULL;
 			}
 			$iEconetHandle = vfs::getFreeFileHandleID($oUser);

@@ -50,19 +50,48 @@ class dfsreader {
 
 	protected function _decode18bitAddr($iLowByte,$iMidByte,$iHighByte,$iFirstBit,$iSecondBit)
 	{
-		$sLowByte = str_pad(decbin($iLowByte),8,"0",STR_PAD_LEFT);
-		$sMidByte = str_pad(decbin($iMidByte),8,"0",STR_PAD_LEFT);
-		$sHighByte = str_pad(decbin($iHighByte),8,"0",STR_PAD_LEFT);
-		$sBin = substr($sHighByte,8-$iSecondBit,1).substr($sHighByte,8-$iFirstBit,1).$sMidByte.$sLowByte;
-		return bindec($sBin);
+		switch($iFirstBit){
+			case 1:
+				$iHighByte = $iHighByte & 3;
+				break;
+			case 3:
+				$iHighByte = $iHighByte & 12;
+				$iHighByte = $iHighByte >> 2;
+				break;
+			case 5:
+				$iHighByte = $iHighByte & 48;
+				$iHighByte = $iHighByte >> 4;
+				break;
+			case 7:
+				$iHighByte = $iHighByte & 192;
+				$iHighByte = $iHighByte >> 6;
+				break;
+		}
+
+		return ($iHighByte << 16) + ($iMidByte << 8) + $iLowByte;
 	}
 
 	protected function _decode10bitAddr($iLowByte,$iHighByte,$iFirstBit,$iSecondBit)
 	{
-		$sLowByte = str_pad(decbin($iLowByte),8,"0",STR_PAD_LEFT);
-		$sHighByte = str_pad(decbin($iHighByte),8,"0",STR_PAD_LEFT);
-		$sBin = substr($sHighByte,8-$iSecondBit,1).substr($sHighByte,8-$iFirstBit,1).$sLowByte;
-		return bindec($sBin);
+		switch($iFirstBit){
+			case 1:
+				$iHighByte = $iHighByte & 3;
+				break;
+			case 3:
+				$iHighByte = $iHighByte & 12;
+				$iHighByte = $iHighByte >> 2;
+				break;
+			case 5:
+				$iHighByte = $iHighByte & 48;
+				$iHighByte = $iHighByte >> 4;
+				break;
+			case 7:
+				$iHighByte = $iHighByte & 192;
+				$iHighByte = $iHighByte >> 6;
+				break;
+		}
+
+		return ($iHighByte << 8) + $iLowByte;
 	}
 
 	protected function _getRawData($iStartSector,$iLength)
@@ -205,7 +234,7 @@ class dfsreader {
 		if(!array_key_exists($sFileName,$aCat[$sDir])){
 			throw new Exception("No such file ".$sFileName);
 		}
-		return array('size'=>$aCat[$sDir][$sFile]['size'],'sector'=>$aCat[$sDir][$sFile]['startsector']);
+		return array('size'=>$aCat[$sDir][$sFileName]['size'],'sector'=>$aCat[$sDir][$sFileName]['startsector']);
 	}
 
 	public function isFile($sFilePath)

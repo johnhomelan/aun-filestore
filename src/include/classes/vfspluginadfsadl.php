@@ -1,17 +1,17 @@
 <?
 /**
- * This file contains the dfs ssd image vfs plugin
+ * This file contains the adfs adl image vfs plugin
  *
 */
 
 /**
- * The vfsplugindfsssd class acts as a vfs plugin to provide access to files stored in a dfs ssd image.
+ * The vfspluginadfsadl class acts as a vfs plugin to provide access to files stored in a adfs filing system stored in a adl image.
  * 
  *
  * @package corevfs
  * @authour John Brown <john@home-lan.co.uk>
 */
-class vfsplugindfsssd {
+class vfspluginadfsadl {
 
 	protected static $aImageReaders = array();
 
@@ -44,10 +44,10 @@ class vfsplugindfsssd {
 
 	protected static function _getImageReader($sImageFile)
 	{
-		if(!array_key_exists($sImageFile,vfsplugindfsssd::$aImageReaders)){
-			vfsplugindfsssd::$aImageReaders[$sImageFile] = new dfsreader($sImageFile);
+		if(!array_key_exists($sImageFile,vfspluginadfsadl::$aImageReaders)){
+			vfspluginadfsadl::$aImageReaders[$sImageFile] = new adfsreader($sImageFile);
 		}
-		return vfsplugindfsssd::$aImageReaders[$sImageFile];
+		return vfspluginadfsadl::$aImageReaders[$sImageFile];
 	}
 
 	protected static function _econetToUnix($sEconetPath)
@@ -60,7 +60,7 @@ class vfsplugindfsssd {
 			$sUnixPath = $sUnixPath.str_replace(DIRECTORY_SEPARATOR ,'.',$sPart).DIRECTORY_SEPARATOR;
 		}
 		$sUnixPath = trim($sUnixPath,DIRECTORY_SEPARATOR);
-		$sUnixPath = config::getValue('vfs_plugin_localdfsssd_root').DIRECTORY_SEPARATOR.$sUnixPath;
+		$sUnixPath = config::getValue('vfs_plugin_localadfsadl_root').DIRECTORY_SEPARATOR.$sUnixPath;
 
 		
 		if(!file_exists($sUnixPath)){
@@ -92,7 +92,7 @@ class vfsplugindfsssd {
 								$iMatches++;
 								$sNewDirPath .= DIRECTORY_SEPARATOR.$sFile;
 								continue;
-							}elseif(strtolower($sFile)===strtolower($sDirPart).'.ssd'){
+							}elseif(strtolower($sFile)===strtolower($sDirPart).'.adl'){
 								//The file is inside an image file so just return the Unix path
 								$sNewDirPath .= DIRECTORY_SEPARATOR.$sDirPart;
 								return $sNewDirPath; 
@@ -116,9 +116,9 @@ class vfsplugindfsssd {
 		$aUnixPath = explode(DIRECTORY_SEPARATOR,$sUnixPath);
 		while(count($aUnixPath)>0){
 			$sUnixPath = implode(DIRECTORY_SEPARATOR,$aUnixPath);
-			if(is_file($sUnixPath.".ssd")){
-				return $sUnixPath.".ssd";
-			}elseif($sUnixPath==config::getValue('vfs_plugin_localdfsssd_root')){
+			if(is_file($sUnixPath.".adl")){
+				return $sUnixPath.".adl";
+			}elseif($sUnixPath==config::getValue('vfs_plugin_localadfsadl_root')){
 				return;
 			}
 			$sFilePathPart = array_pop($aUnixPath);
@@ -132,65 +132,65 @@ class vfsplugindfsssd {
 		$sEconetPath = substr($sEconetPath,2);
 
 		$sPathPreFix = substr($sImageFile,0,strlen($sImageFile)-4);
-		$sPathPreFix = str_ireplace(config::getValue('vfs_plugin_localdfsssd_root'),'',$sPathPreFix);
+		$sPathPreFix = str_ireplace(config::getValue('vfs_plugin_localadfsadl_root'),'',$sPathPreFix);
 		$sPathPreFix = str_ireplace(DIRECTORY_SEPARATOR,'.',ltrim($sPathPreFix,'/'));
 		return ltrim(str_ireplace($sPathPreFix,'',$sEconetPath),'.');
 	} 
 
 	protected static function _checkImageFileExists($sImageFile,$sPathInsideImage)
 	{
-		$oDfs = vfsplugindfsssd::_getImageReader($sImageFile);
-		$aCat = $oDfs->getCatalogue();
+		$oAdfs = vfspluginadfsadl::_getImageReader($sImageFile);
+		$aCat = $oAdfs->getCatalogue();
 		$aPathInsideImage = explode('.',$sPathInsideImage);
 		$bFound = FALSE;
-		if(count($sPathInsideImage)==2){
-			if(array_key_exists($aPathInsideImage[0],$aCat)){
-				if(array_key_exists($aPathInsideImage[1],$aCat[$aPathInsideImage[0]])){
-					$bFound = TRUE;
+		$iCount = 0;
+		foreach($aPathInsideImage as $sPathPart){
+			$aKeys = array_keys($aCat);
+			foreach($aKeys as $sKey){
+				if(strtoupper($sKey)==strtoupper($sPathPart)){
+					$iCount++;
+					if($aCat[$sKey]['type']='dir'){
+						$aCat=$aCat[$sKey]['dir'];
+					}
+					break;
 				}
 			}
 		}
-		if(count($sPathInsideImage)==1){
-			if(array_key_exists($aPathInsideImage[0],$aCat['$'])){
-				$bFound = TRUE;
-			}
-			if(array_key_exists($aPathInsideImage[0],$aCat)){
-				$bFound = TRUE;
-			}
+		if($iCount==count($aPathInsideImage)){
+			return TRUE;
 		}
-
-		return $bFound;
+		return FALSE;
 	}
 
 	public static function _buildFiledescriptorFromEconetPath($oUser,$sCsd,$sEconetPath,$bMustExist,$bReadOnly)
 	{
 		if(strpos($sEconetPath,'$')===0){
 			//Absolute Path
-			$sImageFile = vfsplugindfsssd::_getImageFile($sEconetPath);
+			$sImageFile = vfspluginadfsadl::_getImageFile($sEconetPath);
 		}else{
 			//Relative path
 			$sEconetPath = $sCsd.'.'.$sEconetPath;
-			$sImageFile = vfsplugindfsssd::_getImageFile($sEconetPath);
+			$sImageFile = vfspluginadfsadl::_getImageFile($sEconetPath);
 		}
 		if(strlen($sImageFile)>0){
-			$sPathInsideImage = vfsplugindfsssd::_getPathInsideImage($sEconetPath,$sImageFile);
-			if(vfsplugindfsssd::_checkImageFileExists($sImageFile,$sPathInsideImage)){
+			$sPathInsideImage = vfspluginadfsadl::_getPathInsideImage($sEconetPath,$sImageFile);
+			if(vfspluginadfsadl::_checkImageFileExists($sImageFile,$sPathInsideImage)){
 				$iEconetHandle = vfs::getFreeFileHandleID($oUser);
-				$iVfsHandle = vfsplugindfsssd::$iFileHandle++;
-				vfsplugindfsssd::$aFileHandles[$iVfsHandle]=array('image-file'=>$sImageFile,'path-inside-image'=>$sPathInsideImage,'pos'=>0);
-				$oDfs =  vfsplugindfsssd::_getImageReader($sImageFile);
-				return new filedescriptor('vfsplugindfsssd',$oUser,$sImageFile,$sEconetPath,$iVfsHandle,$iEconetHandle,$oDfs->isFile($sPathInsideImage),$oDfs->isDir($sPathInsideImage));
+				$iVfsHandle = vfspluginadfsadl::$iFileHandle++;
+				vfspluginadfsadl::$aFileHandles[$iVfsHandle]=array('image-file'=>$sImageFile,'path-inside-image'=>$sPathInsideImage,'pos'=>0);
+				$oAdfs =  vfspluginadfsadl::_getImageReader($sImageFile);
+				return new filedescriptor('vfspluginadfsadl',$oUser,$sImageFile,$sEconetPath,$iVfsHandle,$iEconetHandle,$oAdfs->isFile($sPathInsideImage),$oAdfs->isDir($sPathInsideImage));
 			}
 		}
 
 		//Scan the unix dir, see of there is a diskimage in that directory to see if it need changing to a directory
-		$sUnixPath = vfsplugindfsssd::_econetToUnix($sEconetPath);
-		if(file_exists($sUnixPath.'.ssd')){
+		$sUnixPath = vfspluginadfsadl::_econetToUnix($sEconetPath);
+		if(file_exists($sUnixPath.'.adl')){
 			//Disk Image found
 			$iEconetHandle = vfs::getFreeFileHandleID($oUser);
-			$iVfsHandle = vfsplugindfsssd::$iFileHandle++;
-			vfsplugindfsssd::$aFileHandles[$iVfsHandle]=array('image-file'=>$sUnixPath.'.ssd','path-inside-image'=>'','pos'=>0);
-			return new filedescriptor('vfsplugindfsssd',$oUser,$sUnixPath.'.ssd',$sEconetPath,$iVfsHandle,$iEconetHandle,FALSE,TRUE);
+			$iVfsHandle = vfspluginadfsadl::$iFileHandle++;
+			vfspluginadfsadl::$aFileHandles[$iVfsHandle]=array('image-file'=>$sUnixPath.'.adl','path-inside-image'=>'','pos'=>0);
+			return new filedescriptor('vfspluginadfsadl',$oUser,$sUnixPath.'.adl',$sEconetPath,$iVfsHandle,$iEconetHandle,FALSE,TRUE);
 		}
 	
 	}
@@ -198,53 +198,51 @@ class vfsplugindfsssd {
 
 	public static function getDirectoryListing($sEconetPath,$aDirectoryListing)
 	{
-		$sImageFile = vfsplugindfsssd::_getImageFile($sEconetPath);
+		$sImageFile = vfspluginadfsadl::_getImageFile($sEconetPath);
 	
 		//Produce a directory listing for file inside the image if the selected path is inside the image
 		if(strlen($sImageFile)>0){
-			$sPathInsideImage = vfsplugindfsssd::_getPathInsideImage($sEconetPath,$sImageFile);
-			$oDfs = vfsplugindfsssd::_getImageReader($sImageFile);
-			$aCat = $oDfs->getCatalogue();
+			$sPathInsideImage = vfspluginadfsadl::_getPathInsideImage($sEconetPath,$sImageFile);
+			$oAdfs = vfspluginadfsadl::_getImageReader($sImageFile);
+			$aImageStat = stat($sImageFile);
+			$aCat = $oAdfs->getCatalogue();
+
 			if(strlen($sPathInsideImage)>0){
-				if(array_key_exists($sPathInsideImage,$aCat)){
-					$aImageStat = stat($sImageFile);
-					foreach($aCat[$sPathInsideImage] as $sFile=>$aMeta){
-						$aDirectoryListing[$sFile] = new directoryentry($sFile,$sImageFile,'vfsplugindfsssd',$aMeta['loadaddr'],$aMeta['execaddr'],$aMeta['size'],FALSE,$sEconetPath.'.'.$sFile,$aImageStat['ctime'],'-r/-r');
+				$aPathParts = explode('.',$sPathInsideImage);
+				foreach($aPathParts as $sPart){
+					if(array_key_exists($sPart,$aCat)){
+						$aCat = $aCat[$sPart]['dir'];
+					}else{
+						return $aDirectoryListing;
 					}
 				}
-			}else{
-				$aImageStat = stat($sImageFile);
-				foreach($aCat['$'] as $sFile=>$aMeta){
-					$aDirectoryListing[$sFile] = new directoryentry($sFile,$sImageFile,'vfsplugindfsssd',$aMeta['loadaddr'],$aMeta['execaddr'],$aMeta['size'],FALSE,$sEconetPath.'.'.$sFile,$aImageStat['ctime'],'-r/-r');
-				}
-				foreach(array_keys($aCat) as $sDir){
-					if($sDir!='$'){
-						$aDirectoryListing[$sDir] = new directoryentry($sDir,$sImageFile,'vfsplugindfsssd',NULL,NULL,0,TRUE,$sEconetPath.'.'.$sDir,$aImageStat['ctime'],'-r/-r');
-					}
-				}
+			}
+
+			foreach($aCat as $sFile=>$aMeta){
+				$aDirectoryListing[$sFile] = new directoryentry($sFile,$sImageFile,'vfspluginadfsadl',$aMeta['load'],$aMeta['exec'],$aMeta['size'],$aMeta['type']=='dir' ? TRUE : FALSE ,$sEconetPath.'.'.$sFile,$aImageStat['ctime'],'-r/-r');
 			}
 		}
 		
 		//Scan the unix dir, see of there is a diskimage in that directory to see if it need changing to a directory
-		$sUnixPath = vfsplugindfsssd::_econetToUnix($sEconetPath);
+		$sUnixPath = vfspluginadfsadl::_econetToUnix($sEconetPath);
 		if(is_dir($sUnixPath)){
 			$aFiles = scandir($sUnixPath);
 			foreach($aFiles as $sFile){
-				if(stripos($sFile,'.ssd')!==FALSE){
+				if(stripos($sFile,'.adl')!==FALSE){
 					//Disk Image found
 					if(!array_key_exists(substr($sFile,0,strlen($sFile)-4),$aDirectoryListing)){
 						$aStat = stat($sUnixPath.DIRECTORY_SEPARATOR.$sFile);
-						$aDirectoryListing[$sFile]=new directoryentry(substr($sFile,0,strlen($sFile)-4),$sFile,'vfsplugindfsssd',NULL,NULL,0,TRUE,$sEconetPath.'.'.substr($sFile,0,strlen($sFile)-4),$aStat['ctime'],'-r/-r');
+						$aDirectoryListing[$sFile]=new directoryentry(substr($sFile,0,strlen($sFile)-4),$sFile,'vfspluginadfsadl',NULL,NULL,0,TRUE,$sEconetPath.'.'.substr($sFile,0,strlen($sFile)-4),$aStat['ctime'],'-r/-r');
 					}
 				}
 			}
 		}
 
 
-		//Rip out and .ssd files from the list
+		//Rip out and .adl files from the list
 		$aReturn = array();
 		foreach($aDirectoryListing as $sFile => $oFile){
-			if(stripos($sFile,"\/ssd")===FALSE){
+			if(stripos($sFile,"\/adl")===FALSE){
 				$aReturn[$sFile]=$oFile;
 			}
 		}
@@ -284,17 +282,17 @@ class vfsplugindfsssd {
 	{
 		if(strpos($sEconetPath,'$')===0){
 			//Absolute Path
-			$sImageFile = vfsplugindfsssd::_getImageFile($sEconetPath);
+			$sImageFile = vfspluginadfsadl::_getImageFile($sEconetPath);
 		}else{
 			//Relative path
 			$sEconetPath = trim($sCsd,'.').'.'.$sEconetPath;
-			$sImageFile = vfsplugindfsssd::_getImageFile($sEconetPath);
+			$sImageFile = vfspluginadfsadl::_getImageFile($sEconetPath);
 		}
 		if(strlen($sImageFile)>0){
-			$sPathInsideImage = vfsplugindfsssd::_getPathInsideImage($sEconetPath,$sImageFile);
-			if(vfsplugindfsssd::_checkImageFileExists($sImageFile,$sPathInsideImage)){
-				$oDfs = vfsplugindfsssd::_getImageReader($sImageFile);
-				return $oDfs->getFile($sPathInsideImage);
+			$sPathInsideImage = vfspluginadfsadl::_getPathInsideImage($sEconetPath,$sImageFile);
+			if(vfspluginadfsadl::_checkImageFileExists($sImageFile,$sPathInsideImage)){
+				$oAdfs = vfspluginadfsadl::_getImageReader($sImageFile);
+				return $oAdfs->getFile($sPathInsideImage);
 			}
 		}
 		throw new VfsException("No such file");
@@ -306,17 +304,17 @@ class vfsplugindfsssd {
 
 	public static function fsFtell($oUser,$fLocalHandle)
 	{
-		if(array_key_exists($fLocalHandle,vfsplugindfsssd::$aFileHandles)){
-			return vfsplugindfsssd::$aFileHandles[$fLocalHandle]['pos'];
+		if(array_key_exists($fLocalHandle,vfspluginadfsadl::$aFileHandles)){
+			return vfspluginadfsadl::$aFileHandles[$fLocalHandle]['pos'];
 		}
 		throw new VfsException("Invalid handle");
 	}
 
 	public static function fsFStat($oUser,$fLocalHandle)
 	{
-		if(array_key_exists($fLocalHandle,vfsplugindfsssd::$aFileHandles)){
-			$oDfs = vfsplugindfsssd::_getImageReader(vfsplugindfsssd::$aFileHandles[$fLocalHandle]['image-file']);
-			$aStat = $oDfs->getStat(vfsplugindfsssd::$aFileHandles[$fLocalHandle]['path-inside-image']);
+		if(array_key_exists($fLocalHandle,vfspluginadfsadl::$aFileHandles)){
+			$oAdfs = vfspluginadfsadl::_getImageReader(vfspluginadfsadl::$aFileHandles[$fLocalHandle]['image-file']);
+			$aStat = $oAdfs->getStat(vfspluginadfsadl::$aFileHandles[$fLocalHandle]['path-inside-image']);
 			return array('dev'=>null,'ino'=>$aStat['sector'],'size'=>$aStat['size'],'nlink'=>1);
 		}
 		throw new VfsException("Invalid handle");
@@ -324,10 +322,10 @@ class vfsplugindfsssd {
 
 	public static function isEof($oUser,$fLocalHandle)
 	{
-		if(array_key_exists($fLocalHandle,vfsplugindfsssd::$aFileHandles)){
-			$oDfs = vfsplugindfsssd::_getImageReader(vfsplugindfsssd::$aFileHandles[$fLocalHandle]['image-file']);
-			$aStat = $oDfs->getStat(vfsplugindfsssd::$aFileHandles[$fLocalHandle]['path-inside-image']);
-			if(vfsplugindfsssd::$aFileHandles[$fLocalHandle]['pos']>=$aStat['size']){
+		if(array_key_exists($fLocalHandle,vfspluginadfsadl::$aFileHandles)){
+			$oAdfs = vfspluginadfsadl::_getImageReader(vfspluginadfsadl::$aFileHandles[$fLocalHandle]['image-file']);
+			$aStat = $oAdfs->getStat(vfspluginadfsadl::$aFileHandles[$fLocalHandle]['path-inside-image']);
+			if(vfspluginadfsadl::$aFileHandles[$fLocalHandle]['pos']>=$aStat['size']){
 				return TRUE;
 			}
 			return FALSE;
@@ -337,8 +335,8 @@ class vfsplugindfsssd {
 
 	public static function setPos($oUser,$fLocalHandle,$iPos)
 	{
-		if(array_key_exists($fLocalHandle,vfsplugindfsssd::$aFileHandles)){
-			vfsplugindfsssd::$aFileHandles[$fLocalHandle]['pos']=$iPos;
+		if(array_key_exists($fLocalHandle,vfspluginadfsadl::$aFileHandles)){
+			vfspluginadfsadl::$aFileHandles[$fLocalHandle]['pos']=$iPos;
 			return TRUE;
 		}
 		throw new VfsException("Invalid handle");
@@ -346,23 +344,24 @@ class vfsplugindfsssd {
 	
 	public static function read($oUser,$fLocalHandle,$iLength)
 	{
-		if(array_key_exists($fLocalHandle,vfsplugindfsssd::$aFileHandles)){
-			$oDfs = vfsplugindfsssd::_getImageReader(vfsplugindfsssd::$aFileHandles[$fLocalHandle]['image-file']);
-			$sFileData = $oDfs->getFile(vfsplugindfsssd::$aFileHandles[$fLocalHandle]['path-inside-image']);
-			return substr($sFileData,vfsplugindfsssd::$aFileHandles[$fLocalHandle]['pos'],$iLength);
+		if(array_key_exists($fLocalHandle,vfspluginadfsadl::$aFileHandles)){
+			$oAdfs = vfspluginadfsadl::_getImageReader(vfspluginadfsadl::$aFileHandles[$fLocalHandle]['image-file']);
+			$sFileData = $oAdfs->getFile(vfspluginadfsadl::$aFileHandles[$fLocalHandle]['path-inside-image']);
+			return substr($sFileData,vfspluginadfsadl::$aFileHandles[$fLocalHandle]['pos'],$iLength);
 		}
 		throw new VfsException("Invalid handle");
 	}
 
 	public static function write($oUser,$fLocalHandle,$sData)
 	{
-		logger::log("vfsplugindfsssd: Write bytes to file handle ".$fLocalHandle.LOG_DEBUG);
+		logger::log("vfspluginadfsadl: Write bytes to file handle ".$fLocalHandle.LOG_DEBUG);
+		throw new VfsException("Read Only FS");
 	}
 
 	public static function fsClose($oUser,$fLocalHandle)
 	{
-		if(array_key_exists($fLocalHandle,vfsplugindfsssd::$aFileHandles)){
-			unset(vfsplugindfsssd::$aFileHandles[$fLocalHandle]);
+		if(array_key_exists($fLocalHandle,vfspluginadfsadl::$aFileHandles)){
+			unset(vfspluginadfsadl::$aFileHandles[$fLocalHandle]);
 		}
 	}
 }

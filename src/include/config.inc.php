@@ -8,6 +8,7 @@ safe_define('CONFIG_bbc_default_pkg_sleep',40000);
 safe_define('CONFIG_loglevel',LOG_DEBUG);
 safe_define('CONFIG_logstderr',TRUE);
 safe_define('CONFIG_logfile','/tmp/filestore.log');
+safe_define('CONFIG_logbackend','logfile');
 safe_define('CONFIG_aunmap_file','aunmap.txt');
 safe_define('CONFIG_aun_default_port',32768);
 safe_define('CONFIG_version','1.01');
@@ -20,7 +21,7 @@ safe_define('CONFIG_security_default_unix_uid',500);
 safe_define('CONFIG_security_max_session_idle',2400);
 
 safe_define('CONFIG_library_path','$.LIBRARY');
-safe_define('CONFIG_vfs_plugins','dfsssd,localfile');
+safe_define('CONFIG_vfs_plugins','dfsssd,adfsadl,localfile');
 safe_define('CONFIG_vfs_plugin_localfile_root','/tmp/econetroot/');
 safe_define('CONFIG_vfs_disc_name','VFSROOT');
 safe_define('CONFIG_vfs_home_dir_path','$.home');
@@ -28,5 +29,7 @@ safe_define('CONFIG_vfs_default_disc_free',0x9000);
 safe_define('CONFIG_vfs_default_disc_size',0x9000);
 
 safe_define('CONFIG_vfs_plugin_localdfsssd_root','/tmp/econetroot/');
+safe_define('CONFIG_vfs_plugin_localadfsadl_root','/tmp/econetroot/');
 
+safe_define('CONFIG_print_server_spool_dir','/tmp/econetprint');
 ?>

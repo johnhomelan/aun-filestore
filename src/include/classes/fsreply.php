@@ -11,7 +11,7 @@
  *
  * @package coreprotocol
 */
-class fsreply {
+class fsreply extends reply {
 
 	protected $sPkt = NULL;
 	
@@ -24,7 +24,7 @@ class fsreply {
 
 	public function __construct($oRequest)
 	{
-		if(is_object($oRequest) AND get_class($oRequest)=='fsrequest'){
+		if(is_object($oRequest) AND (get_class($oRequest)=='fsrequest' or get_class($oRequest)=='printserverenquiry' OR get_class($oRequest)=='printserverdata')){
 			$this->oRequest = $oRequest;
 			$this->iFlags = $oRequest->getFlags();
 		}else{
@@ -97,53 +97,4 @@ class fsreply {
 		$this->sPkt = pack('CC',$this->aTypeMap['INFO'],0);
 	}
 
-	public function appendByte($iByte)
-	{
-		$this->sPkt = $this->sPkt.pack('C',$iByte);
-	}
-
-	public function appendString($sString)
-	{
-		$aChars = str_split($sString);
-		foreach($aChars as $sChar)
-		{
-			$this->sPkt = $this->sPkt.pack('C',ord($sChar));
-		}
-	}
-
-	public function append16bitIntLittleEndian($iInt)
-	{
-		$this->sPkt = $this->sPkt.pack('v',$iInt);
-	}
-
-	public function append24bitIntLittleEndian($iInt)
-	{
-		$this->sPkt = $this->sPkt.pack('v',$iInt).pack('C',0);
-	}
-
-	public function append32bitIntLittleEndian($iInt)
-	{
-		$this->sPkt = $this->sPkt.pack('V',$iInt);
-	}
-
-	public function setFlags($iFlags)
-	{
-		$this->iFlags = $iFlags;
-	}
-
-	public function getFlags()
-	{
-		return $this->iFlags;
-	}
-
-	public function buildEconetpacket()
-	{
-		$oEconetPacket = new econetpacket();
-		$oEconetPacket->setPort($this->oRequest->getReplyPort());
-		$oEconetPacket->setFlags($this->iFlags);
-		$oEconetPacket->setDestinationStation($this->oRequest->getSourceStation());
-		$oEconetPacket->setDestinationNetwork($this->oRequest->getSourceNetwork());
-		$oEconetPacket->setData($this->sPkt);
-		return $oEconetPacket;
-	}
 }

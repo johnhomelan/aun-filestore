@@ -15,10 +15,9 @@ class filestored  {
 
 	function main()
 	{
-		$aOpts = getopt("dp:");
+		$aOpts = getopt("dp:c:h");
 		$bDaemonize = FALSE;
 		$sPidFile = "";
-
 		foreach($aOpts AS $sOpt => $sValue){
 			switch($sOpt){
 				case "d":
@@ -27,12 +26,21 @@ class filestored  {
 				case "p":
 					$sPidFile = $sValue;
 					break;
+				case "c":
+					safe_define('CONFIG_CONF_FILE_PATH',$sValue);
+					break;
+				case "h":
+					$this->usage();
+					break;
 			}
 		}
 
+		//Fork and background
 		if($bDaemonize){
 			$this->daemonize($sPidFile);
 		}
+
+
 		//Setup signle handler
 		pcntl_signal(SIGCHLD,array($this,'sigHandler'));
 		pcntl_signal(SIGALRM, array($this, 'sigHandler'));
@@ -57,6 +65,29 @@ class filestored  {
 		$this->loop();
 	}
 
+	/**
+	 * Displays how to use the command
+	 *
+	*/
+	public function usage()
+	{
+		echo "\n";
+		echo "filestored\n";
+		echo "----------\n";
+		echo "-h\tShows the help message\n";
+		echo "-d\tCauses the filestored to daemonize and drop into the background, otherwise the process contiunes to run in the forground\n";
+		echo "-p <file>\tCause filestored to write the PID of the deamonized process to a file\n";
+		echo "-c <config_dir>\tProvides the path to the config directory to be used (any files ending in .conf will be read from this directory)\n";
+		echo "\n";
+		exit();
+	}
+
+	/**
+	 * Handles any unix signals 
+	 *
+	 * The main signal this handles is SIGALARM, that is used to perform the house keeping tasks
+	 * @param int $iSigno
+	*/
 	public function sigHandler($iSigno)
 	{
 		switch($iSigno){
@@ -77,6 +108,10 @@ class filestored  {
 		}
 	}
 
+	/**
+	 * Sets up the next alarm to trigger the house keeping tasks
+	 *
+	*/
 	protected function registerNextAlarm()
 	{
 		pcntl_alarm(config::getValue('housekeeping_interval'));
@@ -154,7 +189,6 @@ class filestored  {
 
 	}
 	
-
 	/**
 	 * This method reads a aun packet sends any acks (if needed)
 	 * and passes the resulting econet packet to processEconetPacket
@@ -239,6 +273,11 @@ class filestored  {
 		}
 	}
 
+	/**
+	 * This handles print server enquires 
+	 *
+	 * @param object econetpacket $oEconetPacket The packet from the client to the print server enquiry port
+	*/
 	public function printServerEnquiry($oEconetPacket)
 	{
 		$oPrintServerEnquiry = new printserverenquiry($oEconetPacket);
@@ -247,6 +286,11 @@ class filestored  {
 		
 	}
 
+	/**
+	 * This handles print data from the client
+	 *
+	 * @param object econetpacket $oEconetPacket The print data from the client 
+	*/
 	public function printerServerData($oEconetPacket)
 	{
 		$oPrintServerData = new printserverdata($oEconetPacket);
@@ -254,6 +298,10 @@ class filestored  {
 		$this->sendPrinterReplies();
 	}
 
+	/**
+	 * Sends any print server packets to thier respective clients 
+	 *
+	*/
 	public function sendPrinterReplies()
 	{
 		$aReplies = $this->oPrintServer->getReplies();

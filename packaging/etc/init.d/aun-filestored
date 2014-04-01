@@ -1,0 +1,73 @@
+#!/bin/bash 
+#
+# aun-filestored      This shell script takes care of starting and stopping aun-filestored
+#
+# chkconfig: 2345 80 30
+# description: The aun-filestore is a NetFS and NetPrint server using econet encapsulated in AUN packets
+# processname: aun-filestored
+# pidfile: /var/run/aun-filestored.pid
+
+# Source function library.
+. /etc/rc.d/init.d/functions
+
+# Check that networking is up.
+[ "${NETWORKING}" = "no" ] && exit 0
+
+[ -f /usr/sbin/aun-filestored ] || exit 0
+
+PIDFILE=/var/run/aun-filestored.pid
+RETVAL=0
+prog="aun-filestored"
+
+start() {
+	# Start daemons.
+
+	echo -n $"Starting $prog: "
+	daemon --pidfile $PIDFILE /usr/sbin/aun-filestored -c /etc/aun-filestored -d -p $PIDFILE
+	RETVAL=$?
+	[ $RETVAL -eq 0 ] && touch /var/lock/subsys/aun-filestored
+	echo 
+	return $RETVAL
+}
+
+stop() {
+	# Stop daemons.
+	echo -n $"Shutting down $prog: "
+	killproc -p $PIDFILE $prog 
+	RETVAL=$?
+	[ $RETVAL -eq 0 ] && rm -f /var/lock/subsys/aun-filestored
+	echo
+	return $RETVAL
+}
+
+# See how we were called.
+case "$1" in
+  start)
+	start
+	;;
+  stop)
+	stop
+	;;
+  reload)
+	reload
+	;;
+  restart)
+	stop
+	sleep 1
+	start
+	;;
+  condrestart)
+	if [ -f /var/lock/subsys/aun-filestored ]; then
+	    stop
+	    start
+	fi
+	;;
+  status)
+	status aun-filestored
+	;;
+  *)
+	echo $"Usage: $0 {start|stop|restart|condrestart|status}"
+	exit 1
+esac
+
+exit $?

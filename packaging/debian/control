@@ -1,0 +1,19 @@
+Source: aun-filestored
+Maintainer: John Brown <john@home-lan.co.uk>
+Section: misc
+Priority: optional
+Standards-Version: 3.9.2
+Build-Depends: 
+
+Package: aun-filestored
+Architecture: any
+Depends: 
+Description: AUN file server
+aun-filestore is a Econet Fileserver implementation (using AUN) for Linux and other platforms. It's written in PHP, provides file and print services to Acorn Risc Machines, and Emulated BBCs.
+
+The project is now at the alpha stage, and works well for BBC clients. It handles all file operations however print operations are not implemented.
+
+A basic text file auth backend is done working, however all filestore users access the unix fs as the user the filestore runs as.
+
+The filestore provides access to file via a VFS layer with plugins have been created for local unix fs, and ssd disk image.
+ 

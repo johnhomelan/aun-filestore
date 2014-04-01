@@ -40,26 +40,33 @@ class filestored  {
 			$this->daemonize($sPidFile);
 		}
 
+		//Initialize the system
+		try {
+			//Setup signle handler
+			pcntl_signal(SIGCHLD,array($this,'sigHandler'));
+			pcntl_signal(SIGALRM, array($this, 'sigHandler'));
+			pcntl_signal(SIGTERM,array($this,'sigHandler'));
+			$this->registerNextAlarm();
 
-		//Setup signle handler
-		pcntl_signal(SIGCHLD,array($this,'sigHandler'));
-		pcntl_signal(SIGALRM, array($this, 'sigHandler'));
-		pcntl_signal(SIGTERM,array($this,'sigHandler'));
-		$this->registerNextAlarm();
+			//Create a file server instance and start it
+			$this->oFileserver = new fileserver($this);
+			$this->oFileserver->init();
 
-		//Create a file server instance and start it
-		$this->oFileserver = new fileserver($this);
-		$this->oFileserver->init();
+			//Create a print server instance and start it
+			$this->oPrintServer = new printserver($this);
+			$this->oPrintServer->init();
 
-		//Create a print server instance and start it
-		$this->oPrintServer = new printserver($this);
-		$this->oPrintServer->init();
-
-		//Load the aunmap that maps econet network/station numbers to ip addresses and ports
-		aunmap::loadMap();
-		
-		//Setup listening sockets
-		$this->bindSockets();
+			//Load the aunmap that maps econet network/station numbers to ip addresses and ports
+			aunmap::loadMap();
+			
+			//Setup listening sockets
+			$this->bindSockets();
+		}catch(Exception $oException){
+			//Failed to initialize log and exit none 0
+			logger::log($oException->getMessage(),LOG_INFO);
+			logger::log("Un-abale to initialize the server, shutting down.",LOG_INFO);
+			exit(1);
+		}
 
 		//Enter main loop
 		$this->loop();
@@ -149,7 +156,7 @@ class filestored  {
 	*/	
 	function bindSockets()
 	{
-		$this->oAunSocket = stream_socket_server('udp://'.config::getValue('aun_listen_address').':'.config::getValue('aun_listen_port'),$iErrno,$sErrstr,STREAM_SERVER_BIND);
+		$this->oAunSocket = @stream_socket_server('udp://'.config::getValue('aun_listen_address').':'.config::getValue('aun_listen_port'),$iErrno,$sErrstr,STREAM_SERVER_BIND);
 		if($this->oAunSocket===FALSE){
 			throw new Exception("Un-able to bind AUN socket (".$sErrstr.")",$iErrno);
 		}
@@ -172,17 +179,21 @@ class filestored  {
 
 		//Main Loop
 		while($bLoop){
-			$aReadSet=$this->aAllReadableSockets;
-			$aExpSet=$aAllExpSockets;
-			$iSockets = @stream_select($aReadSet,$aWriteSet,$aExpSet,NULL);
-			if($iSockets!==FALSE){
-				//Step through each socket we need to read from
-				foreach($aReadSet as  $iReadSocket){
-					if($iReadSocket == $this->oAunSocket){
-						//We've received an AUN packet process it 
-						$this->processAunPacket($this->oAunSocket);
+			try{
+				$aReadSet=$this->aAllReadableSockets;
+				$aExpSet=$aAllExpSockets;
+				$iSockets = @stream_select($aReadSet,$aWriteSet,$aExpSet,NULL);
+				if($iSockets!==FALSE){
+					//Step through each socket we need to read from
+					foreach($aReadSet as  $iReadSocket){
+						if($iReadSocket == $this->oAunSocket){
+							//We've received an AUN packet process it 
+							$this->processAunPacket($this->oAunSocket);
+						}
 					}
 				}
+			}catch(Exception $oException){
+				logger::log($oException->getMessage(),LOG_ERROR);
 			}
 		}
 

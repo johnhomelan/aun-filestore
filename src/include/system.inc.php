@@ -10,7 +10,7 @@ function safe_define($sName, $sDefine) {
 	}
 }
 
-require_once ("include/config.inc.php");
+require_once (__DIR__.DIRECTORY_SEPARATOR."config.inc.php");
 
 function __autoload($sClass)
 {
@@ -24,14 +24,23 @@ function __autoload($sClass)
 
 	//Try local dir
 	if (file_exists($sFilename)) {
-		include_once("./".$sFilename);
+		include_once($sFilename);
 		return;
-	}elseif(file_exists("include/classes/".$sFilename)) {
-		include_once ("include/classes/".$sFilename);
+	}elseif(file_exists("include".DIRECTORY_SEPARATOR."classes".DIRECTORY_SEPARATOR.$sFilename)) {
+		//Include relative to the currently working directory
+		include_once ("include".DIRECTORY_SEPARATOR."classes".DIRECTORY_SEPARATOR.$sFilename);
+		return;
+	}elseif(file_exists(__DIR__.DIRECTORY_SEPARATOR."classes".DIRECTORY_SEPARATOR.$sFilename)) {
+		//Include relative to the location of this file (where ever it is in the tree)
+		include_once (__DIR__.DIRECTORY_SEPARATOR."classes".DIRECTORY_SEPARATOR.$sFilename);
+		return;
+	}elseif(class_exists('Phar') AND strlen(Phar::running())>0 AND file_exists(Phar::running().DIRECTORY_SEPARATOR."classes".DIRECTORY_SEPARATOR.$sFilename)){
+		//Includes relative to this file if it this file is contained in a phar archive
+		include_once(Phar::running().DIRECTORY_SEPARATOR."classes".DIRECTORY_SEPARATOR.$sFilename);
 		return;
 	}
 
-	//Try include path
+	//Search the include path
 	$aPath = explode( PATH_SEPARATOR, get_include_path() );
 	foreach($aPath as $sPath){
 		if(file_exists($sPath."/include/classes/".$sFilename)) {
@@ -42,8 +51,8 @@ function __autoload($sClass)
 			return;
 		}
 	}
+
 	logger::log("Failed to load class ".$sClass,LOG_DEBUG);
-	throw new Exception("Failed to load class ".$sClass);
 }
 
 //Register autoload function using newer stack-based system that plays better with other modules with their own autoloaders

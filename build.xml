@@ -1,0 +1,141 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<project name="aun-fileserver" default="rpm">
+
+ <!-- Build Types -->
+	 <!-- Default rpm build job -->
+	 <target name="rpm" description="Builds an rpm" depends="loadrpmvars,tarbuild,rpmbuild,rpmsign,clean"/>
+	 <!-- Increments the release number and builds the rpm -->
+	 <target name="newrelease" description="Increments the release number and builds the rpm" depends="increment_rpm_release,loadrpmvars,tarbuild,rpmbuild,rpmsign,clean"/>
+	 <!-- Increments the minor version and builds the rpm -->
+	 <target name="newversion" description="Increments the minor version and builds the rpm" depends="increment_rpm_version_minor,loadrpmvars,tarbuild,rpmbuild,rpmsign,clean"/>
+	 <!-- Increments the major version and builds the rpm -->
+	 <target name="newmajorversion" description="Increments the major version and builds the rpm" depends="increment_rpm_version_major,loadrpmvars,tarbuild,rpmbuild,rpmsign,clean"/>
+	 <!-- Builds the debian package -->
+ 	 <target name="deb" description="Builds a debian packag" depends="loadrpmvars,debsourcetreebuild" />
+
+ <!-- RPM Operations -->
+	 <!-- Loads all the vars needed to build the rpm -->
+	 <target name="loadrpmvars">
+		<!-- Set default values -->
+		<property name="rpm_release" value="0"/>
+		<property name="rpm_version_major" value="0"/>
+		<property name="rpm_version_minor" value="1"/>
+		<property name="rpm_arch" value="noarch" />
+		<property name="output_dir" value="build" />
+		
+		<!-- Load values from file -->
+		<loadproperties srcFile="build.properties"/>
+		 <property name="rpm_version" value="${rpm_version_major}.${rpm_version_minor}"/>
+		 <property name="rpm_file_name" value="${rpm_name}-${rpm_version}-${rpm_release}.${rpm_arch}.rpm"/>
+		 <property name="rpm_full_path" value="${rpm_build_dir}/RPMS/${rpm_arch}/${rpm_file_name}" />
+	 </target>
+
+	 <!-- Increments the release number by 1 -->
+	 <target name="increment_rpm_release">
+		<propertyfile file="build.properties">
+			<entry type="int" key="rpm_release" default="0" operation="+" value="1"/>
+		</propertyfile>
+		<loadproperties srcFile="build.properties"/>
+		<echo message="Incrementing release number to ${rpm_release}" />
+	 </target>
+
+	<!-- Increments the minor version number by 1 -->
+	 <target name="increment_rpm_version_minor">
+		<propertyfile file="build.properties">
+			<entry type="int" key="rpm_version_minor" default="0" operation="+" value="1"/>
+			<entry type="int" key="rpm_release" value="1"/>
+		</propertyfile>
+		<loadproperties srcFile="build.properties"/>
+		<echo message="Incrementing minor version number to ${rpm_version_minor}" />
+	 </target>
+
+	<!-- Increments the major version number by 1 -->
+	 <target name="increment_rpm_version_major">
+		<propertyfile file="build.properties">
+			<entry type="int" key="rpm_version_major" default="0" operation="+" value="1"/>
+			<entry type="int" key="rpm_version_minor" value="0"/>
+			<entry type="int" key="rpm_release" value="1"/>
+		</propertyfile>
+		<loadproperties srcFile="build.properties"/>
+		<echo message="Incrementing minor version number to ${rpm_version_major}" />
+	 </target>
+
+	 <!-- Builds the tgz needed by the rpm package -->
+	 <target name="tarbuild">
+		<tar destfile="${output_dir}/${rpm_name}-${rpm_version}-${rpm_release}.tar.gz" compression="gzip">
+			<!-- Ant has a default file exclude for .svn files so we don't need to worry about them -->
+			<tarfileset dir="src" prefix="src">
+			</tarfileset>
+			<tarfileset dir="packaging">
+			</tarfileset>
+		</tar>
+	 </target>
+
+	 <!-- Builds the RPM and SRPM -->
+	 <target name="rpmbuild">
+		<exec executable="rpmbuild">
+			<arg line='--define="_version ${rpm_version}" --define="_name ${rpm_name}" --define="_release ${rpm_release}" --define="_arch ${rpm_arch}" --define="_topdir ${rpm_build_dir}" -ta "${output_dir}/${rpm_name}-${rpm_version}-${rpm_release}.tar.gz"'  />
+		</exec>
+		<copy file="${rpm_full_path}" todir="${output_dir}" />
+	 </target>
+
+	 <!-- Signs the RPM -->
+	 <target name="rpmsign" unless="no-sign">
+		<exec executable="rpmsign">
+			<arg line='--addsign ${output_dir}/${rpm_file_name}' />
+		</exec>
+	 </target>
+
+	 <!-- Clean the rpm build dir -->
+	 <target name="clean" unless="no-cleanup">
+		<delete file="${output_dir}/${rpm_name}-${rpm_version}-${rpm_release}.tar.gz"/>
+	 </target>
+
+ <!-- Deb targets -->
+
+	 <target name="debsourcetreebuild" depends="create_deb_dir">
+		<copy todir="${output_dir}/debian/${rpm_name}-${rpm_version}">
+			<fileset dir="src">
+			</fileset>
+			<fileset dir="packaging/debian">
+			</fileset>
+		</copy>
+			
+	 </target>
+	
+	 <target name="create_deb_dir" depends="check_deb_dir_exits" unless="dir.exits">
+		<exec executable="mkdir">
+			<arg line="-p ${output_dir}/debian/${rpm_name}-${rpm_version}" />
+		</exec>
+	 </target>
+
+	 <target name="check_deb_dir_exits" >
+		<condition property="dir.exists">
+			<available file="${output_dir}/debian/${rpm_name}-${rpm_version}" type="dir"/>	
+		</condition>
+	 </target>
+		
+
+ <!-- None rpm related targets -->
+
+	 <!-- Runs all the functional php-unit tests -->
+	 <target name="phpunit" description="Run unit tests with PHPUnit">
+	  <exec executable="phpunit">
+	  <arg line="--coverage-clover ${output_dir}/logs/clover.xml --coverage-html ${output_dir}/coverage/ --log-junit ${output_dir}/logs/junit.xml unit-tests/" />
+	  </exec>
+	 </target>
+
+	 <!-- Builds php-doc file from the code -->
+	 <target name="phpdoc" description="Generate API documentation using phpdoc">
+	  <exec executable="phpdoc">
+	  <arg line="-t ${output_dir}/php-doc/" />
+	  <arg line="-d src/" />
+	  <arg line=" --ignore src/include/external/*,include/external/*,include/smarty/*,include/classes/DIME.php" />
+	  <arg line="--template responsive" />
+	  <arg line='--title "Central UAC"' />
+	  <arg line="--sourcecode" />
+	 </exec>
+	 </target>
+
+</project>

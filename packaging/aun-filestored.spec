@@ -22,6 +22,19 @@ The filestore provides access to file via a VFS layer with plugins have been cre
 %prep
 %setup -c
 
+%post
+/sbin/chkconfig --add aun-filestored
+
+if [ $1 == 1 ]; then
+	mkdir /var/lib/aun-filestore-root/LIBRARY
+	mkdir /var/lib/aun-filestore-root/HOME
+fi
+
+%postun
+if [ $1 == 0 ]; then
+        /sbin/chkconfig --del aun-filestored
+fi
+
 
 %install
 install -d $RPM_BUILD_ROOT/var/lib/aun-filestore-root
@@ -37,9 +50,9 @@ install src/filestored $RPM_BUILD_ROOT/usr/sbin/
 
 %files
 %defattr(644,root,root)
-/usr/sbin/filestored
+%attr(755,root,root)/usr/sbin/filestored
 /usr/share/aun-filestored
-/etc/rc.d/init.d/aun-filestored
+%attr(755,root,root)/etc/rc.d/init.d/aun-filestored
 %attr(755,root,root)/var/lib/aun-filestore-root
 %attr(755,root,root)/var/spool/aun-filestore-print
 %config(noreplace) /etc/aun-filestored

@@ -13,7 +13,7 @@
 # Check that networking is up.
 [ "${NETWORKING}" = "no" ] && exit 0
 
-[ -f /usr/sbin/aun-filestored ] || exit 0
+[ -f /usr/sbin/filestored ] || exit 0
 
 PIDFILE=/var/run/aun-filestored.pid
 RETVAL=0
@@ -23,7 +23,7 @@ start() {
 	# Start daemons.
 
 	echo -n $"Starting $prog: "
-	daemon --pidfile $PIDFILE /usr/sbin/aun-filestored -c /etc/aun-filestored -d -p $PIDFILE
+	daemon --pidfile $PIDFILE /usr/sbin/filestored -c /etc/aun-filestored -d -p $PIDFILE
 	RETVAL=$?
 	[ $RETVAL -eq 0 ] && touch /var/lock/subsys/aun-filestored
 	echo 

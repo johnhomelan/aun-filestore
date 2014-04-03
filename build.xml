@@ -11,21 +11,24 @@
 	 <target name="newversion" description="Increments the minor version and builds the rpm" depends="increment_rpm_version_minor,loadrpmvars,tarbuild,rpmbuild,rpmsign,clean"/>
 	 <!-- Increments the major version and builds the rpm -->
 	 <target name="newmajorversion" description="Increments the major version and builds the rpm" depends="increment_rpm_version_major,loadrpmvars,tarbuild,rpmbuild,rpmsign,clean"/>
+	 <!-- Installs the RPM on the system defined in the the variable TESTHOST -->
+	 <target name="testhost" description="Installs the last RPM on a remote system" depends="loadrpmvars,rpm_remote_install" />
 	 <!-- Builds the debian package -->
  	 <target name="deb" description="Builds a debian packag" depends="loadrpmvars,debsourcetreebuild" />
 
  <!-- RPM Operations -->
 	 <!-- Loads all the vars needed to build the rpm -->
 	 <target name="loadrpmvars">
-		<!-- Set default values -->
+		<!-- Load values from file -->
+		<loadproperties srcFile="build.properties"/>
+
+		<!-- Set default values (ant will never overwite a variable once set -->
 		<property name="rpm_release" value="0"/>
 		<property name="rpm_version_major" value="0"/>
 		<property name="rpm_version_minor" value="1"/>
 		<property name="rpm_arch" value="noarch" />
 		<property name="output_dir" value="build" />
 		
-		<!-- Load values from file -->
-		<loadproperties srcFile="build.properties"/>
 		 <property name="rpm_version" value="${rpm_version_major}.${rpm_version_minor}"/>
 		 <property name="rpm_file_name" value="${rpm_name}-${rpm_version}-${rpm_release}.${rpm_arch}.rpm"/>
 		 <property name="rpm_full_path" value="${rpm_build_dir}/RPMS/${rpm_arch}/${rpm_file_name}" />
@@ -91,7 +94,14 @@
 	 <target name="clean" unless="no-cleanup">
 		<delete file="${output_dir}/${rpm_name}-${rpm_version}-${rpm_release}.tar.gz"/>
 	 </target>
-
+	 
+	 <target name="rpm_remote_install">
+		<property environment="env"/>
+		<property name="remote_host" value="${REMOTEHOST}" />
+		<echo message="Installing RPM on ${remote_host}" />
+		<scp file="${output_dir}/${rpm_full_path}" todir="root@${remote_host}:/tmp/" />
+		<sshexec host="${remote_host}" username="root" command="rpm -Uvh /tmp/${rpm_full_path}"/> 
+	 </target>
  <!-- Deb targets -->
 
 	 <target name="debsourcetreebuild" depends="create_deb_dir">

@@ -1,6 +1,12 @@
 #!/usr/bin/php
 <?
 declare(ticks = 1);
+
+define("AUNFILESTORED_LIB","/usr/share/aun-filestored");
+if(is_dir(AUNFILESTORED_LIB)){
+	ini_set("include_path", AUNFILESTORED_LIB .PATH_SEPARATOR . get_include_path());
+}
+
 include_once('include/system.inc.php');
 
 class filestored  {

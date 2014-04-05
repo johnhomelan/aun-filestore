@@ -28,6 +28,7 @@ The filestore provides access to file via a VFS layer with plugins have been cre
 if [ $1 == 1 ]; then
 	mkdir /var/lib/aun-filestore-root/LIBRARY
 	mkdir /var/lib/aun-filestore-root/HOME
+	mkdir /var/lib/aun-filestore-root/HOME/SYST
 fi
 
 %postun

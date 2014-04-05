@@ -53,6 +53,10 @@ class aunmap {
 				return aunmap::$aIPLookupCache[$sIP];
 			}
 		}
+
+		//No matches at all create a dynamic entry
+		aunmap::$aIPLookupCache[$sIP]=config::getValue('aunmap_autonet').'.'.$aIPParts[3];
+		return aunmap::$aIPLookupCache[$sIP];
 	}
 
 	public static function ecoAddrToIpAddr($iNetworkNumber,$iStationNumber)

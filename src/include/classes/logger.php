@@ -59,7 +59,7 @@ class logger
 	{
 		$sLogFile = config::getValue("logfile");	
 		if(strlen($sLogFile)>0){
-			error_log($sLogMsg, 3, $sLogFile);
+			error_log($sLogMsg."\n", 3, $sLogFile);
 		}else{
 			error_log($sLogMsg);
 		}

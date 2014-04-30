@@ -80,7 +80,7 @@
 	 <!-- Builds the RPM and SRPM -->
 	 <target name="rpmbuild">
 		<exec executable="rpmbuild">
-			<arg line='--define="_version ${rpm_version}" --define="_name ${rpm_name}" --define="_release ${rpm_release}" --define="_arch ${rpm_arch}" --define="_topdir ${rpm_build_dir}" -ta "${output_dir}/${rpm_name}-${rpm_version}-${rpm_release}.tar.gz"'  />
+			<arg line='--define="_version ${rpm_version}" --define="_name ${rpm_name}" --define="_release ${rpm_release}" --define="_arch ${rpm_arch}" --define="_dist ${rpm_dist}" --define="_topdir ${rpm_build_dir}" -ta "${output_dir}/${rpm_name}-${rpm_version}-${rpm_release}.tar.gz"'  />
 		</exec>
 		<copy file="${rpm_full_path}" todir="${output_dir}" />
 	 </target>

@@ -1,0 +1,166 @@
+#!/bin/sh
+
+LogFile=/var/log/${SYNOPKG_PKGNAME}.log
+PIDFILE=/var/run/aun-filestored.pid
+
+
+#-------------------------------------------------------------------------
+#   Log to permanent file, accessible via Package Center "Log" link
+#
+#   Code can be simply adjusted to filter certain types.
+#-------------------------------------------------------------------------
+log()   # argument $1=text to log
+{
+    local prefix=`echo $1|sed "s/:.*$//g"`
+    if [ "${prefix}" != "DEBUG" ]; then
+        echo -n "$(date "+%d-%b-%y %H:%M:%S") " >> ${LogFile}
+        if [ -n "${SYNOPKG_PKG_STATUS}" ]; then
+            echo -n "${SYNOPKG_PKG_STATUS}," >> ${LogFile}
+        fi
+        echo "$1" >> ${LogFile}
+    fi
+}
+
+#-------------------------------------------------------------------------
+#   Remove old log file (mtime is in days)
+#-------------------------------------------------------------------------
+cleanlog()
+{
+    if [ "${SYNOPKG_PKG_STATUS}" != "UPGRADE" ]; then
+        # Be sure LogFile is correct
+        if  [ -n ${SYNOPKG_PKGDEST} ] &&
+            [ -n ${SYNOPKG_PKGNAME} ] &&
+            [ -f ${LogFile} ]; then
+            find ${LogFile} -type f -maxdepth 1 -mtime +31 -delete
+            if [ ! -f ${LogFile} ]; then
+                # Re-create the log file
+                log "INFO: (removed old logging)"
+            fi
+        #else: while upgrading, info about old version is always interesting
+        fi
+    fi
+}
+
+#*************************************************************************
+#    Main
+#*************************************************************************
+case "$1" in
+    start)
+        cleanlog
+        #============================================================
+        # Start the package
+        # -n = test if non-zero string
+        #============================================================
+        if [ -n "${SYNOPKG_PKG_STATUS}" ]; then
+            log "INFO: Package Center requested to start \"${SYNOPKG_PKGNAME}\", version=\"${SYNOPKG_PKGVER}\""
+        else
+            log "INFO: system is booting, start \"${SYNOPKG_PKGNAME}\", version=\"${SYNOPKG_PKGVER}\""
+        fi
+
+        #--------------------------------------------------
+        # Make CardDAV, CalDAV and Web Admin available
+        #--------------------------------------------------
+        if [ ! -d ${PackageAppDir} ]; then
+            log "ERROR: sorry, package=\"${SYNOPKG_PKGNAME}\" has no valid app dir=\"${PackageAppDir}\""
+            exit 7    # LSB init error:  Not running
+        fi
+        
+        ln -s ${PackageAppDir} ${PackageWebLink}
+        if [ $? -ne 0 ]; then
+            log "ERROR: cannot enable web files for package=\"${SYNOPKG_PKGNAME}\""
+            exit 7    # LSB init error:  Not running
+        fi
+
+        #--------------------------------------------------
+        # Enable the Web Admin interface for 1 hour
+        # (or permanently, depending on your settings)
+        #--------------------------------------------------
+        touch ${PackageAppDir}/Specific/ENABLE_ADMIN
+        if [ $? -ne 0 ]; then
+            log "INFO: cannot enable the Web Admin interface (touch failed)"
+        else
+            # Change ownership, so Baikal can touch it again to extend grace time
+            chown ${WebOwnerGroup} ${PackageAppDir}/Specific/ENABLE_ADMIN
+            if [ $? -ne 0 ]; then
+                log "INFO: cannot enable the Web Admin interface (chown to \"${WebOwnerGroup}\" failed)"
+            fi
+        fi
+
+        exit 0    # LSB init okay
+        ;;
+        
+    stop)
+        cleanlog
+        #============================================================
+        # Stop the package
+        # -n = test if non-zero string
+        #============================================================
+        if [ -n "${SYNOPKG_PKG_STATUS}" ]; then
+            log "INFO: Package Center requested to stop \"${SYNOPKG_PKGNAME}\", version=\"${SYNOPKG_PKGVER}\""
+        else
+            log "INFO: system is shutting down, stop \"${SYNOPKG_PKGNAME}\", version=\"${SYNOPKG_PKGVER}\""
+        fi
+
+        #--------------------------------------------------
+        # Disable CardDAV, CalDAV and Web Admin
+        # -h = test for symbolic link
+        #--------------------------------------------------
+        if [ -L ${PackageWebLink} ]; then
+            rm ${PackageWebLink} 
+            if [ $? -ne 0 ]; then
+                log "ERROR: cannot disable web files for package=\"${SYNOPKG_PKGNAME}\""
+                exit 7    # LSB init error:  Not running
+            fi
+        fi
+        exit 0    # LSB init okay
+        ;;
+        
+    restart|force-reload)
+        #============================================================
+        # (Re)Start the daemon
+        #============================================================
+        $0 stop
+        sleep 1
+        $0 start
+        exit $?
+        ;;
+        
+    reload)
+        #============================================================
+        # Reload config
+        #============================================================
+        # Required for LSB compatibility, but nothing to be done
+        exit 0    # LSB init okay
+        ;;
+        
+    status)
+        #============================================================
+        # Get package run status
+        #============================================================
+        if [ -L "${PackageWebLink}" ]; then
+            echo $SYNOPKG_PKGNAME is Running
+            exit 0    # LSB status: Running
+        else
+            echo $SYNOPKG_PKGNAME is Not running
+            exit 3    # LSB status: Not running
+        fi
+        ;;
+        
+    log)
+        #============================================================
+        # Show the log file
+        #============================================================
+        echo ${LogFile}        # Package Center will open this file
+        exit 0
+        ;;
+
+    *)
+        #============================================================
+        # Invalid argument
+        #============================================================
+        echo "Usage: $0 {start|stop|restart|status|log}" >&2
+        exit 3    # LSB init error: Unimplemented feature
+        ;;
+esac
+
+exit 1    # LSB init error: Unspecified

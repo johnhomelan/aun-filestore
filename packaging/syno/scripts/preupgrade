@@ -1,0 +1,5 @@
+#!/bin/sh
+# load all functions
+. `dirname $0`/functions.sh
+# call function with same name as this script
+`basename $0`

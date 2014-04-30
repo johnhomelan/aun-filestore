@@ -14,7 +14,9 @@
 	 <!-- Installs the RPM on the system defined in the the variable TESTHOST -->
 	 <target name="testhost" description="Installs the last RPM on a remote system" depends="loadrpmvars,rpm_remote_install" />
 	 <!-- Builds the debian package -->
- 	 <target name="deb" description="Builds a debian packag" depends="loadrpmvars,debsourcetreebuild" />
+ 	 <target name="deb" description="Builds a debian package" depends="loadrpmvars,debsourcetreebuild" />
+	 <!-- Builds the Synology package -->
+ 	 <target name="syno" description="Builds a package for Synology NAS boxes" depends="loadrpmvars,synosourcetreebuild,syno_build_pkg_tar,syno_replace_vars" />
 
  <!-- RPM Operations -->
 	 <!-- Loads all the vars needed to build the rpm -->
@@ -125,6 +127,42 @@
 			<available file="${output_dir}/debian/${rpm_name}-${rpm_version}" type="dir"/>	
 		</condition>
 	 </target>
+
+ <!-- Syno targets -->
+
+	 <target name="synosourcetreebuild" depends="create_syno_dir">
+		<copy todir="${output_dir}/syno/${rpm_name}-${rpm_version}">
+			<fileset dir="packaging/syno">
+			</fileset>
+		</copy>
+			
+	 </target>
+	
+	 <target name="create_syno_dir" depends="check_syno_dir_exits" unless="dir.exits">
+		<exec executable="mkdir">
+			<arg line="-p ${output_dir}/syno/${rpm_name}-${rpm_version}" />
+		</exec>
+	 </target>
+
+	 <target name="check_syno_dir_exits" >
+		<condition property="dir.exists">
+			<available file="${output_dir}/syno/${rpm_name}-${rpm_version}" type="dir"/>	
+		</condition>
+	 </target>
+
+	 <target name="syno_build_pkg_tar">
+		<tar destfile="${output_dir}/syno/${rpm_name}-${rpm_version}/package.tgz" compression="gzip">
+			<!-- Ant has a default file exclude for .svn files so we don't need to worry about them -->
+			<tarfileset dir="src" prefix="">
+			</tarfileset>
+		</tar>
+	 </target>
+
+	<target name="syno_replace_vars">
+		<checksum file="${output_dir}/syno/${rpm_name}-${rpm_version}/package.tgz" property="syno_pkg_checksum"/>
+		<replace file="${output_dir}/syno/${rpm_name}-${rpm_version}/INFO" token="@version@" value="${rpm_version}"/>
+		<replace file="${output_dir}/syno/${rpm_name}-${rpm_version}/INFO" token="@checksum@" value="${syno_pkg_checksum}"/>
+	</target>
 		
 
  <!-- None rpm related targets -->

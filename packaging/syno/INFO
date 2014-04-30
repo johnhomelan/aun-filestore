@@ -1,0 +1,17 @@
+package="aun-filestored"
+displayname="AUN Filestored"
+version=@version@
+arch="noarch"
+firmware="4.2-3160"
+startable="yes"
+maintainer="John Brown"
+maintainer_url="https://sourceforge.net/projects/aunfilestore/?source=directory"
+distributor="John Brown"
+description="A file server that implelements the NetFS and NetPrint protocols for BBC's and RiscOS, ontop of a Layer 2 emulation for Econet known as AUN."
+install_dep_services="apache-web"
+start_dep_services="apache-web"
+#instuninst_restart_services="apache-web"
+dsmappname="SYNO.SDS._ThirdParty.App.AUN-FILESTORED"
+dsmuidir=ui
+reloadui="yes"
+checksum=@checksum@

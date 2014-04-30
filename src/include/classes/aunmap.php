@@ -30,7 +30,7 @@ class aunmap {
 
 	static $aIpCounter = array();
 
-	public static function ipAddrToEcoAddr($sIP)
+	public static function ipAddrToEcoAddr($sIP,$sPort=NULL)
 	{
 		if(array_key_exists($sIP,aunmap::$aIPLookupCache)){
 			return aunmap::$aIPLookupCache[$sIP];
@@ -55,6 +55,9 @@ class aunmap {
 		}
 
 		//No matches at all create a dynamic entry
+		if(!is_null($sPort)){
+			$sIP=$sIP.':'.$sPort;
+		}
 		aunmap::$aIPLookupCache[$sIP]=config::getValue('aunmap_autonet').'.'.$aIPParts[3];
 		return aunmap::$aIPLookupCache[$sIP];
 	}

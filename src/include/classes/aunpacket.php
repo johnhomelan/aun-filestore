@@ -34,6 +34,8 @@ class aunpacket {
 
 	protected $sSoruceIP = NULL;
 
+	protected $sSourceUdpPort = NULL;
+
 	protected $sDestinationIP = NULL;
 
 
@@ -173,6 +175,7 @@ class aunpacket {
 		if(strpos($sHost,':')!==FALSE){
 			$aIPParts = explode(':',$sHost);
 			$this->sSoruceIP=$aIPParts[0];
+			$this->sSourceUdpPort=$aIPParts[1];
 		}else{
 			$this->sSoruceIP=$sHost;
 		}
@@ -181,6 +184,16 @@ class aunpacket {
 	public function getSourceIP()
 	{
 		return $this->sSoruceIP;
+	}
+
+	public function setSourceUdpPort($iPort)
+	{
+		$this->sSourceUdpPort = $iPort;
+	}
+
+	public function getSourceUdpPort()
+	{
+		return $this->sSourceUdpPort;
 	}
 
 	public function setDestinationIP($sHost)
@@ -210,7 +223,7 @@ class aunpacket {
 		$oEconetPacket = new EconetPacket();
 		$oEconetPacket->setPort($this->iPort);
 		$oEconetPacket->setFlags($this->iCb);
-		$sNetworkStation = aunmap::ipAddrToEcoAddr($this->sSoruceIP);
+		$sNetworkStation = aunmap::ipAddrToEcoAddr($this->sSoruceIP,$this->sSourceUdpPort);
 		$aEcoAddr = explode('.',$sNetworkStation);
 		if(array_key_exists(0,$aEcoAddr) AND array_key_exists(1,$aEcoAddr)){
 			$oEconetPacket->setSourceNetwork($aEcoAddr[0]);

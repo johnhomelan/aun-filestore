@@ -19,6 +19,12 @@ class filestored  {
 	
 	protected $aAllReadableSockets = array();
 
+	/**
+	 * The starting method for the application
+	 *
+	 * This does not contain the main loop, it just initializes the system
+	 * then jumps to the main loop.
+	*/
 	function main()
 	{
 		$aOpts = getopt("dp:c:h");
@@ -176,7 +182,6 @@ class filestored  {
 	*/
 	function loop()
 	{
-
 		$sErrstr=NULL;
 		$iErrno=NULL;
 		$bLoop=TRUE;
@@ -202,8 +207,6 @@ class filestored  {
 				logger::log($oException->getMessage(),LOG_ERROR);
 			}
 		}
-
-
 	}
 	
 	/**
@@ -238,8 +241,8 @@ class filestored  {
 		}elseif($oAunPacket->getPacketType()=='Broadcast'){
 			logger::log("filestore: Received broadcast packet ",LOG_DEBUG);
 			if($oAunPacket->getPortName()=='Bridge'){
-				$aPkt = unpack('C*',$oAunPacket->getData());
-				logger::log("filestore: Bridge packet received (".implode(":",$aPkt).")",LOG_DEBUG);
+				logger::log("filestore: Bridge packet received",LOG_DEBUG);
+				logger::log("filestore: ".$oAunPacket->toString(),LOG_DEBUG);
 			}
 		}
 
@@ -266,6 +269,7 @@ class filestored  {
 				break;
 			default:
 				logger::log("filestore: Recived packet on un-handle port (".$sPort.")",LOG_DEBUG);
+				logger::log("filestore: ".$oEconetPacket->toString(),LOG_DEBUG);
 				break;
 		}
 

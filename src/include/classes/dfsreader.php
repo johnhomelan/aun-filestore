@@ -1,5 +1,8 @@
 <?
-
+/**
+ * Read a dfs disk image
+ *
+*/
 class dfsreader {
 
 	const SECTOR_SIZE = 256;
@@ -14,6 +17,12 @@ class dfsreader {
 
 	protected $aCatalogue = NULL;
 
+	/**
+	 * Creates a new instance of the reader
+	 *
+	 * @param string $sPath The path to the disk image to read
+	 * @param string $sDiskImage A binary string of the disk image (don't supplied this and the path a the same time)
+	*/
 	public function __construct($sPath,$sDiskImage=NULL)
 	{
 		if(!is_null($sDiskImage)){
@@ -22,6 +31,12 @@ class dfsreader {
 		$this->sImagePath = $sPath;
 	}
 
+	/**
+	 * Read abitary byte from the disk image
+	 *
+	 * @param int $iStart The offset to start reading from
+	 * @param it $iLen The number of bytes to read
+	*/
 	protected function _getBytesFromImage($iStart,$iLen)
 	{
 		if(!is_null($this->sDiskImageRaw)){
@@ -35,19 +50,41 @@ class dfsreader {
 		}
 	}
 
+	/**
+	 * Gets a given sector from the image
+	 *
+	 * @parma int $iSector
+	 * @return string
+	*/
 	protected function _getSectorRaw($iSector)
 	{
 		$iStart = ($iSector*self::SECTOR_SIZE);
 		return $this->_getBytesFromImage($iStart,self::SECTOR_SIZE);
 	}
 
+	/**
+	 * Gets a given sector from the image as a byte array
+	 *
+	 * @parma int $iSector
+	 * @return array
+	*/
 	protected function _getSectorAsByteArray($iSector)
 	{
 		$iStart = $iSector*self::SECTOR_SIZE;
 		return unpack('C*',$this->_getBytesFromImage($iStart,self::SECTOR_SIZE));
 	}
 
-
+	/**
+	 * Decodes 18bit Address format used by dfs
+	 *
+	 * DFS stores 3 18bit addrs, and 1 10bit addr, in 7bytes this method helps to decode that data
+	 * @param int $iLowByte
+	 * @param int $iMidByte
+	 * @param int $iHighByte
+	 * @param int $iFirstBit
+	 * @param int $iSecondBit
+	 * @return int
+	*/
 	protected function _decode18bitAddr($iLowByte,$iMidByte,$iHighByte,$iFirstBit,$iSecondBit)
 	{
 		switch($iFirstBit){
@@ -71,6 +108,16 @@ class dfsreader {
 		return ($iHighByte << 16) + ($iMidByte << 8) + $iLowByte;
 	}
 
+	/**
+	 * Decodes 10bit format used by dfs
+	 *
+	 * DFS stores 3 18bit addrs, and 1 10bit addr, in 7bytes this method helps to decode that data
+	 * @param int $iLowByte
+	 * @param int $iHighByte
+	 * @param int $iFirstBit
+	 * @param int $iSecondBit
+	 * @return int
+	*/
 	protected function _decode10bitAddr($iLowByte,$iHighByte,$iFirstBit,$iSecondBit)
 	{
 		switch($iFirstBit){
@@ -94,6 +141,12 @@ class dfsreader {
 		return ($iHighByte << 8) + $iLowByte;
 	}
 
+	/**
+	 * Gets the raw data from a number of sectors 
+	 *
+	 * @param int $iStartSector
+	 * @param int $iLength
+	*/
 	protected function _getRawData($iStartSector,$iLength)
 	{
 		return $this->_getBytesFromImage(($iStartSector*self::SECTOR_SIZE),$iLength);
@@ -196,6 +249,12 @@ class dfsreader {
 		return $this->aCatalogue;
 	}
 
+	/**
+	 * Gets the raw data from a file
+	 *
+	 * @param string $sFilePath
+	 * @return string
+	*/
 	public function getFile($sFilePath){
 		$aCat = $this->getCatalogue();
 		$aParts = explode('.',$sFilePath);

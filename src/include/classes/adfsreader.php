@@ -1,5 +1,8 @@
 <?
-
+/**
+ * Reads adfs disk images 
+ *
+*/
 class adfsreader {
 
 	const TRACKS_PER_SIDE = 80;
@@ -18,6 +21,12 @@ class adfsreader {
 
 	protected $bInterleaved = TRUE;
 
+	/**
+	 * Creates a new instance of the reader
+	 *
+	 * @param string $sPath The path to the disk image to read
+	 * @param string $sDiskImage A binary string of the disk image (don't supplied this and the path a the same time)
+	*/
 	public function __construct($sPath,$sDiskImage=NULL)
 	{
 		if(!is_null($sDiskImage)){
@@ -26,6 +35,13 @@ class adfsreader {
 		$this->sImagePath = $sPath;
 	}
 
+	/**
+	 * Gets a raw sector from the disk image
+	 *
+	 * This method calculates the location in the disk image of the sector and returns the bytes contained in that sector
+	 * @param int $iSector The sector number 
+	 * @return string Binary String 
+	*/
 	protected function _getSectorRaw($iSector)
 	{
 		if($this->bInterleaved){
@@ -51,12 +67,26 @@ class adfsreader {
 		
 	}
 
+	/**
+	 * Gets a sector from the disk as an array of bytes
+	 *
+	 * @param int $iSector The sector number
+	 * @return array
+	*/
 	protected function _getSectorAsByteArray($iSector)
 	{
 		$iStart = ($iSector*self::SECTOR_SIZE);
 		return unpack('C*',$this->_getSectorRaw($iSector));
 	}
 
+	/**
+	 * Gets a number of sectors as a byte array
+	 * 
+	 * Returns a number of sectors inclusive of the start sector
+	 * @param int $iStartSector
+	 * @param int $iCount
+	 * @return array
+	*/
 	protected function _getSectorsAsByteArray($iStartSector,$iCount)
 	{
 		$iStart = ($iStartSector*self::SECTOR_SIZE);
@@ -67,6 +97,13 @@ class adfsreader {
 		return unpack('C*',$sBlock);
 	}
 
+	/**
+	 * Gets a number of sectors as the raw binary 
+	 *
+	 * Returns a number of sectors inclusive of the start sector
+	 * @param int $iStartSector
+	 * @param int $iCount
+	*/
 	protected function _getSectorsRaw($iStartSector,$iCount)
 	{
 		$iStart = ($iStartSector*self::SECTOR_SIZE);
@@ -77,16 +114,39 @@ class adfsreader {
 		return $sBlock;
 	}
 
+	/**
+	 * Decodes the 7bit format used by adfs
+	 *
+	 * @param int $iByte (0-255)
+	 * @return int 
+	*/
 	protected function _decode7bit($iByte)
 	{
 		return $iByte & 127;
 	}
 
+	/**
+	 * Decodes the 32bit int address form used by adfs
+	 *
+	 * @param int $iByte1
+	 * @param int $iByte2
+	 * @param int $iByte3
+	 * @param int $iByte4
+	 * @return int
+	*/
 	protected function _decode32bitAddr($iByte1,$iByte2,$iByte3,$iByte4)
 	{
 		return ($iByte4 << 24) + ($iByte3 << 16) + ($iByte2 << 8) + $iByte1;
 	}
 
+	/**
+	 * Decodes the 24bit int form used by adfs
+	 *
+	 * @param int $iByte1
+	 * @param int $iByte2
+	 * @param int $iByte3
+	 * @return int
+	*/
 	protected function _decode24bitAddr($iByte1,$iByte2,$iByte3)
 	{
 		return ($iByte3 << 16) + ($iByte2 << 8) + $iByte1;
@@ -113,8 +173,7 @@ class adfsreader {
 	/**
 	 * Extracts the disc catalogue 
 	 *
-	 * A dfs image is diveded up into sectors the disk catalogue is stored in the first 2 sectors (00,01), the file names and directory names are all stored
-	 * in sector 00, while the metadata for the file is stored in sector 01.
+	 * An adfs image is diveded up into sectors the root directory ($) is stored in 5 secotors starting on sector 2
 	 *
 	 * @return array The array is in the format array('dir'=>array('filename'=>array('loadaddr'=>,'execaddr'=>,'size'=>,'startsector'=>)));
 	*/
@@ -124,6 +183,9 @@ class adfsreader {
 			$aCat = array();
 			
 			$aSectors = $this->_getSectorsAsByteArray($iStartSector,5);
+
+			//ADFS has a fixed number of table entries per dir (47), so read them all
+			//If not all 47 entries are used the table is 0 padded
 			for($i=0;$i<47;$i++){
 				//The filemeta data start 5 bytes in
 				$iStart = 5+($i*self::METADATA_SIZE);
@@ -137,6 +199,7 @@ class adfsreader {
 					//We hit the last entry 
 					break;
 				}
+
 				for($x=0;$x<self::FILE_NAME_LEN;$x++){
 					if($this->_decode7bit($aMeta[$x])!==13 ){
 						$sFileName .=chr($this->_decode7bit($aMeta[$x]));
@@ -211,6 +274,12 @@ class adfsreader {
 		}
 	}
 
+	/**
+	 * Gets the file stats for a given file 
+	 *
+	 * @param string $sFileName
+	 * @return array
+	*/
 	public function getStat($sFileName)
 	{
 		$aCat = $this->getCatalogue();

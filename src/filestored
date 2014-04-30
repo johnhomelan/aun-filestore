@@ -235,15 +235,18 @@ class filestored  {
 		}
 	
 		//Build an econet packet from the AUN packet an pass it to be processed
-		if($oAunPacket->getPacketType()=='Unicast'){
-			$oEconetPacket = $oAunPacket->buildEconetPacket();
-			$this->processEconetPacket($oEconetPacket);
-		}elseif($oAunPacket->getPacketType()=='Broadcast'){
-			logger::log("filestore: Received broadcast packet ",LOG_DEBUG);
-			if($oAunPacket->getPortName()=='Bridge'){
-				logger::log("filestore: Bridge packet received",LOG_DEBUG);
-				logger::log("filestore: ".$oAunPacket->toString(),LOG_DEBUG);
-			}
+		switch($oAunPacket->getPacketType()){
+			case 'Unicast':
+			case 'Immediate':
+				$oEconetPacket = $oAunPacket->buildEconetPacket();
+				$this->processEconetPacket($oEconetPacket);
+				break;
+			case 'Broadcast':
+				logger::log("filestore: Received broadcast packet ",LOG_DEBUG);
+				if($oAunPacket->getPortName()=='Bridge'){
+					logger::log("filestore: Bridge packet received",LOG_DEBUG);
+					logger::log("filestore: ".$oAunPacket->toString(),LOG_DEBUG);
+				}
 		}
 
 	}

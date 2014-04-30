@@ -20,6 +20,9 @@ class aunpacket {
 	//Single byte (unsigned int) Control/flag 
 	protected $iCb = NULL;
 
+	//Single byte (unsigned int) Padding
+	protected $iPadding = NULL;
+
 	//Single byte (unsigned int) Port number
 	protected $iPort = NULL;
 
@@ -38,11 +41,21 @@ class aunpacket {
 
 	protected $aTypeMap = array(1=>'Broadcast',2=>'Unicast',3=>'Ack',4=>'Reject',5=>'Immediate',6=>'ImmediateReply');
 
+	/**
+	 * Get the econet port number the aun packet is for
+	 *
+	 * @return int
+	*/
 	public function getPort()
 	{
 		return $this->iPort;
 	}
 
+	/**
+	 * Gets the name of the econet port the aun packet is for
+	 *
+	 * @return string
+	*/
 	public function getPortName()
 	{
 		if(array_key_exists($this->iPort,$this->aPortMap)){
@@ -50,6 +63,12 @@ class aunpacket {
 		}
 	}
 
+	/**
+	 * Get the type of aun packet
+	 *
+	 * e.g. Broadcast,Unicast,Ack etc
+	 * @return string
+	*/ 
 	public function getPacketType()
 	{
 		return $this->aTypeMap[$this->iPktType];
@@ -91,6 +110,7 @@ class aunpacket {
 		
 		//Retrans 1 byte unsigned int
 		$aHeader=unpack('C',$sBinaryString);
+		$this->iPadding = $aHeader[1];
 		$sBinaryString = substr($sBinaryString,1);
 		
 		//Sequence 4 bytes little-endian
@@ -178,6 +198,13 @@ class aunpacket {
 		return $this->sDestinationIP;
 	}
 
+	/**
+	 * Builds an econet packet object from this aun packet
+	 *
+	 * All the sub applications FileServer, PrintServer uses the econetpacket object so
+	 * that we can support more than 1 type of econet emulation/encapsulation
+	 * @return object econetpacket
+	*/
 	public function buildEconetPacket()
 	{
 		$oEconetPacket = new EconetPacket();
@@ -193,4 +220,15 @@ class aunpacket {
 		return $oEconetPacket;
 	}
 
+	/**
+	 * Produces a nice string representation of the packet for debugging
+	 *
+	 * @return string
+	*/
+	public function toString()
+	{
+		$aPkt = unpack('C*',$this->getData());
+		$sReturn = "Header | Type : ".$this->getPacketType()." Port : ".$this->getPort()." Control : ".$this->iCb." Pad : ".$this->iPadding." Seq : ".$this->iSeq." | Body |".implode(":",$aPkt)." |";
+		return $sReturn;	
+	}
 }

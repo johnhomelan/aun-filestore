@@ -159,4 +159,17 @@ class econetpacket {
 		}
 
 	}
+
+	/**
+	 * Produces a nice string representation of the packet for debugging
+	 *
+	 * @return string
+	*/
+	public function toString()
+	{
+		$aPkt = unpack('C*',$this->getData());
+		$sReturn = "Header |  Port : ".$this->getPort()." Control : ".$this->iCb." | Body |".implode(":",$aPkt)." |";
+		return $sReturn;	
+	}
+
 }

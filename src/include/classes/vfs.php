@@ -91,7 +91,17 @@ class vfs {
 		}
 		return $aReturn;
 	}
-	
+
+	/**
+	 * Builds a file descriptor object from an econet path
+	 * 
+	 * @param object $oUser The user the file descriptor is being created for 
+	 * @param string $sCsd The currently selected director path
+	 * @param string $sEconetPath The econet file path
+	 * @param boolean $bMustExist The path must exist
+	 * @param boolean $bReadOnly If the file descriptor should be read-only
+	 * @return object file-descriptor
+	*/	
 	static protected function _buildFiledescriptorFromEconetPath($oUser,$sCsd,$sEconetPath,$bMustExist,$bReadOnly)
 	{
 		$aPlugins = vfs::getVfsPlugins();
@@ -115,6 +125,12 @@ class vfs {
 		return $oHandle;
 	}
 
+	/**
+	 * Get the directory catalogue from the supplied file-descriptor
+	 *
+	 * @param object $oFd
+	 * @return array
+	*/
 	static public function getDirectoryListing($oFd)
 	{
 		$sPath = $oFd->getEconetPath();
@@ -132,6 +148,15 @@ class vfs {
 		return $aDirectoryListing;
 	}
 
+	/**
+	 * Get the next free id for a filehandle for the given user 
+	 *
+	 * Only 255 file handles a allowed per user, as file handle is identified by a single byte on the client
+	 * The orignal file server only allowed 255 file handles total for the server, as we do it per user we
+	 * can support as many clients as we want 
+	 * @param object user $oUser
+	 * @return int
+	*/
 	static public function getFreeFileHandleID($oUser)
 	{
 		if(!array_key_exists($oUser->getUserName(),vfs::$aFileHandleIDs)){
@@ -144,6 +169,13 @@ class vfs {
 		return vfs::$aFileHandleIDs[$oUser->getUserName()];
 	}		
 
+	/**
+	 * Creates a directory
+	 * 
+	 * @param int $iNetwork
+	 * @param int $iStation
+	 * @param string $sEconetPath
+	*/
 	static public function createDirectory($iNetwork,$iStation,$sEconetPath)
 	{
 		if(!security::isLoggedIn($iNetwork,$iStation)){
@@ -169,6 +201,13 @@ class vfs {
 		throw new Exception("vfs: Unable to create directory (".$sEconetPath.")");
 	}
 
+	/**
+	 * Deletes a file (or directory)
+	 *
+	 * @param int $iNetwork
+	 * @param int $iStation
+	 * @param string $sEconetPath
+	*/
 	static public function deleteFile($iNetwork,$iStation,$sEconetPath)
 	{
 		if(!security::isLoggedIn($iNetwork,$iStation)){
@@ -194,6 +233,14 @@ class vfs {
 		throw new Exception("vfs: Unable to delete file (".$sEconetPath.")");
 	}
 
+	/**
+	 * Moves a file 
+	 *
+	 * @param int $iNetwork
+	 * @param int $iStation
+	 * @param string $sEconetPathFrom
+	 * @param string $sEconetPathTo	 
+	*/
 	static public function moveFile($iNetwork,$iStation,$sEconetPathFrom,$sEconetPathTo)
 	{
 		if(!security::isLoggedIn($iNetwork,$iStation)){
@@ -220,6 +267,16 @@ class vfs {
 		throw new Exception("vfs: Unable to move file (".$sEconetPathFrom.")");
 	}
 
+	/**
+	 * Saves a file
+	 *
+	 * @param int $iNetwork
+	 * @param int $iStation
+	 * @param string $sEconetPath
+	 * @param string $sData The raw file contents
+	 * @param int $iLoadAddr
+	 * @param int $iExecAddr
+	*/ 
 	static public function saveFile($iNetwork,$iStation,$sEconetPath,$sData,$iLoadAddr,$iExecAddr)
 	{
 		if(!security::isLoggedIn($iNetwork,$iStation)){
@@ -245,6 +302,16 @@ class vfs {
 		throw new Exception("vfs: Unable to save file (".$sEconetPath.")");
 	}
 
+	/**
+	 * Creates a file
+	 *
+	 * @param int $iNetwork
+	 * @param int $iStation
+	 * @param string $sEconetPath
+	 * @param int $iSize
+	 * @param int $iLoadAddr
+	 * @param int $iExecAddr
+	*/ 
 	static public function createFile($iNetwork,$iStation,$sEconetPath,$iSize,$iLoadAddr,$iExecAddr)
 	{
 		if(!security::isLoggedIn($iNetwork,$iStation)){
@@ -270,6 +337,13 @@ class vfs {
 		throw new Exception("vfs: Unable to save file (".$sEconetPath.")");
 	}
 
+	/**
+	 * Gets the contents of a file
+	 *
+	 * @param int $iNetwork
+	 * @param int $iStation
+	 * @param string $sEconetPath
+	*/	 
 	static public function getFile($iNetwork,$iStation,$sEconetPath)
 	{
 		if(!security::isLoggedIn($iNetwork,$iStation)){

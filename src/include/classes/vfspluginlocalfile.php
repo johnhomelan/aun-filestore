@@ -11,7 +11,7 @@
  * @package corevfs
  * @authour John Brown <john@home-lan.co.uk>
 */
-class vfspluginlocalfile {
+class vfspluginlocalfile implements vfsplugininterface {
 
 	public static function init()
 	{

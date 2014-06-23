@@ -181,7 +181,7 @@
 	  <arg line="-d src/" />
 	  <arg line=" --ignore src/include/external/*,include/external/*,include/smarty/*,include/classes/DIME.php" />
 	  <arg line="--template responsive" />
-	  <arg line='--title "Central UAC"' />
+	  <arg line='--title "Aun Filestore"' />
 	  <arg line="--sourcecode" />
 	 </exec>
 	 </target>

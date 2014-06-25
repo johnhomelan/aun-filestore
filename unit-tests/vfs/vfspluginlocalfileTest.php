@@ -50,16 +50,26 @@ class authpluginfileTest extends PHPUnit_Framework_TestCase {
 		}
 
 		try {
-			$aDirectoryListing = vfspluginlocalfile::getDirectoryListing($sDir,$aDirectoryListing);	
+			if(strpos($sFile,'.')!==FALSE){
+				//Relative file scan the dir the file was created in
+				$iLastDot = strrpos($sFile,'.');
+				$sRelPath = substr($sFile,0,$iLastDot);
+				$sFileName = substr($sFile,$iLastDot+1);
+				$aDirectoryListing = vfspluginlocalfile::getDirectoryListing($sDir.'.'.$sRelPath,$aDirectoryListing);
+			}else{
+				//If the file is none relative check just the selected dir
+				$sFileName = $sFile;
+				$aDirectoryListing = vfspluginlocalfile::getDirectoryListing($sDir,$aDirectoryListing);	
+			}
 		}catch(VfsException $oVfsException){	
 			if($oVfsException->isHard()){
 				throw $oVfsException;
 			}
 		}
 		//Test the meta date was saved correctly
-		$this->assertTrue(array_key_exists($sFile,$aDirectoryListing));
-		$this->assertEquals($iLoadAddr,hexdec($aDirectoryListing[$sFile]->getLoadAddr()));
-		$this->assertEquals($iExecAddr,hexdec($aDirectoryListing[$sFile]->getExecAddr()));
+		$this->assertTrue(array_key_exists($sFileName,$aDirectoryListing));
+		$this->assertEquals($iLoadAddr,$aDirectoryListing[$sFileName]->getLoadAddr());
+		$this->assertEquals($iExecAddr,$aDirectoryListing[$sFileName]->getExecAddr());
 	
 		//Check the files content is correct 
 		$this->assertEquals($sData,vfspluginlocalfile::getFile($this->oUser,$sDir,$sFile));

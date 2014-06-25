@@ -11,7 +11,7 @@
  * @package corevfs
  * @authour John Brown <john@home-lan.co.uk>
 */
-class vfspluginadfsadl {
+class vfspluginadfsadl implements vfsplugininterface {
 
 	protected static $aImageReaders = array();
 
@@ -363,6 +363,11 @@ class vfspluginadfsadl {
 		if(array_key_exists($fLocalHandle,vfspluginadfsadl::$aFileHandles)){
 			unset(vfspluginadfsadl::$aFileHandles[$fLocalHandle]);
 		}
+	}
+
+	public static function _getAccessMode($iGid,$iUid,$iMode)
+	{
+		return "-r/-r";
 	}
 }
 

@@ -170,17 +170,17 @@
 	 <!-- Runs all the functional php-unit tests -->
 	 <target name="phpunit" description="Run unit tests with PHPUnit">
 	  <exec executable="phpunit">
-	  <arg line="--coverage-clover ${output_dir}/logs/clover.xml --coverage-html ${output_dir}/coverage/ --log-junit ${output_dir}/logs/junit.xml unit-tests/" />
+	  <arg line="--coverage-clover build/logs/clover.xml --coverage-html build/coverage/ --log-junit build/logs/junit.xml unit-tests/" />
 	  </exec>
 	 </target>
 
 	 <!-- Builds php-doc file from the code -->
 	 <target name="phpdoc" description="Generate API documentation using phpdoc">
 	  <exec executable="phpdoc">
-	  <arg line="-t ${output_dir}/php-doc/" />
+	  <arg line="-t build/php-doc/" />
 	  <arg line="-d src/" />
-	  <arg line=" --ignore src/include/external/*,include/external/*,include/smarty/*,include/classes/DIME.php" />
-	  <arg line="--template responsive" />
+	 <!--  <arg line=" ignore src/include/external/*,include/external/*,include/smarty/*,include/classes/DIME.php" />
+	  <arg line="template responsive" /> -->
 	  <arg line='--title "Aun Filestore"' />
 	  <arg line="--sourcecode" />
 	 </exec>

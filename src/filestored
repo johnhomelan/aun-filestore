@@ -2,10 +2,10 @@
 <?
 declare(ticks = 1);
 
-define("AUNFILESTORED_LIB","/usr/share/aun-filestored");
+/*define("AUNFILESTORED_LIB","/usr/share/aun-filestored");
 if(is_dir(AUNFILESTORED_LIB)){
 	ini_set("include_path", AUNFILESTORED_LIB .PATH_SEPARATOR . get_include_path());
-}
+}*/
 
 include_once('include/system.inc.php');
 
@@ -204,7 +204,7 @@ class filestored  {
 					}
 				}
 			}catch(Exception $oException){
-				logger::log($oException->getMessage(),LOG_ERROR);
+				logger::log($oException->getMessage(),LOG_ERR);
 			}
 		}
 	}
@@ -233,6 +233,7 @@ class filestored  {
 			logger::log("filestore: Sending Ack packet",LOG_DEBUG);
 			stream_socket_sendto($oSocket,$sAck,0,$sHost);
 		}
+		logger::log("filestore: ".$oAunPacket->toString(),LOG_DEBUG);
 	
 		//Build an econet packet from the AUN packet an pass it to be processed
 		switch($oAunPacket->getPacketType()){

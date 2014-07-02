@@ -78,6 +78,16 @@ class security {
 	}
 
 	/**
+	 * Gets the last idle time for a connection
+	*/
+	public static function getIdleTimer($iNetwork,$iStation)
+	{
+		if(array_key_exists($iNetwork,security::$aSessions) AND array_key_exists($iStation,security::$aSessions[$iNetwork])){
+			return security::$aSessions[$iNetwork][$iStation]['idle'];
+		}
+	}
+
+	/**
 	 * Performs the login operation for a give user on a network and station
 	 *
 	 * @param int $iNetwork
@@ -178,7 +188,7 @@ class security {
 
 	public static function getUsersStation($sUsername)
 	{
-		foreach($aUsers as $iNetwork=>$aStationUsers){
+		foreach(security::$aSessions as $iNetwork=>$aStationUsers){
 			foreach($aStationUsers as $iStation=>$aData){
 				$oUser = $aData['user'];
 				if(strtoupper($oUser->getUsername())==trim(strtoupper($sUsername))){

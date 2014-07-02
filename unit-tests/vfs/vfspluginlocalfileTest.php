@@ -5,11 +5,15 @@
 */
 
 //Need to define this to stop the password file being written to
-define('CONFIG_security_mode','singleuser');
-define('CONFIG_vfs_plugin_localfile_root',__DIR__.DIRECTORY_SEPARATOR.'testing_root');
+if(!defined('CONFIG_security_mode')){
+	define('CONFIG_security_mode','singleuser');
+}
+if(!defined('CONFIG_vfs_plugin_localfile_root')){
+	define('CONFIG_vfs_plugin_localfile_root',__DIR__.DIRECTORY_SEPARATOR.'testing_root');
+}
 include_once('include/system.inc.php');
 
-class authpluginfileTest extends PHPUnit_Framework_TestCase {
+class vfspluginlocalfileTest extends PHPUnit_Framework_TestCase {
 	protected $oUser = NULL;
 	public function setup()
 	{

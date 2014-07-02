@@ -5,8 +5,12 @@
 */
 
 //Need to define this to stop the password file being written to
-define('CONFIG_security_plugin_file_user_file','');
-define('CONFIG_security_plugin_file_default_crypt','md5');
+if(!defined('CONFIG_security_plugin_file_user_file')){
+	define('CONFIG_security_plugin_file_user_file','');
+}
+if(!defined('CONFIG_security_plugin_file_default_crypt')){
+	define('CONFIG_security_plugin_file_default_crypt','md5');
+}
 include_once('include/system.inc.php');
 
 class authpluginfileTest extends PHPUnit_Framework_TestCase {

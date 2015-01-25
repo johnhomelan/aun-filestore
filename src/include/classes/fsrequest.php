@@ -57,7 +57,10 @@ class fsrequest extends request {
 	public function getFunction()
 	{
 		if(is_numeric($this->iFunction)){
-			return $this->aFunctionMap[$this->iFunction];
+			if(isset($this->aFunctionMap[$this->iFunction])){
+				return $this->aFunctionMap[$this->iFunction];
+			}
+			logger::log("No function to map on to ".$this->iFunction,LOG_DEBUG);
 		}
 		throw new Exception("No packet was decoded unable to getFunction");
 	}

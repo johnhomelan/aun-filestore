@@ -2,21 +2,49 @@
 <?
 declare(ticks = 1);
 
-/*define("AUNFILESTORED_LIB","/usr/share/aun-filestored");
-if(is_dir(AUNFILESTORED_LIB)){
-	ini_set("include_path", AUNFILESTORED_LIB .PATH_SEPARATOR . get_include_path());
-}*/
+//If we are running the installed version update the include path so the installed version of any
+//classes will run first.
+if(__DIR__ == '/usr/sbin'){
+	define("AUNFILESTORED_LIB","/usr/share/aun-filestored");
+	if(is_dir(AUNFILESTORED_LIB)){
+		ini_set("include_path", AUNFILESTORED_LIB .PATH_SEPARATOR . get_include_path());
+	}
+}
 
 include_once('include/system.inc.php');
 
+/**
+ * filestored is the main loop of the application.  It deals with all the socket operations, dispatches and collects
+ * data from the main application classes (fileserver, print server), and handles all the initialization tasks.
+*/
 class filestored  {
 
+	/**
+	 * Hold the single instance of the fileserver object
+	 *
+	 * @var object fileserver
+	*/
 	protected $oFileserver = NULL;
 
+	/**
+	 * Hold the single instance of the printserver object
+	 *
+	 * @var object printserver
+	*/
 	protected $oPrintServer = NULL;
 
+	/**
+	 * The handle for the AUN udp socket
+	 *
+	 * @var handle
+	*/
 	protected $oAunSocket = NULL;
 	
+	/**
+	 * An array of all the readable sockets currently held open by the application
+	 *	
+	 * @var array
+	*/
 	protected $aAllReadableSockets = array();
 
 	/**

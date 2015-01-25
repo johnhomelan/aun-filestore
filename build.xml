@@ -87,7 +87,7 @@
 
 	 <!-- Signs the RPM -->
 	 <target name="rpmsign" unless="no-sign">
-		<exec executable="rpmsign">
+		<exec executable="rpm">
 			<arg line='--addsign ${output_dir}/${rpm_file_name}' />
 		</exec>
 	 </target>

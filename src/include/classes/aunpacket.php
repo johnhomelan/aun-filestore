@@ -149,8 +149,8 @@ class aunpacket {
 		if($this->aTypeMap[$this->iPktType]=='Immediate' AND $this->iCb==8){
 			//Echo request equiv
 
-			//Set the type as Ack
-			$sPtk = pack('C',6);
+			//Set the type as Immediate reply
+			$sPtk = pack('C',6)
 			//Port 0
 			$sPtk = $sPtk.pack('C',0);
 			//Flag 0

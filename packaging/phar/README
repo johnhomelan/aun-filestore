@@ -1,0 +1,24 @@
+AUN Filestored 
+==============
+
+
+About
+-----
+
+AUN Filestore is a Econet Fileserver implementation (using AUN) for Linux and other platforms. It's written in PHP, provides file and print services to Acorn Risc Machines, and Emulated BBCs.  A basic text file auth backend is done working, however all filestore users access the unix fs as the user the filestore runs as.   The filestore provides access to file via a VFS layer with plugins have been created for local unix fs, and ssd disk image.
+
+
+Running
+-------
+
+This distrobution of the filestore contains all the code in a php phar archvie (filestore.phar), and some basic config files, and 2 empty directors.  All the files the server has access to are stored in file-root, while any print jobs spooled to the server are stored in print-spool
+
+To start the server in the forground simple run 
+
+./run.sh
+
+If you wish to run the server in the background run 
+
+php filestore.phar -c . -d 
+
+

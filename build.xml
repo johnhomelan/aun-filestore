@@ -17,6 +17,8 @@
  	 <target name="deb" description="Builds a debian package" depends="loadrpmvars,debsourcetreebuild" />
 	 <!-- Builds the Synology package -->
  	 <target name="syno" description="Builds a package for Synology NAS boxes" depends="loadrpmvars,synosourcetreebuild,syno_build_pkg_tar,syno_replace_vars" />
+	 <!-- Builds a tar archive containing a phar package -->
+	 <target name="phar" description="Builds a TGZ containing a phar version of the fileserver and the necessary config files etc to run the system from cli" depends="pharbundle" />
 
  <!-- RPM Operations -->
 	 <!-- Loads all the vars needed to build the rpm -->
@@ -165,6 +167,32 @@
 	</target>
 		
 
+	<!-- Create the phar archive -->
+	<target name="pharbuild">
+		<exec executable="php">
+			<arg line="packaging/phar/create-phar.php"/>
+		</exec>
+	</target>
+
+	<!-- Build the tgz to distrobute the phar in -->
+	<target name="pharbundle" depends="pharbuild,loadrpmvars">
+		<tar destfile="${output_dir}/${rpm_name}-${rpm_version}-${rpm_release}-phar.tgz" compression="gzip" >
+			<tarfileset dir="build" prefix="filestore">
+				<include name="filestore.phar"/>
+			</tarfileset>
+			<tarfileset dir="packaging/phar" prefix="filestore"  >
+				<include name="README" />	
+				<include name="default.conf" />	
+				<include name="users.txt" />	
+				<include name="file-root" />	
+				<include name="print-spool" />	
+			</tarfileset>
+			<tarfileset dir="packaging/phar" prefix="filestore" filemode="755" >
+				<include name="run.sh" />	
+			</tarfileset>
+		</tar>
+	
+	</target>
  <!-- None rpm related targets -->
 
 	 <!-- Runs all the functional php-unit tests -->

@@ -4,12 +4,12 @@
 /*	if(file_exists($buildRoot.DIRECTORY_SEPARATOR.'filestore.phar.bz2')){
 		unlink($buildRoot.DIRECTORY_SEPARATOR.'filestore.phar.bz2');
 	}*/
-	$phar = new Phar($buildRoot.DIRECTORY_SEPARATOR."filestore.phar", FilesystemIterator::CURRENT_AS_FILEINFO | FilesystemIterator::KEY_AS_FILENAME, "filestore.phar");
-	$phar->startBuffering();
+	$oPhar = new Phar($buildRoot.DIRECTORY_SEPARATOR."filestore.phar", FilesystemIterator::CURRENT_AS_FILEINFO | FilesystemIterator::KEY_AS_FILENAME, "filestore.phar");
+	$oPhar->startBuffering();
 
-	$phar->buildFromDirectory("src",'/.php$/');
-	$phar->addFile('src/filestored','filestored');
-	$phar->compressFiles(Phar::BZ2);
-	$phar->setStub(file_get_contents('packaging/phar/stub.php'));
+	$oPhar->buildFromDirectory("src",'/.php$/');
+	$oPhar->addFromString ('filestored',str_replace("#!/usr/bin/php\n",'',file_get_contents('src/filestored')));
+	$oPhar->compressFiles(Phar::BZ2);
+	$oPhar->setStub(file_get_contents('packaging/phar/stub.php'));
 
-	$phar->stopBuffering(); 
+	$oPhar->stopBuffering(); 

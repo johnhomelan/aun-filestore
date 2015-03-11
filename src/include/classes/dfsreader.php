@@ -2,6 +2,7 @@
 /**
  * Read a dfs disk image
  *
+ * @package filesystem
 */
 class dfsreader {
 

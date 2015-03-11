@@ -2,6 +2,8 @@
 /**
  * Reads adfs disk images 
  *
+ * @package filesystem
+ *
 */
 class adfsreader {
 
@@ -25,7 +27,7 @@ class adfsreader {
 	 * Creates a new instance of the reader
 	 *
 	 * @param string $sPath The path to the disk image to read
-	 * @param string $sDiskImage A binary string of the disk image (don't supplied this and the path a the same time)
+	 * @param string $sDiskImage A binary string of the disk image (don't supply this and the path a the same time)
 	*/
 	public function __construct($sPath,$sDiskImage=NULL)
 	{

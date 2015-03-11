@@ -33,6 +33,14 @@ class filestored  {
 	*/
 	protected $oPrintServer = NULL;
 
+
+	/**
+	 * Hold the single instance of the birdge object
+	 *
+	 * @var ojbect bridge
+	*/
+	protected $oBridge = NULL;
+
 	/**
 	 * The handle for the AUN udp socket
 	 *
@@ -96,6 +104,10 @@ class filestored  {
 			$this->oPrintServer = new printserver($this);
 			$this->oPrintServer->init();
 
+			//Create the bridge instance and start it
+			$this->oBridge = new bridge($this);
+			$this->oBridge->init();
+
 			//Load the aunmap that maps econet network/station numbers to ip addresses and ports
 			aunmap::loadMap();
 			
@@ -109,6 +121,7 @@ class filestored  {
 		}
 
 		//Enter main loop
+		logger::log("Starting primary loop.",LOG_DEBUG);
 		$this->loop();
 	}
 
@@ -222,7 +235,9 @@ class filestored  {
 				$aReadSet=$this->aAllReadableSockets;
 				$aExpSet=$aAllExpSockets;
 				$iSockets = @stream_select($aReadSet,$aWriteSet,$aExpSet,NULL);
+				echo "Select broke\n";
 				if($iSockets!==FALSE){
+					logger::log("Got data",LOG_DEBUG);
 					//Step through each socket we need to read from
 					foreach($aReadSet as  $iReadSocket){
 						if($iReadSocket == $this->oAunSocket){
@@ -245,13 +260,14 @@ class filestored  {
 	*/
 	public function processAunPacket($oSocket)
 	{
+		$oAunPacket = new AunPacket();
+		
 		//Read the UDP data
 		$sUdpData= stream_socket_recvfrom($oSocket,1500,0,$sHost);
 		logger::log("filestore: Aun packet recvieved from ".$sHost,LOG_DEBUG);	
+		$oAunPacket->setSourceIP($sHost);
 
 		//Decode the AUN packet
-		$oAunPacket = new AunPacket();
-		$oAunPacket->setSourceIP($sHost);
 		$oAunPacket->setDestinationIP(config::getValue('local_ip'));
 		$oAunPacket->decode($sUdpData);
 		
@@ -265,16 +281,23 @@ class filestored  {
 	
 		//Build an econet packet from the AUN packet an pass it to be processed
 		switch($oAunPacket->getPacketType()){
-			case 'Unicast':
 			case 'Immediate':
+			case 'Unicast':
 				$oEconetPacket = $oAunPacket->buildEconetPacket();
 				$this->processEconetPacket($oEconetPacket);
 				break;
 			case 'Broadcast':
 				logger::log("filestore: Received broadcast packet ",LOG_DEBUG);
-				if($oAunPacket->getPortName()=='Bridge'){
-					logger::log("filestore: Bridge packet received",LOG_DEBUG);
-					logger::log("filestore: ".$oAunPacket->toString(),LOG_DEBUG);
+				switch($oAunPacket->getPortName()){
+					case 'Bridge':
+						$this->bridgeCommand($oAunPacket->buildEconetPacket());
+						break;
+					case 'FileServerCommand':
+						//Some fileserver commands can be send via broadcase (e.g. getDiscs which is used to find servers)
+						$oEconetPacket = $oAunPacket->buildEconetPacket();
+						$this->processEconetPacket($oEconetPacket);
+						break;
+					
 				}
 		}
 
@@ -352,6 +375,22 @@ class filestored  {
 	}
 
 	/**
+	 * This dispatches inbound bridge commands to the birdge service 
+	 *
+	 * @param object econetpacket $oEconetPacket The bridge command from the client
+	*/
+	public function bridgeCommand($oEconetPacket)
+	{
+		try{
+			$oBridgeRequest = new bridgerequest($oEconetPacket);
+			$this->oBridge->processRequest($oEconetPacket);
+			$this->sendBridgeReplies();
+		}catch(Exception $oException){
+			logger::log("bridge: ".$oException->getMessage(),LOG_DEBUG);
+		}
+	}
+
+	/**
 	 * Sends any print server packets to thier respective clients 
 	 *
 	*/
@@ -360,6 +399,20 @@ class filestored  {
 		$aReplies = $this->oPrintServer->getReplies();
 		foreach($aReplies as $oReply){
 			logger::log("filestore: Sending econet reply",LOG_DEBUG);
+			$oReplyEconetPacket = $oReply->buildEconetpacket();
+			$this->dispatchReply($oReplyEconetPacket);	
+		}
+	}
+
+	/**
+	 * Sends any bridge reply packets to thier respective clients 
+	 *
+	*/
+	public function sendBridgeReplies()
+	{
+		$aReplies = $this->oBridge->getReplies();
+		foreach($aReplies as $oReply){
+			logger::log("bridge: Sending econet reply",LOG_DEBUG);
 			$oReplyEconetPacket = $oReply->buildEconetpacket();
 			$this->dispatchReply($oReplyEconetPacket);	
 		}
@@ -411,11 +464,12 @@ class filestored  {
 			foreach($aReadSet as  $iReadSocket){
 				if($iReadSocket == $this->oAunSocket){
 					//We've received an AUN packet process it 
-					$sUdpData= stream_socket_recvfrom($this->oAunSocket,1500,0,$sHost);
-					logger::log("filestore: Aun packet recvieved from ".$sHost,LOG_DEBUG);	
-					//Decode the AUN packet
 					$oAunPacket = new AunPacket();
+					$sUdpData= stream_socket_recvfrom($this->oAunSocket,1500,0,$sHost);
 					$oAunPacket->setSourceIP($sHost);
+					logger::log("filestore: Aun packet recvieved from ".$sHost,LOG_DEBUG);	
+
+					//Decode the AUN packet
 					$oAunPacket->setDestinationIP(config::getValue('local_ip'));
 					$oAunPacket->decode($sUdpData);
 					
@@ -471,17 +525,18 @@ class filestored  {
 
 		//Wait for an aun packet
 		$iSockets = @stream_select($aReadSet,$aWriteSet,$aExpSet,1);
+
 		if($iSockets!=FALSE){
 			//Step through each socket we need to read from
 			foreach($aReadSet as  $iReadSocket){
 				if($iReadSocket == $this->oAunSocket){
 					//We've received an AUN packet process it 
+					$oAunPacket = new AunPacket();
 					$sUdpData= stream_socket_recvfrom($this->oAunSocket,1500,0,$sHost);
+					$oAunPacket->setSourceIP($sHost);
 					logger::log("filestore: Aun packet recvieved from ".$sHost,LOG_DEBUG);	
 
 					//Decode the AUN packet
-					$oAunPacket = new AunPacket();
-					$oAunPacket->setSourceIP($sHost);
 					$oAunPacket->setDestinationIP(config::getValue('local_ip'));
 					$oAunPacket->decode($sUdpData);
 					

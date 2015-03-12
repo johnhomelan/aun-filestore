@@ -30,6 +30,13 @@ class aunmap {
 
 	static $aIpCounter = array();
 
+	/**
+	 * Converts an ip address to a econet address
+	 *
+	 * @param string $sIP The ip address to get the econet addr for (in the form xxx.xxx.xxx.xxx)
+	 * @param int $sPort We can support mapping mulitple econet address to a single host however each econet address is bound to a udp port
+	 * @return sring Econet address in the form network.station 
+	*/
 	public static function ipAddrToEcoAddr($sIP,$sPort=NULL)
 	{
 		if(array_key_exists($sIP,aunmap::$aIPLookupCache)){
@@ -62,6 +69,13 @@ class aunmap {
 		return aunmap::$aIPLookupCache[$sIP];
 	}
 
+	/**
+	 * Converts a econet network and station number to a ip address and port 
+	 *
+	 * @param int $iNetworkNumber
+	 * @param int $iStationNumber
+	 * @return string ip address
+	*/
 	public static function ecoAddrToIpAddr($iNetworkNumber,$iStationNumber)
 	{
 		//Test to see if we are in the cached index
@@ -86,6 +100,29 @@ class aunmap {
 			//Return the IP Address
 			return $aIPParts[0].'.'.$aIPParts[1].'.'.$aIPParts[2].'.'.$iStationNumber;
 		}
+	}
+
+	/**
+	 * Tests if a econet network is know to the aunmap
+	 *
+	 * @param int $iNetworkNumber
+	 * @return boolean
+	*/
+	public static function networkKnown($iNetworkNumber)
+	{
+		//Check subnet map
+		if(array_key_exists($iNetworkNumber,aunmap::$aSubnetMap)){
+			return TRUE;
+		}
+
+		//Check the station map
+		foreach(aunmap::$aHostMap as $sKey=>$sIP){
+			list($iNetNumber,$iStationNumber) = explode('.',$sKey);
+			if($iNetworkNumber==$iNetNumber){
+				return TRUE;
+			}
+		}
+		return FALSE;
 	}
 
 	/**

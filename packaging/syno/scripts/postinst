@@ -1,6 +1,6 @@
 #!/bin/sh
 
-//Create the default share econet to hold our virtual file root for the filestore
+#Create the default share econet to hold our virtual file root for the filestore
 synoshare --get econet
 if [ $? != 0 ]; then 
 	//share folder does not exist 

@@ -1,4 +1,4 @@
-<?
+<?php
 
 /**
  * File containing the user class
@@ -124,4 +124,3 @@ class user {
 		return $this->sLib;
 	}
 }
-?>

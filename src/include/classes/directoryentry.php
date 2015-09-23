@@ -1,4 +1,4 @@
-<?
+<?php
 /**
  * This file contains the file directoryentry class
  *
@@ -177,5 +177,3 @@ class directoryentry {
 		return str_pad(substr($sMode,0,6),6,' ');
 	}
 }
-
-?>

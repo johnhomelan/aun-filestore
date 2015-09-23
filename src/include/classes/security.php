@@ -1,4 +1,4 @@
-<?
+<?php
 /**
  * File containing the security class
  *
@@ -302,5 +302,3 @@ class security {
 	}
 
 }
-
-?>

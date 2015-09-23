@@ -1,4 +1,4 @@
-<?
+<?php
 /**
  * This file contains the bridge class
  *
@@ -123,5 +123,3 @@ class bridge {
 		}
 	}
 }
-
-?>

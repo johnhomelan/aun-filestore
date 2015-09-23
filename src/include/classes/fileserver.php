@@ -1,4 +1,4 @@
-<?
+<?php
 /**
  * This file contains the fileserver class
  *
@@ -1731,5 +1731,3 @@ class fileserver {
 		$this->_addReplyToBuffer($oReply);
 	}
 }
-
-?>

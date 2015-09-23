@@ -1,4 +1,4 @@
-<?
+<?php
 /**
  * This file contains the printserver class
  *
@@ -136,5 +136,3 @@ class printserver {
 		
 	}
 }
-
-?>

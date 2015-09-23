@@ -1,4 +1,4 @@
-<?
+<?php
 /**
  * This file contains the aunpacket class
  *
@@ -150,7 +150,7 @@ class aunpacket {
 			//Echo request equiv
 
 			//Set the type as Immediate reply
-			$sPtk = pack('C',6)
+			$sPtk = pack('C',6);
 			//Port 0
 			$sPtk = $sPtk.pack('C',0);
 			//Flag 0

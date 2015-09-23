@@ -1,4 +1,4 @@
-<?
+<?php
 /**
  * Reads adfs disk images 
  *
@@ -373,5 +373,3 @@ class adfsreader {
 		return FALSE;
 	}
 }
-
-?>

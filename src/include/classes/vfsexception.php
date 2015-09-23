@@ -1,4 +1,4 @@
-<?
+<?php
 
 /**
  * This file contains the vfsexception class
@@ -44,5 +44,3 @@ class vfsexception extends Exception {
 	}
 	
 }
-
-?>

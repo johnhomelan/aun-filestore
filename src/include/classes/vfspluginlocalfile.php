@@ -1,4 +1,4 @@
-<?
+<?php
 /**
  * This file contains the localfile vfs plugin
  *
@@ -400,5 +400,3 @@ class vfspluginlocalfile implements vfsplugininterface {
 		return $mReturn;
 	}
 }
-
-?>

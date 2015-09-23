@@ -1,4 +1,4 @@
-<?
+<?php
 /**
  * This file contains the dfs ssd image vfs plugin
  *
@@ -372,5 +372,3 @@ class vfsplugindfsssd implements vfsplugininterface {
 	}
 
 }
-
-?>

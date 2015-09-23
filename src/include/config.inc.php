@@ -1,4 +1,4 @@
-<?
+<?php
 safe_define('CONFIG_aun_listen_address','0.0.0.0');
 safe_define('CONFIG_aun_listen_port',32768);
 
@@ -33,4 +33,3 @@ safe_define('CONFIG_vfs_plugin_localdfsssd_root','/var/lib/aun-filestore-root');
 safe_define('CONFIG_vfs_plugin_localadfsadl_root','/var/lib/aun-filestore-root');
 
 safe_define('CONFIG_print_server_spool_dir','/tmp/econetprint');
-?>

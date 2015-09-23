@@ -1,4 +1,4 @@
-<?
+<?php
 /**
  * This file contains the adfs adl image vfs plugin
  *
@@ -370,5 +370,3 @@ class vfspluginadfsadl implements vfsplugininterface {
 		return "-r/-r";
 	}
 }
-
-?>

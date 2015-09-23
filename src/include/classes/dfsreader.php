@@ -1,4 +1,4 @@
-<?
+<?php
 /**
  * Read a dfs disk image
  *
@@ -334,4 +334,3 @@ class dfsreader {
 
 
 }
-?>

@@ -1,4 +1,4 @@
-<?
+<?php
 
 
 function safe_define($sName, $sDefine) {
@@ -63,4 +63,3 @@ function pearErrorHandler($error)
 	 throw new Exception($error->getMessage().' -- '.$error->getDebugInfo());
 }
 
-?>

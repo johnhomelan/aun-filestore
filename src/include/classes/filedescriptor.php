@@ -1,4 +1,4 @@
-<?
+<?php
 /**
  * This file contains the file descriptor class
  *
@@ -225,4 +225,3 @@ class filedescriptor {
 		}
 	}
 }
-?>

@@ -1,4 +1,4 @@
-<?
+<?php
 /**
  * This file contains interface all vfs plugins must implement
  *
@@ -125,5 +125,3 @@ interface vfsplugininterface {
 
 	public static function fsClose($oUser,$fLocalHandle);
 }
-
-?>

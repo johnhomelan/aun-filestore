@@ -1,4 +1,4 @@
-<?
+<?php
 /**
  * This file contains the vfs class
  *
@@ -545,5 +545,3 @@ class vfs {
 
 
 }
-
-?>

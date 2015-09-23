@@ -1,4 +1,4 @@
-<?
+<?php
 /**
  * This file contains the aunmap class 
  *
@@ -198,5 +198,3 @@ class aunmap {
 		return aunmap::$aIpCounter[$sIP];
 	}
 }
-
-?>

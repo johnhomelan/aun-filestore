@@ -1,5 +1,5 @@
 #!/usr/bin/php
-<?
+<?php
 declare(ticks = 1);
 
 //If we are running the installed version update the include path so the installed version of any
@@ -235,7 +235,6 @@ class filestored  {
 				$aReadSet=$this->aAllReadableSockets;
 				$aExpSet=$aAllExpSockets;
 				$iSockets = @stream_select($aReadSet,$aWriteSet,$aExpSet,NULL);
-				echo "Select broke\n";
 				if($iSockets!==FALSE){
 					logger::log("Got data",LOG_DEBUG);
 					//Step through each socket we need to read from
@@ -574,4 +573,3 @@ class filestored  {
 
 $oApp = new filestored();
 $oApp->main();
-?>

@@ -1,4 +1,4 @@
-<?
+<?php
 /**
  * This file contains the interface for authplugins 
  *
@@ -79,4 +79,3 @@ interface authplugininterface {
 	*/
 	static public function setPriv($sUsername,$sPriv);
 }
-?>

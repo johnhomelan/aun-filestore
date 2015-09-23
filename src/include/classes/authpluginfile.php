@@ -1,4 +1,4 @@
-<?
+<?php
 /**
  * File containing the authpluginfile class
  *
@@ -198,4 +198,3 @@ class authpluginfile implements authplugininterface {
 	}
 
 }
-?>

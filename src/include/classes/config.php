@@ -1,4 +1,4 @@
-<?
+<?php
 /**
  * @package coreutils
  */
@@ -119,4 +119,3 @@ class config {
 	}
 
 }
-?>

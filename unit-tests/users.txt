@@ -2,4 +2,4 @@ TEST:md5-8eee3efdde1eb6cf6639a58848362bf4:home.test:5000:0:S
 TEST2:sha1-05e037c57cdc9fe20f7a97c5af652a0f84acb8f9:home.test:5000:0:U
 TEST3:plain-week:home.test3:5000:3:U
 TEST4::home.test3:5000:3:s
-CREATETEST::home.createtest:5000:3:U
+CREATETEST:md5-49c974fffec43a158dceb2fed374eb90:home.createtest:5000:3:U

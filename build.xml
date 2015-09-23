@@ -5,6 +5,8 @@
  <!-- Build Types -->
 	 <!-- Default rpm build job -->
 	 <target name="rpm" description="Builds an rpm" depends="loadrpmvars,tarbuild,rpmbuild,rpmsign,clean"/>
+	 <!-- Builds an rpm via mock -->
+	 <target name="mock" description="Builds an rpm using mock" depends="loadrpmvars,tarbuild,foreacharch,clean"/>
 	 <!-- Increments the release number and builds the rpm -->
 	 <target name="newrelease" description="Increments the release number and builds the rpm" depends="increment_rpm_release,loadrpmvars,tarbuild,rpmbuild,rpmsign,clean"/>
 	 <!-- Increments the minor version and builds the rpm -->
@@ -91,6 +93,67 @@
 	 <target name="rpmsign" unless="no-sign">
 		<exec executable="rpm">
 			<arg line='--addsign ${output_dir}/${rpm_file_name}' />
+		</exec>
+	 </target>
+
+	<!-- Build the rpm via mock -->
+	<target name="mockrpmbuild">
+		<!-- First Build SRPM -->
+		<copy file="${output_dir}/${rpm_name}-${rpm_version}-${rpm_release}.tar.gz" todir="${rpm_build_dir}/SOURCES" />
+		<!-- RPM nolonger has a build system for i386 on x86_64 systems, but rather we have to use i686 for the build system to product i386 targets -->
+		<if> 
+			<contains string="${mock_container}" substring="i386"/>
+			<then>
+				<!-- i386 rpm arch -->
+				<property name="mock_arch" value="i386" />
+				<exec executable="setarch">
+					<arg line='i686 rpmbuild -bs packaging/${package}.spec --define="_version ${rpm_version}" --define="_name ${rpm_name}" --define="_release ${rpm_release}" --define="_arch ${mock_arch}" --define="_dist ${rpm_dist}"'/>
+				</exec>
+			</then>
+			<else>
+				<!-- Not i386 -->
+				<property name="mock_arch" value="x86_64" />
+				<exec executable="rpmbuild">
+					<arg line='-bs packaging/${package}.spec --define="_version ${rpm_version}" --define="_name ${rpm_name}" --define="_release ${rpm_release}" --define="_arch ${mock_arch}" --define="_dist ${rpm_dist}"'/>
+				</exec>
+			</else>
+		</if>
+		<exec executable="mock">
+			<arg line="-r ${mock_container} --installdeps ${rpm_build_dir}/SRPMS/${rpm_name}-${rpm_version}-${rpm_release}.src.rpm" />
+		</exec>
+		<if> 
+			<contains string="${mock_container}" substring="i386"/>
+			<then>
+				<!-- i386 rpm arch -->
+				<exec executable="setarch">
+					<arg line='i686 mock -r ${mock_container} --target ${mock_arch} --rebuild ${rpm_build_dir}/SRPMS/${rpm_name}-${rpm_version}-${rpm_release}.src.rpm --define="_version ${rpm_version}" --define="_name ${rpm_name}" --define="_release ${rpm_release}" --define="_arch ${mock_arch}" --define="_dist ${rpm_dist}"' />
+				</exec>
+			</then>
+			<else>
+				<exec executable="mock">
+					<arg line='-r ${mock_container} --target ${mock_arch} --rebuild ${rpm_build_dir}/SRPMS/${rpm_name}-${rpm_version}-${rpm_release}.src.rpm --define="_version ${rpm_version}" --define="_name ${rpm_name}" --define="_release ${rpm_release}" --define="_arch ${mock_arch}" --define="_dist ${rpm_dist}"' />
+				</exec>
+			</else>
+		</if>
+		<copy file="/var/lib/mock/${mock_container}/result/${rpm_name}-${rpm_version}-${rpm_release}.${mock_arch}.rpm" todir="${output_dir}/${mock_container}/" />
+	</target>
+
+	 <!-- Signs the RPMs built by mock -->
+	 <target name="mockrpmsign" unless="no-sign">
+		<if> 
+			<contains string="${mock_container}" substring="i386"/>
+			<then>
+				<!-- i386 rpm arch -->
+				<property name="mock_arch" value="i386" />
+			</then>
+			<else>
+				<!-- Not i386 -->
+				<property name="mock_arch" value="x86_64" />
+			</else>
+		</if>
+			
+		<exec executable="rpmsign">
+			<arg line='--addsign ${output_dir}/${mock_container}/${rpm_name}-${rpm_version}-${rpm_release}.${mock_arch}.rpm' />
 		</exec>
 	 </target>
 

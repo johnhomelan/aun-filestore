@@ -22,16 +22,6 @@ class fsreply extends reply {
 
 	protected $aTypeMap = array('DONE'=>0,'SAVE'=>1,'LOAD'=>2,'CAT'=>3,'INFO'=>4,'LOGIN'=>5,'SDISC'=>6,'DIR'=>7,'UNREC'=>8,'LIB'=>9,'DISCS'=>10);
 
-	public function __construct($oRequest)
-	{
-		if(is_object($oRequest) AND (get_class($oRequest)=='fsrequest' or get_class($oRequest)=='printserverenquiry' OR get_class($oRequest)=='printserverdata')){
-			$this->oRequest = $oRequest;
-			$this->iFlags = $oRequest->getFlags();
-		}else{
-			throw new Exception("An fsreply object was created with out suppling an fsrequest object");
-		}
-	}
-
 	/**
 	 * Sets the reply to be an error indicator
 	 *

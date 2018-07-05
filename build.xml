@@ -5,8 +5,6 @@
  <!-- Build Types -->
 	 <!-- Default rpm build job -->
 	 <target name="rpm" description="Builds an rpm" depends="loadrpmvars,tarbuild,rpmbuild,rpmsign,clean"/>
-	 <!-- Builds an rpm via mock -->
-	 <target name="mock" description="Builds an rpm using mock" depends="loadrpmvars,tarbuild,foreacharch,clean"/>
 	 <!-- Increments the release number and builds the rpm -->
 	 <target name="newrelease" description="Increments the release number and builds the rpm" depends="increment_rpm_release,loadrpmvars,tarbuild,rpmbuild,rpmsign,clean"/>
 	 <!-- Increments the minor version and builds the rpm -->

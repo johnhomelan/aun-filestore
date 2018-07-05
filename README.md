@@ -35,7 +35,7 @@ The soap interface and control client has yet to be implemented.
 
 At the moment there are no rpm and deb packages built for easy install (this will happen before the release of the version 0.1).  However it can be run from source, your machine will need to have php installed and the php-pcntl module.
   
-* Check out the source from SVN  
+* Check out the source from GIT  
 * Make the file filestored executable (chmod u+x filestored)
 * Create a directory to act as root of your econet file system
 * Create a directory to hold your config files 

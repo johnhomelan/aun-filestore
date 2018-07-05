@@ -36,9 +36,9 @@ class dfsreader {
 	 * Read abitary byte from the disk image
 	 *
 	 * @param int $iStart The offset to start reading from
-	 * @param it $iLen The number of bytes to read
+	 * @param int $iLen The number of bytes to read
 	*/
-	protected function _getBytesFromImage($iStart,$iLen)
+	protected function _getBytesFromImage($iStart, $iLen)
 	{
 		if(!is_null($this->sDiskImageRaw)){
 			return substr($this->sDiskImageRaw,$iStart,$iLen);

@@ -5,6 +5,7 @@
  * @author John Brown <john@home-lan.co.uk>
  * @package corevfs
 */
+use HomeLan\FileStore\Vfs\Vfs;
 
 /** 
  * This class is used to prepresent a files entry in the directory catalogue
@@ -24,6 +25,8 @@ class directoryentry {
 	protected $iExecAddr = NULL;
 
 	protected $iSize = NULL;
+
+	protected $bDir = NULL;
 
 	protected $iAccess = 15;
 
@@ -159,7 +162,7 @@ class directoryentry {
 
 	public function getSin()
 	{
-		return vfs::getSin($this->sEconetFullFilePath);
+		return Vfs::getSin($this->sEconetFullFilePath);
 	}
 
 	public function getEconetMode()

@@ -5,6 +5,7 @@
  * @author John Brown <john@home-lan.co.uk>
  * @package core
 */
+use HomeLan\FileStore\Vfs\Vfs; 
 
 /**
  * This class implements the econet fileserver
@@ -31,7 +32,7 @@ class fileserver {
 
 	public function init()
 	{
-		vfs::init();
+		Vfs::init();
 		security::init();
 	}
 
@@ -188,7 +189,7 @@ class fileserver {
 		$oUser = security::getUser($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation());
 		try {
 			if(!is_null($oFsRequest->getCsd())){
-				$oCsd = vfs::getFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oFsRequest->getCsd());
+				$oCsd = Vfs::getFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oFsRequest->getCsd());
 				if(is_object($oCsd)){
 					$oUser->setCsd($oCsd->getEconetPath());
 				}
@@ -199,7 +200,7 @@ class fileserver {
 
 		try {
 			if(!is_null($oFsRequest->getLib())){
-				$oLib = vfs::getFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oFsRequest->getLib());
+				$oLib = Vfs::getFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oFsRequest->getLib());
 				if(is_object($oLib)){
 					$oUser->setLib($oLib->getEconetPath());
 				}
@@ -271,7 +272,7 @@ class fileserver {
 				$this->createDirectory($oFsRequest,$sOptions);
 				break;
 			case 'DELETE':
-				$this->delete($oFsRequest,$sOptions);
+				$this->deleteFile($oFsRequest,$sOptions);
 				break;
 			case 'DIR':
 				$this->changeDirectory($oFsRequest,$sOptions);
@@ -363,18 +364,18 @@ class fileserver {
 			//Create the handles for the csd urd and lib
 			$oUser = security::getUser($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation());
 			try {
-				$oUrd = vfs::createFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oUser->getHomedir());
-				$oCsd = vfs::createFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oUser->getHomedir());	
+				$oUrd = Vfs::createFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oUser->getHomedir());
+				$oCsd = Vfs::createFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oUser->getHomedir());	
 			}catch(Exception $oException){
 				logger::log("fileserver: Login unable to open homedirectory for user ".$oUser->getUsername(),LOG_INFO);
-				$oUrd = vfs::createFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),'$');
-				$oCsd = vfs::createFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),'$');
+				$oUrd = Vfs::createFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),'$');
+				$oCsd = Vfs::createFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),'$');
 			}
 			try {
-				$oLib = vfs::createFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oUser->getLib());
+				$oLib = Vfs::createFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oUser->getLib());
 			}catch(Exception $oException){
 				logger::log("fileserver: Login unable to open library dir setting library to $ for user ".$oUser->getUsername(),LOG_INFO);
-				$oLib = vfs::createFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),'');
+				$oLib = Vfs::createFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),'');
 			}
 			//Handles are now build send the reply 
 			$oReply = $oFsRequest->buildReply();
@@ -422,7 +423,7 @@ class fileserver {
 		logger::log("cmdInfo for path ".$sFile."",LOG_DEBUG);
 		$oReply = $oFsRequest->buildReply();
 		try {
-			$oMeta = vfs::getMeta($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sFile);
+			$oMeta = Vfs::getMeta($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sFile);
 			$sReplyData =  sprintf("%-10.10s %08X %08X   %06X   %-6.6s  %02d:%02d:%02d %06x\r\x80",$sFile,$oMeta->getLoadAddr(),$oMeta->getExecAddr(),$oMeta->getSize(),"RW/RW",$oMeta->getDay(),$oMeta->getMonth(),$oMeta->getYear(),$oMeta->getSin());
 			logger::log("INFO ".$sFile." Load: ".$oMeta->getLoadAddr()." Exec: ".$oMeta->getExecAddr()." Size:".$oMeta->getSize(),LOG_DEBUG);
 			$oReply->InfoOk();
@@ -449,7 +450,7 @@ class fileserver {
 				//EC_FS_GET_INFO_ACCESS
 				$oReply = $oFsRequest->buildReply();
 				try {
-					$oMeta = vfs::getMeta($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sDir);
+					$oMeta = Vfs::getMeta($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sDir);
 					$oReply->DoneOk();
 					//Append Type
 					if($oMeta->isDir()){
@@ -471,7 +472,7 @@ class fileserver {
 				//EC_FS_GET_INFO_ALL
 				$oReply = $oFsRequest->buildReply();
 				try {
-					$oMeta = vfs::getMeta($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sDir);
+					$oMeta = Vfs::getMeta($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sDir);
 					$oReply->DoneOk();
 					//Append Type
 					if($oMeta->isDir()){
@@ -484,7 +485,7 @@ class fileserver {
 					$oReply->append24bitIntLittleEndian($oMeta->getSize());
 					$oReply->appendByte($oMeta->getAccess());
 					//Add current date
-					$oeply->appendRaw($oMeta->getCTime());
+					$oReply->appendRaw($oMeta->getCTime());
 				}catch(Exception $oException){
 					$oReply->DoneOk();
 					$oReply->appendByte(0x00);
@@ -502,7 +503,7 @@ class fileserver {
 				//EC_FS_GET_INFO_CTIME
 				$oReply = $oFsRequest->buildReply();
 				try {
-					$oMeta = vfs::getMeta($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sDir);
+					$oMeta = Vfs::getMeta($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sDir);
 					$oReply->DoneOk();
 					//Append Type
 					if($oMeta->isDir()){
@@ -510,7 +511,7 @@ class fileserver {
 					}else{
 						$oReply->appendByte(0x01);
 					}
-					$oeply->appendRaw($oMeta->getCTime());
+					$oReply->appendRaw($oMeta->getCTime());
 				}catch(Exception $oException){
 					$oReply->DoneOk();
 					$oReply->appendByte(0x00);
@@ -524,7 +525,7 @@ class fileserver {
 				//EC_FS_GET_INFO_META
 				$oReply = $oFsRequest->buildReply();
 				try {
-					$oMeta = vfs::getMeta($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sDir);
+					$oMeta = Vfs::getMeta($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sDir);
 					$oReply->DoneOk();
 					//Append Type
 					if($oMeta->isDir()){
@@ -550,7 +551,7 @@ class fileserver {
 				//EC_FS_GET_INFO_SIZE
 				$oReply = $oFsRequest->buildReply();
 				try {
-					$oMeta = vfs::getMeta($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sDir);
+					$oMeta = Vfs::getMeta($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sDir);
 					$oReply->DoneOk();
 					//Append Type
 					if($oMeta->isDir()){
@@ -584,7 +585,7 @@ class fileserver {
 					//dir name fixed to 10 bytes right padded with spaces
 					if($sDir==""){
 						//No dir requested so use csd
-						$oFd = vfs::getFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oFsRequest->getCsd());
+						$oFd = Vfs::getFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oFsRequest->getCsd());
 						$oReply->appendString(str_pad(substr($oFd->getEconetDirName(),0,10),10,' '));
 					}else{
 						$oReply->appendString(str_pad(substr($sDir,0,10),10,' '));
@@ -628,25 +629,25 @@ class fileserver {
 				$iExec = $oFsRequest->get32bitIntLittleEndian(6);
 				$iAccess =$oFsRequest->getByte(7);
 				$sPath = $oFsRequest->getString(8);
-				vfs::setMeta($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sPath,$iLoad,$iExec,$iAccess);
+				Vfs::setMeta($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sPath,$iLoad,$iExec,$iAccess);
 				break;
 			case 2:
 				//EC_FS_SET_INFO_LOAD
 				$iLoad = $oFsRequest->get32bitIntLittleEndian(2);
 				$sPath = $oFsRequest->getString(6);
-				vfs::setMeta($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sPath,$iLoad,NULL,NULL);
+				Vfs::setMeta($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sPath,$iLoad,NULL,NULL);
 				break;
 			case 3:
 				//EC_FS_SET_INFO_EXEC
 				$iExec = $oFsRequest->get32bitIntLittleEndian(2);
 				$sPath = $oFsRequest->getString(6);
-				vfs::setMeta($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sPath,NULL,$iExec,NULL);
+				Vfs::setMeta($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sPath,NULL,$iExec,NULL);
 				break;
 			case 4:
 				//EC_FS_SET_INFO_ACCESS
 				$iAccess =$oFsRequest->getByte(1);
 				$sPath = $oFsRequest->getString(2);
-				vfs::setMeta($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sPath,NULL,NULL,$iAccess);
+				Vfs::setMeta($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sPath,NULL,NULL,$iAccess);
 				break;
 		}
 		$oReply->DoneOk();
@@ -657,12 +658,12 @@ class fileserver {
 	{
 		logger::log("Eof Called by ".$oFsRequest->getSourceNetwork().".".$oFsRequest->getSourceStation(),LOG_DEBUG);
 		//Get the file handle id
-		$iHandle = $oFsHandle->getByte(1);
-		$oReply = $oFsHandle->buildReply();
+		$iHandle = $oFsRequest->getByte(1);
+		$oReply = $oFsRequest->buildReply();
 		$oReply->DoneOk();
 	
 		//Get the file handle
-		$oFsHandle = vfs::getFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$iHandle);	
+		$oFsHandle = Vfs::getFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$iHandle);	
 		if($oFsHandle->isEof()){
 			$oReply->appendByte(0xFF);
 		}else{
@@ -690,8 +691,8 @@ class fileserver {
 				$oReply->DoneOk();
 
 				//Get the directory listing
-				$oFd = vfs::getFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oFsRequest->getCsd());
-				$aDirEntries=vfs::getDirectoryListing($oFd);
+				$oFd = Vfs::getFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oFsRequest->getCsd());
+				$aDirEntries=Vfs::getDirectoryListing($oFd);
 				logger::log("There are ".count($aDirEntries)." entries in dir ".$oFd->getEconetPath(),LOG_DEBUG);
 
 				//Return only the entries the client requested (works like sql limit and offset)
@@ -720,8 +721,8 @@ class fileserver {
 				$oReply->DoneOk();
 
 				//Get the directory listing
-				$oFd = vfs::getFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oFsRequest->getCsd());
-				$aDirEntries=vfs::getDirectoryListing($oFd);
+				$oFd = Vfs::getFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oFsRequest->getCsd());
+				$aDirEntries=Vfs::getDirectoryListing($oFd);
 				logger::log("There are ".count($aDirEntries)." entries in dir ".$oFd->getEconetPath(),LOG_DEBUG);
 
 				//Return only the entries the client requested (works like sql limit and offset)
@@ -754,8 +755,8 @@ class fileserver {
 				$oReply->DoneOk();
 
 				//Get the directory listing
-				$oFd = vfs::getFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oFsRequest->getCsd());
-				$aDirEntries=vfs::getDirectoryListing($oFd);
+				$oFd = Vfs::getFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oFsRequest->getCsd());
+				$aDirEntries=Vfs::getDirectoryListing($oFd);
 				logger::log("There are ".count($aDirEntries)." entries in dir ".$oFd->getEconetPath(),LOG_DEBUG);
 
 				//Return only the entries the client requested (works like sql limit and offset)
@@ -793,7 +794,7 @@ class fileserver {
 			case 0:
 				//EC_FS_ARG_PTR
 				$oReply = $oFsRequest->buildReply();
-				$oFd = vfs::getFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$iHandle);
+				$oFd = Vfs::getFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$iHandle);
 				$iPos = $oFd->fsFTell();
 				$oReply->DoneOk();
 				$oReply->append24bitIntLittleEndian($iPos);
@@ -801,7 +802,7 @@ class fileserver {
 			case 1:
 				//EC_FS_ARG_EXT
 				$oReply = $oFsRequest->buildReply();
-				$oFd = vfs::getFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$iHandle);
+				$oFd = Vfs::getFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$iHandle);
 				$aStat = $oFd->fsFStat();
 				$iSize = $aStat['size'];
 				$oReply->DoneOk();
@@ -810,7 +811,7 @@ class fileserver {
 			case 2:
 				//EC_FS_ARG_SIZE
 				$oReply = $oFsRequest->buildReply();
-				$oFd = vfs::getFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$iHandle);
+				$oFd = Vfs::getFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$iHandle);
 				$aStat = $oFd->fsFStat();
 				$iSize = $aStat['size'];
 				$oReply->DoneOk();
@@ -842,11 +843,11 @@ class fileserver {
 		$oReply->appendString(str_pad(substr(config::getValue('vfs_disc_name'),0,16),16,' '));
 		try {	
 			//csd Leaf name String 10 bytes
-			$oCsd = vfs::getFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oFsRequest->getCsd());	
+			$oCsd = Vfs::getFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oFsRequest->getCsd());	
 			$oReply->appendString(str_pad(substr($oCsd->getEconetDirName(),0,10),10,' '));
 
 			//lib leaf name String 10 bytes
-			$oLib = vfs::getFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oFsRequest->getLib());	
+			$oLib = Vfs::getFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oFsRequest->getLib());	
 			$oReply->appendString(str_pad(substr($oLib->getEconetDirName(),0,10),10,' '));
 		}catch(Exception $oException){
 			$oReply = $oFsRequest->buildReply();
@@ -877,11 +878,11 @@ class fileserver {
 			try {
 				if($sOptions=="^"){
 					//Change to parent dir
-					$oCsd = vfs::getFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oFsRequest->getCsd());
+					$oCsd = Vfs::getFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oFsRequest->getCsd());
 					$sParentPath = $oCsd->getEconetParentPath();
-					$oNewCsd = vfs::createFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sParentPath);
+					$oNewCsd = Vfs::createFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sParentPath);
 				}else{
-					$oNewCsd = vfs::createFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sOptions);	
+					$oNewCsd = Vfs::createFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sOptions);	
 					if(!$oNewCsd->isDir()){
 						logger::log("User tryed to change to directory ".$oNewCsd->getEconetDirName()." however its not a directory.",LOG_DEBUG);
 						$oReply->setError(0xbe,"Not a directory");
@@ -889,7 +890,7 @@ class fileserver {
 						return;
 					}
 				}
-				vfs::closeFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oFsRequest->getCsd());
+				Vfs::closeFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oFsRequest->getCsd());
 				$oReply->DirOk();
 				//Send new csd handle
 				$oReply->appendByte($oNewCsd->getID());
@@ -902,8 +903,8 @@ class fileserver {
 		}else{
 			//No directory selected, change to the users home dir
 			try {
-				$oNewCsd = vfs::createFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oUser->getHomedir());
-				vfs::closeFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oFsRequest->getCsd());
+				$oNewCsd = Vfs::createFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oUser->getHomedir());
+				Vfs::closeFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oFsRequest->getCsd());
 				$oReply->DirOk();
 				$oReply->appendByte($oNewCsd->getID());
 				$oUser->setCsd($oNewCsd->getEconetPath());
@@ -927,14 +928,14 @@ class fileserver {
 		
 		if(strlen($sOptions)>0){
 			try {
-				$oNewLib = vfs::createFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sOptions);	
+				$oNewLib = Vfs::createFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sOptions);	
 				if(!$oNewLib->isDir()){
 					logger::log("User tryed to change the library to ".$oNewLib->getEconetDirName()." however its not a directory.",LOG_DEBUG);
 					$oReply->setError(0xbe,"Not a directory");
 					$this->_addReplyToBuffer($oReply);
 					return;
 				}
-				vfs::closeFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oFsRequest->getLib());
+				Vfs::closeFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oFsRequest->getLib());
 				$oReply->LibOk();
 				//Send new csd handle
 				$oReply->appendByte($oNewLib->getID());
@@ -970,7 +971,7 @@ class fileserver {
 		}
 
 		try {
-			vfs::createDirectory($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sOptions);
+			Vfs::createDirectory($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sOptions);
 			$oReply->DoneOk();
 		}catch(Exception $oException){
 			$oReply->setError(0xff,"Unable to create directory");
@@ -990,7 +991,7 @@ class fileserver {
 			$oReply->setError(0xff,"Syntax");
 		}else{
 			try{
-				vfs::deleteFile($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sOptions);
+				Vfs::deleteFile($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sOptions);
 				$oReply->DoneOk();
 			}catch(Exception $oException){
 				$oReply->setError(0xff,"Unable to delete");
@@ -1012,7 +1013,7 @@ class fileserver {
 		}else{
 			try{
 				list($sFrom,$sTo) = explode(' ',$sOptions);
-				vfs::moveFile($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sFrom,$sTo);
+				Vfs::moveFile($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sFrom,$sTo);
 				$oReply->DoneOk();
 			}catch(Exception $oException){
 				$oReply->setError(0xff,"No such file");
@@ -1043,7 +1044,7 @@ class fileserver {
 			$bReadOnly = TRUE;
 		}
 		try {
-			$oFsHandle = vfs::createFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sPath,$bMustExist,$bReadOnly);
+			$oFsHandle = Vfs::createFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sPath,$bMustExist,$bReadOnly);
 			$oReply->DoneOk();
 			$oReply->appendByte($oFsHandle->getID());
 		}catch(Exception $oException){
@@ -1059,7 +1060,7 @@ class fileserver {
 	public function closeFile($oFsRequest)
 	{
 		$iHandle = $oFsRequest->getByte(1);
-		vfs::closeFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$iHandle);
+		Vfs::closeFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$iHandle);
 		$oReply = $oFsRequest->buildReply();
 		$oReply->DoneOk();
 		$this->_addReplyToBuffer($oReply);
@@ -1080,7 +1081,7 @@ class fileserver {
 	
 		logger::log("Getbytes handle ".$iHandle." size ".$iBytes." prt ".$iUserPtr." offset ".$iOffset.".",LOG_DEBUG);
 
-		$oFsHandle = vfs::getFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$iHandle);	
+		$oFsHandle = Vfs::getFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$iHandle);	
 		
 		$oReply = $oFsRequest->buildReply();
 		$oReply->DoneOk();
@@ -1157,7 +1158,7 @@ class fileserver {
 		$iOffset = $oFsRequest->get24bitIntLittleEndian(6);
 		logger::log("Putbytes handle ".$iHandle." size ".$iBytes." prt ".$iUserPtr." offset ".$iOffset.".",LOG_DEBUG);
 
-		$oFsHandle = vfs::getFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$iHandle);	
+		$oFsHandle = Vfs::getFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$iHandle);	
 
 		if($iUserPtr!=0){
 			logger::log("Moving point ".$iOffset." bytes along the file ",LOG_DEBUG);
@@ -1216,7 +1217,7 @@ class fileserver {
 
 		logger::log("Getbyte handle ".$iHandle." ",LOG_DEBUG);
 		//Reads a byte from the file handle
-		$oFsHandle = vfs::getFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$iHandle);	
+		$oFsHandle = Vfs::getFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$iHandle);	
 		if($oFsHandle->isEof()){
 			$oReply->appendByte(0);
 			$oReply->appendByte(0x80);
@@ -1225,7 +1226,6 @@ class fileserver {
 			$oReply->appendByte(0);
 		}
 
-		$oReply->appendByte($iByte);
 		$this->_addReplyToBuffer($oReply);
 		
 	}
@@ -1238,7 +1238,7 @@ class fileserver {
 
 		logger::log("Putbyte handle ".$iHandle." ",LOG_DEBUG);
 		//Writes a byte to the file handle
-		$oFsHandle = vfs::getFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$iHandle);	
+		$oFsHandle = Vfs::getFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$iHandle);	
 		$oFsRequest->write($iByte);
 
 		$oReply->DoneOk();
@@ -1309,7 +1309,7 @@ class fileserver {
 			}
 			$sData=$sData.$oEconetPacket->getData();
 		}
-		vfs::saveFile($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sPath,$sData,$iLoad,$iExec);
+		Vfs::saveFile($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sPath,$sData,$iLoad,$iExec);
 	
 		//File is saved 	
 		$oReply2 = $oFsRequest->buildReply();
@@ -1343,8 +1343,8 @@ class fileserver {
 		$oReply = $oFsRequest->buildReply();
 		
 		try {
-			$sFileData = vfs::getFile($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sPath);
-			$oMeta = vfs::getMeta($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sPath);
+			$sFileData = Vfs::getFile($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sPath);
+			$oMeta = Vfs::getMeta($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sPath);
 		}catch(Exception $oException){
 			$oReply->setError(0x99,"No such file");
 			$this->_addReplyToBuffer($oReply);
@@ -1447,7 +1447,7 @@ class fileserver {
 				if(!is_null(config::getValue('vfs_home_dir_path'))){
 					$oUser->setHomedir(config::getValue('vfs_home_dir_path').'.'.$aOptions[0]);
 					try {
-						vfs::createDirectory($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),config::getValue('vfs_home_dir_path').'.'.$aOptions[0]);
+						Vfs::createDirectory($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),config::getValue('vfs_home_dir_path').'.'.$aOptions[0]);
 					}catch(Exception $oException){
 					}
 				}else{
@@ -1695,7 +1695,7 @@ class fileserver {
 		$sPath = $oFsRequest->getString(12);
 
 		//Create the file
-		vfs::createFile($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sPath,$iSize,$iLoad,$iExec);
+		Vfs::createFile($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sPath,$iSize,$iLoad,$iExec);
 
 		$oReply = $oFsRequest->buildReply();
 		$oReply->DoneOk();

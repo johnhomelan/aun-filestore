@@ -30,7 +30,6 @@ class request {
 		$this->iSourceNetwork = $oEconetPacket->getSourceNetwork();
 		$this->iSourceStation = $oEconetPacket->getSourceStation();
 		$this->iFlags = $oEconetPacket->getFlags();
-		$this->decode($oEconetPacket->getData());
 	}	
 
 	public function getSourceStation()

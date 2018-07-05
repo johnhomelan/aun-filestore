@@ -5,6 +5,8 @@
  * @author John Brown <john@home-lan.co.uk>
  * @package corevfs
 */
+use HomeLan\FileStore\Vfs\Exception as VfsException;
+use HomeLan\FileStore\Vfs\Vfs as Vfs;
 
 /** 
  * Econet NetFs uses filedecriptor ids with its client for all file operations.  The file handles 
@@ -79,7 +81,7 @@ class filedescriptor {
 
 	public function changeVfs()
 	{
-		$aPlugins = vfs::getVfsPlugins();
+		$aPlugins = Vfs::getVfsPlugins();
 		$iIndex = array_search($this->sVfsPlugin,$aPlugins);
 		$this->iVfsHandle = NULL;
 		if($iIndex!==FALSE){
@@ -93,7 +95,7 @@ class filedescriptor {
 			$this->sVfsPlugin = $sPlugin;
 			$sUnixPath = $sPlugin::_getUnixPathFromEconetPath($this->sEconetFilePath);
 				
-			if(strlen($sUnixFilePath)<1){
+			if(strlen($sUnixPath)<1){
 				//This vfs module can't process the econetpath try the next
 				$this->changeVfs();
 			}
@@ -125,7 +127,7 @@ class filedescriptor {
 					throw $oVfsException;
 				}
 				$this->changeVfs();
-				return $this->fsTell();
+				return $this->fsFTell();
 			}
 		}
 		
@@ -175,7 +177,7 @@ class filedescriptor {
 					throw $oVfsException;
 				}
 				$this->changeVfs();
-				return $this->setPos($this->oUser,$this->iVfsHandle,$iPos);
+				return $this->setPos($iPos);
 			}
 		}
 
@@ -193,7 +195,7 @@ class filedescriptor {
 					throw $oVfsException;
 				}
 				$this->changeVfs();
-				return $this->read($this->oUser,$this->iVfsHandle,$iLength);
+				return $this->read($iLength);
 			}
 		}
 
@@ -211,7 +213,7 @@ class filedescriptor {
 					throw $oVfsException;
 				}
 				$this->changeVfs();
-				return $this->write($this->oUser,$this->iVfsHandle,$sData);
+				return $this->write($sData);
 			}
 		}
 

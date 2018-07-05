@@ -21,6 +21,8 @@ The filestore provides access to file via a VFS layer with plugins have been cre
 
 %prep
 %setup -c
+cd src
+composer install --no-dev
 
 %post
 /sbin/chkconfig --add aun-filestored
@@ -45,6 +47,7 @@ install -d $RPM_BUILD_ROOT/etc/rc.d/init.d
 install -d $RPM_BUILD_ROOT/usr/sbin/
 install -d $RPM_BUILD_ROOT/usr/share/aun-filestored
 cp -r src/include $RPM_BUILD_ROOT/usr/share/aun-filestored/
+cp -r src/vendor $RPM_BUILD_ROOT/usr/share/aun-filestored/
 cp -r etc/aun-filestored/* $RPM_BUILD_ROOT/etc/aun-filestored
 cp etc/init.d/aun-filestored $RPM_BUILD_ROOT/etc/rc.d/init.d/
 install src/filestored $RPM_BUILD_ROOT/usr/sbin/

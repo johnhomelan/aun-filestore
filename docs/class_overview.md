@@ -1,4 +1,4 @@
-ore Classes
+Core Classes
 =
 
 * fileserver

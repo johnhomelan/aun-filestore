@@ -281,7 +281,7 @@ class security {
 
 		$oLoggedInUser = security::getUser($iNetwork,$iStation);
 		if(!$oLoggedInUser->isAdmin()){
-			throw new Exception("Security:  Unable to setPriv, the user logged in on ".$iNetwork.".".$iStation." (".$oUser->getUsername().") does not have admin rights.");
+			throw new Exception("Security:  Unable to setPriv, the user logged in on ".$iNetwork.".".$iStation." (".$oLoggedInUser->getUsername().") does not have admin rights.");
 		}
 
 		if($sPriv!='S' AND $sPriv!='U'){
@@ -295,7 +295,7 @@ class security {
 				$sPlugin::setPriv($sUsername,$sPriv);
 				break;
 			}catch(Exception $oException){
-				logger::log("Security: Exception thrown by plugin ".$sPlugin." when attempting to create user ".$oUser->getUsername()." (".$oException->getMessage().")",LOG_DEBUG);
+				logger::log("Security: Exception thrown by plugin ".$sPlugin." when attempting to create user ".$oLoggedInUser->getUsername()." (".$oException->getMessage().")",LOG_DEBUG);
 			}
 		}
 	

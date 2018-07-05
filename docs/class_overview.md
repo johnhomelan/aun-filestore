@@ -8,13 +8,18 @@ Core Classes
 Core FS
 --
 
-* vfs
 * directoryentry
-* vfspluginlocalfile
-* vfspluginadfsadl
-* vfsplugindfsssd
 * filedescriptor
-* vfsexception
+
+VFS
+--
+
+* Vfs\Vfs
+* Vfs\Exeption
+* Vfs\Plugin\LocalFile
+* Vfs\Plugin\AdfsAdl
+* Vfs\Plugin\DfsSsd
+
 
 Core Net
 --

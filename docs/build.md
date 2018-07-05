@@ -12,28 +12,28 @@ Our current build targets are
 
 Currently missing form the list a deb package for Debian based Linux disrobutions (e.g. Ubuntu, Crunchbang, Debian), and a windows installer.  If anyone wants to take on putting together the  missing build scripts please get in contact with me.  
 
-##Requirements##
+## Requirements ##
 
 In order to run the build scripts you will need to ant and ant contrib installed.  Some targets also require the package build tools installed (e.g. rpms need rpmbuild install, the phar archive needs php installed). 
 
 
-##RPM##
+## RPM ##
 
 
 Run the following commands to build the rpm package 
 
-    svn co svn://svn.code.sf.net/p/aunfilestore/code/trunk aunfilestore
-    cd aunfilestore
+    https://github.com/johnhomelan/aun-filestore.git
+    cd aun-filestore
     ant rpm
 
 Once the build script has run you should find an rpm in the build directory.
 
-##Phar##
+## Phar ##
 
 Run the following commands to build the phar distribution 
 
-    svn co svn://svn.code.sf.net/p/aunfilestore/code/trunk aunfilestore
-    cd aunfilestore
+    https://github.com/johnhomelan/aun-filestore.git
+    cd aun=filestore
     ant phar 
 
 Once the build script has finished you will find a tgz file in the build directory (aun-filestored-<version>-phar.tgz) that can now be distributed to others. 

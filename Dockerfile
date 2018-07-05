@@ -18,9 +18,12 @@ COPY packaging/docker/aunmap.txt /etc/aun-filestored-default-config/aunmap.txt
 COPY packaging/docker/users.txt /etc/aun-filestored-default-config/users.txt
 COPY packaging/docker/entrypoint.sh /
 
+RUN chmod u+x /usr/sbin/filestored
+RUN chmod u+x /entrypoint.sh
+
 EXPOSE 32768/udp
 
 
 VOLUME ["/var/lib/aun-filestore-root", "/var/log","/etc/aun-filestored","/var/spool/aun-filestore-print"]
 
-ENTRYPOINT ["/entrypoint.sh"]
+CMD ["/entrypoint.sh"]

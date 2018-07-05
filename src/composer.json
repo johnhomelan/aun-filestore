@@ -1,0 +1,13 @@
+{
+    "autoload": {
+            "psr-4": {
+              "HomeLan\\FileStore\\Vfs\\": "include/classes/Vfs",
+              "": [
+                "include/classes"
+              ]
+            }
+     },
+    "require-dev": {
+        "phpstan/phpstan": "^0.9.2"
+    }
+}

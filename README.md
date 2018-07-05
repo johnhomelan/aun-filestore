@@ -31,7 +31,38 @@ The print server is still very basic all print jobs are just dumped to a directo
 
 The soap interface and control client has yet to be implemented. 
 
-# Install #
+# Docker Install #
+There is a docker image pre-built read for use on dockerhub.
+
+~~~
+docker run --name=filestored -p 32768/udp -d crowly/aun-filestore
+~~~
+The udp port 32768 needs exposing as this is the port AUN uses for the passing a emulate Econet traffic.   
+
+The docker image can also be built localy 
+
+~~~
+git clone https://github.com/johnhomelan/aun-filestore.git
+cd aun-filestore
+docker build -t aun-filestore .
+docker run --name=filestored -p 32768/udp -d aun-filestore
+~~~
+
+The image has a number of volumes 
+* /var/lib/aun-filestore-root
+** The root of the fs exported by the filestore
+* /var/spool/aun-filestore-print
+** Where print jobs submitted to the filestore a saved
+* /etc/aun-filestored
+** The config directory (see the Config.md file in docs for details of the config options)
+* /var/log
+** The directory used for log storage 
+
+~~~
+docker run --name=filestored -p 32768/udp -v /storage/root:/var/lib/aun-filestore-root -v /storage/print:/var/spool/aun-filestore-print -v /storage/config:/etc/aun-filestored -v /storage/log:/var/log -d crowly/aun-filestore
+~~~
+
+# Install From Source #
 
 At the moment there are no rpm and deb packages built for easy install (this will happen before the release of the version 0.1).  However it can be run from source, your machine will need to have php installed and the php-pcntl module.
   
@@ -41,3 +72,17 @@ At the moment there are no rpm and deb packages built for easy install (this wil
 * Create a directory to hold your config files 
 * Write a basic config file (see the config section)
 * Run the server (./filestored -c <conifg_dir>)
+
+# RPM #
+
+An rpm can be built using ant from the source.
+
+~~~
+git clone https://github.com/johnhomelan/aun-filestore.git
+cd aun-filestore
+ant rpm
+~~~
+
+# Other package formats #
+
+Work has started on supporting deb packaging, and the synology package format.  However this work is not complete.  

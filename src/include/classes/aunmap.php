@@ -35,7 +35,7 @@ class aunmap {
 	 *
 	 * @param string $sIP The ip address to get the econet addr for (in the form xxx.xxx.xxx.xxx)
 	 * @param int $sPort We can support mapping mulitple econet address to a single host however each econet address is bound to a udp port
-	 * @return sring Econet address in the form network.station 
+	 * @return string Econet address in the form network.station 
 	*/
 	public static function ipAddrToEcoAddr($sIP,$sPort=NULL)
 	{

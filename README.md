@@ -1,5 +1,5 @@
 # Aims #
-The main aim of this project is to create an Econet fileserver implementation, which communicates using Acorns AUN protocol (Econet over IP/UDP).
+The main aim of this project is to create an Econet fileserver implementation, which communicates using Acorn's AUN protocol (Econet over IP/UDP).
 
 Our target platform is Linux and Unix like environments, with Windows as a target for later development (trying not to build things in away that will never work with windows).
 

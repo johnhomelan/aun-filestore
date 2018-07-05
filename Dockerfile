@@ -11,13 +11,17 @@ RUN mkdir -p /var/spool/aun-filestore-print
 RUN mkdir -p /usr/share/aun-filestored/include
 
 ADD src/include /usr/share/aun-filestored/include
+ADD src/composer.json /usr/share/aun-filestored
+ADD src/composer.lock /usr/share/aun-filestored
 COPY src/filestored /usr/sbin/
+
 
 COPY packaging/docker/default.conf /etc/aun-filestored-default-config/default.conf
 COPY packaging/docker/aunmap.txt /etc/aun-filestored-default-config/aunmap.txt
 COPY packaging/docker/users.txt /etc/aun-filestored-default-config/users.txt
 COPY packaging/docker/entrypoint.sh /
 
+RUN cd /usr/share/aun-filestored; composer install --no-dev
 RUN chmod u+x /usr/sbin/filestored
 RUN chmod u+x /entrypoint.sh
 

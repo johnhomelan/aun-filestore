@@ -2,6 +2,8 @@
 <?php
 declare(ticks = 1);
 
+use HomeLan\FileStore\Vfs\Vfs; 
+
 //If we are running the installed version update the include path so the installed version of any
 //classes will run first.
 if(__DIR__ == '/usr/sbin'){
@@ -155,7 +157,7 @@ class filestored  {
 				//On sigalarm perform any house keeping tasks
 				logger::log("Got sig alarm",LOG_DEBUG);
 				security::houseKeeping();
-				vfs::houseKeeping();
+				Vfs::houseKeeping();
 				$this->registerNextAlarm();
 				break;
 			case SIGTERM:

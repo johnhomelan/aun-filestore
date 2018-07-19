@@ -261,7 +261,7 @@ class filestored  {
 	*/
 	public function processAunPacket($oSocket)
 	{
-		$oAunPacket = new AunPacket();
+		$oAunPacket = new aunpacket();
 		
 		//Read the UDP data
 		$sUdpData= stream_socket_recvfrom($oSocket,1500,0,$sHost);
@@ -465,7 +465,7 @@ class filestored  {
 			foreach($aReadSet as  $iReadSocket){
 				if($iReadSocket == $this->oAunSocket){
 					//We've received an AUN packet process it 
-					$oAunPacket = new AunPacket();
+					$oAunPacket = new aunpacket();
 					$sUdpData= stream_socket_recvfrom($this->oAunSocket,1500,0,$sHost);
 					$oAunPacket->setSourceIP($sHost);
 					logger::log("filestore: Aun packet recvieved from ".$sHost,LOG_DEBUG);	
@@ -532,7 +532,7 @@ class filestored  {
 			foreach($aReadSet as  $iReadSocket){
 				if($iReadSocket == $this->oAunSocket){
 					//We've received an AUN packet process it 
-					$oAunPacket = new AunPacket();
+					$oAunPacket = new aunpacket();
 					$sUdpData= stream_socket_recvfrom($this->oAunSocket,1500,0,$sHost);
 					$oAunPacket->setSourceIP($sHost);
 					logger::log("filestore: Aun packet recvieved from ".$sHost,LOG_DEBUG);	

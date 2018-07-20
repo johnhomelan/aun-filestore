@@ -7,6 +7,7 @@ namespace HomeLan\FileStore\Vfs\Plugin;
 */
 use HomeLan\FileStore\Vfs\Exception as VfsException;
 use HomeLan\FileStore\Vfs\Vfs as Vfs;
+use HomeLan\FileStore\Vfs\FilePath;
 use config; 
 use logger;
 use filedescriptor;
@@ -99,16 +100,9 @@ class LocalFile implements PluginInterface {
 		return $sUnixPath;
 	}
 
-	public static function _buildFiledescriptorFromEconetPath($oUser,$sCsd,$sEconetPath,$bMustExist,$bReadOnly)
+	public static function _buildFiledescriptorFromEconetPath($oUser,FilePath $oEconetPath,$bMustExist,$bReadOnly)
 	{
-		if(strpos($sEconetPath,'$')===0){
-			//Absolute Path
-			$sUnixPath = LocalFile::_econetToUnix($sEconetPath);
-		}else{
-			//Relative path
-			$sEconetPath = $sCsd.'.'.$sEconetPath;
-			$sUnixPath = LocalFile::_econetToUnix($sEconetPath);
-		}
+		$sUnixPath = LocalFile::_econetToUnix($oEconetPath->getFilePath());
 		if(strlen($sUnixPath)>0){
 			if(is_file($sUnixPath)){
 				if($bReadOnly){
@@ -126,7 +120,7 @@ class LocalFile implements PluginInterface {
 				$iVfsHandle = NULL;
 			}
 			$iEconetHandle = vfs::getFreeFileHandleID($oUser);
-			return new filedescriptor('LocalFile',$oUser,$sUnixPath,$sEconetPath,$iVfsHandle,$iEconetHandle,is_file($sUnixPath),is_dir($sUnixPath));
+			return new filedescriptor('LocalFile',$oUser,$sUnixPath,$oEconetPath->getFilePath(),$iVfsHandle,$iEconetHandle,is_file($sUnixPath),is_dir($sUnixPath));
 			
 		}
 	}
@@ -188,66 +182,34 @@ class LocalFile implements PluginInterface {
 		return $aReturn;
 	}
 
-	public static function createDirectory($oUser,$sCsd,$sEconetPath)
+	public static function createDirectory($oUser,FilePath $oPath)
 	{
-		if(strpos($sEconetPath,'$')===0){
-			//Absolute path
-			$aPath = explode('.',$sEconetPath);
-		}else{
-			//Relative path
-			$aPath = explode('.',trim($sCsd,'.').'.'.$sEconetPath);
-		}
-		$sDir = array_pop($aPath);
-		$sDirPath = implode('.',$aPath);
-		$sUnixDirPath = LocalFile::_econetToUnix($sDirPath);
-		if(is_dir($sUnixDirPath) AND !file_exists(rtrim($sUnixDirPath,DIRECTORY_SEPARATOR).DIRECTORY_SEPARATOR.$sDir)){
-			return mkdir(rtrim($sUnixDirPath,DIRECTORY_SEPARATOR).DIRECTORY_SEPARATOR.$sDir);
+		$sUnixDirPath = LocalFile::_econetToUnix($oPath->sDir);
+		if(is_dir($sUnixDirPath) AND !file_exists(rtrim($sUnixDirPath,DIRECTORY_SEPARATOR).DIRECTORY_SEPARATOR.$oPath->sFile)){
+			return mkdir(rtrim($sUnixDirPath,DIRECTORY_SEPARATOR).DIRECTORY_SEPARATOR).$oPath->sFile;
 		}
 		return FALSE;
 	}
 
-	public static function deleteFile($oUser,$sCsd,$sEconetPath)
+	public static function deleteFile($oUser,FilePath $oEconetPath)
 	{
-		if(strpos($sEconetPath,'$')===0){
-			//Absolute path
-			$aPath = explode('.',$sEconetPath);
-		}else{
-			//Relative path
-			$aPath = explode('.',trim($sCsd,'.').'.'.$sEconetPath);
-		}
-		$sFile = array_pop($aPath);
-		$sFilePath = implode('.',$aPath);
-		$sUnixDirPath = LocalFile::_econetToUnix($sFilePath);
+		$sUnixDirPath = LocalFile::_econetToUnix($oEconetPath->sDir);
 		if(is_dir($sUnixDirPath)){
-			if(file_exists(rtrim($sUnixDirPath,DIRECTORY_SEPARATOR).DIRECTORY_SEPARATOR.$sFile)){
-				$bReturn =  unlink(rtrim($sUnixDirPath,DIRECTORY_SEPARATOR).DIRECTORY_SEPARATOR.$sFile);
+			if(file_exists(rtrim($sUnixDirPath,DIRECTORY_SEPARATOR).DIRECTORY_SEPARATOR.$oEconetPath->sFile)){
+				$bReturn =  unlink(rtrim($sUnixDirPath,DIRECTORY_SEPARATOR).DIRECTORY_SEPARATOR.$oEconetPath->sFile);
 
-				if($bReturn AND file_exists(rtrim($sUnixDirPath,DIRECTORY_SEPARATOR).DIRECTORY_SEPARATOR.$sFile).'.inf'){
-					unlink(rtrim($sUnixDirPath,DIRECTORY_SEPARATOR).DIRECTORY_SEPARATOR.$sFile.'.inf');
+				if($bReturn AND file_exists(rtrim($sUnixDirPath,DIRECTORY_SEPARATOR).DIRECTORY_SEPARATOR.$oEconetPath->sFile).'.inf'){
+					unlink(rtrim($sUnixDirPath,DIRECTORY_SEPARATOR).DIRECTORY_SEPARATOR.$oEconetPath->sFile.'.inf');
 				}
 			}
 		}
 		return FALSE;
 	}
 
-	public static function moveFile($oUser,$sCsd,$sEconetPathFrom,$sEconetPathTo)
+	public static function moveFile($oUser,FilePath $oEconetPathFrom,FilePath $oEconetPathTo)
 	{
-		if(strpos($sEconetPathFrom,'$')===0){
-			//Absolute path
-			$sPathFrom = $sEconetPathFrom;
-		}else{
-			//Relative path
-			$sPathFrom = trim($sCsd,'.').'.'.$sEconetPathFrom;
-		}
-		if(strpos($sEconetPathTo,'$')===0){
-			//Absolute path
-			$sPathTo = $sEconetPathTo;
-		}else{
-			//Relative path
-			$sPathTo = trim($sCsd,'.').'.'.$sEconetPathTo;
-		}
-		$sUnixFrom = LocalFile::_econetToUnix($sPathFrom);
-		$sUnixTo = LocalFile::_econetToUnix($sPathTo);
+		$sUnixFrom = LocalFile::_econetToUnix($oEconetPathFrom->getFilePath());
+		$sUnixTo = LocalFile::_econetToUnix($oEconetPathTo->getFilePath());
 		if(!file_exists($sUnixFrom)){
 			throw new VfsException("No such file");
 		}
@@ -261,46 +223,29 @@ class LocalFile implements PluginInterface {
 		return $bReturn;
 	}
 
-	public static function saveFile($oUser,$sCsd,$sEconetPath,$sData,$iLoadAddr,$iExecAddr)
+	public static function saveFile($oUser,FilePath $oEconetPath,$sData,$iLoadAddr,$iExecAddr)
 	{
-		if(strpos($sEconetPath,'$')===0){
-			//Absolute path
-			$aPath = explode('.',$sEconetPath);
-		}else{
-			//Relative path
-			$aPath = explode('.',trim($sCsd,'.').'.'.$sEconetPath);
-		}
-		$sFile = array_pop($aPath);
-		$sFilePath = implode('.',$aPath);
-		$sUnixDirPath = LocalFile::_econetToUnix($sFilePath);
+		$sUnixDirPath = LocalFile::_econetToUnix($oEconetPath->sDir);
 		if(is_dir($sUnixDirPath)){
-			file_put_contents($sUnixDirPath.DIRECTORY_SEPARATOR.$sFile,$sData);
-			file_put_contents($sUnixDirPath.DIRECTORY_SEPARATOR.$sFile.'.inf',"TAPE file ".str_pad(dechex($iLoadAddr),8,0,STR_PAD_LEFT)." ".str_pad(dechex($iExecAddr),8,0,STR_PAD_LEFT));
+			file_put_contents($sUnixDirPath.DIRECTORY_SEPARATOR.$oEconetPath->sFile,$sData);
+			file_put_contents($sUnixDirPath.DIRECTORY_SEPARATOR.$oEconetPath->sFile.'.inf',"TAPE file ".str_pad(dechex($iLoadAddr),8,0,STR_PAD_LEFT)." ".str_pad(dechex($iExecAddr),8,0,STR_PAD_LEFT));
 			return TRUE;
 		}
+		return FALSE;
 
 	}
 
-	public static function createFile($oUser,$sCsd,$sEconetPath,$iSize,$iLoadAddr,$iExecAddr)
+	public static function createFile($oUser,FilePath $oEconetPath,$iSize,$iLoadAddr,$iExecAddr)
 	{
-		if(strpos($sEconetPath,'$')===0){
-			//Absolute path
-			$aPath = explode('.',$sEconetPath);
-		}else{
-			//Relative path
-			$aPath = explode('.',trim($sCsd,'.').'.'.$sEconetPath);
-		}
-		$sFile = array_pop($aPath);
-		$sFilePath = implode('.',$aPath);
-		$sUnixDirPath = LocalFile::_econetToUnix($sFilePath);
+		$sUnixDirPath = LocalFile::_econetToUnix($oEconetPath->sDir);
 		if(is_dir($sUnixDirPath)){
-			$hFile = fopen($sUnixDirPath.DIRECTORY_SEPARATOR.$sFile,'r+');
+			$hFile = fopen($sUnixDirPath.DIRECTORY_SEPARATOR.$oEconetPath->sFile,'r+');
 			ftruncate($hFile,$iSize);
 			fclose($hFile);
-			file_put_contents($sUnixDirPath.DIRECTORY_SEPARATOR.$sFile.'.inf',"TAPE file ".str_pad(dechex($iLoadAddr),8,0,STR_PAD_LEFT)." ".str_pad(dechex($iExecAddr),8,0,STR_PAD_LEFT));
+			file_put_contents($sUnixDirPath.DIRECTORY_SEPARATOR.$oEconetPath->sFile.'.inf',"TAPE file ".str_pad(dechex($iLoadAddr),8,0,STR_PAD_LEFT)." ".str_pad(dechex($iExecAddr),8,0,STR_PAD_LEFT));
 			return TRUE;
 		}
-
+		return FALSE;
 	}
 
 	/**
@@ -308,16 +253,9 @@ class LocalFile implements PluginInterface {
 	 *
 	 * @throws VfsException if the file does not exist
 	*/
-	public static function getFile($oUser,$sCsd,$sEconetPath)
+	public static function getFile($oUser,FilePath $oEconetPath)
 	{
-		if(strpos($sEconetPath,'$')===0){
-			//Absolute path
-			$sPath = $sEconetPath;
-		}else{
-			//Relative path
-			$sPath = trim($sCsd,'.').'.'.$sEconetPath;
-		}
-		$sUnixPath = LocalFile::_econetToUnix($sPath);
+		$sUnixPath = LocalFile::_econetToUnix($oEconetPath->getFilePath());
 		if(is_file($sUnixPath)){
 			return file_get_contents($sUnixPath);
 		}

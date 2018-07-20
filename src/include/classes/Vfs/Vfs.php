@@ -13,6 +13,7 @@ use logger;
 use Exception;
 use config;
 use HomeLan\FileStore\Vfs\Exception as VfsException;
+use HomeLan\FileStore\Vfs\FilePath;
 
 /**
  * The vfs class handles all file operations carried out by the file server.
@@ -75,6 +76,37 @@ class Vfs {
 	}
 
 	/**
+	 * Converts Econet style path to unix Abosolute of relative path to a fullpath
+	 *
+	 * This takes chroot in to account converting absolute chrooted path to real absolute path
+	 * @return object FilePath
+	 */ 
+	private static function buildFullPath(int $iNetwork,int $iStation,string $sEconetPath): FilePath
+	{
+		if(strpos($sEconetPath,'$')===0){
+			//Absolute path
+			$aPath = explode('.',$sEconetPath);
+			$sFile = array_pop($aPath);
+			$sDir = join('.',$aPath);
+		}elseif(strpos($sEconetPath,'.')!==FALSE){
+			//Relitive path
+			$oUser = security::getUser($iNetwork,$iStation);
+			$aPath = explode('.',$sEconetPath);
+			$sFile = array_pop($aPath);
+			$sDir = $oUser->getCsd().'.'.join('.',$aPath);
+		}else{
+			//No path
+			$oUser = security::getUser($iNetwork,$iStation);
+			$sFile = $sEconetPath;
+			$sDir = $oUser->getCsd();
+		}
+		if($oUser->getRoot()!='$'){
+			$sDir = str_replace('$',$oUser->getRoot(),$sDir);
+		}
+		return new FilePath($sDir, $sFile);
+	}
+
+	/**
 	 * Get a list of all the vfsplugin we should be using 
 	 *
 	 * It also calls the init method of each one when the class is loaded for the first time
@@ -104,19 +136,18 @@ class Vfs {
 	 * Builds a file descriptor object from an econet path
 	 * 
 	 * @param object $oUser The user the file descriptor is being created for 
-	 * @param string $sCsd The currently selected director path
-	 * @param string $sEconetPath The econet file path
+	 * @param string $oEconetPath The econet file path
 	 * @param boolean $bMustExist The path must exist
 	 * @param boolean $bReadOnly If the file descriptor should be read-only
 	 * @return object file-descriptor
 	*/	
-	static protected function _buildFiledescriptorFromEconetPath($oUser,$sCsd,$sEconetPath,$bMustExist,$bReadOnly)
+	static protected function _buildFiledescriptorFromEconetPath($oUser,FilePath $oEconetPath,$bMustExist,$bReadOnly)
 	{
 		$aPlugins = Vfs::getVfsPlugins();
 		$oHandle=NULL;
 		foreach($aPlugins as $sPlugin){
 			try {
-				$oHandle = $sPlugin::_buildFiledescriptorFromEconetPath($oUser,$sCsd,$sEconetPath,$bMustExist,$bReadOnly);
+				$oHandle = $sPlugin::_buildFiledescriptorFromEconetPath($oUser,$oEconetPath,$bMustExist,$bReadOnly);
 				if(is_object($oHandle)){
 					break;
 				}
@@ -128,7 +159,7 @@ class Vfs {
 			}
 		}
 		if(!is_object($oHandle)){
-			throw new Exception("vfs: File/Dir not found (".$sEconetPath.")");
+			throw new Exception("vfs: File/Dir not found (".$oEconetPath->getFilePath().")");
 		}
 		return $oHandle;
 	}
@@ -191,12 +222,12 @@ class Vfs {
 			throw new Exception("vfs: Un-able to create a handle for a station that is not logged in (Who are you?)");
 		}
 		$oUser = security::getUser($iNetwork,$iStation);
-		$sCsd = $oUser->getCsd();
 		$aPlugins = Vfs::getVfsPlugins();
 		$oHandle=NULL;
+		$oPath = Vfs::buildFullPath($iNetwork,$iStation,$sEconetPath);
 		foreach($aPlugins as $sPlugin){
 			try {
-				if($sPlugin::createDirectory($oUser,$sCsd,$sEconetPath)){
+				if($sPlugin::createDirectory($oUser,$oPath)){
 					return;
 				}
 			}catch(VfsException $oVfsException){
@@ -223,12 +254,12 @@ class Vfs {
 			throw new Exception("vfs: Un-able to create a handle for a station that is not logged in (Who are you?)");
 		}
 		$oUser = security::getUser($iNetwork,$iStation);
-		$sCsd = $oUser->getCsd();
+		$oPath = Vfs::buildFullPath($iNetwork,$iStation,$sEconetPath);
 		$aPlugins = Vfs::getVfsPlugins();
 		$oHandle=NULL;
 		foreach($aPlugins as $sPlugin){
 			try {
-				if($sPlugin::deleteFile($oUser,$sCsd,$sEconetPath)){
+				if($sPlugin::deleteFile($oUser,$oPath)){
 					return;
 				}
 			}catch(VfsException $oVfsException){
@@ -256,13 +287,15 @@ class Vfs {
 			throw new Exception("vfs: Un-able to create a handle for a station that is not logged in (Who are you?)");
 		}
 		$oUser = security::getUser($iNetwork,$iStation);
-		$sCsd = $oUser->getCsd();
+		$oPathFrom = Vfs::buildFullPath($iNetwork,$iStation,$sEconetPathFrom);
+		$oPathTo = Vfs::buildFullPath($iNetwork,$iStation,$sEconetPathTo);
+
 		$aPlugins = Vfs::getVfsPlugins();
 		$oHandle=NULL;
 		foreach($aPlugins as $sPlugin){
 
 			try {
-				if($sPlugin::moveFile($oUser,$sCsd,$sEconetPathFrom,$sEconetPathTo)){
+				if($sPlugin::moveFile($oUser,$oPathFrom,$oPathTo)){
 					return;
 				}
 			}catch(VfsException $oVfsException){
@@ -292,12 +325,12 @@ class Vfs {
 			throw new Exception("vfs: Un-able to create a handle for a station that is not logged in (Who are you?)");
 		}
 		$oUser = security::getUser($iNetwork,$iStation);
-		$sCsd = $oUser->getCsd();
+		$oPath = Vfs::buildFullPath($iNetwork,$iStation,$sEconetPath);
 		$aPlugins = Vfs::getVfsPlugins();
 		$oHandle=NULL;
 		foreach($aPlugins as $sPlugin){
 			try {
-				if($sPlugin::saveFile($oUser,$sCsd,$sEconetPath,$sData,$iLoadAddr,$iExecAddr)){
+				if($sPlugin::saveFile($oUser,$oPath,$sData,$iLoadAddr,$iExecAddr)){
 					return;
 				}
 			}catch(VfsException $oVfsException){
@@ -327,12 +360,12 @@ class Vfs {
 			throw new Exception("vfs: Un-able to create a handle for a station that is not logged in (Who are you?)");
 		}
 		$oUser = security::getUser($iNetwork,$iStation);
-		$sCsd = $oUser->getCsd();
+		$oPath = Vfs::buildFullPath($iNetwork,$iStation,$sEconetPath);
 		$aPlugins = Vfs::getVfsPlugins();
 		$oHandle=NULL;
 		foreach($aPlugins as $sPlugin){
 			try {
-				if($sPlugin::createFile($oUser,$sCsd,$sEconetPath,$iSize,$iLoadAddr,$iExecAddr)){
+				if($sPlugin::createFile($oUser,$oPath,$iSize,$iLoadAddr,$iExecAddr)){
 					return;
 				}
 			}catch(VfsException $oVfsException){
@@ -359,12 +392,12 @@ class Vfs {
 			throw new Exception("vfs: Un-able to create a handle for a station that is not logged in (Who are you?)");
 		}
 		$oUser = security::getUser($iNetwork,$iStation);
-		$sCsd = $oUser->getCsd();
+		$oPath = Vfs::buildFullPath($iNetwork,$iStation,$sEconetPath);
 		$aPlugins = Vfs::getVfsPlugins();
 		$oHandle=NULL;
 		foreach($aPlugins as $sPlugin){
 			try {
-				return $sPlugin::getFile($oUser,$sCsd,$sEconetPath);
+				return $sPlugin::getFile($oUser,$oPath);
 			}catch(VfsException $oVfsException){
 				//If it's a hard error abort the operation
 				if($oVfsException->isHard()){
@@ -390,45 +423,29 @@ class Vfs {
 			throw new Exception("vfs: Un-able to create a handle for a station that is not logged in (Who are you?)");
 		}
 		logger::log("vfs: getMeta for ".$sEconetPath,LOG_DEBUG);
-		if(strpos($sEconetPath,'$')===0){
-			//Absolute path
-			$aPath = explode('.',$sEconetPath);
-			$sFile = array_pop($aPath);
-			$sDir = join('.',$aPath);
-		}elseif(strpos($sEconetPath,'.')!==FALSE){
-			//Relitive path
-			$oUser = security::getUser($iNetwork,$iStation);
-			$aPath = explode('.',$sEconetPath);
-			$sFile = array_pop($aPath);
-			$sDir = $oUser->getCsd().'.'.join('.',$aPath);
-		}else{
-			//No path
-			$oUser = security::getUser($iNetwork,$iStation);
-			$sFile = $sEconetPath;
-			$sDir = $oUser->getCsd();
-		}
+		$oPath = Vfs::buildFullPath($iNetwork,$iStation,$sEconetPath);
 
 		$aDirectoryListing = array();
 		$aPlugins = Vfs::getVfsPlugins();
 		foreach($aPlugins as $sPlugin){
 			try {
-				$aDirectoryListing = $sPlugin::getDirectoryListing($sDir,$aDirectoryListing);	
+				$aDirectoryListing = $sPlugin::getDirectoryListing($oPath->sDir,$aDirectoryListing);	
 			}catch(VfsException $oVfsException){	
 				if($oVfsException->isHard()){
 					throw $oVfsException;
 				}
 			}
 		}
-		if(array_key_exists($sFile,$aDirectoryListing)){
-			return $aDirectoryListing[$sFile];
+		if(array_key_exists($oPath->sFile,$aDirectoryListing)){
+			return $aDirectoryListing[$oPath->sFile];
 		}else{
 			//Try case insensative search
 			foreach($aDirectoryListing as $sTestFileName => $oFile){
-				if(trim(strtolower($sTestFileName))==trim(strtolower($sFile))){
+				if(trim(strtolower($sTestFileName))==trim(strtolower($oPath->sFile))){
 					return $oFile;
 				}
 			}
-			logger::log("VFS: getMeta no such file ".$sFile." in dir ".$sDir."",LOG_DEBUG);
+			logger::log("VFS: getMeta no such file ".$oPath->sFile." in dir ".$oPath->sDir."",LOG_DEBUG);
 			throw new Exception("No such file");
 		}
 	}
@@ -450,18 +467,12 @@ class Vfs {
 			logger::log("vfs: Un-able to create a handle for a station that is not logged in (Who are you?)",LOG_DEBUG);
 			throw new Exception("vfs: Un-able to create a handle for a station that is not logged in (Who are you?)");
 		}
-		if(strpos($sEconetPath,'$')===0){
-			//Absolute path
-			$sPath = $sEconetPath;
-		}else{
-			$oUser = security::getUser($iNetwork,$iStation);
-			$sPath = $oUser->getCsd().'.'.trim($sEconetPath,'.');
-		}
+		$oPath = Vfs::buildFullPath($iNetwork,$iStation,$sEconetPath);
 
 		$aPlugins = Vfs::getVfsPlugins();
 		foreach($aPlugins as $sPlugin){
 			try {
-				$sPlugin::setMeta($sPath,$iLoad,$iExec,$iAccess);	
+				$sPlugin::setMeta($oPath->getFilePath(),$iLoad,$iExec,$iAccess);	
 			}catch(VfsException $oVfsException){	
 				if($oVfsException->isHard()){
 					throw $oVfsException;
@@ -488,8 +499,8 @@ class Vfs {
 			throw new Exception("vfs: Un-able to create a handle for a station that is not logged in (Who are you?)");
 		}
 		$oUser = security::getUser($iNetwork,$iStation);
-		$sCsd = $oUser->getCsd();
-		$oHandle = Vfs::_buildFiledescriptorFromEconetPath($oUser,$sCsd,$sEconetPath,$bMustExist,$bReadOnly);
+		$oPath = Vfs::buildFullPath($iNetwork,$iStation,$sEconetPath);
+		$oHandle = Vfs::_buildFiledescriptorFromEconetPath($oUser,$oPath,$bMustExist,$bReadOnly);
 
 		//Store the handel for later use
 		if(!array_key_exists($iNetwork,Vfs::$aHandles)){

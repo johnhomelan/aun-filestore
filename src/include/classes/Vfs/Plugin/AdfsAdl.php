@@ -9,6 +9,7 @@ namespace HomeLan\FileStore\Vfs\Plugin;
 
 use HomeLan\FileStore\Vfs\Exception as VfsException;
 use HomeLan\FileStore\Vfs\Vfs as Vfs;
+use HomeLan\FileStore\Vfs\FilePath;
 use config; 
 use logger;
 use adfsreader;
@@ -173,35 +174,28 @@ class AdfsAdl implements PluginInterface {
 		return FALSE;
 	}
 
-	public static function _buildFiledescriptorFromEconetPath($oUser,$sCsd,$sEconetPath,$bMustExist,$bReadOnly)
+	public static function _buildFiledescriptorFromEconetPath($oUser,FilePath $oEconetPath,$bMustExist,$bReadOnly)
 	{
-		if(strpos($sEconetPath,'$')===0){
-			//Absolute Path
-			$sImageFile = AdfsAdl::_getImageFile($sEconetPath);
-		}else{
-			//Relative path
-			$sEconetPath = $sCsd.'.'.$sEconetPath;
-			$sImageFile = AdfsAdl::_getImageFile($sEconetPath);
-		}
+		$sImageFile = AdfsAdl::_getImageFile($oEconetPath->getFilePath());
 		if(strlen($sImageFile)>0){
-			$sPathInsideImage = AdfsAdl::_getPathInsideImage($sEconetPath,$sImageFile);
+			$sPathInsideImage = AdfsAdl::_getPathInsideImage($oEconetPath->getFilePath(),$sImageFile);
 			if(AdfsAdl::_checkImageFileExists($sImageFile,$sPathInsideImage)){
 				$iEconetHandle = Vfs::getFreeFileHandleID($oUser);
 				$iVfsHandle = AdfsAdl::$iFileHandle++;
 				AdfsAdl::$aFileHandles[$iVfsHandle]=array('image-file'=>$sImageFile,'path-inside-image'=>$sPathInsideImage,'pos'=>0);
 				$oAdfs =  AdfsAdl::_getImageReader($sImageFile);
-				return new filedescriptor('AdfsAdl',$oUser,$sImageFile,$sEconetPath,$iVfsHandle,$iEconetHandle,$oAdfs->isFile($sPathInsideImage),$oAdfs->isDir($sPathInsideImage));
+				return new filedescriptor('AdfsAdl',$oUser,$sImageFile,$oEconetPath->getFilePath(),$iVfsHandle,$iEconetHandle,$oAdfs->isFile($sPathInsideImage),$oAdfs->isDir($sPathInsideImage));
 			}
 		}
 
 		//Scan the unix dir, see of there is a diskimage in that directory to see if it need changing to a directory
-		$sUnixPath = AdfsAdl::_econetToUnix($sEconetPath);
+		$sUnixPath = AdfsAdl::_econetToUnix($oEconetPath->getFilePath());
 		if(file_exists($sUnixPath.'.adl')){
 			//Disk Image found
 			$iEconetHandle = Vfs::getFreeFileHandleID($oUser);
 			$iVfsHandle = AdfsAdl::$iFileHandle++;
 			AdfsAdl::$aFileHandles[$iVfsHandle]=array('image-file'=>$sUnixPath.'.adl','path-inside-image'=>'','pos'=>0);
-			return new filedescriptor('AdfsAdl',$oUser,$sUnixPath.'.adl',$sEconetPath,$iVfsHandle,$iEconetHandle,FALSE,TRUE);
+			return new filedescriptor('AdfsAdl',$oUser,$sUnixPath.'.adl',$oEconetPath->getFilePath(),$iVfsHandle,$iEconetHandle,FALSE,TRUE);
 		}
 	
 	}
@@ -260,26 +254,26 @@ class AdfsAdl implements PluginInterface {
 		return $aReturn;
 	}
 
-	public static function createDirectory($oUser,$sCsd,$sEconetPath)
+	public static function createDirectory($oUser,FilePath $oPath)
 	{
 		return FALSE;
 	}
 
-	public static function deleteFile($oUser,$sCsd,$sEconetPath)
+	public static function deleteFile($oUser,FilePath $oEconetPath)
 	{
 		return FALSE;
 	}
 
-	public static function moveFile($oUser,$sCsd,$sEconetPathFrom,$sEconetPathTo)
+	public static function moveFile($oUser,FilePath $oEconetPathFrom,FilePath $oEconetPathTo)
 	{
 		return FALSE;
 	}
 
-	public static function saveFile($oUser,$sCsd,$sEconetPath,$sData,$iLoadAddr,$iExecAddr)
+	public static function saveFile($oUser,FilePath $oEconetPath,$sData,$iLoadAddr,$iExecAddr)
 	{
 	}
 
-	public static function createFile($oUser,$sCsd,$sEconetPath,$iSize,$iLoadAddr,$iExecAddr)
+	public static function createFile($oUser,FilePath $oEconetPath,$iSize,$iLoadAddr,$iExecAddr)
 	{
 
 	}
@@ -289,18 +283,11 @@ class AdfsAdl implements PluginInterface {
 	 *
 	 * @throws VfsException if the file does not exist
 	*/
-	public static function getFile($oUser,$sCsd,$sEconetPath)
+	public static function getFile($oUser,FilePath $oEconetPath)
 	{
-		if(strpos($sEconetPath,'$')===0){
-			//Absolute Path
-			$sImageFile = AdfsAdl::_getImageFile($sEconetPath);
-		}else{
-			//Relative path
-			$sEconetPath = trim($sCsd,'.').'.'.$sEconetPath;
-			$sImageFile = AdfsAdl::_getImageFile($sEconetPath);
-		}
+		$sImageFile = AdfsAdl::_getImageFile($oEconetPath->getFilePath());
 		if(strlen($sImageFile)>0){
-			$sPathInsideImage = AdfsAdl::_getPathInsideImage($sEconetPath,$sImageFile);
+			$sPathInsideImage = AdfsAdl::_getPathInsideImage($oEconetPath->getFilePath(),$sImageFile);
 			if(AdfsAdl::_checkImageFileExists($sImageFile,$sPathInsideImage)){
 				$oAdfs = AdfsAdl::_getImageReader($sImageFile);
 				return $oAdfs->getFile($sPathInsideImage);

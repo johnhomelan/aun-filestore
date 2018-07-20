@@ -6,6 +6,7 @@ namespace HomeLan\FileStore\Vfs\Plugin;
  * This file contains interface all vfs plugins must implement
  *
 */
+use HomeLan\FileStore\Vfs\FilePath;
 
 /**
  * Any vfs plugin should implelement this interface 
@@ -28,7 +29,7 @@ interface PluginInterface {
 	*/
 	public static function houseKeeping();
 
-	public static function _buildFiledescriptorFromEconetPath($oUser,$sCsd,$sEconetPath,$bMustExist,$bReadOnly);
+	public static function _buildFiledescriptorFromEconetPath($oUser,FilePath $oEconetPath,$bMustExist,$bReadOnly);
 
 	public static function _getAccessMode($iGid,$iUid,$iMode);
 
@@ -46,63 +47,57 @@ interface PluginInterface {
 	 * Creates a directory
 	 *
 	 * @param object user $oUser The user who is performing the create dir operation
-	 * @param string $sCsd The current selected directory
-	 * @parma string $sEconetPath The econet path for the directory that needs creating (this can be a relative path to the CSD)
+	 * @param object FilePath
 	*/
-	public static function createDirectory($oUser,$sCsd,$sEconetPath);
+	public static function createDirectory($oUser,FilePath $oPath);
 
 	/**
 	 * Deletes a file
 	 *
 	 * @param object user $oUser The user who is deleting the file
-	 * @param string $sCsd The current selected directory
-	 * @param string $sEconetPath The path of the file to delete (this can be a relative path to the CSD)
+	 * @param object FilePath $oEconetPath The path of the file to delete 
 	*/
-	public static function deleteFile($oUser,$sCsd,$sEconetPath);
+	public static function deleteFile($oUser,FilePath $oEconetPath);
 
 	/**
 	 * Moves a file from one location to another
 	 *
 	 * @param object user $oUser The user who is moving the file
-	 * @param string $sCsd The current selected directory
-	 * @param string $sEconetPathFrom The file to move (this can be a relative path to the CSD)
-	 * @param string $sEconetPathTo The path to move the file to (this can be a relative path to the CSD)
+	 * @param object FilePath $oEconetPathFrom The file to move 
+	 * @param object FilePath $oEconetPathTo The path to move the file to
 	*/
-	public static function moveFile($oUser,$sCsd,$sEconetPathFrom,$sEconetPathTo);
+	public static function moveFile($oUser,FilePath $oEconetPathFrom,FilePath $oEconetPathTo);
 
 	/**
 	 * Saves a file 
 	 *
 	 * @param object user $oUser The user who is saving the file
-	 * @param string $sCsd The current selected directory
-	 * @param string $sEconetPath The file path to save the file to (this can be a relative path to the CSD)
+	 * @param object FilePath $oEconetPath The file path to save the file to 
 	 * @param string $sData The data to save in the file (binary string)
 	 * @param int $iLoadAddr The load address for the file
 	 * @param int $iExecAddr The execute address for the file
 	*/
-	public static function saveFile($oUser,$sCsd,$sEconetPath,$sData,$iLoadAddr,$iExecAddr);
+	public static function saveFile($oUser,FilePath $oEconetPath,$sData,$iLoadAddr,$iExecAddr);
 
 	/**
 	 * Creates and empty file
 	 *
 	 * @param object user $oUser The user who is saving the file
-	 * @param string $sCsd The current selected directory
-	 * @param string $sEconetPath The path of the file to be created (this can be a relative path to the CSD)
+	 * @param object FilePath $sEconetPath The path of the file to be created
 	 * @param int $iSize The size of the file in bytes
 	 * @param int $iLoadAddr The load address for the file
 	 * @param int $iExecAddr The execute address for the file
 	*/
-	public static function createFile($oUser,$sCsd,$sEconetPath,$iSize,$iLoadAddr,$iExecAddr);
+	public static function createFile($oUser,FilePath $oEconetPath,$iSize,$iLoadAddr,$iExecAddr);
 
 	/**
 	 * Gets the data from a file
 	 *
 	 * @param object user $oUser The user who is saving the file
-	 * @param string $sCsd The current selected directory
-	 * @param string $sEconetPath The file path to read (this can be a relative path to the CSD)
+	 * @param object FilePath $oEconetPath The file path to read 
 	 * @return string Binary string containing the data stored in the file
 	*/
-	public static function getFile($oUser,$sCsd,$sEconetPath);
+	public static function getFile($oUser,FilePath $oEconetPath);
 
 	/**
 	 * Set the metadata for a given file

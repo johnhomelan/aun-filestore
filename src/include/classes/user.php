@@ -20,6 +20,8 @@ class user {
 
 	protected $sHomedir = NULL;
 
+	protected $sRoot = "$";
+
 	protected $iOpt = 0;
 
 	protected $bIsAdmin = FALSE;
@@ -122,5 +124,15 @@ class user {
 			$this->sLib = config::getValue('library_path');
 		}
 		return $this->sLib;
+	}
+
+	public function getRoot()
+	{
+		return $this->sRoot;
+	}
+
+	public function setRoot($sRoot)
+	{
+		$this->sRoot = $sRoot;
 	}
 }

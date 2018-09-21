@@ -1,50 +1,59 @@
-#!/usr/bin/php
 <?php
+
+namespace HomeLan\FileStore\Command; 
 declare(ticks = 1);
 
-//If we are running the installed version update the include path so the installed version of any
-//classes will run first.
-if(__DIR__ == '/usr/sbin'){
-	define("AUNFILESTORED_LIB","/usr/share/aun-filestored");
-	if(is_dir(AUNFILESTORED_LIB)){
-		ini_set("include_path", AUNFILESTORED_LIB .PATH_SEPARATOR . get_include_path());
-	}
-}
+include_once(__DIR__.'/../../system.inc.php');
 
-include_once('include/system.inc.php');
+use Symfony\Component\Console\Input\InputInterface;
+use Symfony\Component\Console\Input\InputOption;
+use Symfony\Component\Console\Input\InputArgument;
+use Symfony\Component\Console\Output\OutputInterface;
+use Symfony\Component\Console\Helper\Table;
+use Symfony\Component\Console\Command\Command;
+
+use HomeLan\FileStore\Aun\Map; 
+use HomeLan\FileStore\Aun\Messages\AunPacket; 
+use HomeLan\FileStore\Aun\Messages\FsRequest;
+use HomeLan\FileStore\Aun\Messages\PrintServerEnquiry; 
+use HomeLan\FileStore\Aun\Messages\PrintServerData; 
+use HomeLan\FileStore\Aun\Messages\BridgeRequest; 
+use HomeLan\FileStore\Authentication\Security; 
+use HomeLan\FileStore\Vfs\Vfs; 
+ 
+use logger;
+use config;
+use Exception;
 
 /**
  * filestored is the main loop of the application.  It deals with all the socket operations, dispatches and collects
  * data from the main application classes (fileserver, print server), and handles all the initialization tasks.
 */
-class filestored  {
+class Filestore extends Command {
 
 	/**
 	 * Hold the single instance of the fileserver object
 	 *
 	 * @var object fileserver
 	*/
-	protected $oFileserver = NULL;
+	protected $oFileServer;
 
 	/**
 	 * Hold the single instance of the printserver object
 	 *
-	 * @var object printserver
 	*/
-	protected $oPrintServer = NULL;
+	protected $oPrintServer;
 
 
 	/**
 	 * Hold the single instance of the birdge object
 	 *
-	 * @var ojbect bridge
 	*/
-	protected $oBridge = NULL;
+	protected $oBridge;
 
 	/**
 	 * The handle for the AUN udp socket
 	 *
-	 * @var handle
 	*/
 	protected $oAunSocket = NULL;
 	
@@ -56,31 +65,36 @@ class filestored  {
 	protected $aAllReadableSockets = array();
 
 	/**
+	 * Initializes the application injecting the service deps 
+	 *
+	*/
+	public function __construct(\HomeLan\FileStore\Services\FileServer $oFileServer, \HomeLan\FileStore\Services\PrintServer $oPrintServer, \HomeLan\FileStore\Services\Bridge $oBridge)
+	{
+		$this->oFileServer = $oFileServer;
+		$this->oPrintServer = $oPrintServer;
+		$this->oBridge = $oBridge;
+		parent::__construct();
+	}
+
+	/**
 	 * The starting method for the application
 	 *
 	 * This does not contain the main loop, it just initializes the system
 	 * then jumps to the main loop.
 	*/
-	function main()
+	protected function execute(InputInterface $oInput, OutputInterface $oOutput)
 	{
-		$aOpts = getopt("dp:c:h");
 		$bDaemonize = FALSE;
 		$sPidFile = "";
-		foreach($aOpts AS $sOpt => $sValue){
-			switch($sOpt){
-				case "d":
-					$bDaemonize = TRUE;
-					break;
-				case "p":
-					$sPidFile = $sValue;
-					break;
-				case "c":
-					safe_define('CONFIG_CONF_FILE_PATH',$sValue);
-					break;
-				case "h":
-					$this->usage();
-					break;
-			}
+
+		if($oInput->getOption('config')!==null){
+			safe_define('CONFIG_CONF_FILE_PATH',$oInput->getOption('config'));
+		}
+		if($oInput->getOption('pidfile')!==null){
+			$sPidFile = $oInput->getOption('pidfile');
+		}
+		if($oInput->getOption('daemonize')!==null){
+			$bDaemonize = true;
 		}
 
 		//Fork and background
@@ -97,19 +111,16 @@ class filestored  {
 			$this->registerNextAlarm();
 
 			//Create a file server instance and start it
-			$this->oFileserver = new fileserver($this);
-			$this->oFileserver->init();
+			$this->oFileServer->init($this);
 
 			//Create a print server instance and start it
-			$this->oPrintServer = new printserver($this);
-			$this->oPrintServer->init();
+			$this->oPrintServer->init($this);
 
 			//Create the bridge instance and start it
-			$this->oBridge = new bridge($this);
-			$this->oBridge->init();
+			$this->oBridge->init($this);
 
-			//Load the aunmap that maps econet network/station numbers to ip addresses and ports
-			aunmap::loadMap();
+			//Load the Aun-Map that maps econet network/station numbers to ip addresses and ports
+			Map::loadMap();
 			
 			//Setup listening sockets
 			$this->bindSockets();
@@ -129,17 +140,33 @@ class filestored  {
 	 * Displays how to use the command
 	 *
 	*/
-	public function usage()
+	protected function configure()
 	{
-		echo "\n";
-		echo "filestored\n";
-		echo "----------\n";
-		echo "-h\tShows the help message\n";
-		echo "-d\tCauses the filestored to daemonize and drop into the background, otherwise the process contiunes to run in the forground\n";
-		echo "-p <file>\tCause filestored to write the PID of the deamonized process to a file\n";
-		echo "-c <config_dir>\tProvides the path to the config directory to be used (any files ending in .conf will be read from this directory)\n";
-		echo "\n";
-		exit();
+		$sHelp =<<<EOF
+Start the file, print and bridge services
+EOF;
+
+		parent::configure();
+		$this->setName('filestore')
+			->setDescription('Start the file, print and bridge services')
+			->addOption(
+				'config',
+				'c',
+				InputOption::VALUE_OPTIONAL,
+				'Provides the path to the config directory to be used (any files ending in .conf will be read from this directory)',
+				null
+			)->addOption(
+				'daemonize',
+				'd',
+				InputOption::VALUE_OPTIONAL,
+				'Causes the filestored to daemonize and drop into the background, otherwise the process contiunes to run in the forground'
+			)->addOption(
+				'pidfile',
+				'p',
+				InputOption::VALUE_OPTIONAL,
+				'Cause filestored to write the PID of the deamonized process to a file'
+			)->setHelp($sHelp);
+				
 	}
 
 	/**
@@ -154,7 +181,7 @@ class filestored  {
 			case SIGALRM:
 				//On sigalarm perform any house keeping tasks
 				logger::log("Got sig alarm",LOG_DEBUG);
-				security::houseKeeping();
+				Security::houseKeeping();
 				vfs::houseKeeping();
 				$this->registerNextAlarm();
 				break;
@@ -319,7 +346,7 @@ class filestored  {
 				$this->printServerEnquiry($oEconetPacket);
 				break;
 			case 'PrinterServerData':
-				$this->PrinterServerData($oEconetPacket);
+				$this->printerServerData($oEconetPacket);
 				break;
 			default:
 				logger::log("filestore: Recived packet on un-handle port (".$sPort.")",LOG_DEBUG);
@@ -338,9 +365,9 @@ class filestored  {
 	*/
 	public function fileServerCommand($oEconetPacket)
 	{
-		$oFsRequest = new fsrequest($oEconetPacket);
-		$this->oFileserver->processRequest($oFsRequest);
-		$aReplies = $this->oFileserver->getReplies();
+		$oFsRequest = new FsRequest($oEconetPacket);
+		$this->oFileServer->processRequest($oFsRequest);
+		$aReplies = $this->oFileServer->getReplies();
 		foreach($aReplies as $oReply){
 			logger::log("filestore: Sending econet reply",LOG_DEBUG);
 			$oReplyEconetPacket = $oReply->buildEconetpacket();
@@ -355,7 +382,7 @@ class filestored  {
 	*/
 	public function printServerEnquiry($oEconetPacket)
 	{
-		$oPrintServerEnquiry = new printserverenquiry($oEconetPacket);
+		$oPrintServerEnquiry = new PrintServerEnquiry($oEconetPacket);
 		$this->oPrintServer->processEnquiry($oPrintServerEnquiry);
 		$this->sendPrinterReplies();
 		
@@ -368,7 +395,7 @@ class filestored  {
 	*/
 	public function printerServerData($oEconetPacket)
 	{
-		$oPrintServerData = new printserverdata($oEconetPacket);
+		$oPrintServerData = new PrintServerData($oEconetPacket);
 		$this->oPrintServer->processData($oPrintServerData);
 		$this->sendPrinterReplies();
 	}
@@ -381,7 +408,7 @@ class filestored  {
 	public function bridgeCommand($oEconetPacket)
 	{
 		try{
-			$oBridgeRequest = new bridgerequest($oEconetPacket);
+			$oBridgeRequest = new BridgeRequest($oEconetPacket);
 			$this->oBridge->processRequest($oEconetPacket);
 			$this->sendBridgeReplies();
 		}catch(Exception $oException){
@@ -425,7 +452,7 @@ class filestored  {
 	public function dispatchReply($oReplyEconetPacket)
 	{
 		usleep(config::getValue('bbc_default_pkg_sleep'));
-		$sIP = aunmap::ecoAddrToIpAddr($oReplyEconetPacket->getDestinationNetwork(),$oReplyEconetPacket->getDestinationStation());
+		$sIP = Map::ecoAddrToIpAddr($oReplyEconetPacket->getDestinationNetwork(),$oReplyEconetPacket->getDestinationStation());
 		if(strlen($sIP)>0){
 			$sPacket = $oReplyEconetPacket->getAunFrame();
 			logger::log("filestore: AUN packet to ".$sIP." (".implode(':',unpack('C*',$sPacket)).")",LOG_DEBUG);
@@ -554,7 +581,7 @@ class filestored  {
 							return $oEconetPacket;
 						}else{
 							//Not the direct data stream we are waiting for but the packet must be processed in the normal way
-							$this->processEconetPacket();
+							$this->processEconetPacket($oEconetPacket);
 							//Go back to listening for the direct stream
 							return $this->waitForAck($iNetwork,$iStation,$iRecursion+1);
 						}
@@ -570,6 +597,3 @@ class filestored  {
 
 	}
 }
-
-$oApp = new filestored();
-$oApp->main();

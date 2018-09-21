@@ -5,13 +5,17 @@
  * @author John Brown <john@home-lan.co.uk>
  * @package coreprotocol
 */
+namespace HomeLan\FileStore\Aun\Messages; 
+
+use Exception; 
+use logger;
 
 /** 
  * This class is used to repressent a file server request
  *
  * @package coreprotocol
 */
-class bridgerequest extends request {
+class BridgeRequest extends Request {
 
 
 	protected $iReplyPort = NULL;
@@ -83,6 +87,6 @@ class bridgerequest extends request {
 
 	public function buildReply()
 	{
-		return new fsreply($this);
+		return new FsReply($this);
 	}
 }

@@ -5,13 +5,16 @@
  * @author John Brown <john@home-lan.co.uk>
  * @package coreprotocol
 */
+namespace HomeLan\FileStore\Aun\Messages; 
+
+use Exception; 
 
 /** 
  * This class is used to repressent file server replys
  *
  * @package coreprotocol
 */
-class fsreply extends reply {
+class FsReply extends Reply {
 
 	protected $sPkt = NULL;
 	

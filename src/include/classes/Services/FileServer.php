@@ -26,7 +26,7 @@ class FileServer {
 
 	protected $oMainApp = NULL ;
 
-	protected $aCommands = array('BYE','CAT','CDIR','DELETE','DIR','FSOPT','INFO','I AM','LIB','LOAD','LOGOFF','PASS','RENAME','SAVE','SDISC','NEWUSER','PRIV','REMUSER','i.');
+	protected $aCommands = array('BYE','CAT','CDIR','DELETE','DIR','FSOPT','INFO','I AM','LIB','LOAD','LOGOFF','PASS','RENAME','SAVE','SDISC','NEWUSER','PRIV','REMUSER','i.','CHROOT','CHROOTOFF');
 	
 	protected $aReplyBuffer = array();
 
@@ -310,6 +310,12 @@ class FileServer {
 				break;
 			case 'REMUSER':
 				$this->removeUser($oFsRequest,$sOptions);
+				break;
+			case 'CHROOT':
+				$this->chroot($oFsRequest,$sOptions);
+				break;
+			case 'CHROOTOFF':
+				$this->chrootoff($oFsRequest,$sOptions);
 				break;
 			default:
 				logger::log("Un-handled command ".$sCommand,LOG_DEBUG);
@@ -1537,6 +1543,58 @@ class FileServer {
 		$oReply->appendByte($oFsRequest->getUrd());
 		$oReply->appendByte($oFsRequest->getCsd());
 		$oReply->appendByte($oFsRequest->getLib());
+		$this->_addReplyToBuffer($oReply);
+	}
+
+	public function chroot($oFsRequest,$sOptions)
+	{
+		$oReply = $oFsRequest->buildReply();
+		$oUser = security::getUser($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation());
+
+		if($sOptions=="^"){
+			//Change to parent dir
+			$oCsd = Vfs::getFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oFsRequest->getCsd());
+			$sParentPath = $oCsd->getEconetParentPath();
+			$oNewRootDir = Vfs::createFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sParentPath);
+		}else{
+			$oNewRootDir = Vfs::createFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sOptions);	
+		}
+
+		if(!$oNewRootDir->isDir()){
+			logger::log("User tryed to change to directory ".$oNewRootDir->getEconetDirName()." however its not a directory.",LOG_DEBUG);
+			$oReply->setError(0xbe,"Not a directory");
+			$this->_addReplyToBuffer($oReply);
+			return;
+		}
+
+		$oUser->setRoot($oNewRootDir->getEconetDirName());
+
+		Vfs::closeFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oFsRequest->getCsd());
+		Vfs::closeFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oNewRootDir);
+		$oNewCsd = Vfs::createFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),'$');
+		$oReply->DirOk();
+		$oReply->appendByte($oNewCsd->getID());
+		$oUser->setCsd($oNewCsd->getEconetPath());
+		$this->_addReplyToBuffer($oReply);
+			
+	}
+
+	/**
+	 * Turns off the chroot feature reverting back to the true root of the filestore 
+	 *
+	*/
+	public function chrootoff($oFsRequest,$sOptions)
+	{
+		$oReply = $oFsRequest->buildReply();
+		$oUser = security::getUser($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation());
+		$oCsd = Vfs::getFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oFsRequest->getCsd());
+		$sNewPath = str_replace('$',$oUser->getRoot(),$oCsd->getEconetDirName());
+		$oUser->setRoot('$');
+		Vfs::closeFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oFsRequest->getCsd());
+		$oNewCsd = Vfs::createFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sNewPath);
+		$oReply->DirOk();
+		$oReply->appendByte($oNewCsd->getID());
+		$oUser->setCsd($oNewCsd->getEconetPath());
 		$this->_addReplyToBuffer($oReply);
 	}
 

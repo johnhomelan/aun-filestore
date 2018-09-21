@@ -210,7 +210,7 @@ class AunPacket {
 	*/
 	public function buildEconetPacket()
 	{
-		$oEconetPacket = new EconetPacket();
+		$oEconetPacket = new econetpacket();
 		$oEconetPacket->setPort($this->iPort);
 		$oEconetPacket->setFlags($this->iCb);
 		$sNetworkStation = Map::ipAddrToEcoAddr($this->sSoruceIP,$this->sSourceUdpPort);

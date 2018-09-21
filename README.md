@@ -3,19 +3,19 @@ The main aim of this project is to create an Econet fileserver implementation, w
 
 Our target platform is Linux and Unix like environments, with Windows as a target for later development (trying not to build things in away that will never work with windows).
 
-## Main features ##
+# Main features #
 
-### User authentication ###
+## User authentication ##
 * Plugable auth system, that allows the server to use multiple password backends. 
     * The system should map econet fileserver users to unix user.
 
-### Storage ###
+## Storage ###
 * The storage system should be plugable with the flowing plugins 
     * Files can be stored on a natvie unix fs (with meta data stored in files)
     * Disk image files (ssd,adl) can be stored in a directory on unix and used as a directory on the acorn side
     * Directories mounted from http servers (for public shared directories between servers)
 
-### Print support ###
+## Print support ##
 * Print to modern printers (using cups)
 * Print jobs converted to a pdf
     * PDF e-mailed to the enduser
@@ -25,13 +25,14 @@ Our target platform is Linux and Unix like environments, with Windows as a targe
 * The other feature it would be nice to have is to operate as a bridge and allow econet frames to be passed over the public internet to other bridges securely (tcp socket, using ssl).
 
 # Todo #
-While all the auth and file serving features are complete, there are some outstanding area that need implementing.
+While all the auth and file serving features are complete, there are some outstanding areas that need implementing.
 
 The print server is still very basic all print jobs are just dumped to a directory. I've yet to figure out how to convert the BBC's printout put to postscript. 
 
 The soap interface and control client has yet to be implemented. 
 
-# Docker Install #
+# Install #
+## Docker Install ##
 There is a docker image pre-built read for use on dockerhub.
 
 ~~~
@@ -62,7 +63,7 @@ The image has a number of volumes
 docker run --name=filestored -p 32768/udp -v /storage/root:/var/lib/aun-filestore-root -v /storage/print:/var/spool/aun-filestore-print -v /storage/config:/etc/aun-filestored -v /storage/log:/var/log -d crowly/aun-filestore
 ~~~
 
-# Install From Source #
+## Install From Source ##
 
 At the moment there are no rpm and deb packages built for easy install (this will happen before the release of the version 0.1).  However it can be run from source, your machine will need to have php installed and the php-pcntl module.
   
@@ -73,7 +74,7 @@ At the moment there are no rpm and deb packages built for easy install (this wil
 * Write a basic config file (see the config section)
 * Run the server (./filestored -c <conifg_dir>)
 
-# RPM #
+## RPM ##
 
 An rpm can be built using ant from the source.
 
@@ -83,6 +84,6 @@ cd aun-filestore
 ant rpm
 ~~~
 
-# Other package formats #
+## Other package formats ##
 
 Work has started on supporting deb packaging, and the synology package format.  However this work is not complete.  

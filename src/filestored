@@ -4,7 +4,6 @@ require_once __DIR__."/vendor/autoload.php";
 
 use HomeLan\FileStore\Console\SingleCommandApplication;
 use HomeLan\FileStore\Command\Filestore;
-
 use HomeLan\FileStore\Services\FileServer;
 use HomeLan\FileStore\Services\PrintServer;
 use HomeLan\FileStore\Services\Bridge;

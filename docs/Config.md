@@ -182,12 +182,12 @@ The base plugin that should be used is the localfile plugin, it exports a local 
 
 **vfs_plugins**
 
-This configures which vfs plugin are used and in what order.  The pluigns are listed in order and are separated by "," with the right most plugin forming the lowest layer of the file system.
+This configures which vfs plugin are used and in what order.  The pluigns are listed in order and are separated by "," with the right most plugin forming the lowest layer of the file system.  Please note the plugin names are case sensitive.  All the plugins can be found in src/include/classes/Vfs/Plugins. 
 
 ~~~~~~
 e.g.
 
-vfs_plugins='dfsssd,adfsadl,localfile'
+vfs_plugins='DfsSsd,AdfsAdl,LocalFile'
 
 ~~~~~~
 

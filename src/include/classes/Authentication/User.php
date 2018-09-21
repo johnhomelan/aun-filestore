@@ -5,6 +5,9 @@
  *
  * @package coreauth
 */
+namespace HomeLan\FileStore\Authentication; 
+
+use config; 
 
 /**
  * This class represents the user 
@@ -12,7 +15,7 @@
  * @package coreauth
  * @author John Brown <john@home-lan.co.uk>
 */
-class user {
+class User {
 
 	protected $sUsername = NULL;
 	

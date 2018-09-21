@@ -6,11 +6,11 @@ namespace HomeLan\FileStore\Vfs\Plugin;
  *
 */
 use HomeLan\FileStore\Vfs\Exception as VfsException;
-use HomeLan\FileStore\Vfs\Vfs as Vfs;
+use HomeLan\FileStore\Vfs\Vfs;
+use HomeLan\FileStore\Vfs\DirectoryEntry;
+use HomeLan\FileStore\Vfs\FileDescriptor;
 use config; 
 use logger;
-use filedescriptor;
-use directoryentry;
 
 /**
  * The LocalFile class acts as a vfs plugin to provide access to local files using the same on disk 
@@ -126,7 +126,7 @@ class LocalFile implements PluginInterface {
 				$iVfsHandle = NULL;
 			}
 			$iEconetHandle = vfs::getFreeFileHandleID($oUser);
-			return new filedescriptor('LocalFile',$oUser,$sUnixPath,$sEconetPath,$iVfsHandle,$iEconetHandle,is_file($sUnixPath),is_dir($sUnixPath));
+			return new FileDescriptor('LocalFile',$oUser,$sUnixPath,$sEconetPath,$iVfsHandle,$iEconetHandle,is_file($sUnixPath),is_dir($sUnixPath));
 			
 		}
 	}
@@ -151,7 +151,7 @@ class LocalFile implements PluginInterface {
 			return $aDirectoryListing;
 		}
 
-		//Scan the unix dir, and build a directoryentry for each file
+		//Scan the unix dir, and build a DirectoryEntry for each file
 		$aFiles = scandir($sUnixPath);
 		foreach($aFiles as $sFile){
 			if($sFile=='..' or $sFile=='.'){
@@ -161,7 +161,7 @@ class LocalFile implements PluginInterface {
 			}else{
 				if(!array_key_exists($sFile,$aDirectoryListing)){
 					$aStat = stat($sUnixPath.DIRECTORY_SEPARATOR.$sFile);
-					$aDirectoryListing[$sFile]=new directoryentry(str_replace('.','/',$sFile),$sFile,'LocalFile',NULL,NULL,$aStat['size'],is_dir($sUnixPath.DIRECTORY_SEPARATOR.$sFile),$sEconetPath.'.'.str_replace('.','/',$sFile),$aStat['ctime'],self::_getAccessMode($aStat['uid'],$aStat['gid'],$aStat['mode']));
+					$aDirectoryListing[$sFile]=new DirectoryEntry(str_replace('.','/',$sFile),$sFile,'LocalFile',NULL,NULL,$aStat['size'],is_dir($sUnixPath.DIRECTORY_SEPARATOR.$sFile),$sEconetPath.'.'.str_replace('.','/',$sFile),$aStat['ctime'],self::_getAccessMode($aStat['uid'],$aStat['gid'],$aStat['mode']));
 				}
 				if(is_null($aDirectoryListing[$sFile]) OR is_null($aDirectoryListing[$sFile]->getExecAddr())){
 					//If there is a .inf file use it toget the load exec addr

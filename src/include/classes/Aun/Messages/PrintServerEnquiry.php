@@ -5,13 +5,16 @@
  * @author John Brown <john@home-lan.co.uk>
  * @package coreprotocol
 */
+namespace HomeLan\FileStore\Aun\Messages; 
+
+use Exception; 
 
 /** 
  * This class is used to repressent a print server enquiry
  *
  * @package coreprotocol
 */
-class printserverenquiry extends request{
+class PrintServerEnquiry extends Request{
 
 
 	protected $sData = NULL;
@@ -42,7 +45,7 @@ class printserverenquiry extends request{
 
 	public function buildReply()
 	{
-		return new reply($this);
+		return new Reply($this);
 	}
 
 }

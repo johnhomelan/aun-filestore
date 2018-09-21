@@ -5,14 +5,14 @@
  * @author John Brown <john@home-lan.co.uk>
  * @package corevfs
 */
-use HomeLan\FileStore\Vfs\Vfs;
+namespace HomeLan\FileStore\Vfs; 
 
 /** 
  * This class is used to prepresent a files entry in the directory catalogue
  *
  * @package corevfs
 */
-class directoryentry {
+class DirectoryEntry {
 
 	protected $sVfsPlugin = NULL;
 

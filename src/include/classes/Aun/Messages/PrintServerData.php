@@ -5,13 +5,16 @@
  * @author John Brown <john@home-lan.co.uk>
  * @package coreprotocol
 */
+namespace HomeLan\FileStore\Aun\Messages; 
+
+use Exception; 
 
 /** 
  * This class is used to repressent a print server data
  *
  * @package coreprotocol
 */
-class printserverdata {
+class PrintServerData {
 
 	protected $iSourceNetwork = NULL;
 
@@ -123,7 +126,7 @@ class printserverdata {
 
 	public function buildReply()
 	{
-		return new reply($this);
+		return new Reply($this);
 	}
 
 	public function getLen()

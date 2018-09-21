@@ -8,11 +8,11 @@ namespace HomeLan\FileStore\Vfs;
  *
 */
 
-use security;
 use logger; 
 use Exception;
 use config;
 use HomeLan\FileStore\Vfs\Exception as VfsException;
+use HomeLan\FileStore\Authentication\Security; 
 
 /**
  * The vfs class handles all file operations carried out by the file server.
@@ -55,7 +55,7 @@ class Vfs {
 		foreach(self::$aHandles as $iNetwork=>$aStations){
 			foreach($aStations as $iStation=>$aHandles){
 				foreach($aHandles as $iHandle=>$oHandle){
-					$oUser = security::getUser($iNetwork,$iStation);
+					$oUser = Security::getUser($iNetwork,$iStation);
 					if(!is_object($oUser)){
 						logger::log("vfs: Removing handle ".$iHandle." for station ".$iNetwork.":".$iStation." as the session has expired",LOG_DEBUG);
 						$oHandle->close();
@@ -66,7 +66,7 @@ class Vfs {
 		}
 
 		//Clear up sin history
-		$aUsers = security::getUsersOnline();
+		$aUsers = Security::getUsersOnline();
 		if(count($aUsers)==0){
 			logger::log("vfs: No users logged in resetting sin history",LOG_DEBUG);
 			self::$aSinMapping = array();
@@ -186,11 +186,11 @@ class Vfs {
 	*/
 	static public function createDirectory($iNetwork,$iStation,$sEconetPath)
 	{
-		if(!security::isLoggedIn($iNetwork,$iStation)){
+		if(!Security::isLoggedIn($iNetwork,$iStation)){
 			logger::log("vfs: Un-able to create a handle for a station that is not logged in (Who are you?)",LOG_DEBUG);
 			throw new Exception("vfs: Un-able to create a handle for a station that is not logged in (Who are you?)");
 		}
-		$oUser = security::getUser($iNetwork,$iStation);
+		$oUser = Security::getUser($iNetwork,$iStation);
 		$sCsd = $oUser->getCsd();
 		$aPlugins = Vfs::getVfsPlugins();
 		$oHandle=NULL;
@@ -218,11 +218,11 @@ class Vfs {
 	*/
 	static public function deleteFile($iNetwork,$iStation,$sEconetPath)
 	{
-		if(!security::isLoggedIn($iNetwork,$iStation)){
+		if(!Security::isLoggedIn($iNetwork,$iStation)){
 			logger::log("vfs: Un-able to create a handle for a station that is not logged in (Who are you?)",LOG_DEBUG);
 			throw new Exception("vfs: Un-able to create a handle for a station that is not logged in (Who are you?)");
 		}
-		$oUser = security::getUser($iNetwork,$iStation);
+		$oUser = Security::getUser($iNetwork,$iStation);
 		$sCsd = $oUser->getCsd();
 		$aPlugins = Vfs::getVfsPlugins();
 		$oHandle=NULL;
@@ -251,11 +251,11 @@ class Vfs {
 	*/
 	static public function moveFile($iNetwork,$iStation,$sEconetPathFrom,$sEconetPathTo)
 	{
-		if(!security::isLoggedIn($iNetwork,$iStation)){
+		if(!Security::isLoggedIn($iNetwork,$iStation)){
 			logger::log("vfs: Un-able to create a handle for a station that is not logged in (Who are you?)",LOG_DEBUG);
 			throw new Exception("vfs: Un-able to create a handle for a station that is not logged in (Who are you?)");
 		}
-		$oUser = security::getUser($iNetwork,$iStation);
+		$oUser = Security::getUser($iNetwork,$iStation);
 		$sCsd = $oUser->getCsd();
 		$aPlugins = Vfs::getVfsPlugins();
 		$oHandle=NULL;
@@ -287,11 +287,11 @@ class Vfs {
 	*/ 
 	static public function saveFile($iNetwork,$iStation,$sEconetPath,$sData,$iLoadAddr,$iExecAddr)
 	{
-		if(!security::isLoggedIn($iNetwork,$iStation)){
+		if(!Security::isLoggedIn($iNetwork,$iStation)){
 			logger::log("vfs: Un-able to create a handle for a station that is not logged in (Who are you?)",LOG_DEBUG);
 			throw new Exception("vfs: Un-able to create a handle for a station that is not logged in (Who are you?)");
 		}
-		$oUser = security::getUser($iNetwork,$iStation);
+		$oUser = Security::getUser($iNetwork,$iStation);
 		$sCsd = $oUser->getCsd();
 		$aPlugins = Vfs::getVfsPlugins();
 		$oHandle=NULL;
@@ -322,11 +322,11 @@ class Vfs {
 	*/ 
 	static public function createFile($iNetwork,$iStation,$sEconetPath,$iSize,$iLoadAddr,$iExecAddr)
 	{
-		if(!security::isLoggedIn($iNetwork,$iStation)){
+		if(!Security::isLoggedIn($iNetwork,$iStation)){
 			logger::log("vfs: Un-able to create a handle for a station that is not logged in (Who are you?)",LOG_DEBUG);
 			throw new Exception("vfs: Un-able to create a handle for a station that is not logged in (Who are you?)");
 		}
-		$oUser = security::getUser($iNetwork,$iStation);
+		$oUser = Security::getUser($iNetwork,$iStation);
 		$sCsd = $oUser->getCsd();
 		$aPlugins = Vfs::getVfsPlugins();
 		$oHandle=NULL;
@@ -354,11 +354,11 @@ class Vfs {
 	*/	 
 	static public function getFile($iNetwork,$iStation,$sEconetPath)
 	{
-		if(!security::isLoggedIn($iNetwork,$iStation)){
+		if(!Security::isLoggedIn($iNetwork,$iStation)){
 			logger::log("vfs: Un-able to create a handle for a station that is not logged in (Who are you?)",LOG_DEBUG);
 			throw new Exception("vfs: Un-able to create a handle for a station that is not logged in (Who are you?)");
 		}
-		$oUser = security::getUser($iNetwork,$iStation);
+		$oUser = Security::getUser($iNetwork,$iStation);
 		$sCsd = $oUser->getCsd();
 		$aPlugins = Vfs::getVfsPlugins();
 		$oHandle=NULL;
@@ -385,7 +385,7 @@ class Vfs {
 	*/
 	static public function getMeta($iNetwork,$iStation,$sEconetPath)
 	{	
-		if(!security::isLoggedIn($iNetwork,$iStation)){
+		if(!Security::isLoggedIn($iNetwork,$iStation)){
 			logger::log("vfs: Un-able to create a handle for a station that is not logged in (Who are you?)",LOG_DEBUG);
 			throw new Exception("vfs: Un-able to create a handle for a station that is not logged in (Who are you?)");
 		}
@@ -397,13 +397,13 @@ class Vfs {
 			$sDir = join('.',$aPath);
 		}elseif(strpos($sEconetPath,'.')!==FALSE){
 			//Relitive path
-			$oUser = security::getUser($iNetwork,$iStation);
+			$oUser = Security::getUser($iNetwork,$iStation);
 			$aPath = explode('.',$sEconetPath);
 			$sFile = array_pop($aPath);
 			$sDir = $oUser->getCsd().'.'.join('.',$aPath);
 		}else{
 			//No path
-			$oUser = security::getUser($iNetwork,$iStation);
+			$oUser = Security::getUser($iNetwork,$iStation);
 			$sFile = $sEconetPath;
 			$sDir = $oUser->getCsd();
 		}
@@ -446,7 +446,7 @@ class Vfs {
 	*/
 	static public function setMeta($iNetwork,$iStation,$sEconetPath,$iLoad,$iExec,$iAccess)
 	{	
-		if(!security::isLoggedIn($iNetwork,$iStation)){
+		if(!Security::isLoggedIn($iNetwork,$iStation)){
 			logger::log("vfs: Un-able to create a handle for a station that is not logged in (Who are you?)",LOG_DEBUG);
 			throw new Exception("vfs: Un-able to create a handle for a station that is not logged in (Who are you?)");
 		}
@@ -454,7 +454,7 @@ class Vfs {
 			//Absolute path
 			$sPath = $sEconetPath;
 		}else{
-			$oUser = security::getUser($iNetwork,$iStation);
+			$oUser = Security::getUser($iNetwork,$iStation);
 			$sPath = $oUser->getCsd().'.'.trim($sEconetPath,'.');
 		}
 
@@ -483,11 +483,11 @@ class Vfs {
 	*/
 	static public function createFsHandle($iNetwork,$iStation,$sEconetPath,$bMustExist=TRUE,$bReadOnly=TRUE)
 	{
-		if(!security::isLoggedIn($iNetwork,$iStation)){
+		if(!Security::isLoggedIn($iNetwork,$iStation)){
 			logger::log("vfs: Un-able to create a handle for a station that is not logged in (Who are you?)",LOG_DEBUG);
 			throw new Exception("vfs: Un-able to create a handle for a station that is not logged in (Who are you?)");
 		}
-		$oUser = security::getUser($iNetwork,$iStation);
+		$oUser = Security::getUser($iNetwork,$iStation);
 		$sCsd = $oUser->getCsd();
 		$oHandle = Vfs::_buildFiledescriptorFromEconetPath($oUser,$sCsd,$sEconetPath,$bMustExist,$bReadOnly);
 

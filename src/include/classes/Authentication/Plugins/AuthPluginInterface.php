@@ -4,6 +4,7 @@
  *
  * @package coreauth
 */
+namespace HomeLan\FileStore\Authentication\Plugins; 
 
 /**
  * The authplugininterface must be impelmented by all auth plugins
@@ -11,7 +12,7 @@
  * @package coreauth
  * @author John Brown <john@home-lan.co.uk>
 */
-interface authplugininterface {
+interface AuthPluginInterface {
 
 	/**
 	 * Intiailizes this plugins data structures

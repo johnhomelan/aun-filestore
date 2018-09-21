@@ -5,13 +5,19 @@
  * @author John Brown <john@home-lan.co.uk>
  * @package core
 */
+namespace HomeLan\FileStore\Services; 
+
+use HomeLan\FileStore\Aun\Map; 
+use logger; 
+use config;
+use Exception;
 
 /**
  * This class implements the econet bridge
  *
  * @package core
 */
-class bridge {
+class Bridge {
 
 	protected $oMainApp = NULL ;
 	
@@ -28,18 +34,14 @@ class bridge {
 		$this->aReplyBuffer[]=$oReply;
 	}
 
-	public function __construct($oMainApp)
-	{
-		$this->oMainApp = $oMainApp;
-	}
-
 	/**
 	 * Initilizes the bridge loading all the routing information for econet networks
 	 *
 	 * @TODO Load the routing data
 	*/
-	public function init()
+	public function init(\HomeLan\FileStore\Command\Filestore $oMainApp)
 	{
+		$this->oMainApp = $oMainApp;
 	}
 
 
@@ -111,7 +113,7 @@ class bridge {
 		$oReply = $oBridgeRequest->buildReply();
 
 		//Check if the AUN Map knows about the network (as aun is currently our only econet emulation)
-		if(aunmap::networkKnown($iNetworNumber)){
+		if(Map::networkKnown($iNetworNumber)){
 			//Network exists (we only reply if we know about a network)
 			$this->_addReplyToBuffer($oReply);
 		}

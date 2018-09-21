@@ -5,13 +5,16 @@
  * @author John Brown <john@home-lan.co.uk>
  * @package coreprotocol
 */
+namespace HomeLan\FileStore\Aun\Messages; 
+
+use Exception;
 
 /** 
  * This class is used to repressent reply packets
  *
  * @package coreprotocol
 */
-class reply {
+class Reply {
 
 	protected $sPkt = NULL;
 	

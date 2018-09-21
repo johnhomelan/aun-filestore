@@ -3,6 +3,7 @@
 /*
  * @group unit-tests
 */
+use HomeLan\FileStore\Aun\Messages\AunPacket; 
 
 include_once('include/system.inc.php');
 
@@ -19,7 +20,7 @@ class aunpacketTest extends PHPUnit_Framework_TestCase {
 
 		//Set port 0x99
 		$sBinaryPacket = $sBinaryPacket . pack('C',0x99);
-		$oPacket = new aunpacket();
+		$oPacket = new AunPacket();
 
 		//Set flags 0
 		$sBinaryPacket = $sBinaryPacket . pack('C',0);

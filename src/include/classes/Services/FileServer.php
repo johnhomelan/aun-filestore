@@ -5,14 +5,24 @@
  * @author John Brown <john@home-lan.co.uk>
  * @package core
 */
+namespace HomeLan\FileStore\Services; 
+
 use HomeLan\FileStore\Vfs\Vfs; 
+use HomeLan\FileStore\Authentication\Security; 
+use HomeLan\FileStore\Authentication\User; 
+use HomeLan\FileStore\Aun\Messages\EconetPacket; 
+
+
+use logger;
+use config;
+use Exception;
 
 /**
  * This class implements the econet fileserver
  *
  * @package core
 */
-class fileserver {
+class FileServer {
 
 	protected $oMainApp = NULL ;
 
@@ -25,15 +35,11 @@ class fileserver {
 		$this->aReplyBuffer[]=$oReply;
 	}
 
-	public function __construct($oMainApp)
-	{
-		$this->oMainApp = $oMainApp;
-	}
-
-	public function init()
+	public function init(\HomeLan\FileStore\Command\Filestore $oMainApp)
 	{
 		Vfs::init();
-		security::init();
+		Security::init();
+		$this->oMainApp = $oMainApp;
 	}
 
 
@@ -61,7 +67,7 @@ class fileserver {
 		logger::log("FS function ".$sFunction,LOG_DEBUG);
 
 		//Update the idle timer for this station
-		security::updateIdleTimer($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation());
+		Security::updateIdleTimer($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation());
 
 
 		//Function where you dont always need to be logged in
@@ -74,7 +80,7 @@ class fileserver {
 		}
 
 		//Function where the user must be logged in
-		if(!security::isLoggedIn($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation())){
+		if(!Security::isLoggedIn($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation())){
 			$oReply = $oFsRequest->buildReply();
 			$oReply->setError(0xbf,"Who are you?");
 			$this->_addReplyToBuffer($oReply);
@@ -186,7 +192,7 @@ class fileserver {
 	*/
 	public function updateCsdLib($oFsRequest)
 	{
-		$oUser = security::getUser($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation());
+		$oUser = Security::getUser($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation());
 		try {
 			if(!is_null($oFsRequest->getCsd())){
 				$oCsd = Vfs::getFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oFsRequest->getCsd());
@@ -358,11 +364,11 @@ class fileserver {
 		}
 
 		//Do login
-		if(security::login($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sUser,$sPass)){
+		if(Security::login($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sUser,$sPass)){
 			//Login success 
 
 			//Create the handles for the csd urd and lib
-			$oUser = security::getUser($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation());
+			$oUser = Security::getUser($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation());
 			try {
 				$oUrd = Vfs::createFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oUser->getHomedir());
 				$oCsd = Vfs::createFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oUser->getHomedir());	
@@ -403,7 +409,7 @@ class fileserver {
 	public function logout($oFsRequest)
 	{
 		try{
-			security::logout($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation());
+			Security::logout($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation());
 			$oReply = $oFsRequest->buildReply();	
 			$oReply->DoneOk();
 		}catch(Exception $oException){
@@ -865,7 +871,7 @@ class fileserver {
 	public function changeDirectory($oFsRequest,$sOptions)
 	{
 		$oReply = $oFsRequest->buildReply();
-		$oUser = security::getUser($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation());
+		$oUser = Security::getUser($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation());
 
 		//Chech the user is logged in
 		if(!is_object($oUser)){
@@ -1111,7 +1117,7 @@ class fileserver {
 				$sBlock = $oFsHandle->read($iBytesToRead);
 				$iBytesToRead = $iBytesToRead-strlen($sBlock);
 			}
-			$oEconetPacket = new econetpacket();
+			$oEconetPacket = new EconetPacket();
 			$oEconetPacket->setDestinationNetwork($oFsRequest->getSourceNetwork());
 			$oEconetPacket->setDestinationStation($oFsRequest->getSourceStation());
 			$oEconetPacket->setPort($iDataPort);
@@ -1370,7 +1376,7 @@ class fileserver {
 			$sBlock = substr($sFileData,0,256);
 			//Remote 256 byte from the string
 			$sFileData=substr($sFileData,256);
-			$oEconetPacket = new econetpacket();
+			$oEconetPacket = new EconetPacket();
 			$oEconetPacket->setDestinationNetwork($oFsRequest->getSourceNetwork());
 			$oEconetPacket->setDestinationStation($oFsRequest->getSourceStation());
 			$oEconetPacket->setPort($iDataPort);
@@ -1421,7 +1427,7 @@ class fileserver {
 
 			try {
 				//Change the password
-				security::setConnectedUsersPassword($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sOldPassword,$sPassword);
+				Security::setConnectedUsersPassword($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sOldPassword,$sPassword);
 				$oReply->DoneOk();
 			}catch(Exception $oException){
 				$oReply->setError(0xff,$oException->getMessage());
@@ -1442,7 +1448,7 @@ class fileserver {
 		}else{
 			$aOptions = explode(' ',$sOptions);
 			if(strlen($aOptions[0])>3 AND strlen($aOptions[0])<11 AND ctype_upper($aOptions[0]) AND ctype_alpha($aOptions[0])){
-				$oUser = new user();
+				$oUser = new User();
 				$oUser->setUsername($aOptions[0]);
 				if(!is_null(config::getValue('vfs_home_dir_path'))){
 					$oUser->setHomedir(config::getValue('vfs_home_dir_path').'.'.$aOptions[0]);
@@ -1453,10 +1459,10 @@ class fileserver {
 				}else{
 					$oUser->setHomedir('$');
 				}
-				$oUser->setUnixUid(config::getValue('security_default_unix_uid'));
+				$oUser->setUnixUid(config::getValue('Security_default_unix_uid'));
 				$oUser->setPriv('U');
 				try{
-					security::createUser($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oUser);
+					Security::createUser($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oUser);
 					$oReply->DoneOk();
 				}catch(Exception $oException){
 					$oReply->setError(0xff,$oException->getMessage());
@@ -1480,7 +1486,7 @@ class fileserver {
 			$oReply->setError(0xff,"Syntax");
 		}else{
 			try {
-				if(security::removeUser($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sOptions)){
+				if(Security::removeUser($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sOptions)){
 					$oReply->DoneOk();
 				}else{
 					$oReply->setError(0xff,"No such user");
@@ -1503,12 +1509,12 @@ class fileserver {
 		if(count($aOptions)!=2){
 			$oReply->setError(0xff,"Syntax");
 		}else{
-			$oMyUser = security::getUser($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation());
+			$oMyUser = Security::getUser($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation());
 			if($oMyUser->isAdmin()){
 				if($aOptions[1]!='S' AND $aOptions[1]!='U'){
 					$oReply->setError(0xff,"The only valid priv is S or U");
 				}else{
-					security::setPriv($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$aOptions[0],$aOptions[1]);
+					Security::setPriv($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$aOptions[0],$aOptions[1]);
 					$oReply->DoneOk();
 				}
 			}else{
@@ -1544,7 +1550,7 @@ class fileserver {
 		$iCount	= $oFsRequest->getByte(2);
 		$oReply = $oFsRequest->buildReply();
 		$oReply->DoneOK();
-		$aUsers = security::getUsersOnline();
+		$aUsers = Security::getUsersOnline();
 		logger::log("usersOnline: There are ".count($aUsers)." on-line, the clients request details of (".$iStart."/".$iCount.")",LOG_DEBUG);
 		$iUsersRemaining = count($aUsers)-$iStart;
 		if($iUsersRemaining>0){
@@ -1584,9 +1590,9 @@ class fileserver {
 		$sUser = $oFsRequest->getString(1);
 		$oReply = $oFsRequest->buildReply();
 
-		$aStation = security::getUsersStation($sUser);
+		$aStation = Security::getUsersStation($sUser);
 		if(array_key_exists('network',$aStation) AND array_key_exists('station',$aStation)){
-			$oUser = security::getUser($aStation['network'],$aStation['station']);
+			$oUser = Security::getUser($aStation['network'],$aStation['station']);
 			if(is_object($oUser) AND $oUser->isAdmin()){
 				$oReply->appendByte(1);
 			}else{

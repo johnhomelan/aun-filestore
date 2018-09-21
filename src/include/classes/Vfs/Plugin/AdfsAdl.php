@@ -8,12 +8,12 @@ namespace HomeLan\FileStore\Vfs\Plugin;
  */
 
 use HomeLan\FileStore\Vfs\Exception as VfsException;
-use HomeLan\FileStore\Vfs\Vfs as Vfs;
+use HomeLan\FileStore\Vfs\Vfs;
+use HomeLan\FileStore\Vfs\DirectoryEntry;
+use HomeLan\FileStore\Vfs\FileDescriptor;
 use config; 
 use logger;
 use adfsreader;
-use filedescriptor;
-use directoryentry;
 
 /**
  * The AdfsAdl class acts as a vfs plugin to provide access to files stored in a adfs filing system stored in a adl image.
@@ -190,7 +190,7 @@ class AdfsAdl implements PluginInterface {
 				$iVfsHandle = AdfsAdl::$iFileHandle++;
 				AdfsAdl::$aFileHandles[$iVfsHandle]=array('image-file'=>$sImageFile,'path-inside-image'=>$sPathInsideImage,'pos'=>0);
 				$oAdfs =  AdfsAdl::_getImageReader($sImageFile);
-				return new filedescriptor('AdfsAdl',$oUser,$sImageFile,$sEconetPath,$iVfsHandle,$iEconetHandle,$oAdfs->isFile($sPathInsideImage),$oAdfs->isDir($sPathInsideImage));
+				return new FileDescriptor('AdfsAdl',$oUser,$sImageFile,$sEconetPath,$iVfsHandle,$iEconetHandle,$oAdfs->isFile($sPathInsideImage),$oAdfs->isDir($sPathInsideImage));
 			}
 		}
 
@@ -201,7 +201,7 @@ class AdfsAdl implements PluginInterface {
 			$iEconetHandle = Vfs::getFreeFileHandleID($oUser);
 			$iVfsHandle = AdfsAdl::$iFileHandle++;
 			AdfsAdl::$aFileHandles[$iVfsHandle]=array('image-file'=>$sUnixPath.'.adl','path-inside-image'=>'','pos'=>0);
-			return new filedescriptor('AdfsAdl',$oUser,$sUnixPath.'.adl',$sEconetPath,$iVfsHandle,$iEconetHandle,FALSE,TRUE);
+			return new FileDescriptor('AdfsAdl',$oUser,$sUnixPath.'.adl',$sEconetPath,$iVfsHandle,$iEconetHandle,FALSE,TRUE);
 		}
 	
 	}
@@ -230,7 +230,7 @@ class AdfsAdl implements PluginInterface {
 			}
 
 			foreach($aCat as $sFile=>$aMeta){
-				$aDirectoryListing[$sFile] = new directoryentry($sFile,$sImageFile,'AdfsAdl',$aMeta['load'],$aMeta['exec'],$aMeta['size'],$aMeta['type']=='dir' ? TRUE : FALSE ,$sEconetPath.'.'.$sFile,$aImageStat['ctime'],'-r/-r');
+				$aDirectoryListing[$sFile] = new DirectoryEntry($sFile,$sImageFile,'AdfsAdl',$aMeta['load'],$aMeta['exec'],$aMeta['size'],$aMeta['type']=='dir' ? TRUE : FALSE ,$sEconetPath.'.'.$sFile,$aImageStat['ctime'],'-r/-r');
 			}
 		}
 		
@@ -243,7 +243,7 @@ class AdfsAdl implements PluginInterface {
 					//Disk Image found
 					if(!array_key_exists(substr($sFile,0,strlen($sFile)-4),$aDirectoryListing)){
 						$aStat = stat($sUnixPath.DIRECTORY_SEPARATOR.$sFile);
-						$aDirectoryListing[$sFile]=new directoryentry(substr($sFile,0,strlen($sFile)-4),$sFile,'AdfsAdl',NULL,NULL,0,TRUE,$sEconetPath.'.'.substr($sFile,0,strlen($sFile)-4),$aStat['ctime'],'-r/-r');
+						$aDirectoryListing[$sFile]=new DirectoryEntry(substr($sFile,0,strlen($sFile)-4),$sFile,'AdfsAdl',NULL,NULL,0,TRUE,$sEconetPath.'.'.substr($sFile,0,strlen($sFile)-4),$aStat['ctime'],'-r/-r');
 					}
 				}
 			}

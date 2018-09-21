@@ -5,13 +5,19 @@
  * @author John Brown <john@home-lan.co.uk>
  * @package core
 */
+namespace HomeLan\FileStore\Services; 
 
+use HomeLan\FileStore\Authentication\Security; 
+
+use logger;
+use config;
+/**
 /**
  * This class implements the econet printserver
  *
  * @package core
 */
-class printserver {
+class PrintServer {
 
 	protected $oMainApp = NULL ;
 	
@@ -24,13 +30,9 @@ class printserver {
 		$this->aReplyBuffer[]=$oReply;
 	}
 
-	public function __construct($oMainApp)
+	public function init(\HomeLan\FileStore\Command\Filestore $oMainApp)
 	{
 		$this->oMainApp = $oMainApp;
-	}
-
-	public function init()
-	{
 	}
 
 
@@ -113,7 +115,7 @@ class printserver {
 				//Print job has ended
 				logger::log("Station ".$oPrintData->getSourceNetwork().":".$oPrintData->getSourceStation()." print job completed",LOG_INFO);
 				if(is_dir(config::getValue('print_server_spool_dir'))){
-					$oUser = security::getUser($oPrintData->getSourceNetwork(),$oPrintData->getSourceStation());
+					$oUser = Security::getUser($oPrintData->getSourceNetwork(),$oPrintData->getSourceStation());
 					if(is_object($oUser)){
 						$sSpoolPath = config::getValue('print_server_spool_dir').DIRECTORY_SEPARATOR.$oUser->getUsername();
 					}else{

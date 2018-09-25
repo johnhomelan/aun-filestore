@@ -5,7 +5,7 @@
  * @author John Brown <john@home-lan.co.uk>
  * @package coreprotocol
 */
-namespace HomeLan\FileStore\Aun\Messages; 
+namespace HomeLan\FileStore\Messages; 
 
 use Exception;
 

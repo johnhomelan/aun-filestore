@@ -8,7 +8,7 @@
 namespace HomeLan\FileStore\Vfs; 
 
 use HomeLan\FileStore\Vfs\Exception as VfsException;
-use logger;
+use HomeLan\FileStore\Authentication\User;
 /** 
  * Econet NetFs uses filedecriptor ids with its client for all file operations.  The file handles 
  * identitier is a single byte.  This class represents a single file description for the server 
@@ -36,8 +36,11 @@ class FileDescriptor {
 
 	protected $bDir = NULL;
 
-	public function __construct($sVfsPlugin,$oUser,$sUnixFilePath,$sEconetFilePath,$iVfsHandle,$iEconetHandle,$bFile=FALSE,$bDir=FALSE)
+	protected $oLogger;
+
+	public function __construct(\Psr\Log\LoggerInterface $oLogger,string $sVfsPlugin, User $oUser, string $sUnixFilePath, string $sEconetFilePath, int $iVfsHandle, int $iEconetHandle, bool $bFile=FALSE, bool $bDir=FALSE)
 	{
+		$this->oLogger = $oLogger;
 		$this->sVfsPlugin = $sVfsPlugin;
 		$this->oUser = $oUser;
 		$this->sUnixFilePath = $sUnixFilePath;
@@ -91,7 +94,7 @@ class FileDescriptor {
 				throw new VfsException("No vfs pluings left to try",TRUE);
 			}
 			$sPlugin = $aPlugins[$iIndex];
-			logger::log("filedescriptor: Changing vfsplugin to ".$sPlugin." due to softerror from ".$this->sVfsPlugin,LOG_DEBUG);
+			$this->oLogger->debug("filedescriptor: Changing vfsplugin to ".$sPlugin." due to softerror from ".$this->sVfsPlugin);
 
 			$this->sVfsPlugin = $sPlugin;
 			$sUnixPath = $sPlugin::_getUnixPathFromEconetPath($this->sEconetFilePath);

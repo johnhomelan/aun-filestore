@@ -5,7 +5,7 @@
  * @author John Brown <john@home-lan.co.uk>
  * @package corenet
 */
-namespace HomeLan\FileStore\Aun\Messages; 
+namespace HomeLan\FileStore\Messages; 
 
 use HomeLan\FileStore\Aun\Map; 
 use Exception;

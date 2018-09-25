@@ -5,7 +5,7 @@
  * @author John Brown <john@home-lan.co.uk>
  * @package coreprotocol
 */
-namespace HomeLan\FileStore\Aun\Messages; 
+namespace HomeLan\FileStore\Messages; 
 
 use Exception; 
 
@@ -19,9 +19,9 @@ class PrintServerEnquiry extends Request{
 
 	protected $sData = NULL;
 
-	public function __construct($oEconetPacket)
+	public function __construct($oEconetPacket, \Psr\Log\LoggerInterface $oLogger)
 	{
-		parent::__construct($oEconetPacket);
+		parent::__construct($oEconetPacket, $oLogger);
 		$this->decode($oEconetPacket->getData());
 	}	
 

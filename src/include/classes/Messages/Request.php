@@ -5,7 +5,7 @@
  * @author John Brown <john@home-lan.co.uk>
  * @package coreprotocol
 */
-namespace HomeLan\FileStore\Aun\Messages; 
+namespace HomeLan\FileStore\Messages; 
 
 use Exception; 
 
@@ -28,11 +28,14 @@ class Request {
 
 	protected $sData = NULL;
 
-	public function __construct($oEconetPacket)
+	protected $oLogger;
+
+	public function __construct($oEconetPacket, \Psr\Log\LoggerInterface $oLogger)
 	{
 		$this->iSourceNetwork = $oEconetPacket->getSourceNetwork();
 		$this->iSourceStation = $oEconetPacket->getSourceStation();
 		$this->iFlags = $oEconetPacket->getFlags();
+		$this->oLogger = $oLogger;
 	}	
 
 	public function getSourceStation()

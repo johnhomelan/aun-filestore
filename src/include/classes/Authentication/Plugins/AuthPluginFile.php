@@ -8,7 +8,6 @@ namespace HomeLan\FileStore\Authentication\Plugins;
 
 use HomeLan\FileStore\Authentication\User;
 use config;
-use logger;
 use Exception;
 
 /**
@@ -22,6 +21,7 @@ use Exception;
 class AuthPluginFile implements AuthPluginInterface {
 
 	protected static $aUsers = array();
+	protected static $oLogger;
 
 	static protected function _writeOutUserFile()
 	{
@@ -40,12 +40,14 @@ class AuthPluginFile implements AuthPluginInterface {
 	 * Load the user list from disk
 	 * @param string $sUser The contents of the userfile can be supplied as an arg, this should be mainly used for testing
 	*/
-	static public function init($sUsers=NULL)
+	static public function init(\Psr\Log\LoggerInterface $oLogger, $sUsers=NULL)
 	{
+		self::$oLogger = $oLogger;
+
 		AuthPluginFile::$aUsers = array();
 		if(is_null($sUsers)){
 			if(!file_exists(config::getValue('security_plugin_file_user_file'))){
-				logger::log("AuthPluginFile: The user files does not exist.",LOG_INFO);
+				self::$oLogger->info("AuthPluginFile: The user files does not exist.");
 				return;
 			}
 			$sUsers = file_get_contents(config::getValue('security_plugin_file_user_file'));

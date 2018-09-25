@@ -13,15 +13,14 @@ use Symfony\Component\Console\Helper\Table;
 use Symfony\Component\Console\Command\Command;
 
 use HomeLan\FileStore\Aun\Map; 
-use HomeLan\FileStore\Aun\Messages\AunPacket; 
-use HomeLan\FileStore\Aun\Messages\FsRequest;
-use HomeLan\FileStore\Aun\Messages\PrintServerEnquiry; 
-use HomeLan\FileStore\Aun\Messages\PrintServerData; 
-use HomeLan\FileStore\Aun\Messages\BridgeRequest; 
+use HomeLan\FileStore\Aun\AunPacket; 
+use HomeLan\FileStore\Messages\FsRequest;
+use HomeLan\FileStore\Messages\PrintServerEnquiry; 
+use HomeLan\FileStore\Messages\PrintServerData; 
+use HomeLan\FileStore\Messages\BridgeRequest; 
 use HomeLan\FileStore\Authentication\Security; 
 use HomeLan\FileStore\Vfs\Vfs; 
  
-use logger;
 use config;
 use Exception;
 
@@ -64,15 +63,23 @@ class Filestore extends Command {
 	*/
 	protected $aAllReadableSockets = array();
 
+
+	/**
+	 * The log handler 
+	 *
+	*/
+	protected $oLogger; 
+
 	/**
 	 * Initializes the application injecting the service deps 
 	 *
 	*/
-	public function __construct(\HomeLan\FileStore\Services\FileServer $oFileServer, \HomeLan\FileStore\Services\PrintServer $oPrintServer, \HomeLan\FileStore\Services\Bridge $oBridge)
+	public function __construct(\HomeLan\FileStore\Services\FileServer $oFileServer, \HomeLan\FileStore\Services\PrintServer $oPrintServer, \HomeLan\FileStore\Services\Bridge $oBridge, \Psr\Log\LoggerInterface $oLogger)
 	{
 		$this->oFileServer = $oFileServer;
 		$this->oPrintServer = $oPrintServer;
 		$this->oBridge = $oBridge;
+		$this->oLogger = $oLogger;
 		parent::__construct();
 	}
 
@@ -120,19 +127,19 @@ class Filestore extends Command {
 			$this->oBridge->init($this);
 
 			//Load the Aun-Map that maps econet network/station numbers to ip addresses and ports
-			Map::loadMap();
+			Map::init($this->oLogger);
 			
 			//Setup listening sockets
 			$this->bindSockets();
 		}catch(Exception $oException){
 			//Failed to initialize log and exit none 0
-			logger::log($oException->getMessage(),LOG_INFO);
-			logger::log("Un-abale to initialize the server, shutting down.",LOG_INFO);
+			$this->oLogger->debug($oException->getMessage());
+			$this->oLogger->emergency("Un-abale to initialize the server, shutting down.");
 			exit(1);
 		}
 
 		//Enter main loop
-		logger::log("Starting primary loop.",LOG_DEBUG);
+		$this->oLogger->debug("Starting primary loop.");
 		$this->loop();
 	}
 
@@ -180,13 +187,13 @@ EOF;
 		switch($iSigno){
 			case SIGALRM:
 				//On sigalarm perform any house keeping tasks
-				logger::log("Got sig alarm",LOG_DEBUG);
+				$this->oLogger->debug("Got sig alarm");
 				Security::houseKeeping();
 				vfs::houseKeeping();
 				$this->registerNextAlarm();
 				break;
 			case SIGTERM:
-				logger::log("Shutting down filestored",LOG_INFO);
+				$this->oLogger->info("Shutting down filestored");
 				break;
 			case SIGCHLD:
 			default:
@@ -263,7 +270,7 @@ EOF;
 				$aExpSet=$aAllExpSockets;
 				$iSockets = @stream_select($aReadSet,$aWriteSet,$aExpSet,NULL);
 				if($iSockets!==FALSE){
-					logger::log("Got data",LOG_DEBUG);
+					$this->oLogger->debug("Got data");
 					//Step through each socket we need to read from
 					foreach($aReadSet as  $iReadSocket){
 						if($iReadSocket == $this->oAunSocket){
@@ -273,7 +280,7 @@ EOF;
 					}
 				}
 			}catch(Exception $oException){
-				logger::log($oException->getMessage(),LOG_ERR);
+				$this->oLogger->error($oException->getMessage());
 			}
 		}
 	}
@@ -290,7 +297,7 @@ EOF;
 		
 		//Read the UDP data
 		$sUdpData= stream_socket_recvfrom($oSocket,1500,0,$sHost);
-		logger::log("filestore: Aun packet recvieved from ".$sHost,LOG_DEBUG);	
+		$this->oLogger->debug("filestore: Aun packet recvieved from ".$sHost);	
 		$oAunPacket->setSourceIP($sHost);
 
 		//Decode the AUN packet
@@ -300,10 +307,10 @@ EOF;
 		//Send an ack for the AUN packet if needed
 		$sAck = $oAunPacket->buildAck();
 		if(strlen($sAck)>0){
-			logger::log("filestore: Sending Ack packet",LOG_DEBUG);
+			$this->oLogger->debug("filestore: Sending Ack packet");
 			stream_socket_sendto($oSocket,$sAck,0,$sHost);
 		}
-		logger::log("filestore: ".$oAunPacket->toString(),LOG_DEBUG);
+		$this->oLogger->debug("filestore: ".$oAunPacket->toString());
 	
 		//Build an econet packet from the AUN packet an pass it to be processed
 		switch($oAunPacket->getPacketType()){
@@ -313,7 +320,7 @@ EOF;
 				$this->processEconetPacket($oEconetPacket);
 				break;
 			case 'Broadcast':
-				logger::log("filestore: Received broadcast packet ",LOG_DEBUG);
+				$this->oLogger->debug("filestore: Received broadcast packet ");
 				switch($oAunPacket->getPortName()){
 					case 'Bridge':
 						$this->bridgeCommand($oAunPacket->buildEconetPacket());
@@ -349,8 +356,8 @@ EOF;
 				$this->printerServerData($oEconetPacket);
 				break;
 			default:
-				logger::log("filestore: Recived packet on un-handle port (".$sPort.")",LOG_DEBUG);
-				logger::log("filestore: ".$oEconetPacket->toString(),LOG_DEBUG);
+				$this->oLogger->debug("filestore: Recived packet on un-handle port (".$sPort.")");
+				$this->oLogger->debug("filestore: ".$oEconetPacket->toString());
 				break;
 		}
 
@@ -365,11 +372,11 @@ EOF;
 	*/
 	public function fileServerCommand($oEconetPacket)
 	{
-		$oFsRequest = new FsRequest($oEconetPacket);
+		$oFsRequest = new FsRequest($oEconetPacket, $this->oLogger);
 		$this->oFileServer->processRequest($oFsRequest);
 		$aReplies = $this->oFileServer->getReplies();
 		foreach($aReplies as $oReply){
-			logger::log("filestore: Sending econet reply",LOG_DEBUG);
+			$this->oLogger->debug("filestore: Sending econet reply");
 			$oReplyEconetPacket = $oReply->buildEconetpacket();
 			$this->dispatchReply($oReplyEconetPacket);	
 		}
@@ -382,7 +389,7 @@ EOF;
 	*/
 	public function printServerEnquiry($oEconetPacket)
 	{
-		$oPrintServerEnquiry = new PrintServerEnquiry($oEconetPacket);
+		$oPrintServerEnquiry = new PrintServerEnquiry($oEconetPacket, $this->oLogger);
 		$this->oPrintServer->processEnquiry($oPrintServerEnquiry);
 		$this->sendPrinterReplies();
 		
@@ -408,11 +415,11 @@ EOF;
 	public function bridgeCommand($oEconetPacket)
 	{
 		try{
-			$oBridgeRequest = new BridgeRequest($oEconetPacket);
+			$oBridgeRequest = new BridgeRequest($oEconetPacket, $this->oLogger);
 			$this->oBridge->processRequest($oEconetPacket);
 			$this->sendBridgeReplies();
 		}catch(Exception $oException){
-			logger::log("bridge: ".$oException->getMessage(),LOG_DEBUG);
+			$this->oLogger->debug("bridge: ".$oException->getMessage());
 		}
 	}
 
@@ -424,7 +431,7 @@ EOF;
 	{
 		$aReplies = $this->oPrintServer->getReplies();
 		foreach($aReplies as $oReply){
-			logger::log("filestore: Sending econet reply",LOG_DEBUG);
+			$this->oLogger->debug("filestore: Sending econet reply");
 			$oReplyEconetPacket = $oReply->buildEconetpacket();
 			$this->dispatchReply($oReplyEconetPacket);	
 		}
@@ -438,7 +445,7 @@ EOF;
 	{
 		$aReplies = $this->oBridge->getReplies();
 		foreach($aReplies as $oReply){
-			logger::log("bridge: Sending econet reply",LOG_DEBUG);
+			$this->oLogger->debug("bridge: Sending econet reply");
 			$oReplyEconetPacket = $oReply->buildEconetpacket();
 			$this->dispatchReply($oReplyEconetPacket);	
 		}
@@ -455,7 +462,7 @@ EOF;
 		$sIP = Map::ecoAddrToIpAddr($oReplyEconetPacket->getDestinationNetwork(),$oReplyEconetPacket->getDestinationStation());
 		if(strlen($sIP)>0){
 			$sPacket = $oReplyEconetPacket->getAunFrame();
-			logger::log("filestore: AUN packet to ".$sIP." (".implode(':',unpack('C*',$sPacket)).")",LOG_DEBUG);
+			$this->oLogger->debug("filestore: AUN packet to ".$sIP." (".implode(':',unpack('C*',$sPacket)).")");
 			if(strlen($sPacket)>0){
 				if(strpos($sIP,':')===FALSE){
 					$sHost=$sIP.':'.config::getValue('aun_default_port');
@@ -493,7 +500,7 @@ EOF;
 					$oAunPacket = new AunPacket();
 					$sUdpData= stream_socket_recvfrom($this->oAunSocket,1500,0,$sHost);
 					$oAunPacket->setSourceIP($sHost);
-					logger::log("filestore: Aun packet recvieved from ".$sHost,LOG_DEBUG);	
+					$this->oLogger->debug("filestore: Aun packet recvieved from ".$sHost);	
 
 					//Decode the AUN packet
 					$oAunPacket->setDestinationIP(config::getValue('local_ip'));
@@ -502,7 +509,7 @@ EOF;
 					//Send an ack for the AUN packet if needed
 					$sAck = $oAunPacket->buildAck();
 					if(strlen($sAck)>0){
-						logger::log("filestore: Sending Ack packet",LOG_DEBUG);
+						$this->oLogger->debug("filestore: Sending Ack packet");
 						stream_socket_sendto($this->oAunSocket,$sAck,0,$sHost);
 					}
 				
@@ -560,7 +567,7 @@ EOF;
 					$oAunPacket = new AunPacket();
 					$sUdpData= stream_socket_recvfrom($this->oAunSocket,1500,0,$sHost);
 					$oAunPacket->setSourceIP($sHost);
-					logger::log("filestore: Aun packet recvieved from ".$sHost,LOG_DEBUG);	
+					$this->oLogger->debug("filestore: Aun packet recvieved from ".$sHost);	
 
 					//Decode the AUN packet
 					$oAunPacket->setDestinationIP(config::getValue('local_ip'));
@@ -569,7 +576,7 @@ EOF;
 					//Send an ack for the AUN packet if needed
 					$sAck = $oAunPacket->buildAck();
 					if(strlen($sAck)>0){
-						logger::log("filestore: Sending Ack packet",LOG_DEBUG);
+						$this->oLogger->debug("filestore: Sending Ack packet");
 						stream_socket_sendto($this->oAunSocket,$sAck,0,$sHost);
 					}
 				

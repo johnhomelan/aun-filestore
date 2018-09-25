@@ -5,10 +5,9 @@
  * @author John Brown <john@home-lan.co.uk>
  * @package coreprotocol
 */
-namespace HomeLan\FileStore\Aun\Messages; 
+namespace HomeLan\FileStore\Messages; 
 
 use Exception; 
-use logger;
 
 /** 
  * This class is used to repressent a file server request
@@ -32,9 +31,10 @@ class BridgeRequest extends Request {
 
 	protected $aFunctionMap = array(0x80=>'EC_BR_QUERY',0x81=>'EC_BR_QUERY2',0x82=>'EC_BR_LOCALNET',0x83=>'EC_BR_NETKNOWN');
 
-	public function __construct($oEconetPacket)
+
+	public function __construct($oEconetPacket, \Psr\Log\LoggerInterface $oLogger)
 	{
-		parent:: __construct($oEconetPacket);
+		parent:: __construct($oEconetPacket,$oLogger);
 		$this->decode($oEconetPacket->getData());
 	}	
 
@@ -50,7 +50,7 @@ class BridgeRequest extends Request {
 			if(isset($this->aFunctionMap[$this->iFunction])){
 				return $this->aFunctionMap[$this->iFunction];
 			}
-			logger::log("No function to map on to ".$this->iFunction,LOG_DEBUG);
+			$this->oLogger->debug("No function to map on to ".$this->iFunction);
 		}
 		throw new Exception("No packet was decoded unable to getFunction");
 	}
@@ -71,7 +71,7 @@ class BridgeRequest extends Request {
 		$aHeader=unpack('CCCCCC',$sBinaryString);
 		$sBinaryString = substr($sBinaryString,5);
 		if(implode('',$aHeader)!=='Bridge'){
-			logger::log("An invalid bridge request was received (it did not begin with the string Bridge)",LOG_DEBUG);
+			$this->oLogger->debug("An invalid bridge request was received (it did not begin with the string Bridge)");
 			throw new Exception("Invalid bridge request");
 		}
 

@@ -9,7 +9,6 @@ namespace HomeLan\FileStore\Services;
 
 use HomeLan\FileStore\Authentication\Security; 
 
-use logger;
 use config;
 /**
 /**
@@ -24,6 +23,18 @@ class PrintServer {
 	protected $aReplyBuffer = array();
 
 	protected $aPrintBuffer = array();
+
+	protected $oLogger;
+
+	/**
+	 * Initializes the service
+	 *
+	*/
+	public function __construct(\Psr\Log\LoggerInterface $oLogger)
+	{
+		$this->oLogger = $oLogger;
+	}
+
 
 	protected function _addReplyToBuffer($oReply)
 	{
@@ -57,7 +68,7 @@ class PrintServer {
 	{
 		$sPrinterName = $oEnquiry->getString(1,6);
 		$iRequestCode = $oEnquiry->get16bitIntLittleEndian(7);
-		logger::log("Printer enquiry for ".$sPrinterName." code ".$iRequestCode,LOG_DEBUG);
+		$this->oLogger->debug("Printer enquiry for ".$sPrinterName." code ".$iRequestCode);
 
 		$oReply = $oEnquiry->buildReply();
 
@@ -95,7 +106,7 @@ class PrintServer {
 			$oReply->appendByte(0);
 			$this->_addReplyToBuffer($oReply);
 			//Spool started create buffer
-			logger::log("Station ".$oPrintData->getSourceNetwork().":".$oPrintData->getSourceStation()." started a print job",LOG_INFO);
+			$this->oLogger->info("Station ".$oPrintData->getSourceNetwork().":".$oPrintData->getSourceStation()." started a print job");
 			if(!array_key_exists($oPrintData->getSourceNetwork(),$this->aPrintBuffer)){
 				$this->aPrintBuffer[$oPrintData->getSourceNetwork()]=array();
 			}
@@ -113,7 +124,7 @@ class PrintServer {
 			$this->aPrintBuffer[$oPrintData->getSourceNetwork()][$oPrintData->getSourceStation()]['data'] .= $oPrintData->getString(1,$oPrintData->getLen());
 			if($oPrintData->getByte($oPrintData->getLen())==3){
 				//Print job has ended
-				logger::log("Station ".$oPrintData->getSourceNetwork().":".$oPrintData->getSourceStation()." print job completed",LOG_INFO);
+				$this->oLogger->info("Station ".$oPrintData->getSourceNetwork().":".$oPrintData->getSourceStation()." print job completed");
 				if(is_dir(config::getValue('print_server_spool_dir'))){
 					$oUser = Security::getUser($oPrintData->getSourceNetwork(),$oPrintData->getSourceStation());
 					if(is_object($oUser)){
@@ -126,7 +137,7 @@ class PrintServer {
 					}
 					file_put_contents($sSpoolPath.DIRECTORY_SEPARATOR.date('H-i-s-d-n-Y').'.raw',$this->aPrintBuffer[$oPrintData->getSourceNetwork()][$oPrintData->getSourceStation()]['data']);
 				}else{
-					logger::log("Un-able to save print out as the spool directory does not exist (".config::getValue('print_server_spool_dir').")",LOG_INFO);
+					$this->oLogger->info("Un-able to save print out as the spool directory does not exist (".config::getValue('print_server_spool_dir').")");
 				}
 				unset($this->aPrintBuffer[$oPrintData->getSourceNetwork()][$oPrintData->getSourceStation()]);
 			}

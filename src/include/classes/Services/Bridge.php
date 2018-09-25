@@ -8,7 +8,6 @@
 namespace HomeLan\FileStore\Services; 
 
 use HomeLan\FileStore\Aun\Map; 
-use logger; 
 use config;
 use Exception;
 
@@ -23,11 +22,22 @@ class Bridge {
 	
 	protected $aReplyBuffer = array();
 
+	protected $oLogger;
+
 	/**
 	 * Holds a list of networks discovered that are reachable through other bridges 
 	 *
 	*/
 	protected $aRemoteNetworks = array();
+
+	/**
+	 * Initializes the service
+	 *
+	*/
+	public function __construct(\Psr\Log\LoggerInterface $oLogger)
+	{
+		$this->oLogger = $oLogger;
+	}
 
 	protected function _addReplyToBuffer($oReply)
 	{
@@ -66,7 +76,7 @@ class Bridge {
 	public function processRequest($oBridgeRequest)
 	{
 		$sFunction = $oBridgeRequest->getFunction();
-		logger::log("Bridge function ".$sFunction,LOG_DEBUG);
+		$this->oLogger->debug("Bridge function ".$sFunction);
 		switch($oBridgeRequest->getFunction()){
 			//Bridge to bridge protocol
 			case 'EC_BR_QUERY':

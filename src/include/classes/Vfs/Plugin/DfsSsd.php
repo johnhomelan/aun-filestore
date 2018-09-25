@@ -12,7 +12,6 @@ use HomeLan\FileStore\Vfs\DirectoryEntry;
 use HomeLan\FileStore\Vfs\FileDescriptor;
 use HomeLan\FileStore\Vfs\FilePath;
 use config; 
-use logger;
 use dfsreader;
 
 /**
@@ -30,8 +29,14 @@ class DfsSsd implements PluginInterface {
 
 	protected static $iFileHandle = 0;
 
-	public static function init()
+	protected static $oLogger;
+
+	protected static $bMultiuser;
+
+	public static function init(\Psr\Log\LoggerInterface $oLogger, bool $bMultiuser = false)
 	{
+		self::$oLogger = $oLogger;
+		self::$bMultiuser = $bMultiuser;
 	}
 
 	public static function houseKeeping()
@@ -41,14 +46,14 @@ class DfsSsd implements PluginInterface {
 
 	protected  static function _setUid($oUser)
 	{
-		if(config::getValue('security_mode')=='multiuser'){
+		if(self::$bMultiuser){
 			posix_seteuid($oUser->getUnixUid());
 		}
 	}
 	
 	protected static function _returnUid()
 	{
-		if(config::getValue('security_mode')=='multiuser'){
+		if(self::$bMultiuser){
 			 posix_seteuid(config::getValue('system_user_id'));
 		}
 	}
@@ -183,7 +188,7 @@ class DfsSsd implements PluginInterface {
 				$iVfsHandle = DfsSsd::$iFileHandle++;
 				DfsSsd::$aFileHandles[$iVfsHandle]=array('image-file'=>$sImageFile,'path-inside-image'=>$sPathInsideImage,'pos'=>0);
 				$oDfs =  DfsSsd::_getImageReader($sImageFile);
-				return new filedescriptor('DfsSsd',$oUser,$sImageFile,$oEconetPath->getFilePath(),$iVfsHandle,$iEconetHandle,$oDfs->isFile($sPathInsideImage),$oDfs->isDir($sPathInsideImage));
+				return new FileDescriptor(self::$oLogger,'DfsSsd',$oUser,$sImageFile,$oEconetPath->getFilePath(),$iVfsHandle,$iEconetHandle,$oDfs->isFile($sPathInsideImage),$oDfs->isDir($sPathInsideImage));
 			}
 		}
 
@@ -194,7 +199,7 @@ class DfsSsd implements PluginInterface {
 			$iEconetHandle = Vfs::getFreeFileHandleID($oUser);
 			$iVfsHandle = DfsSsd::$iFileHandle++;
 			DfsSsd::$aFileHandles[$iVfsHandle]=array('image-file'=>$sUnixPath.'.ssd','path-inside-image'=>'','pos'=>0);
-			return new filedescriptor('DfsSsd',$oUser,$sUnixPath.'.ssd',$oEconetPath->getFilePath(),$iVfsHandle,$iEconetHandle,FALSE,TRUE);
+			return new FileDescriptor(self::$oLogger,'DfsSsd',$oUser,$sUnixPath.'.ssd',$oEconetPath->getFilePath(),$iVfsHandle,$iEconetHandle,FALSE,TRUE);
 		}
 	
 	}
@@ -353,7 +358,7 @@ class DfsSsd implements PluginInterface {
 
 	public static function write($oUser,$fLocalHandle,$sData)
 	{
-		logger::log("DfsSsd: Write bytes to file handle ".$fLocalHandle.LOG_DEBUG);
+		self::$oLogger->debug("DfsSsd: Write bytes to file handle ".$fLocalHandle);
 	}
 
 	public static function fsClose($oUser,$fLocalHandle)

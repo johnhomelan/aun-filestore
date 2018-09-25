@@ -10,10 +10,8 @@ namespace HomeLan\FileStore\Services;
 use HomeLan\FileStore\Vfs\Vfs; 
 use HomeLan\FileStore\Authentication\Security; 
 use HomeLan\FileStore\Authentication\User; 
-use HomeLan\FileStore\Aun\Messages\EconetPacket; 
+use HomeLan\FileStore\Messages\EconetPacket; 
 
-
-use logger;
 use config;
 use Exception;
 
@@ -30,6 +28,17 @@ class FileServer {
 	
 	protected $aReplyBuffer = array();
 
+	protected $oLogger;
+
+	/**
+	 * Initializes the service
+	 *
+	*/
+	public function __construct(\Psr\Log\LoggerInterface $oLogger)
+	{
+		$this->oLogger = $oLogger;
+	}
+
 	protected function _addReplyToBuffer($oReply)
 	{
 		$this->aReplyBuffer[]=$oReply;
@@ -37,8 +46,8 @@ class FileServer {
 
 	public function init(\HomeLan\FileStore\Command\Filestore $oMainApp)
 	{
-		Vfs::init();
-		Security::init();
+		Vfs::init($this->oLogger, config::getValue('vfs_plugins'), config::getValue('security_mode')=='multiuser');
+		Security::init($this->oLogger);
 		$this->oMainApp = $oMainApp;
 	}
 
@@ -64,7 +73,7 @@ class FileServer {
 	public function processRequest($oFsRequest)
 	{
 		$sFunction = $oFsRequest->getFunction();
-		logger::log("FS function ".$sFunction,LOG_DEBUG);
+		$this->oLogger->debug("FS function ".$sFunction);
 
 		//Update the idle timer for this station
 		Security::updateIdleTimer($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation());
@@ -103,7 +112,7 @@ class FileServer {
 				$this->examine($oFsRequest);
 				break;
 			case 'EC_FS_FUNC_CAT_HEADER':
-				logger::log("Call to obsolete unimplemented function EC_FS_FUNC_CAT_HEADER",LOG_INFO);
+				$this->oLogger->info("Call to obsolete unimplemented function EC_FS_FUNC_CAT_HEADER");
 				break;
 			case 'EC_FS_FUNC_LOAD_COMMAND':
 				$this->loadCommand($oFsRequest);
@@ -181,7 +190,7 @@ class FileServer {
 				$this->getUserDiscFree($oFsRequest);
 				break;
 			default:
-				logger::log("Un-handled fs function ".$sFunction,LOG_DEBUG);
+				$this->oLogger->debug("Un-handled fs function ".$sFunction);
 				break;
 				
 		}
@@ -201,7 +210,7 @@ class FileServer {
 				}
 			}	
 		}catch(Exception $oException){
-			logger::log("fileserver: Unable to set users csd to handle ".$oFsRequest->getCsd()." (".$oException->getMessage().")",LOG_DEBUG);
+			$this->oLogger->debug("fileserver: Unable to set users csd to handle ".$oFsRequest->getCsd()." (".$oException->getMessage().")");
 		}
 
 		try {
@@ -212,7 +221,7 @@ class FileServer {
 				}
 			}	
 		}catch(Exception $oException){
-			logger::log("fileserver: Unable to set users lib to handle ".$oFsRequest->getLib()." (".$oException->getMessage().")",LOG_DEBUG);
+			$this->oLogger->debug("fileserver: Unable to set users lib to handle ".$oFsRequest->getLib()." (".$oException->getMessage().")");
 		}
 	
 	}
@@ -233,7 +242,7 @@ class FileServer {
 			$sDataAsString = $sDataAsString.chr($iChar);
 		}
 
-		logger::log("Command: ".$sDataAsString.".",LOG_DEBUG);
+		$this->oLogger->debug("Command: ".$sDataAsString.".");
 
 		foreach($this->aCommands as $sCommand){
 			$iPos = stripos($sDataAsString,$sCommand);
@@ -318,7 +327,7 @@ class FileServer {
 				$this->chrootoff($oFsRequest,$sOptions);
 				break;
 			default:
-				logger::log("Un-handled command ".$sCommand,LOG_DEBUG);
+				$this->oLogger->debug("Un-handled command ".$sCommand);
 				$oReply = $oFsRequest->buildReply();
 				$oReply->setError(0x99,"Un-implemented command");
 				$this->_addReplyToBuffer($oReply);
@@ -344,7 +353,7 @@ class FileServer {
 	*/
 	public function login($oFsRequest,$sOptions)
 	{
-		logger::log("fileserver: Login called ".$sOptions,LOG_DEBUG);
+		$this->oLogger->debug("fileserver: Login called ".$sOptions);
 		$aOptions = explode(" ",$sOptions);
 		if(count($aOptions)>0){
 			//Creditials supplied, decode username and password
@@ -359,7 +368,7 @@ class FileServer {
 			}
 		}else{
 			//No creditials supplied
-			logger::log("Login Failed: *I AM send but with no username or password",LOG_INFO);
+			$this->oLogger->info("Login Failed: *I AM send but with no username or password");
 			//Send Fail Notice
 			$oReply = $oFsRequest->buildReply();
 
@@ -379,19 +388,19 @@ class FileServer {
 				$oUrd = Vfs::createFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oUser->getHomedir());
 				$oCsd = Vfs::createFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oUser->getHomedir());	
 			}catch(Exception $oException){
-				logger::log("fileserver: Login unable to open homedirectory for user ".$oUser->getUsername(),LOG_INFO);
+				$this->oLogger->info("fileserver: Login unable to open homedirectory for user ".$oUser->getUsername());
 				$oUrd = Vfs::createFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),'$');
 				$oCsd = Vfs::createFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),'$');
 			}
 			try {
 				$oLib = Vfs::createFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oUser->getLib());
 			}catch(Exception $oException){
-				logger::log("fileserver: Login unable to open library dir setting library to $ for user ".$oUser->getUsername(),LOG_INFO);
+				$this->oLogger->info("fileserver: Login unable to open library dir setting library to $ for user ".$oUser->getUsername());
 				$oLib = Vfs::createFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),'');
 			}
 			//Handles are now build send the reply 
 			$oReply = $oFsRequest->buildReply();
-			logger::log("fileserver: Login ok urd:".$oUrd->getId()." csd:".$oCsd->getId()." lib:".$oLib->getId(),LOG_DEBUG);
+			$this->oLogger->debug("fileserver: Login ok urd:".$oUrd->getId()." csd:".$oCsd->getId()." lib:".$oLib->getId());
 			$oReply->loginRespone($oUrd->getId(),$oCsd->getId(),$oLib->getId(),$oUser->getBootOpt());
 			$this->_addReplyToBuffer($oReply);
 		}else{
@@ -399,7 +408,7 @@ class FileServer {
 			$oReply = $oFsRequest->buildReply();
 
 			//Send Wrong Password
-			logger::log("Login Failed: For user ".$sUser." invalid password/no such user",LOG_INFO);
+			$this->oLogger->info("Login Failed: For user ".$sUser." invalid password/no such user");
 			$oReply->setError(0xbb,"Incorrect password");
 			$this->_addReplyToBuffer($oReply);
 		}
@@ -432,12 +441,12 @@ class FileServer {
 	*/
 	public function cmdInfo($oFsRequest,$sFile)
 	{
-		logger::log("cmdInfo for path ".$sFile."",LOG_DEBUG);
+		$this->oLogger->debug("cmdInfo for path ".$sFile."");
 		$oReply = $oFsRequest->buildReply();
 		try {
 			$oMeta = Vfs::getMeta($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sFile);
 			$sReplyData =  sprintf("%-10.10s %08X %08X   %06X   %-6.6s  %02d:%02d:%02d %06x\r\x80",$sFile,$oMeta->getLoadAddr(),$oMeta->getExecAddr(),$oMeta->getSize(),"RW/RW",$oMeta->getDay(),$oMeta->getMonth(),$oMeta->getYear(),$oMeta->getSin());
-			logger::log("INFO ".$sFile." Load: ".$oMeta->getLoadAddr()." Exec: ".$oMeta->getExecAddr()." Size:".$oMeta->getSize(),LOG_DEBUG);
+			$this->oLogger->debug("INFO ".$sFile." Load: ".$oMeta->getLoadAddr()." Exec: ".$oMeta->getExecAddr()." Size:".$oMeta->getSize());
 			$oReply->InfoOk();
 			//Append Type
 			$oReply->appendString($sReplyData);
@@ -456,7 +465,7 @@ class FileServer {
 	public function getInfo($oFsRequest)
 	{
 		$sDir = $oFsRequest->getString(2);
-		logger::log("getInfo for path ".$sDir." (".$oFsRequest->getByte(1).")",LOG_DEBUG);
+		$this->oLogger->debug("getInfo for path ".$sDir." (".$oFsRequest->getByte(1).")");
 		switch($oFsRequest->getByte(1)){
 			case 4:
 				//EC_FS_GET_INFO_ACCESS
@@ -541,10 +550,10 @@ class FileServer {
 					$oReply->DoneOk();
 					//Append Type
 					if($oMeta->isDir()){
-						logger::log("isDir",LOG_DEBUG);
+						$this->oLogger->debug("isDir");
 						$oReply->appendByte(0x02);
 					}else{
-						logger::log("isFile",LOG_DEBUG);
+						$this->oLogger->debug("isFile");
 						$oReply->appendByte(0x01);
 					}
 					$oReply->append32bitIntLittleEndian($oMeta->getLoadAddr());
@@ -668,7 +677,7 @@ class FileServer {
 
 	public function eof($oFsRequest)
 	{
-		logger::log("Eof Called by ".$oFsRequest->getSourceNetwork().".".$oFsRequest->getSourceStation(),LOG_DEBUG);
+		$this->oLogger->debug("Eof Called by ".$oFsRequest->getSourceNetwork().".".$oFsRequest->getSourceStation());
 		//Get the file handle id
 		$iHandle = $oFsRequest->getByte(1);
 		$oReply = $oFsRequest->buildReply();
@@ -696,7 +705,7 @@ class FileServer {
 		$iArg = $oFsRequest->getByte(1);
 		$iStart = $oFsRequest->getByte(2);
 		$iCount = $oFsRequest->getByte(3);
-		logger::log("Examine Type ".$iArg." (only 3,1 is implemented)",LOG_DEBUG);
+		$this->oLogger->debug("Examine Type ".$iArg." (only 3,1 is implemented)");
 		switch($iArg){
 			case 0:
 				//EXAMINE_ALL
@@ -705,7 +714,7 @@ class FileServer {
 				//Get the directory listing
 				$oFd = Vfs::getFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oFsRequest->getCsd());
 				$aDirEntries=Vfs::getDirectoryListing($oFd);
-				logger::log("There are ".count($aDirEntries)." entries in dir ".$oFd->getEconetPath(),LOG_DEBUG);
+				$this->oLogger->debug("There are ".count($aDirEntries)." entries in dir ".$oFd->getEconetPath());
 
 				//Return only the entries the client requested (works like sql limit and offset)
 				$aDirEntries = array_slice($aDirEntries,$iStart,$iCount);
@@ -735,7 +744,7 @@ class FileServer {
 				//Get the directory listing
 				$oFd = Vfs::getFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oFsRequest->getCsd());
 				$aDirEntries=Vfs::getDirectoryListing($oFd);
-				logger::log("There are ".count($aDirEntries)." entries in dir ".$oFd->getEconetPath(),LOG_DEBUG);
+				$this->oLogger->debug("There are ".count($aDirEntries)." entries in dir ".$oFd->getEconetPath());
 
 				//Return only the entries the client requested (works like sql limit and offset)
 				$aDirEntries = array_slice($aDirEntries,$iStart,$iCount);
@@ -769,7 +778,7 @@ class FileServer {
 				//Get the directory listing
 				$oFd = Vfs::getFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oFsRequest->getCsd());
 				$aDirEntries=Vfs::getDirectoryListing($oFd);
-				logger::log("There are ".count($aDirEntries)." entries in dir ".$oFd->getEconetPath(),LOG_DEBUG);
+				$this->oLogger->debug("There are ".count($aDirEntries)." entries in dir ".$oFd->getEconetPath());
 
 				//Return only the entries the client requested (works like sql limit and offset)
 				$aDirEntries = array_slice($aDirEntries,$iStart,$iCount);
@@ -896,7 +905,7 @@ class FileServer {
 				}else{
 					$oNewCsd = Vfs::createFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sOptions);	
 					if(!$oNewCsd->isDir()){
-						logger::log("User tryed to change to directory ".$oNewCsd->getEconetDirName()." however its not a directory.",LOG_DEBUG);
+						$this->oLogger->debug("User tryed to change to directory ".$oNewCsd->getEconetDirName()." however its not a directory.");
 						$oReply->setError(0xbe,"Not a directory");
 						$this->_addReplyToBuffer($oReply);
 						return;
@@ -942,7 +951,7 @@ class FileServer {
 			try {
 				$oNewLib = Vfs::createFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sOptions);	
 				if(!$oNewLib->isDir()){
-					logger::log("User tryed to change the library to ".$oNewLib->getEconetDirName()." however its not a directory.",LOG_DEBUG);
+					$this->oLogger->debug("User tryed to change the library to ".$oNewLib->getEconetDirName()." however its not a directory.");
 					$oReply->setError(0xbe,"Not a directory");
 					$this->_addReplyToBuffer($oReply);
 					return;
@@ -1091,7 +1100,7 @@ class FileServer {
 		//Offset (only use if $iUserPtr!=0)
 		$iOffset = $oFsRequest->get24bitIntLittleEndian(6);
 	
-		logger::log("Getbytes handle ".$iHandle." size ".$iBytes." prt ".$iUserPtr." offset ".$iOffset.".",LOG_DEBUG);
+		$this->oLogger->debug("Getbytes handle ".$iHandle." size ".$iBytes." prt ".$iUserPtr." offset ".$iOffset.".");
 
 		$oFsHandle = Vfs::getFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$iHandle);	
 		
@@ -1130,7 +1139,7 @@ class FileServer {
 			$oEconetPacket->setData($sBlock);
 			$this->oMainApp->dispatchReply($oEconetPacket);
 			try {
-				logger::log("Waitinig for ack",LOG_DEBUG);
+				$this->oLogger->debug("Waitinig for ack");
 				$oAck = $this->oMainApp->waitForAck($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation());
 			}catch(Exception $oException){
 				return;
@@ -1168,12 +1177,12 @@ class FileServer {
 		$iBytes = $oFsRequest->get24bitIntLittleEndian(3);
 		//Offset (only use if $iUserPtr!=0)
 		$iOffset = $oFsRequest->get24bitIntLittleEndian(6);
-		logger::log("Putbytes handle ".$iHandle." size ".$iBytes." prt ".$iUserPtr." offset ".$iOffset.".",LOG_DEBUG);
+		$this->oLogger->debug("Putbytes handle ".$iHandle." size ".$iBytes." prt ".$iUserPtr." offset ".$iOffset.".");
 
 		$oFsHandle = Vfs::getFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$iHandle);	
 
 		if($iUserPtr!=0){
-			logger::log("Moving point ".$iOffset." bytes along the file ",LOG_DEBUG);
+			$this->oLogger->debug("Moving point ".$iOffset." bytes along the file ");
 			//Move the file pointer to offset
 			$oFsHandle->setPos($iOffset);
 		}
@@ -1196,7 +1205,7 @@ class FileServer {
 				$oEconetPacket = $this->oMainApp->directStream($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),config::getValue('econet_data_stream_port'));
 
 			}catch(Exception $oException){
-				logger::log("Putbytes timed out waiting for data",LOG_DEBUG);
+				$this->oLogger->debug("Putbytes timed out waiting for data");
 				//$oFailReply=$oFsRequest->buildReply();
 				//$oFailReply->setError(0xff,"Timeout");
 				//$this->_addReplyToBuffer($oReply);
@@ -1227,7 +1236,7 @@ class FileServer {
 		$oReply = $oFsRequest->buildReply();
 		$oReply->DoneOk();
 
-		logger::log("Getbyte handle ".$iHandle." ",LOG_DEBUG);
+		$this->oLogger->debug("Getbyte handle ".$iHandle." ");
 		//Reads a byte from the file handle
 		$oFsHandle = Vfs::getFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$iHandle);	
 		if($oFsHandle->isEof()){
@@ -1248,7 +1257,7 @@ class FileServer {
 		$iByte = $oFsRequest->getByte(2);
 		$oReply = $oFsRequest->buildReply();
 
-		logger::log("Putbyte handle ".$iHandle." ",LOG_DEBUG);
+		$this->oLogger->debug("Putbyte handle ".$iHandle." ");
 		//Writes a byte to the file handle
 		$oFsHandle = Vfs::getFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$iHandle);	
 		$oFsRequest->write($iByte);
@@ -1288,7 +1297,7 @@ class FileServer {
 		//Add max block size
 		$oReply->append16bitIntLittleEndian(968);
 
-		logger::log("Save File ".$sPath." of size ".$iSize,LOG_DEBUG);
+		$this->oLogger->debug("Save File ".$sPath." of size ".$iSize);
 		//Send reply directly
 		$oReplyEconetPacket = $oReply->buildEconetpacket();
 		$this->oMainApp->dispatchReply($oReplyEconetPacket);	
@@ -1298,10 +1307,10 @@ class FileServer {
 		while(strlen($sData)<$iSize){
 			try {
 				//We now need to take over the receving of packets breifly going to our streaming port
-				logger::log("Direct stream (".strlen($sData)."/".$iSize.")",LOG_DEBUG);
+				$this->oLogger->debug("Direct stream (".strlen($sData)."/".$iSize.")");
 				$oEconetPacket = $this->oMainApp->directStream($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),config::getValue('econet_data_stream_port'));
 			}catch(Exception $oException){
-				logger::log("Client failed to send direct stream during save operation (".$oException->getMessage().")",LOG_DEBUG);
+				$this->oLogger->debug("Client failed to send direct stream during save operation (".$oException->getMessage().")");
 				$oFailReply=$oFsRequest->buildReply();
 				$oFailReply->setError(0xff,"Timeout");
 				$this->_addReplyToBuffer($oReply);
@@ -1313,11 +1322,11 @@ class FileServer {
 			//Set the port to be the requested ack port
 			$oReplyEconetPacket->setPort($iAckPort);
 			$this->oMainApp->dispatchReply($oReplyEconetPacket);	
-			logger::log("Replay sent for block of ".strlen($oEconetPacket->getData()),LOG_DEBUG);
+			$this->oLogger->debug("Replay sent for block of ".strlen($oEconetPacket->getData()));
 			try {
 				$this->oMainApp->waitForAck($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation());
 			}catch(Exception $oException){
-				logger::log($oException->getMessage(),LOG_DEBUG);
+				$this->oLogger->debug($oException->getMessage());
 			}
 			$sData=$sData.$oEconetPacket->getData();
 		}
@@ -1561,7 +1570,7 @@ class FileServer {
 		}
 
 		if(!$oNewRootDir->isDir()){
-			logger::log("User tryed to change to directory ".$oNewRootDir->getEconetDirName()." however its not a directory.",LOG_DEBUG);
+			$this->oLogger->debug("User tryed to change to directory ".$oNewRootDir->getEconetDirName()." however its not a directory.");
 			$oReply->setError(0xbe,"Not a directory");
 			$this->_addReplyToBuffer($oReply);
 			return;
@@ -1609,7 +1618,7 @@ class FileServer {
 		$oReply = $oFsRequest->buildReply();
 		$oReply->DoneOK();
 		$aUsers = Security::getUsersOnline();
-		logger::log("usersOnline: There are ".count($aUsers)." on-line, the clients request details of (".$iStart."/".$iCount.")",LOG_DEBUG);
+		$this->oLogger->debug("usersOnline: There are ".count($aUsers)." on-line, the clients request details of (".$iStart."/".$iCount.")");
 		$iUsersRemaining = count($aUsers)-$iStart;
 		if($iUsersRemaining>0){
 			$oReply->appendByte($iUsersRemaining);

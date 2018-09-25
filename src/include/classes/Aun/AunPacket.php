@@ -5,9 +5,9 @@
  * @author John Brown <john@home-lan.co.uk>
  * @package corenet
 */
-namespace HomeLan\FileStore\Aun\Messages; 
+namespace HomeLan\FileStore\Aun; 
 
-use HomeLan\FileStore\Aun\Map; 
+use HomeLan\FileStore\Messages\EconetPacket; 
 use Exception; 
 use config;
 
@@ -210,7 +210,7 @@ class AunPacket {
 	*/
 	public function buildEconetPacket()
 	{
-		$oEconetPacket = new econetpacket();
+		$oEconetPacket = new EconetPacket();
 		$oEconetPacket->setPort($this->iPort);
 		$oEconetPacket->setFlags($this->iCb);
 		$sNetworkStation = Map::ipAddrToEcoAddr($this->sSoruceIP,$this->sSourceUdpPort);

@@ -13,7 +13,6 @@ use HomeLan\FileStore\Vfs\DirectoryEntry;
 use HomeLan\FileStore\Vfs\FileDescriptor;
 use HomeLan\FileStore\Vfs\FilePath;
 use config; 
-use logger;
 use adfsreader;
 
 /**
@@ -31,25 +30,30 @@ class AdfsAdl implements PluginInterface {
 
 	protected static $iFileHandle = 0;
 
-	public static function init()
+	protected static $oLogger;
+
+	protected static $bMultiuser;
+
+	public static function init(\Psr\Log\LoggerInterface $oLogger, bool $bMultiuser = false)
 	{
+		self::$oLogger = $oLogger;
+		self::$bMultiuser = $bMultiuser;
 	}
 
 	public static function houseKeeping()
 	{
-
 	}
 
 	protected  static function _setUid($oUser)
 	{
-		if(config::getValue('security_mode')=='multiuser'){
+		if(self::$bMultiuser){
 			posix_seteuid($oUser->getUnixUid());
 		}
 	}
 	
 	protected static function _returnUid()
 	{
-		if(config::getValue('security_mode')=='multiuser'){
+		if(self::$bMultiuser){
 			 posix_seteuid(config::getValue('system_user_id'));
 		}
 	}
@@ -184,7 +188,7 @@ class AdfsAdl implements PluginInterface {
 				$iVfsHandle = AdfsAdl::$iFileHandle++;
 				AdfsAdl::$aFileHandles[$iVfsHandle]=array('image-file'=>$sImageFile,'path-inside-image'=>$sPathInsideImage,'pos'=>0);
 				$oAdfs =  AdfsAdl::_getImageReader($sImageFile);
-				return new filedescriptor('AdfsAdl',$oUser,$sImageFile,$oEconetPath->getFilePath(),$iVfsHandle,$iEconetHandle,$oAdfs->isFile($sPathInsideImage),$oAdfs->isDir($sPathInsideImage));
+				return new FileDescriptor(self::$oLogger,'AdfsAdl',$oUser,$sImageFile,$oEconetPath->getFilePath(),$iVfsHandle,$iEconetHandle,$oAdfs->isFile($sPathInsideImage),$oAdfs->isDir($sPathInsideImage));
 			}
 		}
 
@@ -195,7 +199,7 @@ class AdfsAdl implements PluginInterface {
 			$iEconetHandle = Vfs::getFreeFileHandleID($oUser);
 			$iVfsHandle = AdfsAdl::$iFileHandle++;
 			AdfsAdl::$aFileHandles[$iVfsHandle]=array('image-file'=>$sUnixPath.'.adl','path-inside-image'=>'','pos'=>0);
-			return new filedescriptor('AdfsAdl',$oUser,$sUnixPath.'.adl',$oEconetPath->getFilePath(),$iVfsHandle,$iEconetHandle,FALSE,TRUE);
+			return new FileDescriptor(self::$oLogger,'AdfsAdl',$oUser,$sUnixPath.'.adl',$oEconetPath->getFilePath(),$iVfsHandle,$iEconetHandle,FALSE,TRUE);
 		}
 	
 	}
@@ -352,7 +356,7 @@ class AdfsAdl implements PluginInterface {
 
 	public static function write($oUser,$fLocalHandle,$sData)
 	{
-		logger::log("AdfsAdl: Write bytes to file handle ".$fLocalHandle.LOG_DEBUG);
+		self::$oLogger->debug("AdfsAdl: Write bytes to file handle ".$fLocalHandle);
 		throw new VfsException("Read Only FS");
 	}
 

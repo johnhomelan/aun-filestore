@@ -8,11 +8,20 @@ use HomeLan\FileStore\Services\FileServer;
 use HomeLan\FileStore\Services\PrintServer;
 use HomeLan\FileStore\Services\Bridge;
 
+use Monolog\Logger;
+use Monolog\Handler\SyslogHandler;
+use Monolog\Handler\StreamHandler;
+
+$oLogger = new Logger("filestored");
+$oLogger->pushHandler(new SyslogHandler("filestored"));
+$oLogger->pushHandler(new StreamHandler('php://stdout', Logger::DEBUG));
+
 $oApplication = new SingleCommandApplication(
 	new Filestore(
-		new FileServer(),
-		new PrintServer(),
-		new Bridge()
+		new FileServer($oLogger),
+		new PrintServer($oLogger),
+		new Bridge($oLogger),
+		$oLogger
 	)
 );
 

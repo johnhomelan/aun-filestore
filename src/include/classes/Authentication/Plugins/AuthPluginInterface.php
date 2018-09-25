@@ -17,9 +17,10 @@ interface AuthPluginInterface {
 	/**
 	 * Intiailizes this plugins data structures
 	 *
+	 * @param \Psr\Log\LoggerInterface $oLogger A psr compatable logger
 	 * @param string $sUser The users details should be suppliable as a string for unit tests
 	*/
-	static public function init($sUsers=NULL);
+	static public function init(\Psr\Log\LoggerInterface $oLogger, $sUsers=NULL);
 
 
 	/**

@@ -8,7 +8,6 @@
 namespace HomeLan\FileStore\Aun; 
 
 use config;
-use logger;
 
 /**
  * This class maps ip address for the AUN protocol to econet network and station numbers.
@@ -33,6 +32,35 @@ class Map {
 	static $aIPLookupCache = array();
 
 	static $aIpCounter = array();
+
+	static $oLogger;
+
+	/**
+	 * Loads the aun map from the configured aun map file
+	 *
+	 * @param \Psr\Log\LoggerInterface $oLogger
+	 * @param string $sMap The text for the map file can be supplied as a string, this is intended largley for unit testing this function
+	*/
+	public static function init(\Psr\Log\LoggerInterface $oLogger, string $sMap=NULL)
+	{
+		self::$oLogger = $oLogger;
+		if(is_null($sMap)){
+			if(!file_exists(config::getValue('aunmap_file'))){
+				self::$oLogger->info("aunmapper: The configure aunmap files does not exist.");
+				return;
+			}
+			$sMap = file_get_contents(config::getValue('aunmap_file'));
+		}
+		$aLines = explode("\n",$sMap);
+		foreach($aLines as $sLine){
+			if(preg_match('/([0-9]*\.[0-9]*\.[0-9]*\.[0-9]*\/[0-9]*) ([0-9]*)/',$sLine,$aMatches)>0){
+				Map::addSubnetMapping($aMatches[1],$aMatches[2]);
+			}
+			if(preg_match('/([0-9]*\.[0-9]*\.[0-9]*\.[0-9]*) ([0-9]*)\.([0-9]*)/',$sLine,$aMatches)>0){
+				Map::addHostMapping($aMatches[1],$aMatches[2],$aMatches[3]);
+			}
+		}
+	}
 
 	/**
 	 * Converts an ip address to a econet address
@@ -142,7 +170,7 @@ class Map {
 			Map::$aHostMap[$iNetworkNumber.'.'.$iStationNumber]=$sIP;
 			Map::$aIPLookupCache[$sIP]=$iNetworkNumber.'.'.$iStationNumber;
 		}else{
-			logger::log("aunmapper: An invaild ip was tried to be used as a aunmap entry (".$sIP.").",LOG_INFO);
+			self::$oLogger->info("aunmapper: An invaild ip was tried to be used as a aunmap entry (".$sIP.").");
 		}
 	}
 
@@ -159,34 +187,10 @@ class Map {
 			Map::$aIPLookupCache=array();
 			Map::$aSubnetMap[$iNetworkNumber]=$sSubnet;
 		}else{
-			logger::log("aunmapper: An invaild subnet was tried to be used as a aunmap entry (".$sSubnet.").",LOG_INFO);
+			self::$oLogger->info("aunmapper: An invaild subnet was tried to be used as a aunmap entry (".$sSubnet.").");
 		}
 	}
 
-	/**
-	 * Loads the aun map from the configured aun map file
-	 *
-	 * @param string $sMap The text for the map file can be supplied as a string, this is intended largley for unit testing this function
-	*/
-	public static function loadMap($sMap=NULL)
-	{
-		if(is_null($sMap)){
-			if(!file_exists(config::getValue('aunmap_file'))){
-				logger::log("aunmapper: The configure aunmap files does not exist.",LOG_INFO);
-				return;
-			}
-			$sMap = file_get_contents(config::getValue('aunmap_file'));
-		}
-		$aLines = explode("\n",$sMap);
-		foreach($aLines as $sLine){
-			if(preg_match('/([0-9]*\.[0-9]*\.[0-9]*\.[0-9]*\/[0-9]*) ([0-9]*)/',$sLine,$aMatches)>0){
-				Map::addSubnetMapping($aMatches[1],$aMatches[2]);
-			}
-			if(preg_match('/([0-9]*\.[0-9]*\.[0-9]*\.[0-9]*) ([0-9]*)\.([0-9]*)/',$sLine,$aMatches)>0){
-				Map::addHostMapping($aMatches[1],$aMatches[2],$aMatches[3]);
-			}
-		}
-	}
 
 	public static function setAunCounter(string $sIP,int $iCounter)
 	{

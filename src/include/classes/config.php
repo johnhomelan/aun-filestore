@@ -86,7 +86,6 @@ class config {
 		//If we know where our config is stored load it 
 		if(defined('CONFIG_CONF_FILE_PATH')){
 			if(!file_exists(CONFIG_CONF_FILE_PATH)){
-				logger::log("Missing config directory (".CONFIG_CONF_FILE_PATH.")",E_USER_NOTICE);	
 				return NULL;
 			}
 

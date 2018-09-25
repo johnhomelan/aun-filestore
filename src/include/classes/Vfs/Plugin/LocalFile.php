@@ -11,7 +11,6 @@ use HomeLan\FileStore\Vfs\DirectoryEntry;
 use HomeLan\FileStore\Vfs\FileDescriptor;
 use HomeLan\FileStore\Vfs\FilePath;
 use config; 
-use logger;
 
 /**
  * The LocalFile class acts as a vfs plugin to provide access to local files using the same on disk 
@@ -22,8 +21,14 @@ use logger;
 */
 class LocalFile implements PluginInterface {
 
-	public static function init()
+	protected static $oLogger;
+
+	protected static $bMultiuser;
+
+	public static function init(\Psr\Log\LoggerInterface $oLogger, bool $bMultiuser = false)
 	{
+		self::$oLogger = $oLogger;
+		self::$bMultiuser = $bMultiuser;
 	}
 
 	public static function houseKeeping()
@@ -33,14 +38,14 @@ class LocalFile implements PluginInterface {
 
 	protected  static function _setUid($oUser)
 	{
-		if(config::getValue('security_mode')=='multiuser'){
+		if(self::$bMultiuser){
 			posix_seteuid($oUser->getUnixUid());
 		}
 	}
 	
 	protected static function _returnUid()
 	{
-		if(config::getValue('security_mode')=='multiuser'){
+		if(self::$bMultiuser){
 			 posix_seteuid(config::getValue('system_user_id'));
 		}
 	}
@@ -57,7 +62,7 @@ class LocalFile implements PluginInterface {
 		$sUnixPath = trim($sUnixPath,DIRECTORY_SEPARATOR);
 		$sUnixPath = config::getValue('vfs_plugin_localfile_root').DIRECTORY_SEPARATOR.$sUnixPath;
 		if(file_exists($sUnixPath)){
-			logger::log("LocalFile: Converted econet path ".$sEconetPath. " to ".$sUnixPath,LOG_DEBUG);
+			self::$oLogger->debug("LocalFile: Converted econet path ".$sEconetPath. " to ".$sUnixPath);
 		}else{
 			//The file does not exists see if a case insenstive version of this files exists
 			$sDir = dirname($sUnixPath);
@@ -66,7 +71,7 @@ class LocalFile implements PluginInterface {
 				$aFiles = scandir($sDir);
 				foreach($aFiles as $sFile){
 					if(strtolower($sFile)==$sTestFileName){
-						logger::log("LocalFile: Converted econet path ".$sEconetPath. " to ".$sDir.DIRECTORY_SEPARATOR.$sFile,LOG_DEBUG);
+						self::$oLogger->debug("LocalFile: Converted econet path ".$sEconetPath. " to ".$sDir.DIRECTORY_SEPARATOR.$sFile);
 						return $sDir.DIRECTORY_SEPARATOR.$sFile;
 					}
 				}
@@ -120,7 +125,7 @@ class LocalFile implements PluginInterface {
 				$iVfsHandle = NULL;
 			}
 			$iEconetHandle = vfs::getFreeFileHandleID($oUser);
-			return new filedescriptor('LocalFile',$oUser,$sUnixPath,$oEconetPath->getFilePath(),$iVfsHandle,$iEconetHandle,is_file($sUnixPath),is_dir($sUnixPath));
+			return new FileDescriptor(self::$oLogger,'LocalFile',$oUser,$sUnixPath,$oEconetPath->getFilePath(),$iVfsHandle,$iEconetHandle,is_file($sUnixPath),is_dir($sUnixPath));
 		}
 	}
 
@@ -297,7 +302,7 @@ class LocalFile implements PluginInterface {
 
 	public static function fsFStat($oUser,$fLocalHandle)
 	{
-		logger::log("LocalFile: Get fstat on ".$fLocalHandle,LOG_DEBUG);
+		self::$oLogger->debug("LocalFile: Get fstat on ".$fLocalHandle);
 		LocalFile::_setUid($oUser);
 		$mReturn =  fstat($fLocalHandle);
 		LocalFile::_returnUid();
@@ -313,7 +318,7 @@ class LocalFile implements PluginInterface {
 
 	public static function setPos($oUser,$fLocalHandle,$iPos)
 	{
-		logger::log("LocalFile: Moving file off-set to ".$iPos." bytes for file handle ".$fLocalHandle.LOG_DEBUG);
+		self::$oLogger->debug("LocalFile: Moving file off-set to ".$iPos." bytes for file handle ".$fLocalHandle);
 		LocalFile::_setUid($oUser);
 		$mReturn =  fseek($fLocalHandle,$iPos,SEEK_SET);
 		LocalFile::_returnUid();
@@ -322,7 +327,7 @@ class LocalFile implements PluginInterface {
 	
 	public static function read($oUser,$fLocalHandle,$iLength)
 	{
-		logger::log("LocalFile: Reading ".$iLength." bytes from file handle ".$fLocalHandle.LOG_DEBUG);
+		self::$oLogger->debug("LocalFile: Reading ".$iLength." bytes from file handle ".$fLocalHandle);
 		LocalFile::_setUid($oUser);
 		$mReturn =  fread($fLocalHandle,$iLength);
 		LocalFile::_returnUid();
@@ -331,7 +336,7 @@ class LocalFile implements PluginInterface {
 
 	public static function write($oUser,$fLocalHandle,$sData)
 	{
-		logger::log("LocalFile: Write bytes to file handle ".$fLocalHandle.LOG_DEBUG);
+		self::$oLogger->debug("LocalFile: Write bytes to file handle ".$fLocalHandle);
 		LocalFile::_setUid($oUser);
 		$mReturn =  fwrite($fLocalHandle,$sData);
 		LocalFile::_returnUid();

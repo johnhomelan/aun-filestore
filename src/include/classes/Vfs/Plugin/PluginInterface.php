@@ -19,8 +19,10 @@ interface PluginInterface {
 	 * Called when the plugin is first loaded
 	 *
 	 * The plugin can perform any setup operations needed in the init method
+	 *
+	 * @param boolean $bMultiuser
 	*/
-	public static function init();
+	public static function init(\Psr\Log\LoggerInterface $oLogger, bool $bMultiuser = false);
 
 	/**
 	 * Called regually to perform any house keeping tasks

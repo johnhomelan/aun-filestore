@@ -7,7 +7,6 @@
 namespace HomeLan\FileStore\Authentication; 
 
 use config;
-use logger;
 use Exception;
 /**
  * This class controls security with in the fileserver, perform login/out and
@@ -21,9 +20,11 @@ class Security {
 
 	protected static $aSessions = array();
 
+	protected static $oLogger;
 
-	public static function init()
+	public static function init(\Psr\Log\LoggerInterface $oLogger)
 	{
+		self::$oLogger = $oLogger;
 		$aPlugins = Security::_getAuthPlugins();
 
 	}
@@ -58,10 +59,10 @@ class Security {
 			$sClassname = "\HomeLan\FileStore\Authentication\Plugins\AuthPlugin".ucfirst($sPlugin);
 			if(!class_exists($sClassname,FALSE)){
 				try{
-					$sClassname::init();
+					$sClassname::init(self::$oLogger);
 					$aReturn[]=$sClassname;
 				}catch(Exception $oException){
-					logger::log("Security: Unable to load authplugin ".$sClassname,LOG_INFO);
+					self::$oLogger->info("Security: Unable to load authplugin ".$sClassname);
 				}
 			}else{
 				$aReturn[]=$sClassname;
@@ -105,17 +106,17 @@ class Security {
 		foreach($aPlugins as $sPlugin){
 			try {
 				if($sPlugin::login($sUser,$sPass,$iNetwork,$iStation)){
-					logger::log("Security: Login for ".$sUser." using authplugin ".$sPlugin,LOG_INFO);
+					self::$oLogger->info("Security: Login for ".$sUser." using authplugin ".$sPlugin);
 					if(!array_key_exists($iNetwork,Security::$aSessions)){
 						Security::$aSessions[$iNetwork]=array();
 					}
 					Security::$aSessions[$iNetwork][$iStation]=array('idle'=>time(),'datetime'=>time(),'provider'=>$sPlugin,'user'=>$sPlugin::buildUserObject($sUser));
 					return TRUE;
 				}else{
-					logger::log("Security: Login failed for ".$sUser." using authplugin ".$sPlugin,LOG_INFO);
+					self::$oLogger->info("Security: Login failed for ".$sUser." using authplugin ".$sPlugin);
 				}
 			}catch(Exception $oException){
-				logger::log("Security: Exception thrown during login attempt by authplugin ".$sPlugin." (".$oException->getMessage().").",LOG_INFO);
+				self::$oLogger->info("Security: Exception thrown during login attempt by authplugin ".$sPlugin." (".$oException->getMessage().").");
 			}
 		}
 		return FALSE;
@@ -125,7 +126,7 @@ class Security {
 	{
 		if(Security::isLoggedIn($iNetwork,$iStation)){
 			$oUser = Security::getUser($iNetwork,$iStation);
-			logger::log("Security: Logout for ".$oUser->getUsername()." on ".$iNetwork.".".$iStation."",LOG_INFO);
+			self::$oLogger->info("Security: Logout for ".$oUser->getUsername()." on ".$iNetwork.".".$iStation."");
 			//Drop the login from the session array
 			unset(Security::$aSessions[$iNetwork][$iStation]);
 		}else{
@@ -174,7 +175,7 @@ class Security {
 	public static function setConnectedUsersPassword($iNetwork,$iStation,$sOldPassword,$sPassword)
 	{
 		if(array_key_exists($iNetwork,Security::$aSessions) AND array_key_exists($iStation,Security::$aSessions[$iNetwork])){
-			logger::log("Security: Changing password for ".Security::$aSessions[$iNetwork][$iStation]['user']->getUsername()." using authplugin ".Security::$aSessions[$iNetwork][$iStation]['provider'],LOG_INFO);
+			self::$oLogger->info("Security: Changing password for ".Security::$aSessions[$iNetwork][$iStation]['user']->getUsername()." using authplugin ".Security::$aSessions[$iNetwork][$iStation]['provider']);
 			$sPlugin = Security::$aSessions[$iNetwork][$iStation]['provider'];
 			$sPlugin::setPassword(Security::$aSessions[$iNetwork][$iStation]['user']->getUsername(),$sOldPassword,$sPassword);
 		}
@@ -226,13 +227,13 @@ class Security {
 		}
 
 		$aPlugins = Security::_getAuthPlugins();
-		logger::log("Security: Creating new user ".$oUser->getUsername(),LOG_INFO);
+		self::$oLogger->info("Security: Creating new user ".$oUser->getUsername());
 		foreach($aPlugins as $sPlugin){
 			try {
 				$sPlugin::createUser($oUser);
 				break;
 			}catch(Exception $oException){
-				logger::log("Security: Exception thrown by plugin ".$sPlugin." when attempting to create user ".$oUser->getUsername()." (".$oException->getMessage().")",LOG_DEBUG);
+				self::$oLogger->debug("Security: Exception thrown by plugin ".$sPlugin." when attempting to create user ".$oUser->getUsername()." (".$oException->getMessage().")");
 			}
 		}
 	
@@ -257,13 +258,13 @@ class Security {
 		}
 
 		$aPlugins = Security::_getAuthPlugins();
-		logger::log("Security: Removing user ".$sUsername,LOG_INFO);
+		self::$oLogger->info("Security: Removing user ".$sUsername);
 		foreach($aPlugins as $sPlugin){
 			try {
 				return $sPlugin::removeUser($sUsername);
 				break;
 			}catch(Exception $oException){
-				logger::log("Security: Exception thrown by plugin ".$sPlugin." when attempting to remove user ".$sUsername." (".$oException->getMessage().")",LOG_DEBUG);
+				self::$oLogger->debug("Security: Exception thrown by plugin ".$sPlugin." when attempting to remove user ".$sUsername." (".$oException->getMessage().")");
 			}
 		}
 	
@@ -293,13 +294,13 @@ class Security {
 		}
 
 		$aPlugins = Security::_getAuthPlugins();
-		logger::log("Security: Setting priv for ".$sUsername." to ".$sPriv,LOG_INFO);
+		self::$oLogger->info("Security: Setting priv for ".$sUsername." to ".$sPriv);
 		foreach($aPlugins as $sPlugin){
 			try {
 				$sPlugin::setPriv($sUsername,$sPriv);
 				break;
 			}catch(Exception $oException){
-				logger::log("Security: Exception thrown by plugin ".$sPlugin." when attempting to create user ".$oLoggedInUser->getUsername()." (".$oException->getMessage().")",LOG_DEBUG);
+				self::$oLogger->debug("Security: Exception thrown by plugin ".$sPlugin." when attempting to create user ".$oLoggedInUser->getUsername()." (".$oException->getMessage().")");
 			}
 		}
 	

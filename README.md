@@ -69,6 +69,7 @@ At the moment there are no rpm and deb packages built for easy install (this wil
   
 * Check out the source from GIT  
 * Make the file filestored executable (chmod u+x filestored)
+* Run "composer install" to fetch the external libraries, and build the autoloader
 * Create a directory to act as root of your econet file system
 * Create a directory to hold your config files 
 * Write a basic config file (see the config section)

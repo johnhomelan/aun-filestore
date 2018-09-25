@@ -11,8 +11,8 @@ use HomeLan\FileStore\Vfs\Vfs;
 use HomeLan\FileStore\Vfs\DirectoryEntry;
 use HomeLan\FileStore\Vfs\FileDescriptor;
 use HomeLan\FileStore\Vfs\FilePath;
+use HomeLan\Retro\Acorn\Disk\DfsReader;
 use config; 
-use dfsreader;
 
 /**
  * The DfsSsd class acts as a vfs plugin to provide access to files stored in a dfs ssd image.
@@ -61,7 +61,7 @@ class DfsSsd implements PluginInterface {
 	protected static function _getImageReader($sImageFile)
 	{
 		if(!array_key_exists($sImageFile,DfsSsd::$aImageReaders)){
-			DfsSsd::$aImageReaders[$sImageFile] = new dfsreader($sImageFile);
+			DfsSsd::$aImageReaders[$sImageFile] = new DfsReader($sImageFile);
 		}
 		return DfsSsd::$aImageReaders[$sImageFile];
 	}

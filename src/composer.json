@@ -12,6 +12,7 @@
     },
     "require": {
         "symfony/console": "^4.1",
-        "monolog/monolog": "^1.23"
+        "monolog/monolog": "^1.23",
+        "homelan/acorn-disk": "^1.0"
     }
 }

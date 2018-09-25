@@ -4,8 +4,51 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "5c4fd1b403757fe7e37c702e137ff30d",
+    "content-hash": "c68205a8e3083f31c77f782c43877c54",
     "packages": [
+        {
+            "name": "homelan/acorn-disk",
+            "version": "v1.0.1",
+            "source": {
+                "type": "git",
+                "url": "https://github.com/johnhomelan/acorn-disk.git",
+                "reference": "f17a56c773568211788a94606e0dc8afc208eca9"
+            },
+            "dist": {
+                "type": "zip",
+                "url": "https://api.github.com/repos/johnhomelan/acorn-disk/zipball/f17a56c773568211788a94606e0dc8afc208eca9",
+                "reference": "f17a56c773568211788a94606e0dc8afc208eca9",
+                "shasum": ""
+            },
+            "require": {
+                "php": ">=7.1"
+            },
+            "type": "project",
+            "autoload": {
+                "psr-4": {
+                    "HomeLan\\Retro\\Acorn\\Disk\\": "src/"
+                }
+            },
+            "notification-url": "https://packagist.org/downloads/",
+            "license": [
+                "MIT"
+            ],
+            "authors": [
+                {
+                    "name": "John Brown",
+                    "email": "packaging@home-lan.co.uk"
+                }
+            ],
+            "description": "Provides class for reading disk images for 8-bit Acorn machines (dfs/adfs)",
+            "keywords": [
+                "ADL",
+                "DFS",
+                "SSD",
+                "acorn",
+                "adfs"
+            ],
+            "time": "2018-09-25T21:40:29+00:00"
+        },
         {
             "name": "monolog/monolog",
             "version": "1.23.0",

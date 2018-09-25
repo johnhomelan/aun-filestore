@@ -12,8 +12,8 @@ use HomeLan\FileStore\Vfs\Vfs;
 use HomeLan\FileStore\Vfs\DirectoryEntry;
 use HomeLan\FileStore\Vfs\FileDescriptor;
 use HomeLan\FileStore\Vfs\FilePath;
+use HomeLan\Retro\Acorn\Disk\AdfsReader;
 use config; 
-use adfsreader;
 
 /**
  * The AdfsAdl class acts as a vfs plugin to provide access to files stored in a adfs filing system stored in a adl image.
@@ -61,7 +61,7 @@ class AdfsAdl implements PluginInterface {
 	protected static function _getImageReader($sImageFile)
 	{
 		if(!array_key_exists($sImageFile,AdfsAdl::$aImageReaders)){
-			AdfsAdl::$aImageReaders[$sImageFile] = new adfsreader($sImageFile);
+			AdfsAdl::$aImageReaders[$sImageFile] = new AdfsReader($sImageFile);
 		}
 		return AdfsAdl::$aImageReaders[$sImageFile];
 	}

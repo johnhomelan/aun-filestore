@@ -14,7 +14,8 @@ phpunit_tests:
    image: php:7.3
    stage: test
    script:
-     - phpunit --process-isolation --log-junit junt.xml unit-tests
+     - cd src; composer install; cd ..
+     - ./src/vendor/bin/phpunit --process-isolation --log-junit junt.xml unit-tests
    artifacts:
     paths:
       - junit.xml   

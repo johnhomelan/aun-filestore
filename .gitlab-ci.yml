@@ -21,7 +21,7 @@ phpunit_tests:
      - php composer-setup.php  --filename=composer --install-dir=/bin
      - php -r "unlink('composer-setup.php');"
      - cd src; composer install; cd ..
-     - cd src; composer install; cd ..
+     - ls src/vendor/bin
      - ./src/vendor/bin/phpunit --process-isolation --log-junit junt.xml unit-tests
    artifacts:
     paths:

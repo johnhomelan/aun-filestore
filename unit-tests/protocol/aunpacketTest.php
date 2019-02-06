@@ -1,17 +1,15 @@
-<?
+<?php
 
 /*
  * @group unit-tests
 */
-use HomeLan\FileStore\Aun\Messages\AunPacket; 
+use HomeLan\FileStore\Aun\Messages\AunPacket;
+use PHPUnit\Framework\TestCase;
 
 include_once('include/system.inc.php');
 
-class aunpacketTest extends PHPUnit_Framework_TestCase {
+class aunpacketTest extends TestCase {
 
-	public function setup()
-	{
-	}
 
 	public function testGetAndSetMethods()
 	{
@@ -64,4 +62,4 @@ class aunpacketTest extends PHPUnit_Framework_TestCase {
 	}
 
 }
-?>
+

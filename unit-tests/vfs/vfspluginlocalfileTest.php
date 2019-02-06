@@ -1,4 +1,4 @@
-<?
+<?php
 
 /*
  * @group unit-tests
@@ -12,10 +12,11 @@ if(!defined('CONFIG_vfs_plugin_localfile_root')){
 	define('CONFIG_vfs_plugin_localfile_root',__DIR__.DIRECTORY_SEPARATOR.'testing_root');
 }
 include_once('include/system.inc.php');
+use PHPUnit\Framework\TestCase;
 
-class vfspluginlocalfileTest extends PHPUnit_Framework_TestCase {
+class vfspluginlocalfileTest extends TestCase {
 	protected $oUser = NULL;
-	public function setup()
+	protected function setup()
 	{
 		//Clean up any files stored in the testing root
 		$sPath = config::getValue('vfs_plugin_localfile_root');
@@ -31,7 +32,7 @@ class vfspluginlocalfileTest extends PHPUnit_Framework_TestCase {
 		$this->oUser->setPriv('u');
 	}
 
-	public function tearDown()
+	protected function tearDown()
 	{
 		$sPath = config::getValue('vfs_plugin_localfile_root');
 		if(file_exists($sPath)){
@@ -161,4 +162,3 @@ class vfspluginlocalfileTest extends PHPUnit_Framework_TestCase {
 	}
 
 }
-?>

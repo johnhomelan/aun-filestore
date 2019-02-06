@@ -1,16 +1,13 @@
-<?
+<?php
 
 /*
  * @group unit-tests
 */
 
 include_once('include/system.inc.php');
+use PHPUnit\Framework\TestCase;
 
-class userTest extends PHPUnit_Framework_TestCase {
-
-	public function setup()
-	{
-	}
+class userTest extends TestCase {
 
 	public function testUser()
 	{

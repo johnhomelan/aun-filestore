@@ -14,7 +14,6 @@ phpunit_tests:
    image: registry.home-lan.co.uk/php-73-testing:latest
    stage: test
    script:
-     - php -r "unlink('composer-setup.php');"
      - cd src; composer install; cd ..
      - ls src/vendor/bin
      - ./src/vendor/bin/phpunit --process-isolation --log-junit junt.xml unit-tests

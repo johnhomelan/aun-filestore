@@ -6,6 +6,7 @@
 
 include_once('include/system.inc.php');
 use PHPUnit\Framework\TestCase;
+use HomeLan\FileStore\Authentication\User as user;
 
 class userTest extends TestCase {
 

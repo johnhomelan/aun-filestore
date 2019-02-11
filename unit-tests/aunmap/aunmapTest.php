@@ -4,8 +4,10 @@
  * @group unit-tests
 */
 
-include_once('include/system.inc.php');
+include_once(__DIR__.'/../../src/include/system.inc.php');
+
 use PHPUnit\Framework\TestCase;
+use HomeLan\FileStore\Aun\Map as aunmap;
 
 class aunmapTest extends TestCase {
 

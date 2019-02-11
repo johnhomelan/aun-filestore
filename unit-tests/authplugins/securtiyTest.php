@@ -3,8 +3,11 @@
 /*
  * @group unit-tests
 */
-use HomeLan\FileStore\Authentication\Security; 
+
 use PHPUnit\Framework\TestCase;
+use HomeLan\FileStore\Authentication\Security; 
+use HomeLan\FileStore\Authentication\Plugins\AuthPluginFile as authpluginfile;
+use HomeLan\FileStore\Authentication\User as user;
 
 //Need to define this to stop the password file being written to
 if(!defined('CONFIG_security_plugin_file_user_file')){

@@ -190,7 +190,7 @@ class LocalFile implements PluginInterface {
 	{
 		$sUnixDirPath = LocalFile::_econetToUnix($oPath->sDir);
 		if(is_dir($sUnixDirPath) AND !file_exists(rtrim($sUnixDirPath,DIRECTORY_SEPARATOR).DIRECTORY_SEPARATOR.$oPath->sFile)){
-			return mkdir(rtrim($sUnixDirPath,DIRECTORY_SEPARATOR).DIRECTORY_SEPARATOR).$oPath->sFile;
+			return mkdir(rtrim($sUnixDirPath,DIRECTORY_SEPARATOR).DIRECTORY_SEPARATOR.$oPath->sFile);
 		}
 		return FALSE;
 	}

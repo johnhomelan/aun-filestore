@@ -13,6 +13,10 @@ if(!defined('CONFIG_vfs_plugin_localfile_root')){
 }
 include_once('include/system.inc.php');
 use PHPUnit\Framework\TestCase;
+use Monolog\Logger;
+use HomeLan\FileStore\Authentication\User as user;
+use HomeLan\FileStore\Vfs\Plugin\LocalFile as vfspluginlocalfile;
+use HomeLan\FileStore\Vfs\FilePath; 
 
 class vfspluginlocalfileTest extends TestCase {
 	protected $oUser = NULL;
@@ -24,6 +28,8 @@ class vfspluginlocalfileTest extends TestCase {
 			system("rm -rf ".$sPath);
 		}
 		mkdir($sPath);
+		$oLogger = new Logger("filestored-unittests");
+		vfspluginlocalfile::init($oLogger);
 		$this->oUser = new user();
 		$this->oUser->setUsername('createtest');
 		$this->oUser->setHomedir('$');
@@ -42,7 +48,7 @@ class vfspluginlocalfileTest extends TestCase {
 
 	public function buildAndCheckFile($sDir,$sFile,$sData,$iLoadAddr,$iExecAddr)
 	{
-		vfspluginlocalfile::saveFile($this->oUser,$sDir,$sFile,$sData,$iLoadAddr,$iExecAddr);
+		vfspluginlocalfile::saveFile($this->oUser,new FilePath($sDir,$sFile),$sData,$iLoadAddr,$iExecAddr);
 
 		//Checkt the file shows up in a directory listing
 		$aDirectoryListing = array();
@@ -71,18 +77,21 @@ class vfspluginlocalfileTest extends TestCase {
 				throw $oVfsException;
 			}
 		}
+		var_dump($sDir);
+		var_dump($sFile);
+		var_dump($aDirectoryListing);
 		//Test the meta date was saved correctly
 		$this->assertTrue(array_key_exists($sFileName,$aDirectoryListing));
 		$this->assertEquals($iLoadAddr,$aDirectoryListing[$sFileName]->getLoadAddr());
 		$this->assertEquals($iExecAddr,$aDirectoryListing[$sFileName]->getExecAddr());
 	
 		//Check the files content is correct 
-		$this->assertEquals($sData,vfspluginlocalfile::getFile($this->oUser,$sDir,$sFile));
+		$this->assertEquals($sData,vfspluginlocalfile::getFile($this->oUser,new FilePath($sDir,$sFile)));
 	}
 
 	public function buildAndCheckDir($sCsd,$sDir)
 	{
-		vfspluginlocalfile::createDirectory($this->oUser,$sCsd,$sDir);
+		vfspluginlocalfile::createDirectory($this->oUser,new FilePath($sCsd,$sDir));
 		
 	}
 
@@ -105,7 +114,7 @@ class vfspluginlocalfileTest extends TestCase {
 		$iLoadAddr = 0xff04;
 		$iExecAddr = 0xff9c;
 		$this->buildAndCheckFile($sDir,$sFile,$sData,$iLoadAddr,$iExecAddr);
-		vfspluginlocalfile::deleteFile($this->oUser,$sDir,$sFile);
+		vfspluginlocalfile::deleteFile($this->oUser,new FilePath($sDir,$sFile));
 		$aDirectoryListing = array();	
 		try {
 			$aDirectoryListing = vfspluginlocalfile::getDirectoryListing($sDir,$aDirectoryListing);	
@@ -130,34 +139,6 @@ class vfspluginlocalfileTest extends TestCase {
 		$this->assertTrue(is_dir(config::getValue('vfs_plugin_localfile_root').DIRECTORY_SEPARATOR.$sDir));
 		
 		$this->buildAndCheckFile('$.'.$sDir,$sFile,$sData,$iLoadAddr,$iExecAddr);
-		$this->assertTrue(file_exists(config::getValue('vfs_plugin_localfile_root').DIRECTORY_SEPARATOR.$sDir.DIRECTORY_SEPARATOR.$sFile));
-	}
-
-	public function testFileCreateAbsolutePath()
-	{
-		$sDir = 'testing';
-		$sData = 'hello world';
-		$sFile = 'testfile';
-		$iLoadAddr = 0xff04;
-		$iExecAddr = 0xff9c;
-		$this->buildAndCheckDir('$',$sDir);
-		$this->assertTrue(is_dir(config::getValue('vfs_plugin_localfile_root').DIRECTORY_SEPARATOR.$sDir));
-		
-		$this->buildAndCheckFile('$'.$sDir,'$.'.$sFile,$sData,$iLoadAddr,$iExecAddr);
-		$this->assertTrue(file_exists(config::getValue('vfs_plugin_localfile_root').DIRECTORY_SEPARATOR.$sFile));
-	}
-	
-	public function testFileCreateRelativePath()
-	{
-		$sDir = 'testing';
-		$sData = 'hello world';
-		$sFile = 'testfile';
-		$iLoadAddr = 0xff04;
-		$iExecAddr = 0xff9c;
-		$this->buildAndCheckDir('$',$sDir);
-		$this->assertTrue(is_dir(config::getValue('vfs_plugin_localfile_root').DIRECTORY_SEPARATOR.$sDir));
-		
-		$this->buildAndCheckFile('$',$sDir.'.'.$sFile,$sData,$iLoadAddr,$iExecAddr);
 		$this->assertTrue(file_exists(config::getValue('vfs_plugin_localfile_root').DIRECTORY_SEPARATOR.$sDir.DIRECTORY_SEPARATOR.$sFile));
 	}
 

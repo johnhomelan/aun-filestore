@@ -213,7 +213,7 @@ class Security {
 	*/
 	public static function createUser($iNetwork,$iStation,$oUser)
 	{
-		if(!is_object($oUser) OR get_class($oUser)!='user'){
+		if(!is_object($oUser) OR get_class($oUser)!='HomeLan\FileStore\Authentication\User'){
 			throw new Exception("Security: Invaild user supplied to createUser.\n");
 		}
 
@@ -228,13 +228,20 @@ class Security {
 
 		$aPlugins = Security::_getAuthPlugins();
 		self::$oLogger->info("Security: Creating new user ".$oUser->getUsername());
+		$bCreated = false;
 		foreach($aPlugins as $sPlugin){
 			try {
 				$sPlugin::createUser($oUser);
+				$bCreated = true;
 				break;
 			}catch(Exception $oException){
 				self::$oLogger->debug("Security: Exception thrown by plugin ".$sPlugin." when attempting to create user ".$oUser->getUsername()." (".$oException->getMessage().")");
 			}
+		}
+		if(!$bCreated){
+			//No user was added
+			self::$oLogger->debug("Security: None of the authplugins would handle creating the user ".$oUser->getUsername());
+			throw new Exception("Security: None of the authplugins would handle creating the user ".$oUser->getUsername());
 		}
 	
 	}

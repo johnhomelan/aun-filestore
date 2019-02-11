@@ -3,7 +3,7 @@
 /*
  * @group unit-tests
 */
-use HomeLan\FileStore\Aun\Messages\AunPacket;
+use HomeLan\FileStore\Aun\AunPacket;
 use PHPUnit\Framework\TestCase;
 
 include_once('include/system.inc.php');
@@ -13,12 +13,15 @@ class aunpacketTest extends TestCase {
 
 	public function testGetAndSetMethods()
 	{
+		$oPacket = new AunPacket();
+		$oPacket->setDestinationIP('192.168.0.1');
+		$oPacket->setSourceIP('192.168.0.2');
+
 		//Set type unicast
 		$sBinaryPacket = pack('C',2);
 
 		//Set port 0x99
 		$sBinaryPacket = $sBinaryPacket . pack('C',0x99);
-		$oPacket = new AunPacket();
 
 		//Set flags 0
 		$sBinaryPacket = $sBinaryPacket . pack('C',0);
@@ -36,7 +39,6 @@ class aunpacketTest extends TestCase {
 		
 		//Check header
 		$this->assertEquals($oPacket->getPort(),0x99);
-		$this->assertEquals($oPacket->getPortName(),'FileServerCommand');
 		$this->assertEquals($oPacket->getPacketType(),'Unicast');
 
 		//Check data 
@@ -53,8 +55,6 @@ class aunpacketTest extends TestCase {
 		
 
 		//Check IP stuff
-		$oPacket->setDestinationIP('192.168.0.1');
-		$oPacket->setSourceIP('192.168.0.2');
 		$this->assertEquals($oPacket->getSourceIP(),'192.168.0.2');
 		$this->assertEquals($oPacket->getDestinationIP(),'192.168.0.1');
 

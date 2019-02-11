@@ -5,6 +5,7 @@
 */
 use HomeLan\FileStore\Authentication\Security; 
 use PHPUnit\Framework\TestCase;
+use Monolog\Logger;
 use HomeLan\FileStore\Authentication\Plugins\AuthPluginFile as authpluginfile;
 use HomeLan\FileStore\Authentication\User as user;
 
@@ -23,7 +24,8 @@ class authpluginfileTest extends TestCase {
 	protected function setup(): void
 	{
 		$sUser = "test:md5-".md5('testpw').":home.test:5000:0:S\ntest2:sha1-".sha1('testpw').":home.test:5000:0:U\ntest3:plain-week:home.test3:5000:3:U\ntest4::home.test3:5000:3:s";
-		authpluginfile::init($sUser);
+		$oLogger = new Logger("filestored-unittests");
+		authpluginfile::init($oLogger,$sUser);
 	}
 
 	public function testLogin()
@@ -59,7 +61,7 @@ class authpluginfileTest extends TestCase {
 		$oUser = authpluginfile::buildUserObject('TEST');
 
 		$this->assertTrue(is_object($oUser));
-		$this->assertEquals(get_class($oUser),'user');
+		$this->assertEquals(get_class($oUser),'HomeLan\FileStore\Authentication\User');
 
 		$this->assertEquals($oUser->getUsername(),'TEST');
 		$this->assertEquals($oUser->getHomedir(),'home.test');

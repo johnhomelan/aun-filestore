@@ -7,14 +7,16 @@
 include_once(__DIR__.'/../../src/include/system.inc.php');
 
 use PHPUnit\Framework\TestCase;
+use Monolog\Logger;
 use HomeLan\FileStore\Aun\Map as aunmap;
 
 class aunmapTest extends TestCase {
 
 	protected function setup(): void
 	{
+		$oLogger = new Logger("filestored-unittests");
 		$sMapFile = "192.168.0.0/24 127\n192.168.0.40 127.254\n192.168.2.20 129.29\n192.168.1.0/24 128\n192.168.0.41\n192.168.2.0/24\n";
-		aunmap::loadMap($sMapFile);
+		aunmap::init($oLogger,$sMapFile);
 	}
 
 	public function testLookUpByIp()

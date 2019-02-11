@@ -16,7 +16,7 @@ use PHPUnit\Framework\TestCase;
 
 class vfspluginlocalfileTest extends TestCase {
 	protected $oUser = NULL;
-	protected function setup()
+	protected function setup(): void
 	{
 		//Clean up any files stored in the testing root
 		$sPath = config::getValue('vfs_plugin_localfile_root');
@@ -32,7 +32,7 @@ class vfspluginlocalfileTest extends TestCase {
 		$this->oUser->setPriv('u');
 	}
 
-	protected function tearDown()
+	protected function tearDown(): void
 	{
 		$sPath = config::getValue('vfs_plugin_localfile_root');
 		if(file_exists($sPath)){

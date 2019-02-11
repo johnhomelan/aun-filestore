@@ -9,7 +9,7 @@ use PHPUnit\Framework\TestCase;
 
 class aunmapTest extends TestCase {
 
-	protected function setup()
+	protected function setup(): void
 	{
 		$sMapFile = "192.168.0.0/24 127\n192.168.0.40 127.254\n192.168.2.20 129.29\n192.168.1.0/24 128\n192.168.0.41\n192.168.2.0/24\n";
 		aunmap::loadMap($sMapFile);

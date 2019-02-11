@@ -11,20 +11,15 @@ services:
   - name: docker:dind
 
 phpunit_tests:
-   image: php:7.3
+   image: registry.home-lan.co.uk/php-73-testing:latest
    stage: test
    script:
-     - apt-get update
-     - apt-get install -y  git
-     - php -r "copy('https://getcomposer.org/installer', 'composer-setup.php');"
-     - php -r "if (hash_file('sha384', 'composer-setup.php') === '48e3236262b34d30969dca3c37281b3b4bbe3221bda826ac6a9a62d6444cdb0dcd0615698a5cbe587c3f0fe57a54d8f5') { echo 'Installer verified'; } else { echo 'Installer corrupt'; unlink('composer-setup.php'); } echo PHP_EOL;"
-     - php composer-setup.php  --filename=composer --install-dir=/bin
      - php -r "unlink('composer-setup.php');"
      - cd src; composer install; cd ..
      - ls src/vendor/bin
      - ./src/vendor/bin/phpunit --process-isolation --log-junit junt.xml unit-tests
    artifacts:
-    paths:
+     paths:
       - junit.xml   
    
 container_build:

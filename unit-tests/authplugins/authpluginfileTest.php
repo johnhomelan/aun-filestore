@@ -6,6 +6,7 @@
 use HomeLan\FileStore\Authentication\Security; 
 use PHPUnit\Framework\TestCase;
 use Monolog\Logger;
+use Monolog\Handler\NullHandler;
 use HomeLan\FileStore\Authentication\Plugins\AuthPluginFile as authpluginfile;
 use HomeLan\FileStore\Authentication\User as user;
 
@@ -25,6 +26,7 @@ class authpluginfileTest extends TestCase {
 	{
 		$sUser = "test:md5-".md5('testpw').":home.test:5000:0:S\ntest2:sha1-".sha1('testpw').":home.test:5000:0:U\ntest3:plain-week:home.test3:5000:3:U\ntest4::home.test3:5000:3:s";
 		$oLogger = new Logger("filestored-unittests");
+		$oLogger->pushHandler(new NullHandler());
 		authpluginfile::init($oLogger,$sUser);
 	}
 

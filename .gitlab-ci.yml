@@ -40,7 +40,7 @@ phpunit_tests_php56:
    services:
     - docker:stable-dind
    script:
-     - cd src; composer install; cd ..
+     - cd src; composer update; cd ..
      - mkdir coverage
      - ./src/vendor/bin/phpunit --log-junit junit.xml
    artifacts:

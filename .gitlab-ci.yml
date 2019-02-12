@@ -4,19 +4,18 @@ stages:
   - test
   - build
   - scan
+  
 variables:
   REPO_IMAGE: registry.home-lan.co.uk/aun-filestore:latest
   
-services:
-  - name: docker:dind
-
 phpunit_tests_php73:
    image: registry.home-lan.co.uk/php-73-testing:latest
    stage: test
+   services:
+    - docker:stable-dind
    script:
      - cd src; composer install; cd ..
      - ./src/vendor/bin/phpunit --process-isolation --log-junit junit.xml
-
    artifacts:
      paths:
       - junit.xml   
@@ -24,6 +23,8 @@ phpunit_tests_php73:
 phpunit_tests_php72:
    image: registry.home-lan.co.uk/php-72-testing:latest
    stage: test
+   services:
+    - docker:stable-dind
    script:
      - cd src; composer install; cd ..
      - mkdir coverage
@@ -36,7 +37,6 @@ phpunit_tests_php72:
 container_build:
    image: docker:dind
    stage: build
-   
    script:
      - export
      - docker login -u $DOCKER_REGISTRY_USER -p $DOCKER_REGISTRY_PW registry.home-lan.co.uk

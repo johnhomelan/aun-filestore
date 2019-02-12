@@ -1,8 +1,8 @@
-FROM phpearth/php:7.2-nginx
+FROM phpearth/php:7.3-nginx
 
 MAINTAINER john@home-lan.co.uk
 
-RUN apk add --no-cache rsync make bash composer php7.2-memcached php7.2-dba php7.2-soap php7.2-posix php7.2-pcntl
+RUN apk add --no-cache rsync make bash composer php7.3-dba php7.3-soap php7.3-posix php7.3-pcntl
 
 RUN mkdir -p /etc/aun-filestored-default-config
 RUN mkdir -p /etc/aun-filestored

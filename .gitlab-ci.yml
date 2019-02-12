@@ -9,7 +9,6 @@ variables:
   
 services:
   - name: docker:dind
-    command: ["docker login -u $DOCKER_REGISTRY_USER -p $DOCKER_REGISTRY_PW registry.home-lan.co.uk"]
 
 phpunit_tests_php73:
    image: registry.home-lan.co.uk/php-73-testing:latest

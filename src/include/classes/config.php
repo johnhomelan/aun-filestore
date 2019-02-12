@@ -48,6 +48,18 @@ class config {
 		return $mReturn;
 	}
 
+	static public function overrideValue(string $sKey,$sValue)
+	{
+		config::$_aConfigCache[$sKey] = $sValue;
+	}
+
+	static public function resetValue(string $sKey)
+	{
+		if(array_key_exists($sKey, config::$_aConfigCache)){
+			unset(config::$_aConfigCache[$sKey]);
+		}
+	}
+
 	/**
 	 * Gets a config variable from constant definitions 
 	 *

@@ -9,11 +9,13 @@ if(!defined('CONFIG_security_mode')){
 	define('CONFIG_security_mode','singleuser');
 }
 if(!defined('CONFIG_vfs_plugin_localfile_root')){
-	define('CONFIG_vfs_plugin_localfile_root',__DIR__.DIRECTORY_SEPARATOR.'testing_root');
+	define('CONFIG_vfs_plugin_localfile_root','/tmp/testing_root-'.uniqid());
 }
-include_once('include/system.inc.php');
+include_once(__DIR__.'/../../src/include/system.inc.php');
+
 use PHPUnit\Framework\TestCase;
 use Monolog\Logger;
+use Monolog\Handler\NullHandler;
 use HomeLan\FileStore\Authentication\User as user;
 use HomeLan\FileStore\Vfs\Plugin\LocalFile as vfspluginlocalfile;
 use HomeLan\FileStore\Vfs\FilePath; 
@@ -22,13 +24,16 @@ class vfspluginlocalfileTest extends TestCase {
 	protected $oUser = NULL;
 	protected function setup(): void
 	{
+		$sPath = '/tmp/testing_root-'.uniqid();
+		config::overrideValue('vfs_plugin_localfile_root',$sPath);
+
 		//Clean up any files stored in the testing root
-		$sPath = config::getValue('vfs_plugin_localfile_root');
 		if(file_exists($sPath)){
 			system("rm -rf ".$sPath);
 		}
 		mkdir($sPath);
 		$oLogger = new Logger("filestored-unittests");
+		$oLogger->pushHandler(new NullHandler());
 		vfspluginlocalfile::init($oLogger);
 		$this->oUser = new user();
 		$this->oUser->setUsername('createtest');
@@ -44,6 +49,7 @@ class vfspluginlocalfileTest extends TestCase {
 		if(file_exists($sPath)){
 			system("rm -rf ".$sPath);
 		}
+		config::resetValue('vfs_plugin_localfile_root');
 	}
 
 	public function buildAndCheckFile($sDir,$sFile,$sData,$iLoadAddr,$iExecAddr)
@@ -77,9 +83,6 @@ class vfspluginlocalfileTest extends TestCase {
 				throw $oVfsException;
 			}
 		}
-		var_dump($sDir);
-		var_dump($sFile);
-		var_dump($aDirectoryListing);
 		//Test the meta date was saved correctly
 		$this->assertTrue(array_key_exists($sFileName,$aDirectoryListing));
 		$this->assertEquals($iLoadAddr,$aDirectoryListing[$sFileName]->getLoadAddr());

@@ -26,7 +26,7 @@ phpunit_tests_php72:
    stage: test
    script:
      - cd src; composer install; cd ..
-     - mkidr coverage
+     - mkdir coverage
      - ./src/vendor/bin/phpunit --process-isolation --log-junit junit.xml --coverage-xml coverage unit-tests/aunmap
    artifacts:
      paths:

@@ -15,7 +15,7 @@ phpunit_tests_php73:
     - docker:stable-dind
    script:
      - cd src; composer install; cd ..
-     - ./src/vendor/bin/phpunit --process-isolation --log-junit junit.xml
+     - ./src/vendor/bin/phpunit --log-junit junit.xml
    artifacts:
      paths:
       - junit.xml   
@@ -28,7 +28,7 @@ phpunit_tests_php72:
    script:
      - cd src; composer install; cd ..
      - mkdir coverage
-     - ./src/vendor/bin/phpunit --process-isolation --log-junit junit.xml --coverage-xml coverage --coverage-text --colors=never
+     - ./src/vendor/bin/phpunit --log-junit junit.xml --coverage-xml coverage --coverage-text --colors=never
    artifacts:
      paths:
       - coverage

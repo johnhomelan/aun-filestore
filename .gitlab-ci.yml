@@ -34,18 +34,6 @@ phpunit_tests_php72:
       - coverage
       - junit.xml   
 
-phpunit_tests_php56:
-   image: registry.home-lan.co.uk/php-56-testing:latest
-   stage: test
-   services:
-    - docker:stable-dind
-   script:
-     - cd src; composer update; cd ..
-     - mkdir coverage
-     - ./src/vendor/bin/phpunit --log-junit junit.xml
-   artifacts:
-     paths:
-      - junit.xml  
       
 container_build:
    image: docker:dind

@@ -117,11 +117,11 @@ class AunPacket {
 		Map::setAunCounter($this->sSoruceIP,$this->iSeq);
 	}
 
-	public function buildAck()
+	public function buildAck(): ?string
 	{
 		//No decoded packet to to Ack
 		if(!is_numeric($this->iPktType)){
-			return;
+			return null;
 		}
 		$sPtk = NULL;
 		if($this->aTypeMap[$this->iPktType]=='Unicast'){

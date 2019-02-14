@@ -23,6 +23,7 @@ class ServiceDispatcher {
 
 	private $aPorts = [];
 	private $oLogger;
+	private $aReplies = [];
 
 
 	/**
@@ -84,9 +85,16 @@ class ServiceDispatcher {
 				}else{
 					$sHost=$sIP;
 				}
-				//stream_socket_sendto($this->oAunSocket,$sPacket,0,$sHost);
+
+				$this->aReplies[$sHost]=$sPacket;
 			}
 		}
+	}
 
+	public function getReplies()
+	{
+		$aReplies = $this->aReplies;
+		$this->aReplies = [];
+		return $aReplies;
 	}
 } 

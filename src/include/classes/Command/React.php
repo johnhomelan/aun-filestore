@@ -12,6 +12,9 @@ use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Helper\Table;
 use Symfony\Component\Console\Command\Command;
 
+use React\EventLoop\Factory as ReactFactory;
+use React\Datagram\Factory as DatagramFactory;
+
 use HomeLan\FileStore\Services\ServiceDispatcher;
 use HomeLan\FileStore\Aun\Map; 
 use HomeLan\FileStore\Aun\AunPacket; 
@@ -81,9 +84,50 @@ class React extends Command {
 			exit(1);
 		}
 
+		//Setup the main react loop
+		$oLoop = ReactFactory::create();
+
+		//Add udp handling for AUN 
+		$oDatagramFactory = new DatagramFactory($oLoop);
+
+		$oServices = $this->oServices;
+		$oLogger = $this->oLogger;
+
+		$oDatagramFactory->createServer(config::getValue('aun_listen_address').':'.config::getValue('aun_listen_port'))
+	  		->then(function (\React\Datagram\Socket $oAunServer) use ($oServices, $oLogger) {
+				$oAunServer->on('message', function($sMessage, $sSrcAddress, $sDstAddress) use ($oServices, $oLogger, $oAunServer){
+					$oAunPacket = new AunPacket();
+					
+					//Read the UDP data
+					$oLogger->debug("filestore: Aun packet recvieved from ".$sSrcAddress);	
+					$oAunPacket->setSourceIP($sSrcAddress);
+
+					//Decode the AUN packet
+					$oAunPacket->setDestinationIP(config::getValue('local_ip'));
+					$oAunPacket->decode($sMessage);
+					
+					//Send an ack for the AUN packet if needed
+					$sAck = $oAunPacket->buildAck();
+					if(strlen($sAck)>0){
+						$oLogger->debug("filestore: Sending Ack packet");
+						$oAunServer->send($sAck,$sSrcAddress);
+					}
+
+					//Dispatch packet to all the services so the relivent one can deal with it 
+					$oServices->inboundPacket($oAunPacket);
+					
+					//Send all replies here
+					//@TODO replace this a better abstaction 
+					$aReplies = $oServices->getReplies();
+					foreach($aReplies as $sTarget=>$sReply){
+						$oAunServer->send($sReply,$sTarget);
+					}
+				});
+			});
+
 		//Enter main loop
 		$this->oLogger->debug("Starting primary loop.");
-		$this->loop();
+		$oLoop->run();
 	}
 
 	/**

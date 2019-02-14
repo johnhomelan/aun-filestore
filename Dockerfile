@@ -13,7 +13,7 @@ RUN mkdir -p /usr/share/aun-filestored/include
 ADD src/include /usr/share/aun-filestored/include
 ADD src/composer.json /usr/share/aun-filestored
 ADD src/composer.lock /usr/share/aun-filestored
-COPY src/filestored /usr/sbin/
+COPY src/react-test /usr/sbin/filestored
 
 
 COPY packaging/docker/default.conf /etc/aun-filestored-default-config/default.conf

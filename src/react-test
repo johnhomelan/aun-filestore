@@ -1,0 +1,34 @@
+#!/usr/bin/php
+<?php
+require_once __DIR__."/vendor/autoload.php";
+
+use HomeLan\FileStore\Console\SingleCommandApplication;
+use HomeLan\FileStore\Command\React;
+use HomeLan\FileStore\Services\ServiceDispatcher;
+use HomeLan\FileStore\Services\Provider\FileServer;
+use HomeLan\FileStore\Services\Provider\PrintServer;
+use HomeLan\FileStore\Services\Provider\Bridge;
+
+use Monolog\Logger;
+use Monolog\Handler\SyslogHandler;
+use Monolog\Handler\StreamHandler;
+
+$oLogger = new Logger("filestored");
+$oLogger->pushHandler(new SyslogHandler("filestored"));
+$oLogger->pushHandler(new StreamHandler('php://stdout', Logger::DEBUG));
+
+$oApplication = new SingleCommandApplication(
+	new React(
+		$oLogger,
+		new ServiceDispatcher(
+			$oLogger,
+			[
+				new FileServer($oLogger),
+				new PrintServer($oLogger),
+				new Bridge($oLogger)
+			]
+		)
+	)
+);
+
+$oApplication->run();

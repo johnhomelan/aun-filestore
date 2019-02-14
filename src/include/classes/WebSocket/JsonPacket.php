@@ -8,6 +8,8 @@
 namespace HomeLan\FileStore\WebSocket; 
 
 use HomeLan\FileStore\Messages\EconetPacket; 
+use HomeLan\FileStore\Aun\Map; 
+use config;
 use Exception; 
 
 /** 
@@ -93,7 +95,7 @@ class JsonPacket {
 		//Read the aun packet type 1 byte unsigned int
 		$aHeader=unpack('C',$aPacket['payload']);
 		$this->iPktType = $aHeader[1];
-		$sBinaryString = substr($sBinaryString,1);
+		$sBinaryString = substr($aPacket['payload'],1);
 		
 		//Read the dst port 1 byte unsigned int
 		$aHeader=unpack('C',$sBinaryString);

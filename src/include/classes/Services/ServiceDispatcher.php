@@ -1,6 +1,7 @@
 <?php
 /**
- * This file contains the bridge class
+ * This file contains the ServiceDispatcher class
+ *
  *
  * @author John Brown <john@home-lan.co.uk>
  * @package core
@@ -10,11 +11,12 @@ namespace HomeLan\FileStore\Services;
 use HomeLan\FileStore\Messages\EconetPacket; 
 use HomeLan\FileStore\Aun\AunPacket; 
 use HomeLan\FileStore\Aun\Map; 
+use HomeLan\FileStore\Services\ServiceInterface;
 
 use config;
 
 /**
- * This class is the interface all services must provide 
+ * This class deals with passing packets into all regisitered service 
  *
  * @package core
 */
@@ -24,6 +26,8 @@ class ServiceDispatcher {
 	private $aPorts = [];
 	private $oLogger;
 	private $aReplies = [];
+	private $iStreamPortStart=20;
+	private $aPortTimeLimits = [];
 
 
 	/**
@@ -36,20 +40,56 @@ class ServiceDispatcher {
 
 		//Takes and array of serivce providers and adds them the the ServiceDispatcher so they get packets 
 		foreach($aServices as $oService){
-			if(in_array('\HomeLan\FileStore\Services\ServiceInterface',class_implements(get_class($oService)))){
-				$oService->registerService($this);
-				$aPorts = $oService->getPorts();
-				foreach($aPorts as $iPort){
-					$this->aPorts[$iPort]=$oService;
-				}
-			}
+			$this->addService($oService);
 		}
 	}
 
 	/**
-	 * Handles an inbound packet
+	 * Adds a single service to the service dispatcher
+	 *
+	 * @param object ServicesInterface $oService
 	*/
-	public function inboundPacket(AunPacket $oPacket)
+	public function addService(ServicesInterface $oService): void
+	{
+		$aPorts = $oService->getPorts();
+
+		//Check if any of the ports the service uses are in use
+		foreach($aPorts as $iPort){
+			if(array_key_exists($iPort,$this->aPorts)){
+				throw new Exception("Port already in use.");
+			}
+		}
+
+		//Add the service for all the ports it provides service via
+		$oService->registerService($this);
+		foreach($aPorts as $iPort){
+			$this->aPorts[$iPort]=$oService;
+		}
+	}
+
+	/**
+	 * Allows a service to claim port temp bais for directly streaming data with a client
+	 *
+	 * @param object ServicesInterface $oService 
+	 * @param int $iTimeOut If no packets are recived after this timeout the port is free'd 
+	 * @return int The port allocated for streaming by the service handler 
+	*/
+	public function claimStreamPort(ServicesInterface $oService, int $iTimeOut=60): int
+	{
+		for($i=$this->iStreamPortStart;$i<($this->iStreamPortStart+20);$i++){
+			if(!array_key_exists($i,$this->aPorts)){
+				$this->aPorts[$i] = $oService;
+				$this->aPortTimeLimits[$i] = time ()+$iTimeOut;
+				return $i;
+			}
+		}
+		throw new Exception("Unable to allocte a stream port as there where none free");
+	}
+
+	/**
+	 * Handles an inbound packet $oService
+	*/
+	public function inboundPacket(AunPacket $oPacket): void
 	{
 		if(array_key_exists($oPacket->getPort(),$this->aPorts)){
 			switch($oPacket->getPacketType()){
@@ -66,13 +106,13 @@ class ServiceDispatcher {
 			$aReplies = $this->aPorts[$$oPacket->getPort()]->getReplies();
 			foreach($aReplies as $oReply){
 				$oReplyEconetPacket = $oReply->buildEconetpacket();
-				$this->dispatchReply($oReplyEconetPacket);	
+				$this->queueReply($oReplyEconetPacket);	
 			}
 		}
 
 	}
 
-	private function dispatchReply(EconetPacket $oPacket)
+	private function queueReply(EconetPacket $oPacket): void
 	{
 		usleep(config::getValue('bbc_default_pkg_sleep'));
 		$sIP = Map::ecoAddrToIpAddr($oPacket->getDestinationNetwork(),$oPacket->getDestinationStation());
@@ -91,7 +131,7 @@ class ServiceDispatcher {
 		}
 	}
 
-	public function getReplies()
+	public function getReplies(): array
 	{
 		$aReplies = $this->aReplies;
 		$this->aReplies = [];

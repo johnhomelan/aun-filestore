@@ -7,6 +7,7 @@
 */
 namespace HomeLan\FileStore\Services; 
 
+use HomeLan\FileStore\Services\ServiceDispatcher; 
 use HomeLan\FileStore\Messages\EconetPacket; 
 
 /**
@@ -23,7 +24,7 @@ interface ServiceInterface {
 
 	public function getServicePorts(): array; 
 
-	public function registerService(): void;
+	public function registerService(ServiceDispatcher $oServiceDispatcher): void;
 
 	public function getReplies(): array;
 } 

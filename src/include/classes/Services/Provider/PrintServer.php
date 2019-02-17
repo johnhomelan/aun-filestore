@@ -8,6 +8,7 @@
 namespace HomeLan\FileStore\Services\Provider; 
 
 use HomeLan\FileStore\Services\ServiceInterface;
+use HomeLan\FileStore\Services\ServiceDispatcher;
 use HomeLan\FileStore\Authentication\Security; 
 use HomeLan\FileStore\Messages\PrintServerEnquiry; 
 use HomeLan\FileStore\Messages\PrintServerData; 
@@ -80,7 +81,7 @@ class PrintServer implements ServiceInterface {
 	}
 
 
-	public function registerService(): void
+	public function registerService(ServiceDispatcher $oServiceDispatcher): void
 	{
 	}
 

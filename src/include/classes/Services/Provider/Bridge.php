@@ -8,6 +8,7 @@
 namespace HomeLan\FileStore\Services\Provider; 
 
 use HomeLan\FileStore\Services\ServiceInterface;
+use HomeLan\FileStore\Services\ServiceDispatcher;
 use HomeLan\FileStore\Aun\Map; 
 use HomeLan\FileStore\Messages\BridgeRequest; 
 use HomeLan\FileStore\Messages\EconetPacket; 
@@ -74,7 +75,7 @@ class Bridge implements ServiceInterface {
 	}
 
 
-	public function registerService(): void
+	public function registerService(ServiceDispatcher $oServiceDispatcher): void
 	{
 	}
 

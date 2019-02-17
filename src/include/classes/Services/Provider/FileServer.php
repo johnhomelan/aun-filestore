@@ -8,11 +8,14 @@
 namespace HomeLan\FileStore\Services\Provider; 
 
 use HomeLan\FileStore\Services\ServiceInterface;
+use HomeLan\FileStore\Services\ServiceDispatcher;
+use HomeLan\FileStore\Services\Stream;
 use HomeLan\FileStore\Vfs\Vfs; 
 use HomeLan\FileStore\Authentication\Security; 
 use HomeLan\FileStore\Authentication\User; 
 use HomeLan\FileStore\Messages\EconetPacket; 
 use HomeLan\FileStore\Messages\FsRequest;
+use HomeLan\FileStore\Messages\FsReply;
 
 use config;
 use Exception;
@@ -24,13 +27,15 @@ use Exception;
 */
 class FileServer implements ServiceInterface{
 
-	protected $oMainApp = NULL ;
+	protected $oServiceDispatcher = NULL ;
 
 	protected $aCommands = array('BYE','CAT','CDIR','DELETE','DIR','FSOPT','INFO','I AM','LIB','LOAD','LOGOFF','PASS','RENAME','SAVE','SDISC','NEWUSER','PRIV','REMUSER','i.','CHROOT','CHROOTOFF');
 	
 	protected $aReplyBuffer = array();
 
 	protected $oLogger;
+
+	protected $aStreamsIn;
 
 	/**
 	 * Initializes the service
@@ -44,7 +49,7 @@ class FileServer implements ServiceInterface{
 	
 	}
 
-	protected function _addReplyToBuffer($oReply)
+	public function addReplyToBuffer(FsReply $oReply)
 	{
 		$this->aReplyBuffer[]=$oReply;
 	}
@@ -61,7 +66,7 @@ class FileServer implements ServiceInterface{
 	*/
 	public function getServicePorts(): array
 	{
-		return [0x9C];
+		return [0x9C, config::getValue('econet_data_stream_port')];
 	}
 
 	/** 
@@ -84,12 +89,17 @@ class FileServer implements ServiceInterface{
 	*/
 	public function unicastPacketIn(EconetPacket $oPacket): void
 	{
-		$this->processRequest(new FsRequest($oPacket, $this->oLogger));
+		if($oPacket->getPort()==config::getValue('econet_data_stream_port')){
+			$this->streamPacketIn($oPacket);
+		}else{
+			$this->processRequest(new FsRequest($oPacket, $this->oLogger));
+		}
 	}
 
 
-	public function registerService(): void
+	public function registerService(ServiceDispatcher $oServiceDispatcher): void
 	{
+		$this->oServiceDispatcher = $oServiceDispatcher;
 	}
 
 	/**
@@ -102,6 +112,27 @@ class FileServer implements ServiceInterface{
 		$aReplies = $this->aReplyBuffer;
 		$this->aReplyBuffer = array();
 		return $aReplies;
+	}
+
+	private function streamPacketIn(EconetPacket $oPacket): void
+	{
+		if(isset($this->aStreamsIn[$oPacket->getSourceNetwork()][$oPacket->getSourceStation()])){
+			$this->aStreamsIn[$oPacket->getSourceNetwork()][$oPacket->getSourceStation()]->inboundPacket($oPacket);
+		}	
+	}
+
+	private function addStream(Stream $oStream,int $iNetwork, int $iStation)
+	{
+		if(!is_array($this->aStreamsIn[$iNetwork])){
+			$this->aStreamsIn[$iNetwork]=[];
+		}
+		$this->aStreamsIn[$iNetwork][$iStation]=$oStream;
+	}
+
+	private function freeStream(Stream $oStream,int $iNetwork, int $iStation)
+	{
+		unset($this->aStreamsIn[$iNetwork][$iStation]);
+		unset ($oStream);
 	}
 
 	/**
@@ -132,7 +163,7 @@ class FileServer implements ServiceInterface{
 		if(!Security::isLoggedIn($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation())){
 			$oReply = $oFsRequest->buildReply();
 			$oReply->setError(0xbf,"Who are you?");
-			$this->_addReplyToBuffer($oReply);
+			$this->addReplyToBuffer($oReply);
 			return;
 		}
 
@@ -298,7 +329,7 @@ class FileServer implements ServiceInterface{
 		$oReply = $oFsRequest->buildReply();
 		$oReply->UnrecognisedOk();
 		$oReply->appendString($sCommand);
-		$this->_addReplyToBuffer($oReply);
+		$this->addReplyToBuffer($oReply);
 	}
 
 	/**
@@ -370,7 +401,7 @@ class FileServer implements ServiceInterface{
 				$this->oLogger->debug("Un-handled command ".$sCommand);
 				$oReply = $oFsRequest->buildReply();
 				$oReply->setError(0x99,"Un-implemented command");
-				$this->_addReplyToBuffer($oReply);
+				$this->addReplyToBuffer($oReply);
 				break;
 		}
 	}
@@ -414,7 +445,7 @@ class FileServer implements ServiceInterface{
 
 			//Send Wrong Password
 			$oReply->setError(0xbb,"Incorrect password");
-			$this->_addReplyToBuffer($oReply);
+			$this->addReplyToBuffer($oReply);
 			return;
 		}
 
@@ -442,7 +473,7 @@ class FileServer implements ServiceInterface{
 			$oReply = $oFsRequest->buildReply();
 			$this->oLogger->debug("fileserver: Login ok urd:".$oUrd->getId()." csd:".$oCsd->getId()." lib:".$oLib->getId());
 			$oReply->loginRespone($oUrd->getId(),$oCsd->getId(),$oLib->getId(),$oUser->getBootOpt());
-			$this->_addReplyToBuffer($oReply);
+			$this->addReplyToBuffer($oReply);
 		}else{
 			//Login failed
 			$oReply = $oFsRequest->buildReply();
@@ -450,7 +481,7 @@ class FileServer implements ServiceInterface{
 			//Send Wrong Password
 			$this->oLogger->info("Login Failed: For user ".$sUser." invalid password/no such user");
 			$oReply->setError(0xbb,"Incorrect password");
-			$this->_addReplyToBuffer($oReply);
+			$this->addReplyToBuffer($oReply);
 		}
 			
 	}
@@ -471,7 +502,7 @@ class FileServer implements ServiceInterface{
 			$oReply = $oFsRequest->buildReply();
 			$oReply->setError(0xbf,"Who are you?");
 		}
-		$this->_addReplyToBuffer($oReply);
+		$this->addReplyToBuffer($oReply);
 	}
 	/**
 	 * Handles the *info command
@@ -493,7 +524,7 @@ class FileServer implements ServiceInterface{
 		}catch(Exception $oException){
 			$oReply->setError(0xff,"No such file");
 		}
-		$this->_addReplyToBuffer($oReply);
+		$this->addReplyToBuffer($oReply);
 	}
 
 	/**
@@ -526,7 +557,7 @@ class FileServer implements ServiceInterface{
 					$oReply->appendByte(0x00);
 					$oReply->appendByte(0x00);
 				}
-				$this->_addReplyToBuffer($oReply);
+				$this->addReplyToBuffer($oReply);
 				return;
 				break;
 			case 5:
@@ -557,7 +588,7 @@ class FileServer implements ServiceInterface{
 					$oReply->appendByte(0x00);
 					$oReply->appendByte(0x00);
 				}	
-				$this->_addReplyToBuffer($oReply);
+				$this->addReplyToBuffer($oReply);
 				return;
 				break;
 			case 1:
@@ -579,7 +610,7 @@ class FileServer implements ServiceInterface{
 					$oReply->appendByte(0x00);
 					$oReply->appendByte(0x00);
 				}
-				$this->_addReplyToBuffer($oReply);
+				$this->addReplyToBuffer($oReply);
 				return;
 				break;
 			case 2:
@@ -604,7 +635,7 @@ class FileServer implements ServiceInterface{
 					$oReply->appendByte(0x00);
 					$oReply->appendByte(0x00);
 				}
-				$this->_addReplyToBuffer($oReply);
+				$this->addReplyToBuffer($oReply);
 				return;
 	
 				break;
@@ -627,7 +658,7 @@ class FileServer implements ServiceInterface{
 					$oReply->appendByte(0x00);
 					$oReply->appendByte(0x00);
 				}
-				$this->_addReplyToBuffer($oReply);
+				$this->addReplyToBuffer($oReply);
 				return;
 				
 				break;
@@ -658,12 +689,12 @@ class FileServer implements ServiceInterface{
 					//Cyle  always 0 probably should not be 
 					$oReply->appendByte(0);
 
-					$this->_addReplyToBuffer($oReply);
+					$this->addReplyToBuffer($oReply);
 
 				}catch(Exception $oException){
 					$oReply = $oFsRequest->buildReply();
 					$oReply->setError(0x8e,"Bad INFO argument");
-					$this->_addReplyToBuffer($oReply);
+					$this->addReplyToBuffer($oReply);
 				}
 				return;
 				break;
@@ -676,7 +707,7 @@ class FileServer implements ServiceInterface{
 		}
 		$oReply = $oFsRequest->buildReply();
 		$oReply->setError(0x8e,"Bad INFO argument");
-		$this->_addReplyToBuffer($oReply);
+		$this->addReplyToBuffer($oReply);
 	}
 
 	public function setInfo($oFsRequest)
@@ -712,7 +743,7 @@ class FileServer implements ServiceInterface{
 				break;
 		}
 		$oReply->DoneOk();
-		$this->_addReplyToBuffer($oReply);
+		$this->addReplyToBuffer($oReply);
 	}
 
 	public function eof($oFsRequest)
@@ -730,7 +761,7 @@ class FileServer implements ServiceInterface{
 		}else{
 			$oReply->appendByte(0);
 		}
-		$this->_addReplyToBuffer($oReply);
+		$this->addReplyToBuffer($oReply);
 	}
 
 	/**
@@ -843,7 +874,7 @@ class FileServer implements ServiceInterface{
 				$oReply->appendByte(0x80);
 				break;
 		}
-		$this->_addReplyToBuffer($oReply);
+		$this->addReplyToBuffer($oReply);
 	}
 
 	public function getArgs($oFsRequest)
@@ -884,7 +915,7 @@ class FileServer implements ServiceInterface{
 				$oReply->DoneOk();
 				break;
 		}
-		$this->_addReplyToBuffer($oReply);
+		$this->addReplyToBuffer($oReply);
 	}
 
 	/**
@@ -915,7 +946,7 @@ class FileServer implements ServiceInterface{
 			$oReply->setError(0xff,$oException->getMessage());
 		}
 
-		$this->_addReplyToBuffer($oReply);
+		$this->addReplyToBuffer($oReply);
 	}
 
 	/**
@@ -931,7 +962,7 @@ class FileServer implements ServiceInterface{
 		//Chech the user is logged in
 		if(!is_object($oUser)){
 			$oReply->setError(0xbf,"Who are you?");
-			$this->_addReplyToBuffer($oReply);
+			$this->addReplyToBuffer($oReply);
 			return;
 		}
 		
@@ -947,7 +978,7 @@ class FileServer implements ServiceInterface{
 					if(!$oNewCsd->isDir()){
 						$this->oLogger->debug("User tryed to change to directory ".$oNewCsd->getEconetDirName()." however its not a directory.");
 						$oReply->setError(0xbe,"Not a directory");
-						$this->_addReplyToBuffer($oReply);
+						$this->addReplyToBuffer($oReply);
 						return;
 					}
 				}
@@ -973,7 +1004,7 @@ class FileServer implements ServiceInterface{
 				$oReply->setError(0xff,"No such directory.");	
 			}
 		}
-		$this->_addReplyToBuffer($oReply);
+		$this->addReplyToBuffer($oReply);
 
 
 	}
@@ -993,7 +1024,7 @@ class FileServer implements ServiceInterface{
 				if(!$oNewLib->isDir()){
 					$this->oLogger->debug("User tryed to change the library to ".$oNewLib->getEconetDirName()." however its not a directory.");
 					$oReply->setError(0xbe,"Not a directory");
-					$this->_addReplyToBuffer($oReply);
+					$this->addReplyToBuffer($oReply);
 					return;
 				}
 				Vfs::closeFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oFsRequest->getLib());
@@ -1007,7 +1038,7 @@ class FileServer implements ServiceInterface{
 		}else{
 			$oReply->setError(0xff,"Syntax ?");	
 		}
-		$this->_addReplyToBuffer($oReply);
+		$this->addReplyToBuffer($oReply);
 
 
 	}
@@ -1022,12 +1053,12 @@ class FileServer implements ServiceInterface{
 		$oReply = $oFsRequest->buildReply();
 		if(strlen($sOptions)<1){
 			$oReply->setError(0xff,"Syntax");
-			$this->_addReplyToBuffer($oReply);
+			$this->addReplyToBuffer($oReply);
 			return;
 		}
 		if(strlen($sOptions)>10){
 			$oReply->setError(0xff,"Maximum directory name length is 10");
-			$this->_addReplyToBuffer($oReply);
+			$this->addReplyToBuffer($oReply);
 			return;
 		}
 
@@ -1037,7 +1068,7 @@ class FileServer implements ServiceInterface{
 		}catch(Exception $oException){
 			$oReply->setError(0xff,"Unable to create directory");
 		}
-		$this->_addReplyToBuffer($oReply);
+		$this->addReplyToBuffer($oReply);
 	}
 
 	/**
@@ -1058,7 +1089,7 @@ class FileServer implements ServiceInterface{
 				$oReply->setError(0xff,"Unable to delete");
 			}
 		}
-		$this->_addReplyToBuffer($oReply);
+		$this->addReplyToBuffer($oReply);
 	}
 
 	/**
@@ -1080,7 +1111,7 @@ class FileServer implements ServiceInterface{
 				$oReply->setError(0xff,"No such file");
 			}
 		}
-		$this->_addReplyToBuffer($oReply);
+		$this->addReplyToBuffer($oReply);
 		
 	}
 
@@ -1111,7 +1142,7 @@ class FileServer implements ServiceInterface{
 		}catch(Exception $oException){
 			$oReply->setError(0xff,"No such file");
 		}
-		$this->_addReplyToBuffer($oReply);
+		$this->addReplyToBuffer($oReply);
 	}
 
 	/**
@@ -1124,7 +1155,7 @@ class FileServer implements ServiceInterface{
 		Vfs::closeFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$iHandle);
 		$oReply = $oFsRequest->buildReply();
 		$oReply->DoneOk();
-		$this->_addReplyToBuffer($oReply);
+		$this->addReplyToBuffer($oReply);
 	}
 
 	public function getBytes($oFsRequest)
@@ -1204,7 +1235,7 @@ class FileServer implements ServiceInterface{
 		//Number of bytes sent
 		$oReply2->append24bitIntLittleEndian($iBytes-$iBytesToRead);
 		$oReply2->setFlags($oAck->getFlags());
-		$this->_addReplyToBuffer($oReply2);
+		$this->addReplyToBuffer($oReply2);
 	}
 
 	public function putBytes($oFsRequest)
@@ -1234,40 +1265,38 @@ class FileServer implements ServiceInterface{
 		$oReply->append16bitIntLittleEndian(256);
 
 		//Send reply directly
-		$oReplyEconetPacket = $oReply->buildEconetpacket();
-		$this->oMainApp->dispatchReply($oReplyEconetPacket);	
-		$sData = "";
+		$this->addReplyToBuffer($oReply);
 
-		while(strlen($sData)<$iBytes){
-			try {
-				usleep(config::getValue('bbc_default_pkg_sleep'));
-				//We now need to take over the receving of packets breifly going to our streaming port
-				$oEconetPacket = $this->oMainApp->directStream($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),config::getValue('econet_data_stream_port'));
+		$_this = $this;
 
-			}catch(Exception $oException){
-				$this->oLogger->debug("Putbytes timed out waiting for data");
-				//$oFailReply=$oFsRequest->buildReply();
-				//$oFailReply->setError(0xff,"Timeout");
-				//$this->_addReplyToBuffer($oReply);
-				//return;
-			}
-			//We got the data send a reply
-			usleep(config::getValue('bbc_default_pkg_sleep'));
-			$oAck = $oFsRequest->buildReply();
-			$oAck->DoneOk();
-			$oAckPackage = $oAck->buildEconetpacket();
-			$oAckPackage->setPort(0x91);
-			$this->oMainApp->dispatchReply($oAckPackage);
+		$this->addStream($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(), 
+			new Stream(
+				config::getValue('econet_data_stream_port'),
+				$iBytes,
+				function($oStream,$oPacket) use ($oFsRequest, $_this) {
+					$oAck = $oFsRequest->buildReply();
+					$oAck->DoneOk();
+					$oAckPackage = $oAck->buildEconetpacket();
+					$oAckPackage->setPort(0x91);
+					$_this->addReplyToBuffer($oAckPackage);
+				},
+				function($oStream,$sData) use ($oFsRequest, $oFsHandle, $_this){
+					$oFsHandle->write($sData);
+					usleep(config::getValue('bbc_default_pkg_sleep'));
+					$oReply2 = $oFsRequest->buildReply();
+			                $oReply2->DoneOk();
+			                $oReply2->appendByte(0);
+					$oReply2->append24bitIntLittleEndian(strlen($sData));
+					$_this->addReplyToBuffer($oReply2);
+					$_this->freeStream($oStream,$oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation());
+				},
+				function($oStream, $sError) use($oFsRequest, $_this) {
+					$_this->oLogger->debug("Putbytes waiting for data (".$sError.")");
+					$_this->freeStream($oStream,$oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation());
+				}
+			)
+		);
 
-			$sData=$sData.$oEconetPacket->getData();
-		}
-		$oFsHandle->write($sData);
-		usleep(config::getValue('bbc_default_pkg_sleep'));
-		$oReply2 = $oFsRequest->buildReply();
-		$oReply2->DoneOk();
-		$oReply2->appendByte(0);
-		$oReply2->append24bitIntLittleEndian(strlen($sData));
-		$this->_addReplyToBuffer($oReply2);
 	}
 
 	public function getByte($oFsRequest)
@@ -1287,7 +1316,7 @@ class FileServer implements ServiceInterface{
 			$oReply->appendByte(0);
 		}
 
-		$this->_addReplyToBuffer($oReply);
+		$this->addReplyToBuffer($oReply);
 		
 	}
 
@@ -1303,7 +1332,7 @@ class FileServer implements ServiceInterface{
 		$oFsRequest->write($iByte);
 
 		$oReply->DoneOk();
-		$this->_addReplyToBuffer($oReply);
+		$this->addReplyToBuffer($oReply);
 	}
 
 	/**
@@ -1353,7 +1382,7 @@ class FileServer implements ServiceInterface{
 				$this->oLogger->debug("Client failed to send direct stream during save operation (".$oException->getMessage().")");
 				$oFailReply=$oFsRequest->buildReply();
 				$oFailReply->setError(0xff,"Timeout");
-				$this->_addReplyToBuffer($oReply);
+				$this->addReplyToBuffer($oReply);
 				return;
 			}
 			$oReply = $oFsRequest->buildReply();
@@ -1386,7 +1415,7 @@ class FileServer implements ServiceInterface{
 
 		$iYear = $iYear+date('n',time());
 		$oReply2->appendByte($iYear);
-		$this->_addReplyToBuffer($oReply2);
+		$this->addReplyToBuffer($oReply2);
 		
 	}
 
@@ -1408,7 +1437,7 @@ class FileServer implements ServiceInterface{
 			$oMeta = Vfs::getMeta($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sPath);
 		}catch(Exception $oException){
 			$oReply->setError(0x99,"No such file");
-			$this->_addReplyToBuffer($oReply);
+			$this->addReplyToBuffer($oReply);
 			return;			
 		}
 
@@ -1441,7 +1470,7 @@ class FileServer implements ServiceInterface{
 
 		$oReply2 = $oFsRequest->buildReply();
 		$oReply2->DoneOk();
-		$this->_addReplyToBuffer($oReply2);
+		$this->addReplyToBuffer($oReply2);
 
 	}
 
@@ -1488,7 +1517,7 @@ class FileServer implements ServiceInterface{
 				$oReply->setError(0xff,$oException->getMessage());
 			}
 		}
-		$this->_addReplyToBuffer($oReply);
+		$this->addReplyToBuffer($oReply);
 	}
 
 	/**
@@ -1527,7 +1556,7 @@ class FileServer implements ServiceInterface{
 			}
 		
 		}
-		$this->_addReplyToBuffer($oReply);
+		$this->addReplyToBuffer($oReply);
 	}
 
 	/**
@@ -1550,7 +1579,7 @@ class FileServer implements ServiceInterface{
 				$oReply->setError(0xff,"You do not have admin rights");
 			}
 		}
-		$this->_addReplyToBuffer($oReply);
+		$this->addReplyToBuffer($oReply);
 	}
 
 	/**
@@ -1577,7 +1606,7 @@ class FileServer implements ServiceInterface{
 			}
 			
 		}
-		$this->_addReplyToBuffer($oReply);
+		$this->addReplyToBuffer($oReply);
 	}
 
 	/**
@@ -1592,7 +1621,7 @@ class FileServer implements ServiceInterface{
 		$oReply->appendByte($oFsRequest->getUrd());
 		$oReply->appendByte($oFsRequest->getCsd());
 		$oReply->appendByte($oFsRequest->getLib());
-		$this->_addReplyToBuffer($oReply);
+		$this->addReplyToBuffer($oReply);
 	}
 
 	public function chroot($oFsRequest,$sOptions)
@@ -1612,7 +1641,7 @@ class FileServer implements ServiceInterface{
 		if(!$oNewRootDir->isDir()){
 			$this->oLogger->debug("User tryed to change to directory ".$oNewRootDir->getEconetDirName()." however its not a directory.");
 			$oReply->setError(0xbe,"Not a directory");
-			$this->_addReplyToBuffer($oReply);
+			$this->addReplyToBuffer($oReply);
 			return;
 		}
 
@@ -1624,7 +1653,7 @@ class FileServer implements ServiceInterface{
 		$oReply->DirOk();
 		$oReply->appendByte($oNewCsd->getID());
 		$oUser->setCsd($oNewCsd->getEconetPath());
-		$this->_addReplyToBuffer($oReply);
+		$this->addReplyToBuffer($oReply);
 			
 	}
 
@@ -1644,7 +1673,7 @@ class FileServer implements ServiceInterface{
 		$oReply->DirOk();
 		$oReply->appendByte($oNewCsd->getID());
 		$oUser->setCsd($oNewCsd->getEconetPath());
-		$this->_addReplyToBuffer($oReply);
+		$this->addReplyToBuffer($oReply);
 	}
 
 	/**
@@ -1681,12 +1710,12 @@ class FileServer implements ServiceInterface{
 					}
 				}
 				if($i>($iStart+$iCount)){
-					$this->_addReplyToBuffer($oReply);
+					$this->addReplyToBuffer($oReply);
 					return;
 				}
 			}
 		}
-		$this->_addReplyToBuffer($oReply);
+		$this->addReplyToBuffer($oReply);
 	}
 
 	/**
@@ -1710,7 +1739,7 @@ class FileServer implements ServiceInterface{
 		}else{
 			$oReply->DoneNoton();
 		}
-		$this->_addReplyToBuffer($oReply);	
+		$this->addReplyToBuffer($oReply);	
 	}
 
 	/**
@@ -1735,7 +1764,7 @@ class FileServer implements ServiceInterface{
 			//Indicate that no more discs are present
 			$oReply->appendByte(0);
 		}
-		$this->_addReplyToBuffer($oReply);	
+		$this->addReplyToBuffer($oReply);	
 	}
 
 	/**
@@ -1751,7 +1780,7 @@ class FileServer implements ServiceInterface{
 		$oReply->DoneOk();
 		$oReply->append32bitIntLittleEndian(config::getValue('vfs_default_disc_free'));
 		$oReply->append32bitIntLittleEndian(config::getValue('vfs_default_disc_size'));
-		$this->_addReplyToBuffer($oReply);
+		$this->addReplyToBuffer($oReply);
 	}
 
 	/**
@@ -1763,7 +1792,7 @@ class FileServer implements ServiceInterface{
 		$oReply = $oFsRequest->buildReply();
 		$oReply->DoneOk();
 		$oReply->appendString("aunfs_srv ".config::getValue('version'));
-		$this->_addReplyToBuffer($oReply);
+		$this->addReplyToBuffer($oReply);
 	}
 
 	/**
@@ -1784,7 +1813,7 @@ class FileServer implements ServiceInterface{
 		//Min
 		$oReply->appendByte(ltrim(date('i',$iTime),0));
 
-		$this->_addReplyToBuffer($oReply);
+		$this->addReplyToBuffer($oReply);
 	}
 
 	/**
@@ -1823,7 +1852,7 @@ class FileServer implements ServiceInterface{
 		$iYear = $iYear+date('n',time());
 		$oReply->appendByte($iYear);
 		
-		$this->_addReplyToBuffer($oReply);
+		$this->addReplyToBuffer($oReply);
 	}
 
 	/**
@@ -1841,6 +1870,6 @@ class FileServer implements ServiceInterface{
 		$oReply->DoneOk();
 		$oReply->append24bitIntLittleEndian(config::getValue('vfs_default_disc_free'));
 
-		$this->_addReplyToBuffer($oReply);
+		$this->addReplyToBuffer($oReply);
 	}
 }

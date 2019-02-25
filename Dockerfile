@@ -4,6 +4,11 @@ MAINTAINER john@home-lan.co.uk
 
 RUN apk add --no-cache rsync make bash composer php7.3-dba php7.3-soap php7.3-posix php7.3-pcntl
 
+ENV PHPIZE_DEPS="git file re2c autoconf make zlib zlib-dev g++"
+RUN apk add --no-cache ${PHPIZE_DEPS} "php7.2-dev"
+RUN pecl install ev
+RUN apk del ${PHPIZE_DEPS}
+
 RUN mkdir -p /etc/aun-filestored-default-config
 RUN mkdir -p /etc/aun-filestored
 RUN mkdir -p /var/lib/aun-filestore-root

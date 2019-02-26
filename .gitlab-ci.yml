@@ -9,7 +9,7 @@ variables:
   REPO_IMAGE: registry.home-lan.co.uk/aun-filestore:latest
   
 phpunit_tests_php73:
-   image: registry.home-lan.co.uk/php-73-testing:latest
+   image: registry.home-lan.co.uk/php-73-testing:react
    stage: test
    services:
     - docker:stable-dind

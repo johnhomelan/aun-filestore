@@ -86,6 +86,8 @@ class React extends Command {
 
 		//Setup the main react loop
 		$oLoop = ReactFactory::create();
+		
+		$this->oLogger->info("core: Using ".get_class($oLoop)." as the primary event loop handler");
 
 		//Add udp handling for AUN 
 		$oDatagramFactory = new DatagramFactory($oLoop);

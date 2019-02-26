@@ -4,6 +4,16 @@ MAINTAINER john@home-lan.co.uk
 
 RUN apk add --no-cache rsync make bash composer php7.3-dba php7.3-soap php7.3-posix php7.3-pcntl
 
+#Install the ev pecl extension so React can use event over select
+ENV PHPIZE_DEPS="git file re2c autoconf make zlib-dev g++ libevent-dev openssl-dev"
+RUN apk add --no-cache ${PHPIZE_DEPS} "php7.3-dev"
+RUN apk add --no-cache libevent openssl
+RUN sed -i "$ s|\-n||g" /usr/bin/pecl
+RUN pecl install event
+RUN echo "extension=event" >/etc/php/7.3/conf.d/01_event.ini
+RUN apk del ${PHPIZE_DEPS}
+
+
 RUN mkdir -p /etc/aun-filestored-default-config
 RUN mkdir -p /etc/aun-filestored
 RUN mkdir -p /var/lib/aun-filestore-root

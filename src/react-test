@@ -1,6 +1,10 @@
 #!/usr/bin/php
 <?php
-require_once __DIR__."/vendor/autoload.php";
+if(file_exists(__DIR__."/vendor/autoload.php")){
+        require_once __DIR__."/vendor/autoload.php";
+}else{
+        require_once "/usr/share/aun-filestored/vendor/autoload.php";
+}
 
 use HomeLan\FileStore\Console\SingleCommandApplication;
 use HomeLan\FileStore\Command\React;

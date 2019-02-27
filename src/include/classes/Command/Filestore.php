@@ -74,7 +74,7 @@ class Filestore extends Command {
 	 * Initializes the application injecting the service deps 
 	 *
 	*/
-	public function __construct(\HomeLan\FileStore\Services\FileServer $oFileServer, \HomeLan\FileStore\Services\PrintServer $oPrintServer, \HomeLan\FileStore\Services\Bridge $oBridge, \Psr\Log\LoggerInterface $oLogger)
+	public function __construct(\HomeLan\FileStore\Services\Provider\FileServer $oFileServer, \HomeLan\FileStore\Services\Provider\PrintServer $oPrintServer, \HomeLan\FileStore\Services\Provider\Bridge $oBridge, \Psr\Log\LoggerInterface $oLogger)
 	{
 		$this->oFileServer = $oFileServer;
 		$this->oPrintServer = $oPrintServer;

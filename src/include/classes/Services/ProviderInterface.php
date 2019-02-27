@@ -15,7 +15,7 @@ use HomeLan\FileStore\Messages\EconetPacket;
  *
  * @package core
 */
-interface ServiceInterface {
+interface ProviderInterface {
 
 
 	public function unicastPacketIn(EconetPacket $oPacket): void;

@@ -7,7 +7,7 @@
 */
 namespace HomeLan\FileStore\Services\Provider; 
 
-use HomeLan\FileStore\Services\ServiceInterface;
+use HomeLan\FileStore\Services\ProviderInterface;
 use HomeLan\FileStore\Services\ServiceDispatcher;
 use HomeLan\FileStore\Authentication\Security; 
 use HomeLan\FileStore\Messages\PrintServerEnquiry; 
@@ -21,7 +21,7 @@ use config;
  *
  * @package core
 */
-class PrintServer implements ServiceInterface {
+class PrintServer implements ProviderInterface {
 
 	protected $aReplyBuffer = array();
 
@@ -92,9 +92,12 @@ class PrintServer implements ServiceInterface {
 	*/
 	public function getReplies(): array
 	{
-		$aReplies = $this->aReplyBuffer;
-		$this->aReplyBuffer = array();
-		return $aReplies;
+		$aReturn = [];
+		foreach($this->aReplyBuffer as $oReply){
+			$aReturn[] = $oReply->buildEconetpacket();
+		}
+		$this->aReplyBuffer = [];
+		return $aReturn;
 	}
 
 	/**

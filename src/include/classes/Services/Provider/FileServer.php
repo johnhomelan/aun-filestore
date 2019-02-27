@@ -7,7 +7,7 @@
 */
 namespace HomeLan\FileStore\Services\Provider; 
 
-use HomeLan\FileStore\Services\ServiceInterface;
+use HomeLan\FileStore\Services\ProviderInterface;
 use HomeLan\FileStore\Services\ServiceDispatcher;
 use HomeLan\FileStore\Services\Stream;
 use HomeLan\FileStore\Vfs\Vfs; 
@@ -25,7 +25,7 @@ use Exception;
  *
  * @package core
 */
-class FileServer implements ServiceInterface{
+class FileServer implements ProviderInterface{
 
 	protected $oServiceDispatcher = NULL ;
 
@@ -97,9 +97,16 @@ class FileServer implements ServiceInterface{
 	}
 
 
+	/**
+	 * Called when the service provider is registered with the ServiceDispatcher
+	*/
 	public function registerService(ServiceDispatcher $oServiceDispatcher): void
 	{
 		$this->oServiceDispatcher = $oServiceDispatcher;
+		$_this = $this;
+		$this->oServiceDispatcher->addHousingKeepingTask(function() use ($_this){
+			$_this->houseKeeping();
+		});
 	}
 
 	/**
@@ -109,11 +116,27 @@ class FileServer implements ServiceInterface{
 	*/
 	public function getReplies(): array
 	{
-		$aReplies = $this->aReplyBuffer;
-		$this->aReplyBuffer = array();
-		return $aReplies;
+		$aReturn = [];
+		foreach($this->aReplyBuffer as $oReply){
+			switch(get_class($oReply)){
+				case 'HomeLan\FileStore\Messages\FsReply':
+					$aReturn[] = $oReply->buildEconetpacket();
+					break;
+				case 'HomeLan\FileStore\Messages\EconetPacket':
+					$aReturn[] = $oReply;
+					break;
+				default:
+					$this->oLogger->warning("Service provider filestore produced a reply of the invalid type ".get_class($oReply)." dropping");
+					break;
+			}
+		}
+		$this->aReplyBuffer = [];
+		return $aReturn;
 	}
 
+	/**
+	 * Deals with inbound packets for io streams (e.g. save, putbytes) 
+	*/
 	private function streamPacketIn(EconetPacket $oPacket): void
 	{
 		if(isset($this->aStreamsIn[$oPacket->getSourceNetwork()][$oPacket->getSourceStation()])){
@@ -121,6 +144,9 @@ class FileServer implements ServiceInterface{
 		}	
 	}
 
+	/**
+	 * Adds a new io stream (e.g. save, putbytes)
+	*/
 	private function addStream(Stream $oStream,int $iNetwork, int $iStation)
 	{
 		if(!is_array($this->aStreamsIn[$iNetwork])){
@@ -129,10 +155,25 @@ class FileServer implements ServiceInterface{
 		$this->aStreamsIn[$iNetwork][$iStation]=$oStream;
 	}
 
+	/**
+	 * Frees an existing io stream
+	*/
 	private function freeStream(Stream $oStream,int $iNetwork, int $iStation)
 	{
 		unset($this->aStreamsIn[$iNetwork][$iStation]);
 		unset ($oStream);
+	}
+
+	public function houseKeeping()
+	{
+		$aStreamsToTest =  $this->aStreamsIn;
+		foreach($aStreamsToTest as $iNetwork=>$aStations){
+			foreach($aStations as $iStation=>$oStream){
+				//If the stream has timeout it will call its own fail event that
+				//should clean up the stream and references in $this->aStreamsIn 
+				$oStream->checkTimedOut();	
+			}
+		}
 	}
 
 	/**
@@ -504,6 +545,7 @@ class FileServer implements ServiceInterface{
 		}
 		$this->addReplyToBuffer($oReply);
 	}
+
 	/**
 	 * Handles the *info command
 	 *
@@ -1293,6 +1335,9 @@ class FileServer implements ServiceInterface{
 				function($oStream, $sError) use($oFsRequest, $_this) {
 					$_this->oLogger->debug("Putbytes waiting for data (".$sError.")");
 					$_this->freeStream($oStream,$oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation());
+					$oFailReply=$oFsRequest->buildReply();
+					$oFailReply->setError(0xff,"Timeout");
+					$this->addReplyToBuffer($oFailReply);
 				}
 			)
 		);
@@ -1371,51 +1416,49 @@ class FileServer implements ServiceInterface{
 		$oReplyEconetPacket = $oReply->buildEconetpacket();
 		$this->oMainApp->dispatchReply($oReplyEconetPacket);	
 		$sData = '';
+		$_this = $this;
 
-		//Get the data from the cleint
-		while(strlen($sData)<$iSize){
-			try {
-				//We now need to take over the receving of packets breifly going to our streaming port
-				$this->oLogger->debug("Direct stream (".strlen($sData)."/".$iSize.")");
-				$oEconetPacket = $this->oMainApp->directStream($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),config::getValue('econet_data_stream_port'));
-			}catch(Exception $oException){
-				$this->oLogger->debug("Client failed to send direct stream during save operation (".$oException->getMessage().")");
-				$oFailReply=$oFsRequest->buildReply();
-				$oFailReply->setError(0xff,"Timeout");
-				$this->addReplyToBuffer($oReply);
-				return;
-			}
-			$oReply = $oFsRequest->buildReply();
-			$oReply->DoneOk();
-			$oReplyEconetPacket = $oReply->buildEconetpacket();
-			//Set the port to be the requested ack port
-			$oReplyEconetPacket->setPort($iAckPort);
-			$this->oMainApp->dispatchReply($oReplyEconetPacket);	
-			$this->oLogger->debug("Replay sent for block of ".strlen($oEconetPacket->getData()));
-			try {
-				$this->oMainApp->waitForAck($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation());
-			}catch(Exception $oException){
-				$this->oLogger->debug($oException->getMessage());
-			}
-			$sData=$sData.$oEconetPacket->getData();
-		}
-		Vfs::saveFile($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sPath,$sData,$iLoad,$iExec);
-	
-		//File is saved 	
-		$oReply2 = $oFsRequest->buildReply();
-		$oReply2->DoneOk();
-		$oReply2->appendByte(15);
-		//Add current date
-		
-		$iDay = date('j',time());
-		$oReply2->appendByte($iDay);
-		//The last byte is month and year, first 4 bits year, last 4 bits month
-		$iYear= date('y',time());
-		$iYear << 4;
+		$this->addStream($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(), 
+			new Stream(
+				config::getValue('econet_data_stream_port'),
+				$iSize,
+				function($oStream,$oPacket) use ($oFsRequest, $iAckPort, $_this) {
+					$oReply = $oFsRequest->buildReply();
+					$oReply->DoneOk();
+					$oReplyEconetPacket = $oReply->buildEconetpacket();
+					$oReplyEconetPacket->setPort($iAckPort);
+					$_this->addReplyToBuffer($oReplyEconetPacket);
+					$_this->oLogger->debug("Replay sent for block of ".strlen($oPacket->getData()));
+				},
+				function($oStream,$sData) use ($oFsRequest, $sPath, $iLoad, $iExec, $_this){
+					Vfs::saveFile($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sPath,$sData,$iLoad,$iExec);
+				
+					//File is saved 	
+					$oReply2 = $oFsRequest->buildReply();
+					$oReply2->DoneOk();
+					$oReply2->appendByte(15);
 
-		$iYear = $iYear+date('n',time());
-		$oReply2->appendByte($iYear);
-		$this->addReplyToBuffer($oReply2);
+					//Add current date	
+					$iDay = date('j',time());
+					$oReply2->appendByte($iDay);
+
+					//The last byte is month and year, first 4 bits year, last 4 bits month
+					$iYear= date('y',time());
+					$iYear << 4;
+					$iYear = $iYear+date('n',time());
+					$oReply2->appendByte($iYear);
+					$_this->addReplyToBuffer($oReply2);
+					$_this->freeStream($oStream,$oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation());
+				},
+				function($oStream, $sError) use($oFsRequest, $_this) {
+					$_this->oLogger->debug("Filesave failed (".$sError.")");
+					$_this->freeStream($oStream,$oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation());
+					$oFailReply=$oFsRequest->buildReply();
+					$oFailReply->setError(0xff,"Timeout");
+					$this->addReplyToBuffer($oFailReply);
+				}
+			)
+		);
 		
 	}
 

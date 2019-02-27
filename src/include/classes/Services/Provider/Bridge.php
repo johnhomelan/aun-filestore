@@ -7,7 +7,7 @@
 */
 namespace HomeLan\FileStore\Services\Provider; 
 
-use HomeLan\FileStore\Services\ServiceInterface;
+use HomeLan\FileStore\Services\ProviderInterface;
 use HomeLan\FileStore\Services\ServiceDispatcher;
 use HomeLan\FileStore\Aun\Map; 
 use HomeLan\FileStore\Messages\BridgeRequest; 
@@ -20,7 +20,7 @@ use Exception;
  *
  * @package core
 */
-class Bridge implements ServiceInterface {
+class Bridge implements ProviderInterface {
 
 	protected $aReplyBuffer = array();
 
@@ -86,9 +86,12 @@ class Bridge implements ServiceInterface {
 	*/
 	public function getReplies(): array
 	{
-		$aReplies = $this->aReplyBuffer;
-		$this->aReplyBuffer = array();
-		return $aReplies;
+		$aReturn = [];
+		foreach($this->aReplyBuffer as $oReply){
+			$aReturn[] = $oReply->buildEconetpacket();
+		}
+		$this->aReplyBuffer = [];
+		return $aReturn;
 	}
 
 	/**

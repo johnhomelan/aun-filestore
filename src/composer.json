@@ -17,6 +17,12 @@
         "homelan/acorn-disk": "v1.0.2",
         "react/event-loop": "^1.1",
         "react/http": "^0.8.4",
-        "react/datagram": "^1.4"
-    }
+        "react/datagram": "^1.4",
+        "sentry/sentry": "^2.0@dev",
+        "php-http/httplug": "^2.0@dev",
+        "php-http/guzzle6-adapter": "^2.0@dev",
+        "php-http/curl-client": "^2.0@dev",
+        "guzzlehttp/psr7": "^1.5@dev"
+    },
+    "minimum-stability": "dev"
 }

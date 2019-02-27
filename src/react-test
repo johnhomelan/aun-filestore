@@ -17,6 +17,10 @@ $oLogger = new Logger("filestored");
 $oLogger->pushHandler(new SyslogHandler("filestored"));
 $oLogger->pushHandler(new StreamHandler('php://stdout', Logger::DEBUG));
 
+if(getenv('SENTRY_URL')===FALSE){
+	Sentry\init(['dsn'=>getenv('SENTRY_URL')]);
+}
+
 $oApplication = new SingleCommandApplication(
 	new React(
 		$oLogger,

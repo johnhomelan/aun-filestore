@@ -44,6 +44,8 @@ class JsonPacket {
 
 	protected $aTypeMap = array(1=>'Broadcast',2=>'Unicast',3=>'Ack',4=>'Reject',5=>'Immediate',6=>'ImmediateReply');
 
+	protected $sSoruceIP = NULL;
+
 	/**
 	 * Get the econet port number the aun packet is for
 	 *

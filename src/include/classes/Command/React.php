@@ -71,9 +71,7 @@ class React extends Command {
 		try {
 			//Setup signle handler
 			pcntl_signal(SIGCHLD,array($this,'sigHandler'));
-			pcntl_signal(SIGALRM, array($this, 'sigHandler'));
 			pcntl_signal(SIGTERM,array($this,'sigHandler'));
-			$this->registerNextAlarm();
 
 			Map::init($this->oLogger);
 
@@ -84,6 +82,16 @@ class React extends Command {
 			exit(1);
 		}
 
+		$this->MainLoop();
+	}
+
+	/**
+	 * Creates the primary react php loop, and starts it 
+	 *
+	*/
+	private function MainLoop()
+	{
+
 		//Setup the main react loop
 		$oLoop = ReactFactory::create();
 
@@ -93,7 +101,7 @@ class React extends Command {
 		$oServices = $this->oServices;
 		$oLogger = $this->oLogger;
 
-		$oDatagramFactory->createServer(config::getValue('aun_listen_address').':'.config::getValue('aun_listen_port'))
+		$oAunServer = $oDatagramFactory->createServer(config::getValue('aun_listen_address').':'.config::getValue('aun_listen_port'))
 	  		->then(function (\React\Datagram\Socket $oAunServer) use ($oServices, $oLogger) {
 				$oAunServer->on('message', function($sMessage, $sSrcAddress, $sDstAddress) use ($oServices, $oLogger, $oAunServer){
 					$oAunPacket = new AunPacket();
@@ -123,8 +131,26 @@ class React extends Command {
 						$oAunServer->send($sReply,$sTarget);
 					}
 				});
+				return $oAunServer;
 			});
 
+		//Send any outstanding replies, normally its one request in one reply out.  However some services (e.g. File) have direct streams that can generate 
+		//mutiple replies to an initial request.
+		$oLoop->addPeriodicTimer(1, function(\React\EventLoop\Timer\Timer $oTimer) use ($oServices, $oAunServer) {
+			//Send any messages for the services
+			$aReplies = $oServices->getReplies();
+			foreach($aReplies as $sTarget=>$sReply){
+				$oAunServer->send($sReply,$sTarget);
+			}
+		});
+			
+		$oLoop->addPeriodicTimer(config::getValue('housekeeping_interval'), function(\React\EventLoop\Timer\Timer $oTimer) use ($oServices, $oLogger) {
+			$oLogger->debug("Running house keeping tasks");
+			Security::houseKeeping();
+			vfs::houseKeeping();
+			$oServices->houseKeeping();
+	
+		});
 		//Enter main loop
 		$this->oLogger->debug("Starting primary loop.");
 		$oLoop->run();
@@ -172,13 +198,6 @@ EOF;
 	public function sigHandler($iSigno)
 	{
 		switch($iSigno){
-			case SIGALRM:
-				//On sigalarm perform any house keeping tasks
-				$this->oLogger->debug("Got sig alarm");
-				Security::houseKeeping();
-				vfs::houseKeeping();
-				$this->registerNextAlarm();
-				break;
 			case SIGTERM:
 				$this->oLogger->info("Shutting down filestored");
 				break;
@@ -188,16 +207,6 @@ EOF;
 				break;
 		}
 	}
-
-	/**
-	 * Sets up the next alarm to trigger the house keeping tasks
-	 *
-	*/
-	protected function registerNextAlarm()
-	{
-		pcntl_alarm(config::getValue('housekeeping_interval'));
-	}
-
 
 	/**
 	 * Cause the program to daemonize 

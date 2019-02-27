@@ -11,7 +11,7 @@ namespace HomeLan\FileStore\Services;
 use HomeLan\FileStore\Messages\EconetPacket; 
 use HomeLan\FileStore\Aun\AunPacket; 
 use HomeLan\FileStore\Aun\Map; 
-use HomeLan\FileStore\Services\ServiceInterface;
+use HomeLan\FileStore\Services\ProviderInterface;
 
 use config;
 
@@ -28,6 +28,7 @@ class ServiceDispatcher {
 	private $aReplies = [];
 	private $iStreamPortStart=20;
 	private $aPortTimeLimits = [];
+	private $aHouseKeepingTasks = [];
 
 
 	/**
@@ -49,9 +50,9 @@ class ServiceDispatcher {
 	 *
 	 * @param object ServicesInterface $oService
 	*/
-	public function addService(ServicesInterface $oService): void
+	public function addService(ProviderInterface $oService): void
 	{
-		$aPorts = $oService->getPorts();
+		$aPorts = $oService->getServicePorts();
 
 		//Check if any of the ports the service uses are in use
 		foreach($aPorts as $iPort){
@@ -68,13 +69,23 @@ class ServiceDispatcher {
 	}
 
 	/**
+	 * Allows a service to register a housekeeping task to get called periodically 
+	 *
+	 * @param callable $fTask The function to run the house keeping task for 
+	*/
+	public function addHousingKeepingTask(callable $fTask)
+	{
+		$this->aHouseKeepingTasks[] = $fTask;
+	}
+
+	/**
 	 * Allows a service to claim port temp bais for directly streaming data with a client
 	 *
 	 * @param object ServicesInterface $oService 
 	 * @param int $iTimeOut If no packets are recived after this timeout the port is free'd 
 	 * @return int The port allocated for streaming by the service handler 
 	*/
-	public function claimStreamPort(ServicesInterface $oService, int $iTimeOut=60): int
+	public function claimStreamPort(ProviderInterface $oService, int $iTimeOut=60): int
 	{
 		for($i=$this->iStreamPortStart;$i<($this->iStreamPortStart+20);$i++){
 			if(!array_key_exists($i,$this->aPorts)){
@@ -105,13 +116,19 @@ class ServiceDispatcher {
 			}
 			$aReplies = $this->aPorts[$$oPacket->getPort()]->getReplies();
 			foreach($aReplies as $oReply){
-				$oReplyEconetPacket = $oReply->buildEconetpacket();
-				$this->queueReply($oReplyEconetPacket);	
+				$this->queueReply($oReply);	
 			}
 		}
 
 	}
 
+	/**
+	 * Queues a packet from a service for dispatch 
+	 *
+	 * It also converts all packets to an AunPacket 
+	 * @TODO refactor this once AUN is not the only supported abstraction of Econet packets
+	 *
+	*/
 	private function queueReply(EconetPacket $oPacket): void
 	{
 		usleep(config::getValue('bbc_default_pkg_sleep'));
@@ -131,10 +148,25 @@ class ServiceDispatcher {
 		}
 	}
 
+	/**
+	 * Gets all the replies for all the services
+	 *
+	 * @return array of EconetPacket
+	*/
 	public function getReplies(): array
 	{
 		$aReplies = $this->aReplies;
 		$this->aReplies = [];
 		return $aReplies;
+	}
+
+	/**
+	 * Run the housekeeping tasks for all services
+	*/ 
+	public function houseKeeping()
+	{
+		foreach($this->aHouseKeepingTasks as $fTask){
+			($fTask)();
+		}
 	}
 } 

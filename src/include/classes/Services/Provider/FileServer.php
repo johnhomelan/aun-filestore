@@ -9,7 +9,7 @@ namespace HomeLan\FileStore\Services\Provider;
 
 use HomeLan\FileStore\Services\ProviderInterface;
 use HomeLan\FileStore\Services\ServiceDispatcher;
-use HomeLan\FileStore\Services\Stream;
+use HomeLan\FileStore\Services\StreamIn;
 use HomeLan\FileStore\Vfs\Vfs; 
 use HomeLan\FileStore\Authentication\Security; 
 use HomeLan\FileStore\Authentication\User; 
@@ -52,11 +52,6 @@ class FileServer implements ProviderInterface{
 	public function addReplyToBuffer(FsReply $oReply)
 	{
 		$this->aReplyBuffer[]=$oReply;
-	}
-
-	public function init(\HomeLan\FileStore\Command\Filestore $oMainApp)
-	{
-		$this->oMainApp = $oMainApp;
 	}
 
 	/**
@@ -147,7 +142,7 @@ class FileServer implements ProviderInterface{
 	/**
 	 * Adds a new io stream (e.g. save, putbytes)
 	*/
-	private function addStream(Stream $oStream,int $iNetwork, int $iStation)
+	private function addStream(StreamIn $oStream,int $iNetwork, int $iStation)
 	{
 		if(!is_array($this->aStreamsIn[$iNetwork])){
 			$this->aStreamsIn[$iNetwork]=[];
@@ -158,7 +153,7 @@ class FileServer implements ProviderInterface{
 	/**
 	 * Frees an existing io stream
 	*/
-	private function freeStream(Stream $oStream,int $iNetwork, int $iStation)
+	private function freeStream(StreamIn $oStream,int $iNetwork, int $iStation)
 	{
 		unset($this->aStreamsIn[$iNetwork][$iStation]);
 		unset ($oStream);
@@ -1217,67 +1212,87 @@ class FileServer implements ProviderInterface{
 
 		$oFsHandle = Vfs::getFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$iHandle);	
 		
+		//Send reply directly
 		$oReply = $oFsRequest->buildReply();
 		$oReply->DoneOk();
-		//Send reply directly
-		$oReplyEconetPacket = $oReply->buildEconetpacket();
-		$this->oMainApp->dispatchReply($oReplyEconetPacket);	
-		try {
-			$this->oMainApp->waitForAck($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation());
-		}catch(Exception $oException){
-			return;
-		}
+		$this->addReplyToBuffer($oReply);
 
-		//Break the data into blocks and send it
-//		if($iUserPtr!=0){
-			//Move the file pointer to offset
+		$_this = $this;
+		$oServiceDispatcher = $this->oServiceDispatcher;
+	
+		$this->oServiceDispatcher->addAckEvent($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),function() use ($_this, $oFsHandle, $oFsRequest, $iBytes, $iOffset, $iDataPort){
 			$oFsHandle->setPos($iOffset);
-//		}
-		$bLoop = TRUE;
-		$iFullBlocks = round($iBytes/256,0,PHP_ROUND_HALF_DOWN);
-		$iBytesToRead = $iBytes;
-		while($bLoop){
-			if($iFullBlocks>1){
+			$iBytesToRead = $iBytes;
+			if($iBytesToRead>256){
 				$sBlock = $oFsHandle->read(256);
-				$iFullBlocks--;
 				$iBytesToRead=$iBytesToRead-256;
 			}else{
 				$sBlock = $oFsHandle->read($iBytesToRead);
 				$iBytesToRead = $iBytesToRead-strlen($sBlock);
 			}
+
 			$oEconetPacket = new EconetPacket();
 			$oEconetPacket->setDestinationNetwork($oFsRequest->getSourceNetwork());
 			$oEconetPacket->setDestinationStation($oFsRequest->getSourceStation());
 			$oEconetPacket->setPort($iDataPort);
 			$oEconetPacket->setData($sBlock);
-			$this->oMainApp->dispatchReply($oEconetPacket);
-			try {
-				$this->oLogger->debug("Waitinig for ack");
-				$oAck = $this->oMainApp->waitForAck($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation());
-			}catch(Exception $oException){
-				return;
-			}
 
-			if($iBytesToRead==0 OR $oFsHandle->isEof()){
-				$bLoop=FALSE;
-			}
-		}
-		$oReply2 = $oFsRequest->buildReply();
-		$oReply2->DoneOk();
-		//Flag
-		if($oFsHandle->isEof()){
-			//As we have hit EOF the number of bytes sent has fallen short of the ammount requested send the remaining bytes
-			$iOutstandingBytes = $iBytes - strlen($sBlock);
-			$oEconetPacket->setData(str_pad("",$iOutstandingBytes,0));
-			$this->oMainApp->dispatchReply($oEconetPacket);
-			$oReply2->appendByte(0x80);
-		}else{
-			$oReply2->appendByte(0);
-		}
-		//Number of bytes sent
-		$oReply2->append24bitIntLittleEndian($iBytes-$iBytesToRead);
-		$oReply2->setFlags($oAck->getFlags());
-		$this->addReplyToBuffer($oReply2);
+			$this->addReplyToBuffer($oEconetPacket);
+			$this->oServiceDispatcher->sendPackets($this);
+
+			$cAckHandler = function($_this, $oFsRequest, $oServiceDispatcher, $iBytes, $iBytesToRead, $oFsHandle, $iDataPort, &$cAckHandler){
+				if($iBytesToRead==0 OR $oFsHandle->isEof()){
+					$oReply2 = $oFsRequest->buildReply();
+					$oReply2->DoneOk();
+					//Flag
+					if($oFsHandle->isEof()){
+						//As we have hit EOF the number of bytes sent has fallen short of the ammount requested send the remaining bytes
+						$oEconetPacket = new EconetPacket();
+						$oEconetPacket->setDestinationNetwork($oFsRequest->getSourceNetwork());
+						$oEconetPacket->setDestinationStation($oFsRequest->getSourceStation());
+						$oEconetPacket->setPort($iDataPort);
+						$oEconetPacket->setData(str_pad("",$iBytesToRead,0));
+						$_this->addReplyToBuffer($oEconetPacket);
+						$oReply2->appendByte(0x80);
+					}else{
+						$oReply2->appendByte(0);
+					}
+					//Number of bytes sent
+					$oReply2->append24bitIntLittleEndian($iBytes-$iBytesToRead);
+					$oReply2->setFlags($oAck->getFlags());
+					$_this->addReplyToBuffer($oReply2);
+					$oServiceDispatcher->sendPackets($_this);
+
+				}else{
+					if($iBytesToRead>256){
+						$sBlock = $oFsHandle->read(256);
+					}else{
+						$sBlock = $oFsHandle->read($iBytesToRead);
+					}
+					$iBytesToRead = $iBytesToRead-strlen($sBlock);
+
+					$oEconetPacket = new EconetPacket();
+					$oEconetPacket->setDestinationNetwork($oFsRequest->getSourceNetwork());
+					$oEconetPacket->setDestinationStation($oFsRequest->getSourceStation());
+					$oEconetPacket->setPort($iDataPort);
+					$oEconetPacket->setData($sBlock);
+
+					$_this->addReplyToBuffer($oEconetPacket);
+					$oServiceDispatcher->addAckEvent($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),function() use ($_this, $oFsRequest, $oServiceDispatcher, $iBytes, $iBytesToRead, $oFsHandle, $iDataPort, $cAckHandler){
+						($cAckHandler)($_this, $oFsRequest, $oServiceDispatcher, $iBytes, $iBytesToRead, $oFsHandle, $iDataPort, $cAckHandler);
+					});
+					$oServiceDispatcher->sendPackets($_this);
+				}
+
+			};
+
+			$oServiceDispatcher->addAckEvent($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),function() use (&$cAckHandler, $_this, $oFsRequest, $oServiceDispatcher, $iBytes, $iBytesToRead, $oFsHandle, $iDataPort) {
+				($cAckHandler)($_this, $oFsRequest, $oServiceDispatcher, $iBytes, $iBytesToRead, $oFsHandle, $iDataPort, $cAckHandler) ;
+			});
+		});
+
+		$this->oServiceDispatcher->sendPackets($this);
+
 	}
 
 	public function putBytes($oFsRequest)
@@ -1312,7 +1327,7 @@ class FileServer implements ProviderInterface{
 		$_this = $this;
 
 		$this->addStream($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(), 
-			new Stream(
+			new StreamIn(
 				config::getValue('econet_data_stream_port'),
 				$iBytes,
 				function($oStream,$oPacket) use ($oFsRequest, $_this) {
@@ -1414,12 +1429,12 @@ class FileServer implements ProviderInterface{
 		$this->oLogger->debug("Save File ".$sPath." of size ".$iSize);
 		//Send reply directly
 		$oReplyEconetPacket = $oReply->buildEconetpacket();
-		$this->oMainApp->dispatchReply($oReplyEconetPacket);	
+		$this->addReplyToBuffer($oReplyEconetPacket);	
 		$sData = '';
 		$_this = $this;
 
 		$this->addStream($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(), 
-			new Stream(
+			new StreamIn(
 				config::getValue('econet_data_stream_port'),
 				$iSize,
 				function($oStream,$oPacket) use ($oFsRequest, $iAckPort, $_this) {
@@ -1493,12 +1508,16 @@ class FileServer implements ProviderInterface{
 		//Add ctime 2 bytes day,year+month
 		$oReply->appendRaw($oMeta->getCTime());
 		$oReplyEconetPacket = $oReply->buildEconetpacket();
-		$this->oMainApp->dispatchReply($oReplyEconetPacket);	
+		$this->addReplyToBuffer($oReplyEconetPacket);	
+
+		$_this = $this;
+		$oLoop = $this->oServiceDispatcher->getLoop();
+		$fTime = config::getValue('bbc_default_pkg_sleep');
+		$oServiceDispatcher = $this->oServiceDispatcher;
 
 		//Break the data into blocks and send it
 		while(strlen($sFileData)>0){
 			
-			usleep(config::getValue('bbc_default_pkg_sleep'));
 			//Build a 256 byte block
 			$sBlock = substr($sFileData,0,256);
 			//Remote 256 byte from the string
@@ -1508,12 +1527,20 @@ class FileServer implements ProviderInterface{
 			$oEconetPacket->setDestinationStation($oFsRequest->getSourceStation());
 			$oEconetPacket->setPort($iDataPort);
 			$oEconetPacket->setData($sBlock);
-			$this->oMainApp->dispatchReply($oEconetPacket);
+	
+			$oLoop->setTimer($fTime/1000000,function() use ($_this, $oEconetPacket){
+				$_this->addReplyToBuffer($oEconetPacket);
+				$oServiceDispatcher->sendPackets($_this);
+			});
+			$fTime = $fTime + config::getValue('bbc_default_pkg_sleep');
 		}
+
 
 		$oReply2 = $oFsRequest->buildReply();
 		$oReply2->DoneOk();
-		$this->addReplyToBuffer($oReply2);
+		$oLoop->setTimer($fTime/1000000,function() use ($_this, $oReply2){
+			$_this->addReplyToBuffer($oReply2);
+		});
 
 	}
 

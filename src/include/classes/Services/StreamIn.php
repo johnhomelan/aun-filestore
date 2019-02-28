@@ -4,7 +4,7 @@ namespace HomeLan\FileStore\Services;
 
 use HomeLan\FileStore\Messages\EconetPacket; 
 
-class Stream {
+class StreamIn {
 
 	private $iPort;
 	private $iBytes;

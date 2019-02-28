@@ -23,12 +23,15 @@ use config;
 class ServiceDispatcher {
 
 
+	private $oLoop;
+	private $oAunServer;
 	private $aPorts = [];
 	private $oLogger;
 	private $aReplies = [];
 	private $iStreamPortStart=20;
 	private $aPortTimeLimits = [];
 	private $aHouseKeepingTasks = [];
+	private $aAckEvents = [];
 
 
 	/**
@@ -43,6 +46,22 @@ class ServiceDispatcher {
 		foreach($aServices as $oService){
 			$this->addService($oService);
 		}
+	}
+
+	/**
+	 * Called when the application is jusp about to start the main loop
+	 *
+	 * It passes the loop in so providers can register events with the loop
+	*/
+	public function start(\React\EventLoop\LoopInterface $oLoop, \React\Datagram\Socket $oAunServer)
+	{
+		$this->oLoop = $oLoop;
+		$this->oAunServer = $oAunServer;
+	}
+
+	public function getLoop()
+	{
+		return $this->oLoop;
 	}
 
 	/**
@@ -109,6 +128,9 @@ class ServiceDispatcher {
 					$this->oLogger->debug("Unicast Packet in:  ".$oPacket->toString());
 					$this->aPorts[$$oPacket->getPort()]->unicastPacketIn($oPacket->buildEconetPacket());
 					break;
+				case 'Ack':
+					$this->ackEvents($oPacket);
+					break;
 				case 'Broadcast':
 					$this->oLogger->debug("Broadcast Packet in:  ".$oPacket->toString());
 					$this->aPorts[$$oPacket->getPort()]->broadcastPacketIn($oPacket->buildEconetPacket());
@@ -158,6 +180,46 @@ class ServiceDispatcher {
 		$aReplies = $this->aReplies;
 		$this->aReplies = [];
 		return $aReplies;
+	}
+
+	/**
+	 * Sends all the packets a Service has queues up
+	 *
+	*/
+	public function sendPackets(ProviderInterface $oService)
+	{
+		$aReplys = $oService->getReplies();
+		foreach($aReplys as $oPacket){
+			$sIP = Map::ecoAddrToIpAddr($oPacket->getDestinationNetwork(),$oPacket->getDestinationStation());
+			$this->oAunServer->send($oPacket->getAunFrame(),$sIP);
+		}
+		
+	}
+
+	/**
+	 * Adds an event for the this ack packet the a network/station
+	 *
+	*/
+	public function addAckEvent($iNetwork, $iStation, $fCallable)
+	{
+		if(!is_array($this->aAckEvents[$iStation])){
+			$this->aAckEvents[$iStation]=[];
+		}
+		$this->aAckEvents[$iStation][$iStation] = $fCallable;
+	}
+
+	/**
+	 * Checks to see if an Ack should tirgger an event, and if so tirgger it
+	 *
+	*/ 
+	public function ackEvents(AunPacket $oPacket)
+	{
+		$oEconetPacket = $oPacket->buildEconetPacket();
+		if(array_key_exists($oEconetPacket->getSourceNetwork(),$this->aAckEvents) AND array_key_exists($oEconetPacket->getSourceStation(),$this->aAckEvents[$oEconetPacket->getSourceNetwork()])){
+			$fCallable = $this->aAckEvents[$oEconetPacket->getSourceNetwork()][$oEconetPacket->getSourceStation()];
+			unset($this->aAckEvents[$oEconetPacket->getSourceNetwork()][$oEconetPacket->getSourceStation()]);
+			($fCallable)();
+		}
 	}
 
 	/**

@@ -155,6 +155,7 @@ class React extends Command {
 		});
 		//Enter main loop
 		$this->oLogger->debug("Starting primary loop.");
+		$this->oServices->start($oLoop, $oAunServer);
 		$oLoop->run();
 	}
 

@@ -104,8 +104,8 @@ class React extends Command {
 		$oLogger = $this->oLogger;
 
 		$oAunServer = $oDatagramFactory->createServer(config::getValue('aun_listen_address').':'.config::getValue('aun_listen_port'))
-	  		->then(function (\React\Datagram\Socket $oAunServer) use ($oServices, $oLogger) {
-				$oAunServer->on('message', function($sMessage, $sSrcAddress, $sDstAddress) use ($oServices, $oLogger, $oAunServer){
+	  		->then(function (\React\Datagram\Socket $oAunServer) use ($oServices, $oLogger, $oLoop) {
+				$oAunServer->on('message', function($sMessage, $sSrcAddress, $sDstAddress) use ($oServices, $oLogger, $oAunServer, $oLoop){
 					$oAunPacket = new AunPacket();
 					
 					//Read the UDP data
@@ -133,6 +133,7 @@ class React extends Command {
 						$oAunServer->send($sReply,$sTarget);
 					}
 				});
+				$oServices->start($oLoop, $oAunServer);
 				return $oAunServer;
 			});
 
@@ -155,7 +156,6 @@ class React extends Command {
 		});
 		//Enter main loop
 		$this->oLogger->debug("Starting primary loop.");
-		$this->oServices->start($oLoop, $oAunServer);
 		$oLoop->run();
 	}
 

@@ -21,8 +21,13 @@ $oLogger = new Logger("filestored");
 $oLogger->pushHandler(new SyslogHandler("filestored"));
 $oLogger->pushHandler(new StreamHandler('php://stdout', Logger::DEBUG));
 
-if(getenv('SENTRY_URL')===FALSE){
-	Sentry\init(['dsn'=>getenv('SENTRY_URL')]);
+if(getenv('SENTRY_URL')!==FALSE){
+	echo "hi\n";
+	Sentry\init(['dsn'=>getenv('SENTRY_URL'),
+		'release'=>'0d74bc6a3c6211e99d450242ac110024',
+		'default_integrations'=>true,
+		'error_types'=>E_ERROR | E_PARSE | E_CORE_ERROR | E_CORE_WARNING | E_COMPILE_ERROR | E_COMPILE_WARNING | E_STRICT,
+		'attach_stacktrace'=>true]);
 }
 
 $oApplication = new SingleCommandApplication(

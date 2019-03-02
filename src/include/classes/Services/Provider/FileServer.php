@@ -35,7 +35,7 @@ class FileServer implements ProviderInterface{
 
 	protected $oLogger;
 
-	protected $aStreamsIn;
+	protected $aStreamsIn = [];
 
 	/**
 	 * Initializes the service

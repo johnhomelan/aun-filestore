@@ -1220,7 +1220,7 @@ class FileServer implements ProviderInterface{
 		$_this = $this;
 		$oServiceDispatcher = $this->oServiceDispatcher;
 	
-		$this->oServiceDispatcher->addAckEvent($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),function() use ($_this, $oFsHandle, $oFsRequest, $iBytes, $iOffset, $iDataPort){
+		$this->oServiceDispatcher->addAckEvent($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),function() use ($_this, $oFsHandle, $oFsRequest, $iBytes, $iOffset, $iDataPort, $oServiceDispatcher){
 			$oFsHandle->setPos($iOffset);
 			$iBytesToRead = $iBytes;
 			if($iBytesToRead>256){
@@ -1240,7 +1240,7 @@ class FileServer implements ProviderInterface{
 			$this->addReplyToBuffer($oEconetPacket);
 			$this->oServiceDispatcher->sendPackets($this);
 
-			$cAckHandler = function($_this, $oFsRequest, $oServiceDispatcher, $iBytes, $iBytesToRead, $oFsHandle, $iDataPort, &$cAckHandler){
+			$cAckHandler = function($oAckPacket, $_this, $oFsRequest, $oServiceDispatcher, $iBytes, $iBytesToRead, $oFsHandle, $iDataPort, &$cAckHandler){
 				if($iBytesToRead==0 OR $oFsHandle->isEof()){
 					$oReply2 = $oFsRequest->buildReply();
 					$oReply2->DoneOk();
@@ -1259,7 +1259,7 @@ class FileServer implements ProviderInterface{
 					}
 					//Number of bytes sent
 					$oReply2->append24bitIntLittleEndian($iBytes-$iBytesToRead);
-					$oReply2->setFlags($oAck->getFlags());
+					$oReply2->setFlags($oAckPacket->getFlags());
 					$_this->addReplyToBuffer($oReply2);
 					$oServiceDispatcher->sendPackets($_this);
 
@@ -1286,8 +1286,8 @@ class FileServer implements ProviderInterface{
 
 			};
 
-			$oServiceDispatcher->addAckEvent($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),function() use (&$cAckHandler, $_this, $oFsRequest, $oServiceDispatcher, $iBytes, $iBytesToRead, $oFsHandle, $iDataPort) {
-				($cAckHandler)($_this, $oFsRequest, $oServiceDispatcher, $iBytes, $iBytesToRead, $oFsHandle, $iDataPort, $cAckHandler) ;
+			$oServiceDispatcher->addAckEvent($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),function($oAckPacket) use (&$cAckHandler, $_this, $oFsRequest, $oServiceDispatcher, $iBytes, $iBytesToRead, $oFsHandle, $iDataPort) {
+				($cAckHandler)($oAckPacket, $_this, $oFsRequest, $oServiceDispatcher, $iBytes, $iBytesToRead, $oFsHandle, $iDataPort, $cAckHandler) ;
 			});
 		});
 
@@ -1528,7 +1528,7 @@ class FileServer implements ProviderInterface{
 			$oEconetPacket->setPort($iDataPort);
 			$oEconetPacket->setData($sBlock);
 	
-			$oLoop->setTimer($fTime/1000000,function() use ($_this, $oEconetPacket){
+			$oLoop->setTimer($fTime/1000000,function() use ($_this, $oEconetPacket, $oServiceDispatcher){
 				$_this->addReplyToBuffer($oEconetPacket);
 				$oServiceDispatcher->sendPackets($_this);
 			});

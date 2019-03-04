@@ -12,7 +12,6 @@
         "phpstan/phpstan": "^0.9.2"   
     },
     "require": {
-        "symfony/console": "^4.1",
         "monolog/monolog": "^1.23",
         "homelan/acorn-disk": "v1.0.2",
         "react/event-loop": "^1.1",
@@ -22,7 +21,18 @@
         "php-http/httplug": "^2.0@dev",
         "php-http/guzzle6-adapter": "^2.0@dev",
         "php-http/curl-client": "^2.0@dev",
-        "guzzlehttp/psr7": "^1.5@dev"
+        "guzzlehttp/psr7": "^1.5@dev",
+        "symfony/console": "4.2.*",
+        "symfony/dotenv": "4.2.*",
+        "symfony/flex": "^1.1",
+        "symfony/framework-bundle": "4.2.*",
+        "symfony/yaml": "4.2.*"
     },
-    "minimum-stability": "dev"
+    "minimum-stability": "dev",
+    "scripts": {
+        "auto-scripts": {
+            "cache:clear": "symfony-cmd",
+            "assets:install %PUBLIC_DIR%": "symfony-cmd"
+        }
+    }
 }

@@ -12,6 +12,8 @@ use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Helper\Table;
 use Symfony\Component\Console\Command\Command;
 
+use Symfony\Component\HttpKernel\HttpKernel;
+
 use React\EventLoop\Factory as ReactFactory;
 use React\Datagram\Factory as DatagramFactory;
 
@@ -20,6 +22,7 @@ use HomeLan\FileStore\Aun\Map;
 use HomeLan\FileStore\Aun\AunPacket; 
 use HomeLan\FileStore\Authentication\Security; 
 use HomeLan\FileStore\Vfs\Vfs; 
+use HomeLan\FileStore\Admin\Kernel;
  
 use config;
 use Exception;
@@ -105,7 +108,7 @@ class React extends Command {
 
 		$oAunServer = $oDatagramFactory->createServer(config::getValue('aun_listen_address').':'.config::getValue('aun_listen_port'))
 	  		->then(function (\React\Datagram\Socket $oAunServer) use ($oServices, $oLogger, $oLoop) {
-				$oAunServer->on('message', function($sMessage, $sSrcAddress, $sDstAddress) use ($oServices, $oLogger, $oAunServer, $oLoop){
+				$oAunServer->on('message', function($sMessage, $sSrcAddress, $sDstAddress) use ($oServices, $oLogger, $oAunServer){
 					$oAunPacket = new AunPacket();
 					
 					//Read the UDP data
@@ -154,6 +157,7 @@ class React extends Command {
 			$oServices->houseKeeping();
 	
 		});
+		$this->adminService($oLoop);
 		//Enter main loop
 		$this->oLogger->debug("Starting primary loop.");
 		$oLoop->run();
@@ -209,6 +213,52 @@ EOF;
 				//Ignore
 				break;
 		}
+	}
+
+	public function adminService($oLoop)
+	{
+
+		$oKernel = new Kernel('prod', false);
+		$callback = function ($oRequest, $oResponse) use ($oKernel) {
+			$method = $oRequest->getMethod();
+			$headers = $oRequest->getHeaders();
+			$query = $oRequest->getQuery();
+			$content = $oRequest->getBody();
+			$post = array();
+			if (in_array(strtoupper($method), array('POST', 'PUT', 'DELETE', 'PATCH')) &&
+				isset($headers['Content-Type']) && (0 === strpos($headers['Content-Type'], 'application/x-www-form-urlencoded'))
+			) {
+				parse_str($content, $post);
+			}
+			$sfRequest = new \Symfony\Component\HttpFoundation\Request(
+				$query,
+				$post,
+				array(),
+				array(), // To get the cookies, we'll need to parse the headers
+				$oRequest->getFiles(),
+				array(), // Server is partially filled a few lines below
+				$content
+			);
+			$sfRequest->setMethod($method);
+			$sfRequest->headers->replace($headers);
+			$sfRequest->server->set('REQUEST_URI', $oRequest->getPath());
+			if (isset($headers['Host'])) {
+				$sfRequest->server->set('SERVER_NAME', explode(':', $headers['Host'])[0]);
+			}
+			$sfResponse = $oKernel->handle($sfRequest);
+
+			$oResponse->writeHead(
+				$sfResponse->getStatusCode(),
+				$sfResponse->headers->all()
+			);
+			$oResponse->end($sfResponse->getContent());
+			$oKernel->terminate($oRequest, $oResponse);
+		};
+
+		$oHttpsocket = new \React\Socket\Server('0.0.0.0:8080',$oLoop);
+		$oHttpServer = new \React\Http\Server($oHttpsocket);
+
+		$oHttpServer->on('request', $callback);
 	}
 
 	/**

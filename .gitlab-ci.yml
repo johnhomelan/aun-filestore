@@ -8,6 +8,16 @@ stages:
 variables:
   REPO_IMAGE: registry.home-lan.co.uk/aun-filestore:react
   
+phpunit_phpstan_php73:
+   image: registry.home-lan.co.uk/php-73-testing:latest
+   stage: test
+   services:
+    - docker:stable-dind
+   script:
+     - cd src; composer install; cd ..
+     - ./src/vendor/bin/phpstan analyse -n --no-ansi --no-progress src/include src/react-test
+
+      
 phpunit_tests_php73:
    image: registry.home-lan.co.uk/php-73-testing:latest
    stage: test

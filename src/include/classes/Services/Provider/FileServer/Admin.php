@@ -116,7 +116,7 @@ class Admin implements AdminInterface
 				$aUserData=[];
 				foreach($aUsers as $iNetwork=>$aStationData){
 					foreach($aData as $iStation=>$aData){
-						$aUserData[] = ['network'=>$iNetwork, 'station'=>$iStation, 'user'=>$oUser->getUsername()];
+						$aUserData[] = ['network'=>$iNetwork, 'station'=>$iStation, 'user'=>$aData['user']->getUsername()];
 					}
 				}
 				$aReturn = AdminEntity::createCollection($sType,$this->getEntityFields($sType),$aUserData,null,'user');

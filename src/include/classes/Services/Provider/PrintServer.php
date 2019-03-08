@@ -8,12 +8,12 @@
 namespace HomeLan\FileStore\Services\Provider; 
 
 use HomeLan\FileStore\Services\ProviderInterface;
+use HomeLan\FileStore\Services\Provider\PrintServer\Admin;
 use HomeLan\FileStore\Services\ServiceDispatcher;
 use HomeLan\FileStore\Authentication\Security; 
 use HomeLan\FileStore\Messages\PrintServerEnquiry; 
 use HomeLan\FileStore\Messages\PrintServerData; 
 use HomeLan\FileStore\Messages\EconetPacket; 
-
 use config;
 /**
 /**
@@ -38,6 +38,18 @@ class PrintServer implements ProviderInterface {
 		$this->oLogger = $oLogger;
 	}
 
+	public function getName(): string
+	{
+		return "Print Server";
+	}
+	/** 
+	 * Gets the admin interface Object for this serivce provider 
+	 *
+	*/
+	public function getAdminInterface(): ?AdminInterface
+	{
+		return new Admin($this);
+	}
 
 	protected function _addReplyToBuffer($oReply)
 	{
@@ -188,5 +200,16 @@ class PrintServer implements ProviderInterface {
 		}
 		
 		
+	}
+
+	public function getJobs(): array
+	{
+		$aJobs = [];
+		foreach($this->aPrintBuffer as $iNetwork=>$aData){
+			foreach($aData as $iStation=>$aBufferInfo){
+				$aJobs[] = ['network'=>$iNetwork, 'station'=>$iStation, 'began'=>$aBufferInfo['began'], 'size'=>strlen($aBufferInfo['data'])];
+			}
+		}
+		return $aJobs;
 	}
 }

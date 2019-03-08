@@ -127,6 +127,19 @@ class AuthPluginFile implements AuthPluginInterface {
 	}
 
 	/**
+	 * Gets all the user objects know to the plugin
+	 *
+	*/
+	static public function getAllUsers(): array
+	{
+		$aReturn = [];
+		foreach(AuthPluginFile::$aUsers as $sUserName => $aUserData){
+			$aReturn[] = AuthPluginFile::buildUserObject($sUserName);
+		}
+		return $aReturn;
+	}
+
+	/**
 	 * Set the password for a given user
 	 *
 	 * This causes the on disk password file to be updated

@@ -9,12 +9,19 @@ use Symfony\Component\DependencyInjection\ContainerBuilder;
 use Symfony\Component\HttpKernel\Kernel as BaseKernel;
 use Symfony\Component\Routing\RouteCollectionBuilder;
 
+use HomeLan\FileStore\Services\ServiceDispatcher;
+
 class Kernel extends BaseKernel
 {
     use MicroKernelTrait;
 
     private const CONFIG_EXTS = '.{php,xml,yaml,yml}';
     private $projectDir = __DIR__;
+
+    public function getProjectDir()
+    {
+	return $this->projectDir;
+    }
 
     public function registerBundles(): iterable
     {
@@ -24,6 +31,16 @@ class Kernel extends BaseKernel
                 yield new $class();
             }
         }
+    }
+
+    public function getCacheDir()
+    {
+	    return $this->getProjectDir().'/../../../var/cache';
+    }
+
+    public function getLogDir()
+    {
+	    return $this->getProjectDir().'/../../../var/log';
     }
 
     protected function configureContainer(ContainerBuilder $container, LoaderInterface $loader): void

@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "ae58779eeaa0bfbb1960e848b00a9bda",
+    "content-hash": "3966a278451fa8d7c47f431e3e3f1931",
     "packages": [
         {
             "name": "clue/stream-filter",
@@ -2072,6 +2072,62 @@
                 "sentry"
             ],
             "time": "2019-03-01T09:00:23+00:00"
+        },
+        {
+            "name": "smarty/smarty",
+            "version": "dev-master",
+            "source": {
+                "type": "git",
+                "url": "https://github.com/smarty-php/smarty.git",
+                "reference": "70fc2fd2760faaaadc8eb62a7d67f15c9c5768e9"
+            },
+            "dist": {
+                "type": "zip",
+                "url": "https://api.github.com/repos/smarty-php/smarty/zipball/70fc2fd2760faaaadc8eb62a7d67f15c9c5768e9",
+                "reference": "70fc2fd2760faaaadc8eb62a7d67f15c9c5768e9",
+                "shasum": ""
+            },
+            "require": {
+                "php": ">=5.2"
+            },
+            "require-dev": {
+                "smarty/smarty-dev": "~3.1@dev"
+            },
+            "type": "library",
+            "extra": {
+                "branch-alias": {
+                    "dev-master": "3.1.x-dev"
+                }
+            },
+            "autoload": {
+                "classmap": [
+                    "libs/"
+                ]
+            },
+            "notification-url": "https://packagist.org/downloads/",
+            "license": [
+                "LGPL-3.0"
+            ],
+            "authors": [
+                {
+                    "name": "Monte Ohrt",
+                    "email": "monte@ohrt.com"
+                },
+                {
+                    "name": "Uwe Tews",
+                    "email": "uwe.tews@googlemail.com"
+                },
+                {
+                    "name": "Rodney Rehm",
+                    "email": "rodney.rehm@medialize.de"
+                }
+            ],
+            "description": "Smarty - the compiling PHP template engine",
+            "homepage": "http://www.smarty.net",
+            "keywords": [
+                "templating"
+            ],
+            "time": "2018-12-09T04:06:53+00:00"
         },
         {
             "name": "symfony/cache",
@@ -5680,7 +5736,8 @@
         "php-http/httplug": 20,
         "php-http/guzzle6-adapter": 20,
         "php-http/curl-client": 20,
-        "guzzlehttp/psr7": 20
+        "guzzlehttp/psr7": 20,
+        "smarty/smarty": 20
     },
     "prefer-stable": false,
     "prefer-lowest": false,

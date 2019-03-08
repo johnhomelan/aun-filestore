@@ -13,7 +13,7 @@ use Symfony\Component\Console\Helper\Table;
 use Symfony\Component\Console\Command\Command;
 
 use Symfony\Component\HttpKernel\HttpKernel;
-
+use Symfony\Component\HttpKernel\Exception\NotFoundHttpException; 
 use React\EventLoop\Factory as ReactFactory;
 use React\Datagram\Factory as DatagramFactory;
 
@@ -219,46 +219,58 @@ EOF;
 	{
 
 		$oKernel = new Kernel('prod', false);
-		$callback = function ($oRequest, $oResponse) use ($oKernel) {
-			$method = $oRequest->getMethod();
-			$headers = $oRequest->getHeaders();
-			$query = $oRequest->getQuery();
-			$content = $oRequest->getBody();
-			$post = array();
-			if (in_array(strtoupper($method), array('POST', 'PUT', 'DELETE', 'PATCH')) &&
-				isset($headers['Content-Type']) && (0 === strpos($headers['Content-Type'], 'application/x-www-form-urlencoded'))
+		$oLogger = $this->oLogger;
+		$callback = function (\Psr\Http\Message\ServerRequestInterface $oRequest) use ($oKernel, $oLogger) {
+			$sMethod = $oRequest->getMethod();
+			$aHeaders = $oRequest->getHeaders();
+			$sContent = $oRequest->getBody();
+			$oLogger->info("Admin page request ".$oRequest->getUri()->getPath());
+
+			$aPost = array();
+			if (in_array(strtoupper($sMethod), array('POST', 'PUT', 'DELETE', 'PATCH')) &&
+				isset($aHeaders['Content-Type']) && (0 === strpos($aHeaders['Content-Type'], 'application/x-www-form-urlencoded'))
 			) {
-				parse_str($content, $post);
+				parse_str($sContent, $aPost);
 			}
 			$sfRequest = new \Symfony\Component\HttpFoundation\Request(
-				$query,
-				$post,
+				$oRequest->getQueryParams(),
+				$aPost,
 				array(),
-				array(), // To get the cookies, we'll need to parse the headers
-				$oRequest->getFiles(),
+				$oRequest->getCookieParams(), // To get the cookies, we'll need to parse the aHeaders
+				$oRequest->getUploadedFiles(),
 				array(), // Server is partially filled a few lines below
-				$content
+				$sContent
 			);
-			$sfRequest->setMethod($method);
-			$sfRequest->headers->replace($headers);
-			$sfRequest->server->set('REQUEST_URI', $oRequest->getPath());
-			if (isset($headers['Host'])) {
-				$sfRequest->server->set('SERVER_NAME', explode(':', $headers['Host'])[0]);
+			$sfRequest->setMethod($sMethod);
+			$sfRequest->headers->replace($aHeaders);
+			$sfRequest->server->set('REQUEST_URI', $oRequest->getUri()->getPath());
+			if (isset($aHeaders['Host'])) {
+				$sfRequest->server->set('SERVER_NAME', explode(':', (string) $aHeaders['Host'][0]));
 			}
-			$sfResponse = $oKernel->handle($sfRequest);
-
-			$oResponse->writeHead(
-				$sfResponse->getStatusCode(),
-				$sfResponse->headers->all()
-			);
-			$oResponse->end($sfResponse->getContent());
-			$oKernel->terminate($oRequest, $oResponse);
+			
+			try {
+				$sfResponse = $oKernel->handle($sfRequest);
+			}catch(NotFoundHttpException $oException){
+				$oLogger->info("Admin page not found (".$oRequest->getUri()->getPath().")");
+				return  new  \React\Http\Response(
+						404,
+						[],
+						"Page \"".$oRequest->getUri()->getPath()."\" not found.");
+			}catch(\Exception $oException){
+				$oLogger->info("Error: ".$oException->getMessage());
+				throw $oException;
+			}
+			$oResponse = new \React\Http\Response(
+						200,
+						$sfResponse->headers->all(),
+						$sfResponse->getContent());
+			$oKernel->terminate($sfRequest, $sfResponse);
+			return $oResponse;
 		};
 
-		$oHttpsocket = new \React\Socket\Server('0.0.0.0:8080',$oLoop);
-		$oHttpServer = new \React\Http\Server($oHttpsocket);
-
-		$oHttpServer->on('request', $callback);
+		$oHttpSocket = new \React\Socket\Server('0.0.0.0:8081',$oLoop);
+		$oHttpServer = new \React\Http\Server($callback);
+		$oHttpServer->listen($oHttpSocket);
 	}
 
 	/**

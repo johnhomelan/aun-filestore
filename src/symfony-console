@@ -1,14 +1,14 @@
 #!/usr/bin/env php
 <?php
 
-use HomeLan\FileStore\Admin\Kerenl;
+use HomeLan\FileStore\Admin\Kernel;
 use Symfony\Bundle\FrameworkBundle\Console\Application;
 use Symfony\Component\Console\Input\ArgvInput;
 use Symfony\Component\Debug\Debug;
 
 set_time_limit(0);
 
-require dirname(__DIR__).'/vendor/autoload.php';
+require __DIR__.'/vendor/autoload.php';
 
 if (!class_exists(Application::class)) {
     throw new RuntimeException('You need to add "symfony/framework-bundle" as a Composer dependency.');
@@ -23,7 +23,7 @@ if ($input->hasParameterOption('--no-debug', true)) {
     putenv('APP_DEBUG='.$_SERVER['APP_DEBUG'] = $_ENV['APP_DEBUG'] = '0');
 }
 
-require dirname(__DIR__).'include/classes/Admin/config/bootstrap.php';
+require __DIR__.'/include/classes/Admin/config/bootstrap.php';
 
 if ($_SERVER['APP_DEBUG']) {
     umask(0000);

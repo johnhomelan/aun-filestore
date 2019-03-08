@@ -7,6 +7,7 @@
 */
 namespace HomeLan\FileStore\Services; 
 
+use HomeLan\FileStore\Services\Provider\AdminInterface; 
 use HomeLan\FileStore\Services\ServiceDispatcher; 
 use HomeLan\FileStore\Messages\EconetPacket; 
 
@@ -17,6 +18,9 @@ use HomeLan\FileStore\Messages\EconetPacket;
 */
 interface ProviderInterface {
 
+	public function getName(): string;
+
+	public function getAdminInterface(): ?AdminInterface;
 
 	public function unicastPacketIn(EconetPacket $oPacket): void;
 

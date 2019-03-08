@@ -7,6 +7,7 @@
 */
 namespace HomeLan\FileStore\Services\Provider; 
 
+use HomeLan\FileStore\Services\Provider\FileServer\Admin;
 use HomeLan\FileStore\Services\ProviderInterface;
 use HomeLan\FileStore\Services\ServiceDispatcher;
 use HomeLan\FileStore\Services\StreamIn;
@@ -47,6 +48,20 @@ class FileServer implements ProviderInterface{
 		Vfs::init($this->oLogger, config::getValue('vfs_plugins'), config::getValue('security_mode')=='multiuser');
 		Security::init($this->oLogger);
 	
+	}
+
+	public function getName(): string
+	{
+		return "File Server";
+	}
+
+	/** 
+	 * Gets the admin interface Object for this serivce provider 
+	 *
+	*/
+	public function getAdminInterface(): ?AdminInterface
+	{
+		return new Admin($this);
 	}
 
 	public function addReplyToBuffer(FsReply $oReply)

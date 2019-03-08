@@ -204,6 +204,19 @@ class Security {
 		return array();	
 	}
 
+	public static function getAllUsers(): array
+	{
+		$aReturn = [];
+		$aPlugins = Security::_getAuthPlugins();
+		foreach($aPlugins as $sPlugin){
+			$aUsers = $sPlugin::getAllUsers();
+			foreach($aUsers as $oUser){
+				$aReturn[] = ['plugin'=>$sPlugin, 'user'=>$oUser];
+			}
+		}
+		return $aReturn;
+	}
+
 	/**
 	 * Creates a new user (assuming the user logged in on the given network/station has admin rights)
 	 *

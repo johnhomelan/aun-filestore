@@ -22,7 +22,7 @@ use config;
 */
 class ServiceDispatcher {
 
-
+	static private $oSingleton;
 	private $oLoop;
 	private $oAunServer;
 	private $aPorts = [];
@@ -33,6 +33,17 @@ class ServiceDispatcher {
 	private $aHouseKeepingTasks = [];
 	private $aAckEvents = [];
 
+	/**
+	 * Keeping this class as a singleton, this is static method should be used to get references to this object
+	 *
+	*/
+	public static function create(\Psr\Log\LoggerInterface $oLogger = null, array $aServices = null)
+	{
+		if(!is_object(ServiceDispatcher::$oSingleton)){
+			ServiceDispatcher::$oSingleton = new ServiceDispatcher($oLogger, $aServices);
+		}
+		return ServiceDispatcher::$oSingleton;	
+	}
 
 	/**
 	 * Constructor registers the Logger and all the services 
@@ -59,6 +70,11 @@ class ServiceDispatcher {
 		$this->oAunServer = $oAunServer;
 	}
 
+	/**
+	 * Gets a reference to the main event loop
+	 *
+	 * @TODO Fileserver needs updating so this is nolonger needed 
+	*/
 	public function getLoop()
 	{
 		return $this->oLoop;
@@ -86,6 +102,30 @@ class ServiceDispatcher {
 			$this->aPorts[$iPort]=$oService;
 		}
 	}
+
+	/**
+	 * Gets an array of all the regisitered services 
+	 *
+	*/
+	public function getServices(): array
+	{
+		$aReturn=[];
+		foreach($this->aPorts as $oService){
+			if(!in_array($oService,$aReturn)){
+				$aReturn[] = $oService;
+			}
+		}
+		return $aReturn;
+	}
+
+	public function getServiceByPort(int $iPort): ?ProviderInterface
+	{
+		if(array_key_exists($iPort,$this->aPorts)){
+			return $this->aPorts[$iPort];
+		}
+		return null;
+	}	
+
 
 	/**
 	 * Allows a service to register a housekeeping task to get called periodically 
@@ -126,17 +166,17 @@ class ServiceDispatcher {
 				case 'Immediate':
 				case 'Unicast':
 					$this->oLogger->debug("Unicast Packet in:  ".$oPacket->toString());
-					$this->aPorts[$$oPacket->getPort()]->unicastPacketIn($oPacket->buildEconetPacket());
+					$this->aPorts[$oPacket->getPort()]->unicastPacketIn($oPacket->buildEconetPacket());
 					break;
 				case 'Ack':
 					$this->ackEvents($oPacket);
 					break;
 				case 'Broadcast':
 					$this->oLogger->debug("Broadcast Packet in:  ".$oPacket->toString());
-					$this->aPorts[$$oPacket->getPort()]->broadcastPacketIn($oPacket->buildEconetPacket());
+					$this->aPorts[$oPacket->getPort()]->broadcastPacketIn($oPacket->buildEconetPacket());
 					break;
 			}
-			$aReplies = $this->aPorts[$$oPacket->getPort()]->getReplies();
+			$aReplies = $this->aPorts[$oPacket->getPort()]->getReplies();
 			foreach($aReplies as $oReply){
 				$this->queueReply($oReply);	
 			}

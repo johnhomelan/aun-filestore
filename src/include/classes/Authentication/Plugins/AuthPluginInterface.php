@@ -43,6 +43,12 @@ interface AuthPluginInterface {
 	static public function buildUserObject($sUsername);
 
 	/**
+	 * Gets all the user objects know to the plugin
+	 *
+	*/
+	static public function getAllUsers(): array;
+
+	/**
 	 * Set the password for a given user
 	 *
 	 * @param string $sUsername

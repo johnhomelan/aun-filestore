@@ -46,6 +46,20 @@ class Bridge implements ProviderInterface {
 		$this->aReplyBuffer[]=$oReply;
 	}
 
+	public function getName(): string
+	{
+		return "Bridge";
+	}
+
+	/** 
+	 * Gets the admin interface Object for this serivce provider 
+	 *
+	*/
+	public function getAdminInterface(): ?AdminInterface
+	{
+		return NULL;
+	}
+
 	/**
 	 * Gets the ports this service uses 
 	 * 

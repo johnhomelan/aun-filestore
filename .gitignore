@@ -2,3 +2,4 @@ build/
 src/vendor
 src/.env
 src/.env.test
+src/var

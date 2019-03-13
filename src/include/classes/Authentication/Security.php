@@ -211,7 +211,7 @@ class Security {
 		foreach($aPlugins as $sPlugin){
 			$aUsers = $sPlugin::getAllUsers();
 			foreach($aUsers as $oUser){
-				$aReturn[] = ['plugin'=>$sPlugin, 'user'=>$oUser];
+				$aReturn[] = ['plugin'=>substr($sPlugin, strrpos($sPlugin, '\\') + 1), 'user'=>$oUser];
 			}
 		}
 		return $aReturn;

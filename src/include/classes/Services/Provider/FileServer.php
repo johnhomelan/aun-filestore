@@ -46,7 +46,6 @@ class FileServer implements ProviderInterface{
 	{
 		$this->oLogger = $oLogger;
 		Vfs::init($this->oLogger, config::getValue('vfs_plugins'), config::getValue('security_mode')=='multiuser');
-		Security::init($this->oLogger);
 	
 	}
 

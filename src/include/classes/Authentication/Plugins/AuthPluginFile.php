@@ -47,7 +47,7 @@ class AuthPluginFile implements AuthPluginInterface {
 		AuthPluginFile::$aUsers = array();
 		if(is_null($sUsers)){
 			if(!file_exists(config::getValue('security_plugin_file_user_file'))){
-				self::$oLogger->info("AuthPluginFile: The user files does not exist.");
+				self::$oLogger->error("AuthPluginFile: The user file (".config::getValue('security_plugin_file_user_file').") does not exist.");
 				return;
 			}
 			$sUsers = file_get_contents(config::getValue('security_plugin_file_user_file'));

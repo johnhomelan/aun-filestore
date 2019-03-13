@@ -54,6 +54,7 @@ class React extends Command {
 		$bDaemonize = FALSE;
 		$sPidFile = "";
 
+		$this->oLogger->info("Config input is ".$oInput->getOption('config'));
 		if($oInput->getOption('config')!==null){
 			safe_define('CONFIG_CONF_FILE_PATH',$oInput->getOption('config'));
 		}
@@ -68,6 +69,9 @@ class React extends Command {
 		if($bDaemonize){
 			$this->daemonize($sPidFile);
 		}
+
+		//Initialize the security system
+		Security::init($this->oLogger);
 
 
 		//Initialize the system
@@ -268,7 +272,7 @@ EOF;
 			return $oResponse;
 		};
 
-		$oHttpSocket = new \React\Socket\Server('0.0.0.0:8081',$oLoop);
+		$oHttpSocket = new \React\Socket\Server('0.0.0.0:8080',$oLoop);
 		$oHttpServer = new \React\Http\Server($callback);
 		$oHttpServer->listen($oHttpSocket);
 	}

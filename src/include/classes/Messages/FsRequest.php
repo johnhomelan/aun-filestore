@@ -73,7 +73,7 @@ class FsRequest extends Request {
 	 *
 	 * @param string $sBinaryString
 	*/
-	public function decode($sBinaryString)
+	public function decode(string $sBinaryString): void
 	{
 		//Read the header
 
@@ -109,7 +109,7 @@ class FsRequest extends Request {
 		
 	}
 
-	public function buildReply()
+	public function buildReply(): \HomeLan\FileStore\Messages\FsReply
 	{
 		return new FsReply($this);
 	}

@@ -49,7 +49,7 @@ class React extends Command {
 	 * This does not contain the main loop, it just initializes the system
 	 * then jumps to the main loop.
 	*/
-	protected function execute(InputInterface $oInput, OutputInterface $oOutput)
+	protected function execute(InputInterface $oInput, OutputInterface $oOutput): void
 	{
 		$bDaemonize = FALSE;
 		$sPidFile = "";
@@ -96,7 +96,7 @@ class React extends Command {
 	 * Creates the primary react php loop, and starts it 
 	 *
 	*/
-	private function MainLoop()
+	private function MainLoop(): \React\Datagram\Socket
 	{
 
 		//Setup the main react loop
@@ -171,7 +171,7 @@ class React extends Command {
 	 * Displays how to use the command
 	 *
 	*/
-	protected function configure()
+	protected function configure(): void
 	{
 		$sHelp =<<<EOF
 Start the file, print and bridge services
@@ -206,7 +206,7 @@ EOF;
 	 * The main signal this handles is SIGALARM, that is used to perform the house keeping tasks
 	 * @param int $iSigno
 	*/
-	public function sigHandler($iSigno)
+	public function sigHandler(int $iSigno): void
 	{
 		switch($iSigno){
 			case SIGTERM:
@@ -234,7 +234,7 @@ EOF;
 			if (in_array(strtoupper($sMethod), array('POST', 'PUT', 'DELETE', 'PATCH')) &&
 				isset($aHeaders['Content-Type']) && (0 === strpos($aHeaders['Content-Type'], 'application/x-www-form-urlencoded'))
 			) {
-				parse_str($sContent, $aPost);
+				parse_str($sContent, $result);
 			}
 			$sfRequest = new \Symfony\Component\HttpFoundation\Request(
 				$oRequest->getQueryParams(),
@@ -284,7 +284,7 @@ EOF;
 	 *
 	 * @param string $sPidFile The file to write the pid of the child to
 	*/
-	function daemonize($sPidFile)
+	function daemonize(string $sPidFile): void
 	{
 		$iPid=pcntl_fork();
 		if($iPid != 0){

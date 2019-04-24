@@ -26,7 +26,7 @@ class config {
 	 * @param string $sKey Variable to get
 	 * @return mixed
 	*/
-	static public function getValue($sKey)
+	static public function getValue(string $sKey)
 	{
 		if(array_key_exists($sKey,config::$_aConfigCache)){
 			return config::$_aConfigCache[$sKey];
@@ -48,12 +48,12 @@ class config {
 		return $mReturn;
 	}
 
-	static public function overrideValue(string $sKey,$sValue)
+	static public function overrideValue(string $sKey,$sValue): void
 	{
 		config::$_aConfigCache[$sKey] = $sValue;
 	}
 
-	static public function resetValue(string $sKey)
+	static public function resetValue(string $sKey): void
 	{
 		if(array_key_exists($sKey, config::$_aConfigCache)){
 			unset(config::$_aConfigCache[$sKey]);
@@ -68,7 +68,7 @@ class config {
 	 * @param string $sKey Variable to get
 	 * @return mixed
 	*/
-	static protected function _getDefinedValue($sKey)
+	static protected function _getDefinedValue(string $sKey)
 	{
 		if(defined('CONFIG_'.$sKey)){
 			return constant('CONFIG_'.$sKey);
@@ -85,7 +85,7 @@ class config {
 	 * @param string $sKey Variable to get
 	 * @return mixed
 	*/
-	static protected function _getConfigFileValue($sKey)
+	static protected function _getConfigFileValue(string $sKey)
 	{
 		//If we have already read in our config do a quick lookup
 		if(is_array(config::$aFileSettings)){

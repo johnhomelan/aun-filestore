@@ -64,7 +64,7 @@ class ServiceDispatcher {
 	 *
 	 * It passes the loop in so providers can register events with the loop
 	*/
-	public function start(\React\EventLoop\LoopInterface $oLoop, \React\Datagram\Socket $oAunServer)
+	public function start(\React\EventLoop\LoopInterface $oLoop, \React\Datagram\Socket $oAunServer): void
 	{
 		$this->oLoop = $oLoop;
 		$this->oAunServer = $oAunServer;
@@ -132,7 +132,7 @@ class ServiceDispatcher {
 	 *
 	 * @param callable $fTask The function to run the house keeping task for 
 	*/
-	public function addHousingKeepingTask(callable $fTask)
+	public function addHousingKeepingTask(callable $fTask): void
 	{
 		$this->aHouseKeepingTasks[] = $fTask;
 	}
@@ -226,7 +226,7 @@ class ServiceDispatcher {
 	 * Sends all the packets a Service has queues up
 	 *
 	*/
-	public function sendPackets(ProviderInterface $oService)
+	public function sendPackets(ProviderInterface $oService): void
 	{
 		$aReplys = $oService->getReplies();
 		foreach($aReplys as $oPacket){
@@ -240,7 +240,7 @@ class ServiceDispatcher {
 	 * Adds an event for the this ack packet the a network/station
 	 *
 	*/
-	public function addAckEvent($iNetwork, $iStation, $fCallable)
+	public function addAckEvent($iNetwork, $iStation, $fCallable): void
 	{
 		if(!is_array($this->aAckEvents[$iStation])){
 			$this->aAckEvents[$iStation]=[];
@@ -252,7 +252,7 @@ class ServiceDispatcher {
 	 * Checks to see if an Ack should tirgger an event, and if so tirgger it
 	 *
 	*/ 
-	public function ackEvents(AunPacket $oPacket)
+	public function ackEvents(AunPacket $oPacket): void
 	{
 		$oEconetPacket = $oPacket->buildEconetPacket();
 		if(array_key_exists($oEconetPacket->getSourceNetwork(),$this->aAckEvents) AND array_key_exists($oEconetPacket->getSourceStation(),$this->aAckEvents[$oEconetPacket->getSourceNetwork()])){
@@ -265,7 +265,7 @@ class ServiceDispatcher {
 	/**
 	 * Run the housekeeping tasks for all services
 	*/ 
-	public function houseKeeping()
+	public function houseKeeping(): void
 	{
 		foreach($this->aHouseKeepingTasks as $fTask){
 			($fTask)();

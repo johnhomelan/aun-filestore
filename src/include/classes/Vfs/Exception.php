@@ -42,7 +42,7 @@ class Exception extends BaseException {
 	 * Oh matron 
 	 * @return boolean
 	*/
-	public function isHard()
+	public function isHard(): bool
 	{
 		return $this->bHard;
 	}

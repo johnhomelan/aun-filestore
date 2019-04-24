@@ -23,7 +23,7 @@ class AuthPluginFile implements AuthPluginInterface {
 	protected static $aUsers = array();
 	protected static $oLogger;
 
-	static protected function _writeOutUserFile()
+	static protected function _writeOutUserFile(): void
 	{
 		$sUserFileContents = "";
 		if(strlen(config::getValue('security_plugin_file_user_file'))>0){
@@ -40,7 +40,7 @@ class AuthPluginFile implements AuthPluginInterface {
 	 * Load the user list from disk
 	 * @param string $sUser The contents of the userfile can be supplied as an arg, this should be mainly used for testing
 	*/
-	static public function init(\Psr\Log\LoggerInterface $oLogger, $sUsers=NULL)
+	static public function init(\Psr\Log\LoggerInterface $oLogger, $sUsers=NULL): void
 	{
 		self::$oLogger = $oLogger;
 
@@ -77,7 +77,7 @@ class AuthPluginFile implements AuthPluginInterface {
 	 * @param int $iStation As the file auth plugin can't restrict by station  this param is not used but is here so we implement the interface correctly.
 	 * @return boolean
 	*/
-	static public function login($sUsername,$sPassword,$iNetwork=NULL,$iStation=NULL)
+	static public function login(string $sUsername,string $sPassword,int $iNetwork=NULL,int $iStation=NULL): bool
 	{	
 		if(!array_key_exists(strtoupper($sUsername),AuthPluginFile::$aUsers)){
 			return FALSE;
@@ -113,7 +113,7 @@ class AuthPluginFile implements AuthPluginInterface {
 	 * @param string $sUsername
 	 * @return object user
 	*/
-	static public function buildUserObject($sUsername)
+	static public function buildUserObject(string $sUsername): \HomeLan\FileStore\Authentication\User
 	{
 		$oUser = new User();
 		if(array_key_exists(strtoupper($sUsername),AuthPluginFile::$aUsers)){
@@ -147,7 +147,7 @@ class AuthPluginFile implements AuthPluginInterface {
 	 * @param string $sOldPassword Can be null if the old password is blank
 	 * @param string $sPassword
 	*/
-	static public function setPassword($sUsername,$sOldPassword,$sPassword)
+	static public function setPassword(string $sUsername,string $sOldPassword,string $sPassword): void
 	{
 		//Test old password
 		if(!AuthPluginFile::login($sUsername,$sOldPassword,NULL,NULL)){
@@ -182,7 +182,7 @@ class AuthPluginFile implements AuthPluginInterface {
 	 *
 	 * @param object user $oUser The user object that should be added to the backend
 	*/
-	static public function createUser($oUser)
+	static public function createUser($oUser): void
 	{
 		if(!array_key_exists(strtoupper($oUser->getUsername()),AuthPluginFile::$aUsers)){
 			AuthPluginFile::$aUsers[strtoupper($oUser->getUsername())]=array('username'=>$oUser->getUsername(),'password'=>'','homedir'=>$oUser->getHomedir(),'unixuid'=>$oUser->getUnixUid(),'opt'=>$oUser->getBootOpt(),'priv'=>$oUser->getPriv());
@@ -199,7 +199,7 @@ class AuthPluginFile implements AuthPluginInterface {
 	 *
 	 * @param string username
 	*/
-	static public function removeUser($sUsername)
+	static public function removeUser(string $sUsername): bool
 	{
 		if(array_key_exists(strtoupper($sUsername),AuthPluginFile::$aUsers)){
 			unset(AuthPluginFile::$aUsers[strtoupper($sUsername)]);
@@ -210,7 +210,7 @@ class AuthPluginFile implements AuthPluginInterface {
 		}
 	}
 
-	static public function setPriv($sUsername,$sPriv)
+	static public function setPriv(string $sUsername,string $sPriv): void
 	{
 		if(array_key_exists(strtoupper($sUsername),AuthPluginFile::$aUsers)){
 			AuthPluginFile::$aUsers[strtoupper($sUsername)]['priv']=$sPriv;

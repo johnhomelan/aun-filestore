@@ -56,7 +56,7 @@ class FileDescriptor {
 		return $this->sEconetFilePath;
 	}
 
-	public function getEconetDirName()
+	public function getEconetDirName(): ?string
 	{
 		if(strpos($this->sEconetFilePath,'.')!==FALSE){
 			$aParts = explode('.',$this->sEconetFilePath);
@@ -68,7 +68,7 @@ class FileDescriptor {
 		}
 	}
 
-	public function getEconetParentPath()
+	public function getEconetParentPath(): string
 	{
 		//Build the path with out the last dir
 		$aPathParts = explode('.',$this->sEconetFilePath);
@@ -83,7 +83,7 @@ class FileDescriptor {
 		return '$';
 	}
 
-	public function changeVfs()
+	public function changeVfs(): void
 	{
 		$aPlugins = Vfs::getVfsPlugins();
 		$iIndex = array_search($this->sVfsPlugin,$aPlugins);

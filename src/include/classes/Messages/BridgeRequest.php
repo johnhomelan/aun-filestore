@@ -60,7 +60,7 @@ class BridgeRequest extends Request {
 	 *
 	 * @param string $sBinaryString
 	*/
-	public function decode($sBinaryString)
+	public function decode(string $sBinaryString): void
 	{
 		//Read the function code 1 byte unsigned int
 		$aHeader=unpack('C',$sBinaryString);
@@ -85,7 +85,7 @@ class BridgeRequest extends Request {
 		
 	}
 
-	public function buildReply()
+	public function buildReply(): \HomeLan\FileStore\Messages\FsReply
 	{
 		return new FsReply($this);
 	}

@@ -25,7 +25,7 @@ class PrintServerEnquiry extends Request{
 		$this->decode($oEconetPacket->getData());
 	}	
 
-	public function getReplyPort()
+	public function getReplyPort(): int
 	{
 		return 0x9E;
 	}
@@ -35,7 +35,7 @@ class PrintServerEnquiry extends Request{
 	 *
 	 * @param string $sBinaryString
 	*/
-	public function decode($sBinaryString)
+	public function decode(string $sBinaryString): void
 	{
 	
 		//The reset is data
@@ -43,7 +43,7 @@ class PrintServerEnquiry extends Request{
 		
 	}
 
-	public function buildReply()
+	public function buildReply(): \HomeLan\FileStore\Messages\Reply
 	{
 		return new Reply($this);
 	}

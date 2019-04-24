@@ -51,7 +51,7 @@ class JsonPacket {
 	 *
 	 * @return int
 	*/
-	public function getPort()
+	public function getPort(): int
 	{
 		return $this->iPort;
 	}
@@ -62,7 +62,7 @@ class JsonPacket {
 	 * e.g. Broadcast,Unicast,Ack etc
 	 * @return string
 	*/ 
-	public function getPacketType()
+	public function getPacketType(): string
 	{
 		return $this->aTypeMap[$this->iPktType];
 	}
@@ -72,7 +72,7 @@ class JsonPacket {
 	 *
 	 * @return string
 	*/
-	public function getData()
+	public function getData(): string
 	{
 		return $this->sData;
 	}
@@ -82,7 +82,7 @@ class JsonPacket {
 	 *
 	 * @param string $sBinaryString
 	*/
-	public function decode($sJsonString)
+	public function decode($sJsonString): void
 	{
 		$aPacket = json_decode($sJsonString,true);
 		if(is_null($aPacket)){
@@ -183,7 +183,7 @@ class JsonPacket {
 	 * that we can support more than 1 type of econet emulation/encapsulation
 	 * @return object econetpacket
 	*/
-	public function buildEconetPacket()
+	public function buildEconetPacket(): \HomeLan\FileStore\Messages\EconetPacket
 	{
 		$oEconetPacket = new EconetPacket();
 		$oEconetPacket->setPort($this->iPort);
@@ -199,7 +199,7 @@ class JsonPacket {
 	 *
 	 * @return string
 	*/
-	public function toString()
+	public function toString(): string
 	{
 		$aPkt = unpack('C*',$this->getData());
 		$sReturn = "Header | Type : ".$this->getPacketType()." Port : ".$this->getPort()." Control : ".$this->iCb." Pad : ".$this->iPadding." Seq : ".$this->iSeq." | Body |".implode(":",$aPkt)." |";

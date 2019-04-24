@@ -41,7 +41,7 @@ class Map {
 	 * @param \Psr\Log\LoggerInterface $oLogger
 	 * @param string $sMap The text for the map file can be supplied as a string, this is intended largley for unit testing this function
 	*/
-	public static function init(\Psr\Log\LoggerInterface $oLogger, string $sMap=NULL)
+	public static function init(\Psr\Log\LoggerInterface $oLogger, string $sMap=NULL): void
 	{
 		self::$oLogger = $oLogger;
 		if(is_null($sMap)){
@@ -69,7 +69,7 @@ class Map {
 	 * @param int $sPort We can support mapping mulitple econet address to a single host however each econet address is bound to a udp port
 	 * @return string Econet address in the form network.station 
 	*/
-	public static function ipAddrToEcoAddr(string $sIP,$sPort=NULL):string 
+	public static function ipAddrToEcoAddr(string $sIP,int $sPort=NULL):string 
 	{
 		if(array_key_exists($sIP,Map::$aIPLookupCache)){
 			return Map::$aIPLookupCache[$sIP];
@@ -164,7 +164,7 @@ class Map {
 	 * @param int $iNetworkNumber The network number
 	 * @param int $iStationNumber The station number
 	*/
-	public static function addHostMapping(string $sIP,int $iNetworkNumber,int $iStationNumber)
+	public static function addHostMapping(string $sIP,int $iNetworkNumber,int $iStationNumber): void
 	{
 		if(preg_match('/[0-9]*\.[0-9]*\.[0-9]*\.[0-9]*/',$sIP)){
 			Map::$aHostMap[$iNetworkNumber.'.'.$iStationNumber]=$sIP;
@@ -180,7 +180,7 @@ class Map {
 	 * @param string $sSubnet The subnet to add the map (in the form 192.168.0.0/24)
 	 * @param int $iNetworkNumber The network number
 	*/
-	public static function addSubnetMapping(string $sSubnet,int $iNetworkNumber)
+	public static function addSubnetMapping(string $sSubnet,int $iNetworkNumber): void
 	{
 		if(preg_match('/[0-9]*\.[0-9]*\.[0-9]*\.[0-9]*\/[0-9]*/',$sSubnet)>0){
 			//Blank the reverse mapping cache 
@@ -192,7 +192,7 @@ class Map {
 	}
 
 
-	public static function setAunCounter(string $sIP,int $iCounter)
+	public static function setAunCounter(string $sIP,int $iCounter): void
 	{
 		Map::$aIpCounter[$sIP]=$iCounter;
 	}

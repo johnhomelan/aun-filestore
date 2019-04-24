@@ -10,7 +10,7 @@ use HomeLan\FileStore\Services\ServiceDispatcher;
 
 class IndexController extends AbstractController 
 {
-	public function index(Smarty $oSmartyService)
+	public function index(Smarty $oSmartyService): \Symfony\Component\HttpFoundation\Response
 	{
 		$oServices = ServiceDispatcher::create();
 		$oSmarty = $oSmartyService->getSmarty();

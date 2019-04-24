@@ -22,7 +22,7 @@ class Security {
 
 	protected static $oLogger;
 
-	public static function init(\Psr\Log\LoggerInterface $oLogger)
+	public static function init(\Psr\Log\LoggerInterface $oLogger): void
 	{
 		self::$oLogger = $oLogger;
 		$aPlugins = Security::_getAuthPlugins();
@@ -32,7 +32,7 @@ class Security {
 	/**
 	 * Cleans up any sessions that have been idle for too long
 	*/
-	public static function houseKeeping()
+	public static function houseKeeping(): void
 	{
 		$iTime = time();
 		foreach(Security::$aSessions as $iNetwork=>$aStations){
@@ -51,7 +51,7 @@ class Security {
 	 * It also calls the init method of each one
 	 *
 	**/
-	protected static function _getAuthPlugins()
+	protected static function _getAuthPlugins(): array
 	{
 		$aReturn = array();
 		$aAuthPlugis = explode(',',config::getValue('security_auth_plugins'));
@@ -74,7 +74,7 @@ class Security {
 	/**
 	 * Updates the last idle time for a connection
 	*/
-	public static function updateIdleTimer($iNetwork,$iStation)
+	public static function updateIdleTimer($iNetwork,$iStation): void
 	{
 		if(array_key_exists($iNetwork,Security::$aSessions) AND array_key_exists($iStation,Security::$aSessions[$iNetwork])){
 			Security::$aSessions[$iNetwork][$iStation]['idle']=time();
@@ -100,7 +100,7 @@ class Security {
 	 * @param string $sUser
 	 * @param string $sPass
 	*/
-	public static function login($iNetwork,$iStation,$sUser,$sPass)
+	public static function login(int $iNetwork,int $iStation,string $sUser,string $sPass): bool
 	{
 		$aPlugins = Security::_getAuthPlugins();
 		foreach($aPlugins as $sPlugin){
@@ -122,7 +122,7 @@ class Security {
 		return FALSE;
 	}
 
-	public static function logout($iNetwork,$iStation)
+	public static function logout($iNetwork,$iStation): void
 	{
 		if(Security::isLoggedIn($iNetwork,$iStation)){
 			$oUser = Security::getUser($iNetwork,$iStation);
@@ -142,7 +142,7 @@ class Security {
 	 * @param int $iStation
 	 * @return object user
 	*/
-	public static function getUser($iNetwork,$iStation)
+	public static function getUser(int $iNetwork,int $iStation): object
 	{
 		if(array_key_exists($iNetwork,Security::$aSessions) AND array_key_exists($iStation,Security::$aSessions[$iNetwork])){
 			return Security::$aSessions[$iNetwork][$iStation]['user'];
@@ -156,7 +156,7 @@ class Security {
 	 * @param int $iStation
 	 * @return boolean
 	*/
-	public static function isLoggedIn($iNetwork,$iStation)
+	public static function isLoggedIn(int $iNetwork,int $iStation): bool
 	{
 		if(array_key_exists($iNetwork,Security::$aSessions) AND array_key_exists($iStation,Security::$aSessions[$iNetwork])){
 			return TRUE;
@@ -172,7 +172,7 @@ class Security {
 	 * @param string $sOldPassword
 	 * @param string $sPassword
 	*/	 
-	public static function setConnectedUsersPassword($iNetwork,$iStation,$sOldPassword,$sPassword)
+	public static function setConnectedUsersPassword(int $iNetwork,int $iStation,string $sOldPassword,string $sPassword): void
 	{
 		if(array_key_exists($iNetwork,Security::$aSessions) AND array_key_exists($iStation,Security::$aSessions[$iNetwork])){
 			self::$oLogger->info("Security: Changing password for ".Security::$aSessions[$iNetwork][$iStation]['user']->getUsername()." using authplugin ".Security::$aSessions[$iNetwork][$iStation]['provider']);
@@ -186,12 +186,12 @@ class Security {
 	 *
 	 * @return array
 	*/
-	public static function getUsersOnline()
+	public static function getUsersOnline(): array
 	{
 		return  Security::$aSessions;
 	}
 
-	public static function getUsersStation($sUsername)
+	public static function getUsersStation($sUsername): array
 	{
 		foreach(Security::$aSessions as $iNetwork=>$aStationUsers){
 			foreach($aStationUsers as $iStation=>$aData){
@@ -224,7 +224,7 @@ class Security {
 	 * @param int $iStation
 	 * @param object user $oUser
 	*/
-	public static function createUser($iNetwork,$iStation,$oUser)
+	public static function createUser(int $iNetwork,int $iStation,$oUser): void
 	{
 		if(!is_object($oUser) OR get_class($oUser)!='HomeLan\FileStore\Authentication\User'){
 			throw new Exception("Security: Invaild user supplied to createUser.\n");
@@ -266,7 +266,7 @@ class Security {
 	 * @param int $iStation
 	 * @param string $sUsername
 	*/
-	public static function removeUser($iNetwork,$iStation,$sUsername)
+	public static function removeUser(int $iNetwork,int $iStation,string $sUsername)
 	{
 		if(!Security::isLoggedIn($iNetwork,$iStation)){
 			throw new Exception("Security:  Unable to remove the user, no user is logged in on ".$iNetwork.".".$iStation);
@@ -298,7 +298,7 @@ class Security {
 	 * @param string $sUsername
 	 * @param string $sPriv (S|U)
 	*/
-	public static function setPriv($iNetwork,$iStation,$sUsername,$sPriv)
+	public static function setPriv(int $iNetwork,int $iStation,string $sUsername,string $sPriv): void
 	{
 		if(!Security::isLoggedIn($iNetwork,$iStation)){
 			throw new Exception("Security:  Unable to setPriv, no user is logged in on ".$iNetwork.".".$iStation);

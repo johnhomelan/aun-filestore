@@ -51,7 +51,7 @@ class PrintServer implements ProviderInterface {
 		return new Admin($this);
 	}
 
-	protected function _addReplyToBuffer($oReply)
+	protected function _addReplyToBuffer($oReply): void
 	{
 		$this->aReplyBuffer[]=$oReply;
 	}
@@ -117,7 +117,7 @@ class PrintServer implements ProviderInterface {
 	 *
 	 * @param object fsrequest $oEquiry
 	*/
-	public function processEnquiry($oEnquiry)
+	public function processEnquiry($oEnquiry): void
 	{
 		$sPrinterName = $oEnquiry->getString(1,6);
 		$iRequestCode = $oEnquiry->get16bitIntLittleEndian(7);
@@ -152,7 +152,7 @@ class PrintServer implements ProviderInterface {
 		$this->_addReplyToBuffer($oReply);
 	}
 
-	public function processData($oPrintData)
+	public function processData($oPrintData): void
 	{
 		$oReply = $oPrintData->buildReply();
 		if($oPrintData->getLen()==1 AND $oPrintData->getByte(1)==0){

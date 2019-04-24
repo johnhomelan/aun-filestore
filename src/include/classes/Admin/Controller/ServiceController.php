@@ -11,7 +11,7 @@ use HomeLan\FileStore\Services\ServiceDispatcher;
 class ServiceController extends AbstractController 
 {
 
-	public function index(Smarty $oSmartyService, Request $oRequest)
+	public function index(Smarty $oSmartyService, Request $oRequest): \Symfony\Component\HttpFoundation\Response
 	{
 		$oServices = ServiceDispatcher::create();
 

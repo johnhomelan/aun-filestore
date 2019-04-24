@@ -34,7 +34,7 @@ class SingleCommandApplication extends Application {
          * Gets the diffinition of the single application
 	 *
          */
-        public function getDefinition()
+        public function getDefinition(): \Symfony\Component\Console\Input\InputDefinition
         {
                 $oDefinition = parent::getDefinition();
                 $oDefinition->setArguments();

@@ -13,7 +13,7 @@ class FilePath
 		$this->sDir = $sDir;
 	}
 
-	public function getFilePath()
+	public function getFilePath(): string
 	{
 		return $this->sDir.'.'.$this->sFile;
 	}

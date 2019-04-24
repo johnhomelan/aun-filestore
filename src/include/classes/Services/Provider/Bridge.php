@@ -41,7 +41,7 @@ class Bridge implements ProviderInterface {
 		$this->oLogger = $oLogger;
 	}
 
-	protected function _addReplyToBuffer($oReply)
+	protected function _addReplyToBuffer($oReply): void
 	{
 		$this->aReplyBuffer[]=$oReply;
 	}
@@ -114,7 +114,7 @@ class Bridge implements ProviderInterface {
 	 * The bridgerequest object contains the request the bridge must process 
 	 * @param object bridgerequest $oBridgeRequest
 	*/
-	public function processRequest($oBridgeRequest)
+	public function processRequest($oBridgeRequest): void
 	{
 		$sFunction = $oBridgeRequest->getFunction();
 		$this->oLogger->debug("Bridge function ".$sFunction);
@@ -142,7 +142,7 @@ class Bridge implements ProviderInterface {
 	 *
 	 * @param object bridgerequest $oBridgeRequest
 	*/
-	protected function queryLocalNet($oBridgeRequest)
+	protected function queryLocalNet($oBridgeRequest): void
 	{
 		$oReply = $oBridgeRequest->buildReply();
 		//The first byte of the reply is the local network number	
@@ -157,7 +157,7 @@ class Bridge implements ProviderInterface {
 	 *
 	 * @param object bridgerequest $oBridgeRequest
 	*/ 
-	protected function queryNetKnown($oBridgeRequest)
+	protected function queryNetKnown($oBridgeRequest): void
 	{
 		//This first byte after the reply port is the network number the bridge is being queried about
 		$iNetworNumber = $oBridgeRequest->getByte();

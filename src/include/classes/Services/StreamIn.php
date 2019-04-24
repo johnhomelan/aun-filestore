@@ -33,7 +33,7 @@ class StreamIn {
 	 * If this packet completes the data stream the fSucessCallback callback is called 
 	 * In the event of a timeout the fFailCallback callback is called
 	*/
-	public function inboundPacket(EconetPacket $oPacket)
+	public function inboundPacket(EconetPacket $oPacket): void
 	{
 		$this->sData=$this->sData.$oPacket->getData();
 		if(strlen($this->sData)<$this->iBytes){
@@ -56,7 +56,7 @@ class StreamIn {
 	 * If the stream has timed out the fFailCallback callback is called
 	 * If it has not timeout no action is taken
 	*/
-	public function checkTimeout()
+	public function checkTimeout(): void
 	{
 		if(time()>$this->iTimeout){
 			//Timed out 

@@ -32,12 +32,12 @@ class Reply {
 		}
 	}
 
-	public function appendByte($iByte)
+	public function appendByte($iByte): void
 	{
 		$this->sPkt = $this->sPkt.pack('C',$iByte);
 	}
 
-	public function appendString($sString)
+	public function appendString($sString): void
 	{
 		$aChars = str_split($sString);
 		foreach($aChars as $sChar)
@@ -46,27 +46,27 @@ class Reply {
 		}
 	}
 
-	public function append16bitIntLittleEndian($iInt)
+	public function append16bitIntLittleEndian($iInt): void
 	{
 		$this->sPkt = $this->sPkt.pack('v',$iInt);
 	}
 
-	public function append24bitIntLittleEndian($iInt)
+	public function append24bitIntLittleEndian($iInt): void
 	{
 		$this->sPkt = $this->sPkt.pack('v',$iInt).pack('C',0);
 	}
 
-	public function append32bitIntLittleEndian($iInt)
+	public function append32bitIntLittleEndian($iInt): void
 	{
 		$this->sPkt = $this->sPkt.pack('V',$iInt);
 	}
 
-	public function appendRaw($sRawBytes)
+	public function appendRaw($sRawBytes): void
 	{
 		$this->sPkt = $this->sPkt.$sRawBytes;
 	}
 
-	public function setFlags($iFlags)
+	public function setFlags($iFlags): void
 	{
 		$this->iFlags = $iFlags;
 	}
@@ -76,9 +76,9 @@ class Reply {
 		return $this->iFlags;
 	}
 
-	public function buildEconetpacket()
+	public function buildEconetpacket(): \HomeLan\FileStore\Messages\EconetPacket
 	{
-		$oEconetPacket = new econetpacket();
+		$oEconetPacket = new EconetPacket();
 		$oEconetPacket->setPort($this->oRequest->getReplyPort());
 		$oEconetPacket->setFlags($this->iFlags);
 		$oEconetPacket->setDestinationStation($this->oRequest->getSourceStation());

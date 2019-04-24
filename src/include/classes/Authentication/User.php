@@ -33,7 +33,7 @@ class User {
 
 	protected $sLib = NULL;
 
-	public function setUsername($sUsername)
+	public function setUsername($sUsername): void
 	{
 		$this->sUsername=strtoupper($sUsername);
 	}
@@ -43,7 +43,7 @@ class User {
 		return $this->sUsername;
 	}
 
-	public function setUnixUid($iUid)
+	public function setUnixUid($iUid): void
 	{
 		$this->iUnixUid = $iUid;
 	}
@@ -53,7 +53,7 @@ class User {
 		return $this->iUnixUid;
 	}
 
-	public function setHomedir($sDir)
+	public function setHomedir($sDir): void
 	{
 		$this->sHomedir = $sDir;
 	}
@@ -63,7 +63,7 @@ class User {
 		return $this->sHomedir;
 	}
 
-	public function setBootOpt($iOpt)
+	public function setBootOpt($iOpt): void
 	{
 		$this->iOpt = $iOpt;
 	}
@@ -73,7 +73,7 @@ class User {
 		return $this->iOpt;
 	}
 
-	public function setPriv($sPriv)
+	public function setPriv($sPriv): void
 	{
 		switch(strtoupper($sPriv)){
 			case 'S':
@@ -85,7 +85,7 @@ class User {
 		}
 	}
 
-	public function getPriv()
+	public function getPriv(): string
 	{
 		if($this->bIsAdmin){
 			return 'S';
@@ -98,12 +98,12 @@ class User {
 	 *
 	 * @return boolean
 	*/
-	public function isAdmin()
+	public function isAdmin(): bool
 	{
 		return $this->bIsAdmin;
 	}
 
-	public function setCsd($sCsd)
+	public function setCsd($sCsd): void
 	{
 		$this->sCsd = $sCsd;
 	}
@@ -116,7 +116,7 @@ class User {
 		return $this->sCsd;
 	}
 
-	public function setLib($sLib)
+	public function setLib($sLib): void
 	{
 		$this->sLib = $sLib;
 	}
@@ -134,7 +134,7 @@ class User {
 		return $this->sRoot;
 	}
 
-	public function setRoot($sRoot)
+	public function setRoot($sRoot): void
 	{
 		$this->sRoot = $sRoot;
 	}

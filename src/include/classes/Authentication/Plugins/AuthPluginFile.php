@@ -77,7 +77,7 @@ class AuthPluginFile implements AuthPluginInterface {
 	 * @param int $iStation As the file auth plugin can't restrict by station  this param is not used but is here so we implement the interface correctly.
 	 * @return boolean
 	*/
-	static public function login(string $sUsername,string $sPassword,int $iNetwork=NULL,int $iStation=NULL): bool
+	static public function login(string $sUsername, string $sPassword, ?int $iNetwork=NULL, ?int $iStation=NULL): bool
 	{	
 		if(!array_key_exists(strtoupper($sUsername),AuthPluginFile::$aUsers)){
 			return FALSE;

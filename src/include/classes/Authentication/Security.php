@@ -142,7 +142,7 @@ class Security {
 	 * @param int $iStation
 	 * @return object user
 	*/
-	public static function getUser(int $iNetwork,int $iStation): object
+	public static function getUser(int $iNetwork,int $iStation): ?User
 	{
 		if(array_key_exists($iNetwork,Security::$aSessions) AND array_key_exists($iStation,Security::$aSessions[$iNetwork])){
 			return Security::$aSessions[$iNetwork][$iStation]['user'];

@@ -32,7 +32,7 @@ interface AuthPluginInterface {
 	 * @param int $iStation A plugin can restrict optionally by station
 	 * @return boolean
 	*/
-	static public function login(string $sUsername,string $sPassword,int $iNetwork=NULL,int $iStation=NULL): bool;
+	static public function login(string $sUsername,string $sPassword,?int $iNetwork=NULL,?int $iStation=NULL): bool;
 
 	/**
 	 * Creates a user object based of the auth data used by the plugin

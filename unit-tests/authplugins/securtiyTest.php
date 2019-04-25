@@ -46,7 +46,7 @@ class SecurityTest extends TestCase {
 		$this->assertTrue(Security::login(127,1,'test3','week'));
 		$this->assertTrue(Security::login(127,1,'test4',''));
 		//Should fail	
-		$this->assertFalse(authpluginfile::login('TEST','testpwrong',127,1));
+		$this->assertFalse(authpluginfile::login('TEST','testpwrong',(int) 127, (int) 1));
 
 	}
 
@@ -127,7 +127,7 @@ class SecurityTest extends TestCase {
 		Security::login(127,1,'TEST','testpw');
 		Security::setConnectedUsersPassword(127,1,'testpw','testpwchanged');
 		$this->assertTrue(Security::login(127,4,'TEST','testpwchanged'));
-		$this->assertFalse(authpluginfile::login('TEST','testpw',127,5));
+		$this->assertFalse(authpluginfile::login('TEST','testpw', (int) 127, (int) 5));
 	}
 
 	public function testCreateUserShouldWork()

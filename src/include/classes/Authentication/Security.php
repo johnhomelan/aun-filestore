@@ -147,6 +147,7 @@ class Security {
 		if(array_key_exists($iNetwork,Security::$aSessions) AND array_key_exists($iStation,Security::$aSessions[$iNetwork])){
 			return Security::$aSessions[$iNetwork][$iStation]['user'];
 		}
+		return null;
 	}
 
 	/**

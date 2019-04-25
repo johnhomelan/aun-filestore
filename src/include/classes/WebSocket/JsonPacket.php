@@ -84,7 +84,7 @@ class JsonPacket {
 	*/
 	public function decode($sJsonString): void
 	{
-		$aPacket = json_decode($sJsonString,true);
+		$aPacket = json_decode($sJsonString,true, null, JSON_THROW_ON_ERROR);
 		if(is_null($aPacket)){
 			throw new Exception("Invalid json encoded econet packet");
 		}
@@ -172,7 +172,7 @@ class JsonPacket {
 					'network'=>$this->iNetworkNumber
 				],
 				'payload'=>$sPtk
-			]);
+			], JSON_THROW_ON_ERROR);
 
 	}
 

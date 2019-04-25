@@ -366,7 +366,7 @@ class FileServer implements ProviderInterface{
 		$this->oLogger->debug("Command: ".$sDataAsString.".");
 
 		foreach($this->aCommands as $sCommand){
-			$iPos = stripos($sDataAsString,$sCommand);
+			$iPos = stripos($sDataAsString,(string) $sCommand);
 			if($iPos===0){
 				//Found cli command found
 				$iOptionsPos = $iPos+strlen($sCommand);

@@ -8,6 +8,7 @@
 namespace HomeLan\FileStore\Aun; 
 
 use HomeLan\FileStore\Messages\EconetPacket; 
+use HomeLan\FileStore\Encapsulation\EncapsulationInterface;
 use Exception; 
 use config;
 
@@ -17,7 +18,7 @@ use config;
  * @package corenet
 */
 
-class AunPacket {
+class AunPacket implements EncapsulationInterface {
 
 	//Single byte (unsigned int) Aun Packet Type 1=>BroadCast =
 	protected $iPktType = NULL;

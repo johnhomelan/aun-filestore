@@ -14,15 +14,24 @@ use Symfony\Component\Console\Command\Command;
 
 use Symfony\Component\HttpKernel\HttpKernel;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException; 
+use React\EventLoop\LoopInterface;
 use React\EventLoop\Factory as ReactFactory;
 use React\Datagram\Factory as DatagramFactory;
 
+use Ratchet\Server\IoServer;
+use Ratchet\Http\HttpServer;
+use Ratchet\WebSocket\WsServer;
+
 use HomeLan\FileStore\Services\ServiceDispatcher;
+use HomeLan\FileStore\Services\WebSocketHandler;
 use HomeLan\FileStore\Aun\Map; 
 use HomeLan\FileStore\Aun\AunPacket; 
 use HomeLan\FileStore\Authentication\Security; 
 use HomeLan\FileStore\Vfs\Vfs; 
 use HomeLan\FileStore\Admin\Kernel;
+
+use HomeLan\FileStore\Encapsulation\PacketDispatcher;
+use HomeLan\FileStore\Encapsulation\EncapsulationTypeMap;
  
 use config;
 use Exception;
@@ -101,59 +110,30 @@ class React extends Command {
 
 		//Setup the main react loop
 		$oLoop = ReactFactory::create();
+		$oLogger = $this->oLogger;
 		
 		$this->oLogger->info("core: Using ".get_class($oLoop)." as the primary event loop handler");
 
-		//Add udp handling for AUN 
-		$oDatagramFactory = new DatagramFactory($oLoop);
+		$oAunServer = $this->aunService($oLoop);
+		$this->adminService($oLoop);
 
-		$oServices = $this->oServices;
-		$oLogger = $this->oLogger;
-
-		$oAunServer = $oDatagramFactory->createServer(config::getValue('aun_listen_address').':'.config::getValue('aun_listen_port'))
-	  		->then(function (\React\Datagram\Socket $oAunServer) use ($oServices, $oLogger, $oLoop) {
-				$oAunServer->on('message', function($sMessage, $sSrcAddress, $sDstAddress) use ($oServices, $oLogger, $oAunServer){
-					$oAunPacket = new AunPacket();
-					
-					//Read the UDP data
-					$oLogger->debug("filestore: Aun packet recvieved from ".$sSrcAddress);	
-					$oAunPacket->setSourceIP($sSrcAddress);
-
-					//Decode the AUN packet
-					$oAunPacket->setDestinationIP(config::getValue('local_ip'));
-					$oAunPacket->decode($sMessage);
-					
-					//Send an ack for the AUN packet if needed
-					$sAck = $oAunPacket->buildAck();
-					if(strlen($sAck)>0){
-						$oLogger->debug("filestore: Sending Ack packet");
-						$oAunServer->send($sAck,$sSrcAddress);
-					}
-
-					//Dispatch packet to all the services so the relivent one can deal with it 
-					$oServices->inboundPacket($oAunPacket);
-					
-					//Send all replies here
-					//@TODO replace this a better abstaction 
-					$aReplies = $oServices->getReplies();
-					foreach($aReplies as $sTarget=>$sReply){
-						$oAunServer->send($sReply,$sTarget);
-					}
-				});
-				$oServices->start($oLoop, $oAunServer);
-				return $oAunServer;
-			});
-
+		$oEncapsulationTypeMap = EncapsulationTypeMap::create();
+		
 		//Send any outstanding replies, normally its one request in one reply out.  However some services (e.g. File) have direct streams that can generate 
 		//mutiple replies to an initial request.
-		$oLoop->addPeriodicTimer(1, function(\React\EventLoop\Timer\Timer $oTimer) use ($oServices, $oAunServer) {
+		$oServices = $this->oServices;
+		$oServices->start($oEncapsulationTypeMap, $oLoop, $oAunServer);
+		$oLoop->addPeriodicTimer(1, function(\React\EventLoop\Timer\Timer $oTimer) use ($oServices, $oEncapsulationTypeMap, $oLoop, $oAunServer) {
+			//Get packet dispatcher
+		        $oPacketDispatcher = PacketDispatcher::create($oEncapsulationTypeMap, $oLoop, $oAunServer);
 			//Send any messages for the services
 			$aReplies = $oServices->getReplies();
-			foreach($aReplies as $sTarget=>$sReply){
-				$oAunServer->send($sReply,$sTarget);
+			foreach($aReplies as $oReply){
+				$oPacketDispatcher->sendPacket($oReply);
 			}
 		});
-			
+		
+		//Run regular house keeping tasks	
 		$oLoop->addPeriodicTimer(config::getValue('housekeeping_interval'), function(\React\EventLoop\Timer\Timer $oTimer) use ($oServices, $oLogger) {
 			$oLogger->debug("Running house keeping tasks");
 			Security::houseKeeping();
@@ -161,7 +141,7 @@ class React extends Command {
 			$oServices->houseKeeping();
 	
 		});
-		$this->adminService($oLoop);
+
 		//Enter main loop
 		$this->oLogger->debug("Starting primary loop.");
 		$oLoop->run();
@@ -219,9 +199,92 @@ EOF;
 		}
 	}
 
-	public function adminService($oLoop)
+	/**
+	  * Adds all the AUN handling services to the event loop
+	  *
+	  * @param object LoopInterface $oLoop
+	*/
+	public function aunService(LoopInterface $oLoop)
 	{
 
+		//Add udp handling for AUN 
+		$oDatagramFactory = new DatagramFactory($oLoop);
+
+		$oServices = $this->oServices;
+		$oLogger = $this->oLogger;
+		$oReturnSocket = null;
+
+		$oAunServer = $oDatagramFactory->createServer(config::getValue('aun_listen_address').':'.config::getValue('aun_listen_port'))
+	  		->then(function (\React\Datagram\Socket $oAunServer) use ($oServices, $oLogger, $oLoop, &$oReturnSocket) {
+				$oAunServer->on('message', function($sMessage, $sSrcAddress, $sDstAddress) use ($oServices, $oLogger, $oAunServer){
+					$oAunPacket = new AunPacket();
+					
+					//Read the UDP data
+					$oLogger->debug("filestore: Aun packet recvieved from ".$sSrcAddress);	
+					$oAunPacket->setSourceIP($sSrcAddress);
+
+					//Decode the AUN packet
+					$oAunPacket->setDestinationIP(config::getValue('local_ip'));
+					$oAunPacket->decode($sMessage);
+					
+					//Send an ack for the AUN packet if needed
+					$sAck = $oAunPacket->buildAck();
+					if(strlen($sAck)>0){
+						$oLogger->debug("filestore: Sending Ack packet");
+						$oAunServer->send($sAck,$sSrcAddress);
+					}
+
+					//Dispatch packet to all the services so the relivent one can deal with it 
+					$oServices->inboundPacket($oAunPacket);
+					
+					//Send all replies here
+					//@TODO replace this a better abstaction 
+					$aReplies = $oServices->getReplies();
+					foreach($aReplies as $sTarget=>$sReply){
+						$oAunServer->send($sReply,$sTarget);
+					}
+				});
+				$oReturnSocket = $oAunServer;
+				return $oAunServer;
+			});
+		return $oReturnSocket;
+	}
+
+	/**
+	  * Adds all the websocket handling services to the event loop
+	  *
+	  * @param object LoopInterface $oLoop
+	*/
+	public function websocketService(LoopInterface $oLoop)
+	{
+
+		//Add udp handling for AUN 
+		$oWebSocketTransport = new React\Socket\Server($oLoop);
+		$oWebSocketTransport->listen('8890', '0.0.0.0');
+
+		$oServices = $this->oServices;
+		$oLogger = $this->oLogger;
+		$oWebSocketHandler = new WebSocketHandler($this->oLogger, $oServices);
+
+		$oWebsocketServer = new IoServer(
+			new HttpServer(
+				new WsServer(
+					$oWebSocketHandler
+				)
+			),
+			$oWebSocketTransport,
+			$oLoop
+		);
+		return $oWebSocketHandler;
+	}
+
+	/** 
+	  * Seetup the Admin web interface service
+	  *
+	  * @param object LoopInterface $oLoop The loop to add the service to
+	*/
+	public function adminService(LoopInterface $oLoop)
+	{
 		$oKernel = new Kernel('prod', false);
 		$oLogger = $this->oLogger;
 		$callback = function (\Psr\Http\Message\ServerRequestInterface $oRequest) use ($oKernel, $oLogger) {

@@ -12,6 +12,8 @@ use HomeLan\FileStore\Messages\EconetPacket;
 use HomeLan\FileStore\Aun\AunPacket; 
 use HomeLan\FileStore\Aun\Map; 
 use HomeLan\FileStore\Services\ProviderInterface;
+use HomeLan\FileStore\Encapsulation\PacketDispatcher;
+use HomeLan\FileStore\Encapsulation\EncapsulationTypeMap;
 
 use config;
 
@@ -23,6 +25,7 @@ use config;
 class ServiceDispatcher {
 
 	static private $oSingleton;
+	private $oEncapsulationTypeMap;
 	private $oLoop;
 	private $oAunServer;
 	private $aPorts = [];
@@ -64,8 +67,9 @@ class ServiceDispatcher {
 	 *
 	 * It passes the loop in so providers can register events with the loop
 	*/
-	public function start(\React\EventLoop\LoopInterface $oLoop, \React\Datagram\Socket $oAunServer): void
+	public function start(EncapsulationTypeMap $oEncapsulationTypeMap, \React\EventLoop\LoopInterface $oLoop, \React\Datagram\Socket $oAunServer): void
 	{
+		$this->oEncapsulationTypeMap = $oEncapsulationTypeMap;
 		$this->oLoop = $oLoop;
 		$this->oAunServer = $oAunServer;
 	}
@@ -194,20 +198,7 @@ class ServiceDispatcher {
 	private function queueReply(EconetPacket $oPacket): void
 	{
 		usleep(config::getValue('bbc_default_pkg_sleep'));
-		$sIP = Map::ecoAddrToIpAddr($oPacket->getDestinationNetwork(),$oPacket->getDestinationStation());
-		if(strlen($sIP)>0){
-			$sPacket = $oPacket->getAunFrame();
-			$this->oLogger->debug("Packet out to  ".$sIP." (".implode(':',unpack('C*',$sPacket)).")");
-			if(strlen($sPacket)>0){
-				if(strpos($sIP,':')===FALSE){
-					$sHost=$sIP.':'.config::getValue('aun_default_port');
-				}else{
-					$sHost=$sIP;
-				}
-
-				$this->aReplies[$sHost]=$sPacket;
-			}
-		}
+		$this->aReplies[]=$oPacket;
 	}
 
 	/**
@@ -228,12 +219,11 @@ class ServiceDispatcher {
 	*/
 	public function sendPackets(ProviderInterface $oService): void
 	{
+		$oPacketDispatcher = PacketDispatcher::create($this->oEncapsulationTypeMap, $this->oLoop, $this->oAunServer);
 		$aReplys = $oService->getReplies();
 		foreach($aReplys as $oPacket){
-			$sIP = Map::ecoAddrToIpAddr($oPacket->getDestinationNetwork(),$oPacket->getDestinationStation());
-			$this->oAunServer->send($oPacket->getAunFrame(),$sIP);
+			$oPacketDispatcher->sendPacket($oPacket);
 		}
-		
 	}
 
 	/**

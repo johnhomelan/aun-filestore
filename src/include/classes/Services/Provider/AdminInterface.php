@@ -69,4 +69,10 @@ interface AdminInterface {
 	*/
 	public function getEntities(string $sType): array;
 
+	/**
+	 * Gets the commands that can be run
+	 *
+	*/
+	public function getCommands(): array;
+
 }

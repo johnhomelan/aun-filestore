@@ -113,5 +113,13 @@ class Admin implements AdminInterface
 		}
 	}
 
+	/**
+	 * Gets all the commands that can be run
+	*/
+	public function getCommands(): array
+	{
+			
+	}
+
 
 }

@@ -259,7 +259,7 @@ EOF;
 	{
 
 		//Add udp handling for AUN 
-		$oWebSocketTransport = new \React\Socket\Server($oLoop);
+		$oWebSocketTransport = new \React\Socket\Server(8080,$oLoop);
 		$oWebSocketTransport->listen('8890', '0.0.0.0');
 
 		$oServices = $this->oServices;

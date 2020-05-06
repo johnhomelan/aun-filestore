@@ -56,4 +56,8 @@ class WebSocketHandler implements MessageComponentInterface {
 	{
 
 	}
+
+	public function onError(ConnectionInterface $oConnection, \Exception $oError)
+	{
+	}
 }	

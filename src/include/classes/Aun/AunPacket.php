@@ -235,4 +235,14 @@ class AunPacket implements EncapsulationInterface {
 		$sReturn = "Header | Type : ".$this->getPacketType()." Port : ".$this->getPort()." Control : ".$this->iCb." Pad : ".$this->iPadding." Seq : ".$this->iSeq." | Body |".implode(":",$aPkt)." |";
 		return $sReturn;	
 	}
+
+	/**
+	  * At the moment just a sub function to be compatible with the EncapsulationInterface 
+	  *
+	  * @TODO Implment this method as part of the move to the Encapsulation Abstraction so websocket clients, and server to server encapuslations will work
+	 */ 	  
+	public function getReplies(): array
+	{
+
+	}
 }

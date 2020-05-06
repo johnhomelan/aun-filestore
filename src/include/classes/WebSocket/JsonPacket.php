@@ -8,6 +8,8 @@
 namespace HomeLan\FileStore\WebSocket; 
 
 use HomeLan\FileStore\Messages\EconetPacket; 
+use HomeLan\FileStore\Aun\Map; 
+use config;
 use Exception; 
 
 /** 
@@ -42,12 +44,14 @@ class JsonPacket {
 
 	protected $aTypeMap = array(1=>'Broadcast',2=>'Unicast',3=>'Ack',4=>'Reject',5=>'Immediate',6=>'ImmediateReply');
 
+	protected $sSoruceIP = NULL;
+
 	/**
 	 * Get the econet port number the aun packet is for
 	 *
 	 * @return int
 	*/
-	public function getPort()
+	public function getPort(): int
 	{
 		return $this->iPort;
 	}
@@ -58,7 +62,7 @@ class JsonPacket {
 	 * e.g. Broadcast,Unicast,Ack etc
 	 * @return string
 	*/ 
-	public function getPacketType()
+	public function getPacketType(): string
 	{
 		return $this->aTypeMap[$this->iPktType];
 	}
@@ -68,7 +72,7 @@ class JsonPacket {
 	 *
 	 * @return string
 	*/
-	public function getData()
+	public function getData(): string
 	{
 		return $this->sData;
 	}
@@ -78,9 +82,9 @@ class JsonPacket {
 	 *
 	 * @param string $sBinaryString
 	*/
-	public function decode($sJsonString)
+	public function decode($sJsonString): void
 	{
-		$aPacket = json_decode($sJsonString,true);
+		$aPacket = json_decode($sJsonString,true, null, JSON_THROW_ON_ERROR);
 		if(is_null($aPacket)){
 			throw new Exception("Invalid json encoded econet packet");
 		}
@@ -93,7 +97,7 @@ class JsonPacket {
 		//Read the aun packet type 1 byte unsigned int
 		$aHeader=unpack('C',$aPacket['payload']);
 		$this->iPktType = $aHeader[1];
-		$sBinaryString = substr($sBinaryString,1);
+		$sBinaryString = substr($aPacket['payload'],1);
 		
 		//Read the dst port 1 byte unsigned int
 		$aHeader=unpack('C',$sBinaryString);
@@ -168,7 +172,7 @@ class JsonPacket {
 					'network'=>$this->iNetworkNumber
 				],
 				'payload'=>$sPtk
-			]);
+			], JSON_THROW_ON_ERROR);
 
 	}
 
@@ -179,7 +183,7 @@ class JsonPacket {
 	 * that we can support more than 1 type of econet emulation/encapsulation
 	 * @return object econetpacket
 	*/
-	public function buildEconetPacket()
+	public function buildEconetPacket(): \HomeLan\FileStore\Messages\EconetPacket
 	{
 		$oEconetPacket = new EconetPacket();
 		$oEconetPacket->setPort($this->iPort);
@@ -195,7 +199,7 @@ class JsonPacket {
 	 *
 	 * @return string
 	*/
-	public function toString()
+	public function toString(): string
 	{
 		$aPkt = unpack('C*',$this->getData());
 		$sReturn = "Header | Type : ".$this->getPacketType()." Port : ".$this->getPort()." Control : ".$this->iCb." Pad : ".$this->iPadding." Seq : ".$this->iSeq." | Body |".implode(":",$aPkt)." |";

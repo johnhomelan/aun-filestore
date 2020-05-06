@@ -20,7 +20,7 @@ interface AuthPluginInterface {
 	 * @param \Psr\Log\LoggerInterface $oLogger A psr compatable logger
 	 * @param string $sUser The users details should be suppliable as a string for unit tests
 	*/
-	static public function init(\Psr\Log\LoggerInterface $oLogger, $sUsers=NULL);
+	static public function init(\Psr\Log\LoggerInterface $oLogger, $sUsers=NULL): void;
 
 
 	/**
@@ -32,7 +32,7 @@ interface AuthPluginInterface {
 	 * @param int $iStation A plugin can restrict optionally by station
 	 * @return boolean
 	*/
-	static public function login($sUsername,$sPassword,$iNetwork=NULL,$iStation=NULL);
+	static public function login(string $sUsername,string $sPassword,?int $iNetwork=NULL,?int $iStation=NULL): bool;
 
 	/**
 	 * Creates a user object based of the auth data used by the plugin
@@ -40,7 +40,13 @@ interface AuthPluginInterface {
 	 * @param string $sUsername
 	 * @return object user
 	*/
-	static public function buildUserObject($sUsername);
+	static public function buildUserObject(string $sUsername): \HomeLan\FileStore\Authentication\User;
+
+	/**
+	 * Gets all the user objects know to the plugin
+	 *
+	*/
+	static public function getAllUsers(): array;
 
 	/**
 	 * Set the password for a given user
@@ -48,7 +54,7 @@ interface AuthPluginInterface {
 	 * @param string $sUsername
 	 * @param string $sPassword
 	*/
-	static public function setPassword($sUsername,$sOldPassword,$sPassword);
+	static public function setPassword(string $sUsername, string $sOldPassword, string $sPassword): void;
 
 	/**
 	 * Creates a new user in the backend
@@ -58,7 +64,7 @@ interface AuthPluginInterface {
 	 *
 	 * @param object user $oUser The user object that should be added to the backend
 	*/
-	static public function createUser($oUser);
+	static public function createUser($oUser): void;
 
 	/**
 	 * Removes a given user
@@ -69,7 +75,7 @@ interface AuthPluginInterface {
 	 * @param string $sUsername
 	 * @return boolean
 	*/
-	static public function removeUser($sUsername);
+	static public function removeUser(string $sUsername): bool;
 
 	/**
 	 * Sets the priv for a given user
@@ -79,5 +85,5 @@ interface AuthPluginInterface {
 	 * @param string $sUsername
 	 * @param string $sPriv
 	*/
-	static public function setPriv($sUsername,$sPriv);
+	static public function setPriv(string $sUsername,string $sPriv): void;
 }

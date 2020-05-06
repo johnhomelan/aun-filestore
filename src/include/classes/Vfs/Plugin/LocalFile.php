@@ -25,32 +25,32 @@ class LocalFile implements PluginInterface {
 
 	protected static $bMultiuser;
 
-	public static function init(\Psr\Log\LoggerInterface $oLogger, bool $bMultiuser = false)
+	public static function init(\Psr\Log\LoggerInterface $oLogger, bool $bMultiuser = false): void
 	{
 		self::$oLogger = $oLogger;
 		self::$bMultiuser = $bMultiuser;
 	}
 
-	public static function houseKeeping()
+	public static function houseKeeping(): void
 	{
 
 	}
 
-	protected  static function _setUid($oUser)
+	protected  static function _setUid($oUser): void
 	{
 		if(self::$bMultiuser){
 			posix_seteuid($oUser->getUnixUid());
 		}
 	}
 	
-	protected static function _returnUid()
+	protected static function _returnUid(): void
 	{
 		if(self::$bMultiuser){
 			 posix_seteuid(config::getValue('system_user_id'));
 		}
 	}
 
-	protected static function _econetToUnix($sEconetPath)
+	protected static function _econetToUnix($sEconetPath): string
 	{
 		//Trim leading $.
 		$sEconetPath = substr($sEconetPath,2);
@@ -105,7 +105,7 @@ class LocalFile implements PluginInterface {
 		return $sUnixPath;
 	}
 
-	public static function _buildFiledescriptorFromEconetPath($oUser,FilePath $oEconetPath,$bMustExist,$bReadOnly)
+	public static function _buildFiledescriptorFromEconetPath($oUser,FilePath $oEconetPath,$bMustExist,$bReadOnly): \HomeLan\FileStore\Vfs\FileDescriptor
 	{
 		$sUnixPath = LocalFile::_econetToUnix($oEconetPath->getFilePath());
 		if(strlen($sUnixPath)>0){
@@ -129,7 +129,7 @@ class LocalFile implements PluginInterface {
 		}
 	}
 
-	public static function _getAccessMode($iGid,$iUid,$iMode)
+	public static function _getAccessMode($iGid,$iUid,$iMode): string
 	{
 		$sAccess = "";
 		$sAccess .= (($iMode & 0x0080) ? 'w' : '-');
@@ -140,7 +140,7 @@ class LocalFile implements PluginInterface {
 		return $sAccess;
 	}
 
-	public static function getDirectoryListing($sEconetPath,$aDirectoryListing)
+	public static function getDirectoryListing(string $sEconetPath,array $aDirectoryListing): array
 	{
 		$sUnixPath = LocalFile::_econetToUnix($sEconetPath);
 
@@ -186,7 +186,7 @@ class LocalFile implements PluginInterface {
 		return $aReturn;
 	}
 
-	public static function createDirectory($oUser,FilePath $oPath)
+	public static function createDirectory($oUser,FilePath $oPath): bool
 	{
 		$sUnixDirPath = LocalFile::_econetToUnix($oPath->sDir);
 		if(is_dir($sUnixDirPath) AND !file_exists(rtrim($sUnixDirPath,DIRECTORY_SEPARATOR).DIRECTORY_SEPARATOR.$oPath->sFile)){
@@ -195,7 +195,7 @@ class LocalFile implements PluginInterface {
 		return FALSE;
 	}
 
-	public static function deleteFile($oUser,FilePath $oEconetPath)
+	public static function deleteFile($oUser,FilePath $oEconetPath): bool
 	{
 		$sUnixDirPath = LocalFile::_econetToUnix($oEconetPath->sDir);
 		if(is_dir($sUnixDirPath)){
@@ -210,7 +210,7 @@ class LocalFile implements PluginInterface {
 		return FALSE;
 	}
 
-	public static function moveFile($oUser,FilePath $oEconetPathFrom,FilePath $oEconetPathTo)
+	public static function moveFile($oUser,FilePath $oEconetPathFrom,FilePath $oEconetPathTo): bool
 	{
 		$sUnixFrom = LocalFile::_econetToUnix($oEconetPathFrom->getFilePath());
 		$sUnixTo = LocalFile::_econetToUnix($oEconetPathTo->getFilePath());
@@ -227,7 +227,7 @@ class LocalFile implements PluginInterface {
 		return $bReturn;
 	}
 
-	public static function saveFile($oUser,FilePath $oEconetPath,$sData,$iLoadAddr,$iExecAddr)
+	public static function saveFile($oUser,FilePath $oEconetPath,string $sData,int $iLoadAddr,int $iExecAddr): bool
 	{
 		$sUnixDirPath = LocalFile::_econetToUnix($oEconetPath->sDir);
 		if(is_dir($sUnixDirPath)){
@@ -239,7 +239,7 @@ class LocalFile implements PluginInterface {
 
 	}
 
-	public static function createFile($oUser,FilePath $oEconetPath,$iSize,$iLoadAddr,$iExecAddr)
+	public static function createFile($oUser,FilePath $oEconetPath,int $iSize,int $iLoadAddr,int $iExecAddr): bool
 	{
 		$sUnixDirPath = LocalFile::_econetToUnix($oEconetPath->sDir);
 		if(is_dir($sUnixDirPath)){
@@ -257,7 +257,7 @@ class LocalFile implements PluginInterface {
 	 *
 	 * @throws VfsException if the file does not exist
 	*/
-	public static function getFile($oUser,FilePath $oEconetPath)
+	public static function getFile($oUser,FilePath $oEconetPath): string
 	{
 		$sUnixPath = LocalFile::_econetToUnix($oEconetPath->getFilePath());
 		if(is_file($sUnixPath)){
@@ -266,7 +266,7 @@ class LocalFile implements PluginInterface {
 		throw new VfsException("No such file");
 	}
 
-	public static function setMeta($sEconetPath,$iLoad,$iExec,$iAccess)
+	public static function setMeta(string $sEconetPath,$iLoad,$iExec,int $iAccess): void
 	{
 		$sUnixPath = LocalFile::_econetToUnix($sEconetPath);
 		if(file_exists($sUnixPath) AND file_exists($sUnixPath.'.inf')){
@@ -308,7 +308,7 @@ class LocalFile implements PluginInterface {
 		LocalFile::_returnUid();
 		return $mReturn;
 	}
-	public static function isEof($oUser,$fLocalHandle)
+	public static function isEof($oUser,$fLocalHandle): bool
 	{
 		LocalFile::_setUid($oUser);
 		$mReturn =  feof($fLocalHandle);
@@ -316,7 +316,7 @@ class LocalFile implements PluginInterface {
 		return $mReturn;
 	}
 
-	public static function setPos($oUser,$fLocalHandle,$iPos)
+	public static function setPos($oUser,$fLocalHandle,$iPos): int
 	{
 		self::$oLogger->debug("LocalFile: Moving file off-set to ".$iPos." bytes for file handle ".$fLocalHandle);
 		LocalFile::_setUid($oUser);
@@ -343,7 +343,7 @@ class LocalFile implements PluginInterface {
 		return $mReturn;
 	}
 
-	public static function fsClose($oUser,$fLocalHandle)
+	public static function fsClose($oUser,$fLocalHandle): bool
 	{
 		LocalFile::_setUid($oUser);
 		$mReturn = fclose($fLocalHandle);

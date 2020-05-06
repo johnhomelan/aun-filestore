@@ -63,7 +63,7 @@ class DirectoryEntry {
 		return $this->sUnixName;
 	}
 
-	public function setLoadAddr($iLoadAddr)
+	public function setLoadAddr($iLoadAddr): void
 	{
 		$this->iLoadAddr = $iLoadAddr;
 	}
@@ -73,7 +73,7 @@ class DirectoryEntry {
 		return $this->iLoadAddr;
 	}
 
-	public function setExecAddr($iExecAddr)
+	public function setExecAddr($iExecAddr): void
 	{
 		$this->iExecAddr = $iExecAddr;
 	}
@@ -88,7 +88,7 @@ class DirectoryEntry {
 		return $this->iSize;
 	}
 
-	public function setAccessByStr($sAccess)
+	public function setAccessByStr($sAccess): void
 	{
 		$iMode = 0;
 		if(substr($sAccess,0,1)=='w'){
@@ -112,7 +112,7 @@ class DirectoryEntry {
 		$this->iAccess = $iMode;	
 	}
 
-	public function setAccess($iAccess)
+	public function setAccess($iAccess): void
 	{
 		$this->iAccess = $iAccess;
 	}
@@ -122,7 +122,7 @@ class DirectoryEntry {
 		return $this->iAccess;
 	}
 
-	public function getCTime()
+	public function getCTime(): string
 	{
 		//Add current date
 		$iDay = date('j',$this->iCTime);
@@ -135,22 +135,22 @@ class DirectoryEntry {
 		return $sDate;
 	}
 
-	public function setCTime($iDataTime)
+	public function setCTime($iDataTime): void
 	{
 		$this->iCTime = $iDataTime;
 	}
 
-	public function getDay()
+	public function getDay(): string
 	{
 		return date('j',$this->iCTime);
 	}
 
-	public function getMonth()
+	public function getMonth(): string
 	{
 		return date('n',$this->iCTime);
 	}
 
-	public function getYear()
+	public function getYear(): string
 	{
 		return date('y',$this->iCTime);
 	}
@@ -160,12 +160,12 @@ class DirectoryEntry {
 		return $this->bDir;
 	}
 
-	public function getSin()
+	public function getSin(): int
 	{
 		return Vfs::getSin($this->sEconetFullFilePath);
 	}
 
-	public function getEconetMode()
+	public function getEconetMode(): string
 	{
 		$sMode ="";
 		if($this->isDir()){

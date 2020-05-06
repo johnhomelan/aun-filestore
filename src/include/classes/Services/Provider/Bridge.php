@@ -5,9 +5,13 @@
  * @author John Brown <john@home-lan.co.uk>
  * @package core
 */
-namespace HomeLan\FileStore\Services; 
+namespace HomeLan\FileStore\Services\Provider; 
 
+use HomeLan\FileStore\Services\ProviderInterface;
+use HomeLan\FileStore\Services\ServiceDispatcher;
 use HomeLan\FileStore\Aun\Map; 
+use HomeLan\FileStore\Messages\BridgeRequest; 
+use HomeLan\FileStore\Messages\EconetPacket; 
 use config;
 use Exception;
 
@@ -16,10 +20,8 @@ use Exception;
  *
  * @package core
 */
-class Bridge {
+class Bridge implements ProviderInterface {
 
-	protected $oMainApp = NULL ;
-	
 	protected $aReplyBuffer = array();
 
 	protected $oLogger;
@@ -39,32 +41,71 @@ class Bridge {
 		$this->oLogger = $oLogger;
 	}
 
-	protected function _addReplyToBuffer($oReply)
+	protected function _addReplyToBuffer($oReply): void
 	{
 		$this->aReplyBuffer[]=$oReply;
 	}
 
-	/**
-	 * Initilizes the bridge loading all the routing information for econet networks
-	 *
-	 * @TODO Load the routing data
-	*/
-	public function init(\HomeLan\FileStore\Command\Filestore $oMainApp)
+	public function getName(): string
 	{
-		$this->oMainApp = $oMainApp;
+		return "Bridge";
 	}
 
+	/** 
+	 * Gets the admin interface Object for this serivce provider 
+	 *
+	*/
+	public function getAdminInterface(): ?AdminInterface
+	{
+		return NULL;
+	}
+
+	/**
+	 * Gets the ports this service uses 
+	 * 
+	 * @return array of int
+	*/
+	public function getServicePorts(): array
+	{
+		return [0x9D];
+	}
+
+	/** 
+	 * All inbound bridge messages come in via broadcast 
+	 *
+	*/
+	public function broadcastPacketIn(EconetPacket $oPacket): void
+	{
+		$this->processRequest(new BridgeRequest($oPacket,$this->oLogger));
+
+	}
+
+	/** 
+	 * All inbound bridge messages come in via broadcast, so unicast should ignore them
+	 *
+	*/
+	public function unicastPacketIn(EconetPacket $oPacket): void
+	{
+	}
+
+
+	public function registerService(ServiceDispatcher $oServiceDispatcher): void
+	{
+	}
 
 	/**
 	 * Retreives all the reply objects built by the bridge 
 	 *
 	 * This method removes the replies from the buffer 
 	*/
-	public function getReplies()
+	public function getReplies(): array
 	{
-		$aReplies = $this->aReplyBuffer;
-		$this->aReplyBuffer = array();
-		return $aReplies;
+		$aReturn = [];
+		foreach($this->aReplyBuffer as $oReply){
+			$aReturn[] = $oReply->buildEconetpacket();
+		}
+		$this->aReplyBuffer = [];
+		return $aReturn;
 	}
 
 	/**
@@ -73,7 +114,7 @@ class Bridge {
 	 * The bridgerequest object contains the request the bridge must process 
 	 * @param object bridgerequest $oBridgeRequest
 	*/
-	public function processRequest($oBridgeRequest)
+	public function processRequest($oBridgeRequest): void
 	{
 		$sFunction = $oBridgeRequest->getFunction();
 		$this->oLogger->debug("Bridge function ".$sFunction);
@@ -101,7 +142,7 @@ class Bridge {
 	 *
 	 * @param object bridgerequest $oBridgeRequest
 	*/
-	protected function queryLocalNet($oBridgeRequest)
+	protected function queryLocalNet($oBridgeRequest): void
 	{
 		$oReply = $oBridgeRequest->buildReply();
 		//The first byte of the reply is the local network number	
@@ -116,7 +157,7 @@ class Bridge {
 	 *
 	 * @param object bridgerequest $oBridgeRequest
 	*/ 
-	protected function queryNetKnown($oBridgeRequest)
+	protected function queryNetKnown($oBridgeRequest): void
 	{
 		//This first byte after the reply port is the network number the bridge is being queried about
 		$iNetworNumber = $oBridgeRequest->getByte();

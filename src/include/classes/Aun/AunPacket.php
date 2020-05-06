@@ -8,6 +8,7 @@
 namespace HomeLan\FileStore\Aun; 
 
 use HomeLan\FileStore\Messages\EconetPacket; 
+use HomeLan\FileStore\Encapsulation\EncapsulationInterface;
 use Exception; 
 use config;
 
@@ -17,7 +18,7 @@ use config;
  * @package corenet
 */
 
-class AunPacket {
+class AunPacket implements EncapsulationInterface {
 
 	//Single byte (unsigned int) Aun Packet Type 1=>BroadCast =
 	protected $iPktType = NULL;
@@ -50,7 +51,7 @@ class AunPacket {
 	 *
 	 * @return int
 	*/
-	public function getPort()
+	public function getPort(): int
 	{
 		return $this->iPort;
 	}
@@ -61,7 +62,7 @@ class AunPacket {
 	 * e.g. Broadcast,Unicast,Ack etc
 	 * @return string
 	*/ 
-	public function getPacketType()
+	public function getPacketType(): string
 	{
 		return $this->aTypeMap[$this->iPktType];
 	}
@@ -71,7 +72,7 @@ class AunPacket {
 	 *
 	 * @return string
 	*/
-	public function getData()
+	public function getData(): string
 	{
 		return $this->sData;
 	}
@@ -81,7 +82,7 @@ class AunPacket {
 	 *
 	 * @param string $sBinaryString
 	*/
-	public function decode($sBinaryString)
+	public function decode(string $sBinaryString): void
 	{
 		//Read the header
 
@@ -160,7 +161,7 @@ class AunPacket {
 
 	}
 
-	public function setSourceIP($sHost)
+	public function setSourceIP($sHost): void
 	{
 		if(strpos($sHost,':')!==FALSE){
 			$aIPParts = explode(':',$sHost);
@@ -176,7 +177,7 @@ class AunPacket {
 		return $this->sSoruceIP;
 	}
 
-	public function setSourceUdpPort($iPort)
+	public function setSourceUdpPort($iPort): void
 	{
 		$this->sSourceUdpPort = $iPort;
 	}
@@ -186,7 +187,7 @@ class AunPacket {
 		return $this->sSourceUdpPort;
 	}
 
-	public function setDestinationIP($sHost)
+	public function setDestinationIP($sHost): void
 	{
 		if(strpos($sHost,':')!==FALSE){
 			$aIPParts = explode(':',$sHost);
@@ -208,7 +209,7 @@ class AunPacket {
 	 * that we can support more than 1 type of econet emulation/encapsulation
 	 * @return object econetpacket
 	*/
-	public function buildEconetPacket()
+	public function buildEconetPacket(): \HomeLan\FileStore\Messages\EconetPacket
 	{
 		$oEconetPacket = new EconetPacket();
 		$oEconetPacket->setPort($this->iPort);
@@ -228,10 +229,20 @@ class AunPacket {
 	 *
 	 * @return string
 	*/
-	public function toString()
+	public function toString(): string
 	{
 		$aPkt = unpack('C*',$this->getData());
 		$sReturn = "Header | Type : ".$this->getPacketType()." Port : ".$this->getPort()." Control : ".$this->iCb." Pad : ".$this->iPadding." Seq : ".$this->iSeq." | Body |".implode(":",$aPkt)." |";
 		return $sReturn;	
+	}
+
+	/**
+	  * At the moment just a sub function to be compatible with the EncapsulationInterface 
+	  *
+	  * @TODO Implment this method as part of the move to the Encapsulation Abstraction so websocket clients, and server to server encapuslations will work
+	 */ 	  
+	public function getReplies(): array
+	{
+
 	}
 }

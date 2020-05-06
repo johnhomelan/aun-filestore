@@ -52,7 +52,7 @@ class EconetPacket {
 		}
 	}
 
-	public function getPortByName(string $sName)
+	public function getPortByName(string $sName): void
 	{
 		if(in_array($sName,$this->aPortMap)){
 			$this->iPort = array_search($sName,$this->aPortMap);
@@ -61,7 +61,7 @@ class EconetPacket {
 		}
 	}
 
-	public function setData(string $sData)
+	public function setData(string $sData): void
 	{
 		$this->sData=$sData;
 	}
@@ -71,12 +71,12 @@ class EconetPacket {
 		return $this->sData;
 	}
 	
-	public function setPort(int $iPort)
+	public function setPort(int $iPort): void
 	{
 		$this->iPort = $iPort;
 	}
 
-	public function setFlags(int $iCb)
+	public function setFlags(int $iCb): void
 	{
 		$this->iCb = $iCb;
 	}
@@ -86,12 +86,12 @@ class EconetPacket {
 		return $this->iCb;
 	}
 
-	public function setSourceStation($sStation)
+	public function setSourceStation($sStation): void
 	{
 		$this->iSrcStn=$sStation;
 	}
 
-	public function setSourceNetwork($iNetwork)
+	public function setSourceNetwork($iNetwork): void
 	{
 		$this->iSrcNet=$iNetwork;
 	}
@@ -108,13 +108,13 @@ class EconetPacket {
 
 
 
-	public function setDestinationNetwork($iNetwork)
+	public function setDestinationNetwork($iNetwork): void
 	{
 		$this->iDstNet=$iNetwork;
 
 	}
 
-	public function setDestinationStation($sStation)
+	public function setDestinationStation($sStation): void
 	{
 		if(strpos($sStation,'.')!==FALSE){
 			$aStnParts = explode('.',$sStation);

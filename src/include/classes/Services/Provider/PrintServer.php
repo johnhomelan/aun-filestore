@@ -5,10 +5,15 @@
  * @author John Brown <john@home-lan.co.uk>
  * @package core
 */
-namespace HomeLan\FileStore\Services; 
+namespace HomeLan\FileStore\Services\Provider; 
 
+use HomeLan\FileStore\Services\ProviderInterface;
+use HomeLan\FileStore\Services\Provider\PrintServer\Admin;
+use HomeLan\FileStore\Services\ServiceDispatcher;
 use HomeLan\FileStore\Authentication\Security; 
-
+use HomeLan\FileStore\Messages\PrintServerEnquiry; 
+use HomeLan\FileStore\Messages\PrintServerData; 
+use HomeLan\FileStore\Messages\EconetPacket; 
 use config;
 /**
 /**
@@ -16,10 +21,8 @@ use config;
  *
  * @package core
 */
-class PrintServer {
+class PrintServer implements ProviderInterface {
 
-	protected $oMainApp = NULL ;
-	
 	protected $aReplyBuffer = array();
 
 	protected $aPrintBuffer = array();
@@ -35,28 +38,78 @@ class PrintServer {
 		$this->oLogger = $oLogger;
 	}
 
+	public function getName(): string
+	{
+		return "Print Server";
+	}
+	/** 
+	 * Gets the admin interface Object for this serivce provider 
+	 *
+	*/
+	public function getAdminInterface(): ?AdminInterface
+	{
+		return new Admin($this);
+	}
 
-	protected function _addReplyToBuffer($oReply)
+	protected function _addReplyToBuffer($oReply): void
 	{
 		$this->aReplyBuffer[]=$oReply;
 	}
 
-	public function init(\HomeLan\FileStore\Command\Filestore $oMainApp)
+	/**
+	 * Gets the ports this service uses 
+	 * 
+	 * @return array of int
+	*/
+	public function getServicePorts(): array
 	{
-		$this->oMainApp = $oMainApp;
+		return [0xA0, 0xD2];
 	}
 
+	/** 
+	 * All inbound bridge messages come in via broadcast 
+	 *
+	*/
+	public function broadcastPacketIn(EconetPacket $oPacket): void
+	{
+
+	}
+
+	/** 
+	 * All inbound bridge messages come in via broadcast, so unicast should ignore them
+	 *
+	*/
+	public function unicastPacketIn(EconetPacket $oPacket): void
+	{
+		$sPort = $oPacket->getPortName();
+		switch($sPort){
+			case 'PrinterServerEnquiry':
+				$this->processEnquiry(new PrintServerEnquiry($oPacket, $this->oLogger));
+				break;
+			case 'PrinterServerData':
+				$this->processData(new PrintServerData($oPacket));
+				break;
+		}
+	}
+
+
+	public function registerService(ServiceDispatcher $oServiceDispatcher): void
+	{
+	}
 
 	/**
 	 * Retreives all the reply objects built by the fileserver 
 	 *
 	 * This method removes the replies from the buffer 
 	*/
-	public function getReplies()
+	public function getReplies(): array
 	{
-		$aReplies = $this->aReplyBuffer;
-		$this->aReplyBuffer = array();
-		return $aReplies;
+		$aReturn = [];
+		foreach($this->aReplyBuffer as $oReply){
+			$aReturn[] = $oReply->buildEconetpacket();
+		}
+		$this->aReplyBuffer = [];
+		return $aReturn;
 	}
 
 	/**
@@ -64,7 +117,7 @@ class PrintServer {
 	 *
 	 * @param object fsrequest $oEquiry
 	*/
-	public function processEnquiry($oEnquiry)
+	public function processEnquiry($oEnquiry): void
 	{
 		$sPrinterName = $oEnquiry->getString(1,6);
 		$iRequestCode = $oEnquiry->get16bitIntLittleEndian(7);
@@ -99,7 +152,7 @@ class PrintServer {
 		$this->_addReplyToBuffer($oReply);
 	}
 
-	public function processData($oPrintData)
+	public function processData($oPrintData): void
 	{
 		$oReply = $oPrintData->buildReply();
 		if($oPrintData->getLen()==1 AND $oPrintData->getByte(1)==0){
@@ -147,5 +200,16 @@ class PrintServer {
 		}
 		
 		
+	}
+
+	public function getJobs(): array
+	{
+		$aJobs = [];
+		foreach($this->aPrintBuffer as $iNetwork=>$aData){
+			foreach($aData as $iStation=>$aBufferInfo){
+				$aJobs[] = ['network'=>$iNetwork, 'station'=>$iStation, 'began'=>$aBufferInfo['began'], 'size'=>strlen($aBufferInfo['data'])];
+			}
+		}
+		return $aJobs;
 	}
 }

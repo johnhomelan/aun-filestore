@@ -74,7 +74,7 @@ class Filestore extends Command {
 	 * Initializes the application injecting the service deps 
 	 *
 	*/
-	public function __construct(\HomeLan\FileStore\Services\FileServer $oFileServer, \HomeLan\FileStore\Services\PrintServer $oPrintServer, \HomeLan\FileStore\Services\Bridge $oBridge, \Psr\Log\LoggerInterface $oLogger)
+	public function __construct(\HomeLan\FileStore\Services\Provider\FileServer $oFileServer, \HomeLan\FileStore\Services\Provider\PrintServer $oPrintServer, \HomeLan\FileStore\Services\Provider\Bridge $oBridge, \Psr\Log\LoggerInterface $oLogger)
 	{
 		$this->oFileServer = $oFileServer;
 		$this->oPrintServer = $oPrintServer;
@@ -89,7 +89,7 @@ class Filestore extends Command {
 	 * This does not contain the main loop, it just initializes the system
 	 * then jumps to the main loop.
 	*/
-	protected function execute(InputInterface $oInput, OutputInterface $oOutput)
+	protected function execute(InputInterface $oInput, OutputInterface $oOutput): void
 	{
 		$bDaemonize = FALSE;
 		$sPidFile = "";
@@ -147,7 +147,7 @@ class Filestore extends Command {
 	 * Displays how to use the command
 	 *
 	*/
-	protected function configure()
+	protected function configure(): void
 	{
 		$sHelp =<<<EOF
 Start the file, print and bridge services
@@ -182,7 +182,7 @@ EOF;
 	 * The main signal this handles is SIGALARM, that is used to perform the house keeping tasks
 	 * @param int $iSigno
 	*/
-	public function sigHandler($iSigno)
+	public function sigHandler(int $iSigno): void
 	{
 		switch($iSigno){
 			case SIGALRM:
@@ -206,7 +206,7 @@ EOF;
 	 * Sets up the next alarm to trigger the house keeping tasks
 	 *
 	*/
-	protected function registerNextAlarm()
+	protected function registerNextAlarm(): void
 	{
 		pcntl_alarm(config::getValue('housekeeping_interval'));
 	}
@@ -219,7 +219,7 @@ EOF;
 	 *
 	 * @param string $sPidFile The file to write the pid of the child to
 	*/
-	function daemonize($sPidFile)
+	function daemonize(string $sPidFile): void
 	{
 		$iPid=pcntl_fork();
 		if($iPid != 0){
@@ -241,7 +241,7 @@ EOF;
 	 * Sets up a UDP sockets listening on the port used for aun packets 
 	 *
 	*/	
-	function bindSockets()
+	function bindSockets(): void
 	{
 		$this->oAunSocket = @stream_socket_server('udp://'.config::getValue('aun_listen_address').':'.config::getValue('aun_listen_port'),$iErrno,$sErrstr,STREAM_SERVER_BIND);
 		if($this->oAunSocket===FALSE){
@@ -255,7 +255,7 @@ EOF;
 	 *
 	 * Reads any aun packets, decodes them, acks them, sends them to the fileserver class (if they are file server packets) and dispatches any replys
 	*/
-	function loop()
+	function loop(): void
 	{
 		$sErrstr=NULL;
 		$iErrno=NULL;
@@ -291,7 +291,7 @@ EOF;
 	 *
 	 * @param int $oSocket The socket to read the aun packet from
 	*/
-	public function processAunPacket($oSocket)
+	public function processAunPacket(int $oSocket): void
 	{
 		$oAunPacket = new AunPacket();
 		
@@ -341,7 +341,7 @@ EOF;
 	 *
 	 * Only the file server is implemented at the moment so only file server packets are processed 
 	*/
-	public function processEconetPacket($oEconetPacket)
+	public function processEconetPacket($oEconetPacket): void
 	{
 	
 		$sPort = $oEconetPacket->getPortName();
@@ -370,7 +370,7 @@ EOF;
 	 * Any reply packets produced by the file server class at this point are dispatched	
 	 * @param object econetpacket $oEconetPacket
 	*/
-	public function fileServerCommand($oEconetPacket)
+	public function fileServerCommand($oEconetPacket): void
 	{
 		$oFsRequest = new FsRequest($oEconetPacket, $this->oLogger);
 		$this->oFileServer->processRequest($oFsRequest);
@@ -387,7 +387,7 @@ EOF;
 	 *
 	 * @param object econetpacket $oEconetPacket The packet from the client to the print server enquiry port
 	*/
-	public function printServerEnquiry($oEconetPacket)
+	public function printServerEnquiry($oEconetPacket): void
 	{
 		$oPrintServerEnquiry = new PrintServerEnquiry($oEconetPacket, $this->oLogger);
 		$this->oPrintServer->processEnquiry($oPrintServerEnquiry);
@@ -400,7 +400,7 @@ EOF;
 	 *
 	 * @param object econetpacket $oEconetPacket The print data from the client 
 	*/
-	public function printerServerData($oEconetPacket)
+	public function printerServerData($oEconetPacket): void
 	{
 		$oPrintServerData = new PrintServerData($oEconetPacket);
 		$this->oPrintServer->processData($oPrintServerData);
@@ -412,7 +412,7 @@ EOF;
 	 *
 	 * @param object econetpacket $oEconetPacket The bridge command from the client
 	*/
-	public function bridgeCommand($oEconetPacket)
+	public function bridgeCommand($oEconetPacket): void
 	{
 		try{
 			$oBridgeRequest = new BridgeRequest($oEconetPacket, $this->oLogger);
@@ -427,7 +427,7 @@ EOF;
 	 * Sends any print server packets to thier respective clients 
 	 *
 	*/
-	public function sendPrinterReplies()
+	public function sendPrinterReplies(): void
 	{
 		$aReplies = $this->oPrintServer->getReplies();
 		foreach($aReplies as $oReply){
@@ -441,7 +441,7 @@ EOF;
 	 * Sends any bridge reply packets to thier respective clients 
 	 *
 	*/
-	public function sendBridgeReplies()
+	public function sendBridgeReplies(): void
 	{
 		$aReplies = $this->oBridge->getReplies();
 		foreach($aReplies as $oReply){
@@ -456,7 +456,7 @@ EOF;
 	 *
 	 * @param object econetpacket $oReplyEconetPacket
 	*/
-	public function dispatchReply($oReplyEconetPacket)
+	public function dispatchReply($oReplyEconetPacket): void
 	{
 		usleep(config::getValue('bbc_default_pkg_sleep'));
 		$sIP = Map::ecoAddrToIpAddr($oReplyEconetPacket->getDestinationNetwork(),$oReplyEconetPacket->getDestinationStation());
@@ -480,7 +480,7 @@ EOF;
 	 *
 	 * @param int $iPort the econet port to accept the stream on
 	*/
-	public function directStream($iNetwork,$iStation,$iPort,$iRecursion=0)
+	public function directStream($iNetwork,$iStation,int $iPort,$iRecursion=0)
 	{
 		if($iRecursion>20){
 			throw new Exception("No direct stream recevied in 20 packets");
@@ -545,7 +545,7 @@ EOF;
 	 * @param int $iStation
 	 * @param int $iRecursion
 	*/
-	public function waitForAck($iNetwork,$iStation,$iRecursion=0)
+	public function waitForAck(int $iNetwork,int $iStation,int $iRecursion=0)
 	{
 		if($iRecursion>20){
 			throw new Exception("No ack recevied in 20 packets");

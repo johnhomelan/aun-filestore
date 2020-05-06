@@ -31,7 +31,7 @@ class FsReply extends Reply {
 	 * @param int $iCode Error code 0-254
 	 * @param string $sMessage The message for the error
 	*/
-	public function setError($iCode,$sMessage)
+	public function setError(int $iCode,string $sMessage): void
 	{
 		if(is_numeric($iCode) AND $iCode>0 AND $iCode<256){
 			$this->sPkt = pack('CC',$this->aTypeMap['DONE'],$iCode);
@@ -45,47 +45,47 @@ class FsReply extends Reply {
 		}
 	}
 
-	public function loginRespone($iUrd,$iCsd,$iLib,$iOpt)
+	public function loginRespone($iUrd,$iCsd,$iLib,$iOpt): void
 	{
 		$this->sPkt = pack('CCCCCC',$this->aTypeMap['LOGIN'],0,$iUrd,$iCsd,$iLib,$iOpt);
 	}
 
-	public function Done()
+	public function Done(): void
 	{
 		$this->sPkt = pack('C',$this->aTypeMap['DONE']);
 	}
 
-	public function DoneOK()
+	public function DoneOK(): void
 	{
 		$this->sPkt = pack('CC',$this->aTypeMap['DONE'],0);
 	}
 
-	public function DirOK()
+	public function DirOK(): void
 	{
 		$this->sPkt = pack('CC',$this->aTypeMap['DIR'],0);
 	}
 
-	public function LibOK()
+	public function LibOK(): void
 	{
 		$this->sPkt = pack('CC',$this->aTypeMap['LIB'],0);
 	}
 
-	public function UnrecognisedOk()
+	public function UnrecognisedOk(): void
 	{
 		$this->sPkt = pack('CC',$this->aTypeMap['UNREC'],0);
 	}
 
-	public function DiscsOk()
+	public function DiscsOk(): void
 	{
 		$this->sPkt = pack('CC',$this->aTypeMap['DISCS'],0);
 	}
 	
-	public function DoneNoton()
+	public function DoneNoton(): void
 	{
 		$this->sPkt = pack('CC',$this->aTypeMap['DONE'],0xAE);
 	}
 
-	public function InfoOk()
+	public function InfoOk(): void
 	{
 		$this->sPkt = pack('CC',$this->aTypeMap['INFO'],0);
 	}

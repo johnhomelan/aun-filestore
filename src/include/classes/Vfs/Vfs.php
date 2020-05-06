@@ -37,7 +37,7 @@ class Vfs {
 
 	protected static $bMultiuser;
 
-	public static function init(\Psr\Log\LoggerInterface $oLogger,string $sVfsPlugins, bool $bMultiuser = false)
+	public static function init(\Psr\Log\LoggerInterface $oLogger,string $sVfsPlugins, bool $bMultiuser = false): void
 	{
 		self::$oLogger = $oLogger;
 		self::$sVfsPlugins = $sVfsPlugins;
@@ -51,7 +51,7 @@ class Vfs {
 	 *
 	 *
 	*/
-	public static function houseKeeping()
+	public static function houseKeeping(): void
 	{
 		//Call house keeping on each plugin 
 		$aPlugins = Vfs::getVfsPlugins();
@@ -119,7 +119,7 @@ class Vfs {
 	 * It also calls the init method of each one when the class is loaded for the first time
 	 *
 	**/
-	public static function getVfsPlugins()
+	public static function getVfsPlugins(): array
 	{
 		$aReturn = array();
 		$aVfsPlugins = explode(',',self::$sVfsPlugins);
@@ -148,7 +148,7 @@ class Vfs {
 	 * @param boolean $bReadOnly If the file descriptor should be read-only
 	 * @return object file-descriptor
 	*/	
-	static protected function _buildFiledescriptorFromEconetPath($oUser,FilePath $oEconetPath,$bMustExist,$bReadOnly)
+	static protected function _buildFiledescriptorFromEconetPath(object $oUser,FilePath $oEconetPath,bool $bMustExist,bool $bReadOnly): object
 	{
 		$aPlugins = Vfs::getVfsPlugins();
 		$oHandle=NULL;
@@ -177,7 +177,7 @@ class Vfs {
 	 * @param object $oFd
 	 * @return array
 	*/
-	static public function getDirectoryListing($oFd)
+	static public function getDirectoryListing(object $oFd): array
 	{
 		$sPath = $oFd->getEconetPath();
 		$aDirectoryListing = array();
@@ -203,7 +203,7 @@ class Vfs {
 	 * @param object user $oUser
 	 * @return int
 	*/
-	static public function getFreeFileHandleID($oUser)
+	static public function getFreeFileHandleID($oUser): int
 	{
 		if(!array_key_exists($oUser->getUserName(),Vfs::$aFileHandleIDs)){
 			Vfs::$aFileHandleIDs[$oUser->getUserName()]=0;
@@ -222,7 +222,7 @@ class Vfs {
 	 * @param int $iStation
 	 * @param string $sEconetPath
 	*/
-	static public function createDirectory($iNetwork,$iStation,$sEconetPath)
+	static public function createDirectory(int $iNetwork,int $iStation,string $sEconetPath): void
 	{
 		if(!Security::isLoggedIn($iNetwork,$iStation)){
 			self::$oLogger->debug("vfs: Un-able to create a handle for a station that is not logged in (Who are you?)");
@@ -255,7 +255,7 @@ class Vfs {
 	 * @param int $iStation
 	 * @param string $sEconetPath
 	*/
-	static public function deleteFile($iNetwork,$iStation,$sEconetPath)
+	static public function deleteFile(int $iNetwork,int $iStation,string $sEconetPath): void
 	{
 		if(!Security::isLoggedIn($iNetwork,$iStation)){
 			self::$oLogger->debug("vfs: Un-able to create a handle for a station that is not logged in (Who are you?)");
@@ -289,7 +289,7 @@ class Vfs {
 	 * @param string $sEconetPathFrom
 	 * @param string $sEconetPathTo	 
 	*/
-	static public function moveFile($iNetwork,$iStation,$sEconetPathFrom,$sEconetPathTo)
+	static public function moveFile(int $iNetwork,int $iStation,string $sEconetPathFrom,string $sEconetPathTo): void
 	{
 		if(!Security::isLoggedIn($iNetwork,$iStation)){
 			self::$oLogger->debug("vfs: Un-able to create a handle for a station that is not logged in (Who are you?)");
@@ -327,7 +327,7 @@ class Vfs {
 	 * @param int $iLoadAddr
 	 * @param int $iExecAddr
 	*/ 
-	static public function saveFile($iNetwork,$iStation,$sEconetPath,$sData,$iLoadAddr,$iExecAddr)
+	static public function saveFile(int $iNetwork,int $iStation,string $sEconetPath,string $sData,int $iLoadAddr,int $iExecAddr): void
 	{
 		if(!Security::isLoggedIn($iNetwork,$iStation)){
 			self::$oLogger->debug("vfs: Un-able to create a handle for a station that is not logged in (Who are you?)");
@@ -362,7 +362,7 @@ class Vfs {
 	 * @param int $iLoadAddr
 	 * @param int $iExecAddr
 	*/ 
-	static public function createFile($iNetwork,$iStation,$sEconetPath,$iSize,$iLoadAddr,$iExecAddr)
+	static public function createFile(int $iNetwork,int $iStation,string $sEconetPath,int $iSize,int $iLoadAddr,int $iExecAddr): void
 	{
 		if(!Security::isLoggedIn($iNetwork,$iStation)){
 			self::$oLogger->debug("vfs: Un-able to create a handle for a station that is not logged in (Who are you?)");
@@ -394,7 +394,7 @@ class Vfs {
 	 * @param int $iStation
 	 * @param string $sEconetPath
 	*/	 
-	static public function getFile($iNetwork,$iStation,$sEconetPath)
+	static public function getFile(int $iNetwork,int $iStation,string $sEconetPath)
 	{
 		if(!Security::isLoggedIn($iNetwork,$iStation)){
 			self::$oLogger->debug("vfs: Un-able to create a handle for a station that is not logged in (Who are you?)");
@@ -425,7 +425,7 @@ class Vfs {
 	 * @param int $iStation
 	 * @param string $sEconetPath	
 	*/
-	static public function getMeta($iNetwork,$iStation,$sEconetPath)
+	static public function getMeta(int $iNetwork,int $iStation,string $sEconetPath)
 	{	
 		if(!Security::isLoggedIn($iNetwork,$iStation)){
 			self::$oLogger->debug("vfs: Un-able to create a handle for a station that is not logged in (Who are you?)");
@@ -470,7 +470,7 @@ class Vfs {
 	 * @param int $iExec
 	 * @param int $iAccess
 	*/
-	static public function setMeta($iNetwork,$iStation,$sEconetPath,$iLoad,$iExec,$iAccess)
+	static public function setMeta(int $iNetwork,int $iStation,string $sEconetPath,int $iLoad,int $iExec,int $iAccess): void
 	{	
 		if(!Security::isLoggedIn($iNetwork,$iStation)){
 			self::$oLogger->debug("vfs: Un-able to create a handle for a station that is not logged in (Who are you?)");
@@ -501,7 +501,7 @@ class Vfs {
 	 * @param boolean $bMustExist
 	 * @param boolean $bReadOnly
 	*/
-	static public function createFsHandle($iNetwork,$iStation,$sEconetPath,$bMustExist=TRUE,$bReadOnly=TRUE)
+	static public function createFsHandle(int $iNetwork,int $iStation,string $sEconetPath,bool $bMustExist=TRUE,bool $bReadOnly=TRUE)
 	{
 		if(!Security::isLoggedIn($iNetwork,$iStation)){
 			self::$oLogger->debug("vfs: Un-able to create a handle for a station that is not logged in (Who are you?)");
@@ -532,7 +532,7 @@ class Vfs {
 	 * @param int $iStation
 	 * @param int $iHandle The filehandel used by the client
 	*/
-	static public function getFsHandle($iNetwork,$iStation,$iHandle)
+	static public function getFsHandle(int $iNetwork,int $iStation,int $iHandle)
 	{
 		if(array_key_exists($iNetwork,Vfs::$aHandles) AND array_key_exists($iStation,Vfs::$aHandles[$iNetwork]) AND array_key_exists($iHandle,Vfs::$aHandles[$iNetwork][$iStation])){
 			return Vfs::$aHandles[$iNetwork][$iStation][$iHandle];
@@ -548,7 +548,7 @@ class Vfs {
 	 * @param int $iStation
 	 * @param int $iHandle The filehandel used by the client
 	*/
-	static public function closeFsHandle($iNetwork,$iStation,$iHandle)
+	static public function closeFsHandle(int $iNetwork,int $iStation,int $iHandle): void
 	{
 		if(array_key_exists($iNetwork,Vfs::$aHandles) AND array_key_exists($iStation,Vfs::$aHandles[$iNetwork]) AND array_key_exists($iHandle,Vfs::$aHandles[$iNetwork][$iStation])){
 			Vfs::$aHandles[$iNetwork][$iStation][$iHandle]->close();
@@ -563,7 +563,7 @@ class Vfs {
 	 * @param string $sEconetFullFilePath
 	 * @return int A uniqe 24bit int for a file
 	*/
-	static public function getSin($sEconetFullFilePath)
+	static public function getSin(string $sEconetFullFilePath): int
 	{
 		if(!array_key_exists($sEconetFullFilePath,Vfs::$aSinMapping)){
 			Vfs::$iSin++;

@@ -5,12 +5,18 @@
  * @author John Brown <john@home-lan.co.uk>
  * @package core
 */
-namespace HomeLan\FileStore\Services; 
+namespace HomeLan\FileStore\Services\Provider; 
 
+use HomeLan\FileStore\Services\Provider\FileServer\Admin;
+use HomeLan\FileStore\Services\ProviderInterface;
+use HomeLan\FileStore\Services\ServiceDispatcher;
+use HomeLan\FileStore\Services\StreamIn;
 use HomeLan\FileStore\Vfs\Vfs; 
 use HomeLan\FileStore\Authentication\Security; 
 use HomeLan\FileStore\Authentication\User; 
 use HomeLan\FileStore\Messages\EconetPacket; 
+use HomeLan\FileStore\Messages\FsRequest;
+use HomeLan\FileStore\Messages\FsReply;
 
 use config;
 use Exception;
@@ -20,15 +26,17 @@ use Exception;
  *
  * @package core
 */
-class FileServer {
+class FileServer implements ProviderInterface{
 
-	protected $oMainApp = NULL ;
+	protected $oServiceDispatcher = NULL ;
 
 	protected $aCommands = array('BYE','CAT','CDIR','DELETE','DIR','FSOPT','INFO','I AM','LIB','LOAD','LOGOFF','PASS','RENAME','SAVE','SDISC','NEWUSER','PRIV','REMUSER','i.','CHROOT','CHROOTOFF');
 	
 	protected $aReplyBuffer = array();
 
 	protected $oLogger;
+
+	protected $aStreamsIn = [];
 
 	/**
 	 * Initializes the service
@@ -37,31 +45,144 @@ class FileServer {
 	public function __construct(\Psr\Log\LoggerInterface $oLogger)
 	{
 		$this->oLogger = $oLogger;
+		Vfs::init($this->oLogger, config::getValue('vfs_plugins'), config::getValue('security_mode')=='multiuser');
+	
 	}
 
-	protected function _addReplyToBuffer($oReply)
+	public function getName(): string
+	{
+		return "File Server";
+	}
+
+	/** 
+	 * Gets the admin interface Object for this serivce provider 
+	 *
+	*/
+	public function getAdminInterface(): ?AdminInterface
+	{
+		return new Admin($this);
+	}
+
+	public function addReplyToBuffer(FsReply $oReply): void
 	{
 		$this->aReplyBuffer[]=$oReply;
 	}
 
-	public function init(\HomeLan\FileStore\Command\Filestore $oMainApp)
+	/**
+	 * Gets the ports this service uses 
+	 * 
+	 * @return array of int
+	*/
+	public function getServicePorts(): array
 	{
-		Vfs::init($this->oLogger, config::getValue('vfs_plugins'), config::getValue('security_mode')=='multiuser');
-		Security::init($this->oLogger);
-		$this->oMainApp = $oMainApp;
+		return [0x9C, config::getValue('econet_data_stream_port')];
 	}
 
+	/** 
+	 * Filestore messages can come in via broadcast (e.g. sdiscs which is uses to find servers)
+	 *
+	*/
+	public function broadcastPacketIn(EconetPacket $oPacket): void
+	{
+		$oFsRequest = new FsRequest($oPacket, $this->oLogger);
+		switch($oFsRequest->getFunction()){
+			case 'EC_FS_FUNC_CLI':
+				$this->processRequest($oFsRequest);
+				break;
+		}
+	}
+
+	/** 
+	 * All inbound bridge messages come in via broadcast, so unicast should ignore them
+	 *
+	*/
+	public function unicastPacketIn(EconetPacket $oPacket): void
+	{
+		if($oPacket->getPort()==config::getValue('econet_data_stream_port')){
+			$this->streamPacketIn($oPacket);
+		}else{
+			$this->processRequest(new FsRequest($oPacket, $this->oLogger));
+		}
+	}
+
+
+	/**
+	 * Called when the service provider is registered with the ServiceDispatcher
+	*/
+	public function registerService(ServiceDispatcher $oServiceDispatcher): void
+	{
+		$this->oServiceDispatcher = $oServiceDispatcher;
+		$_this = $this;
+		$this->oServiceDispatcher->addHousingKeepingTask(function() use ($_this){
+			$_this->houseKeeping();
+		});
+	}
 
 	/**
 	 * Retreives all the reply objects built by the fileserver 
 	 *
 	 * This method removes the replies from the buffer 
 	*/
-	public function getReplies()
+	public function getReplies(): array
 	{
-		$aReplies = $this->aReplyBuffer;
-		$this->aReplyBuffer = array();
-		return $aReplies;
+		$aReturn = [];
+		foreach($this->aReplyBuffer as $oReply){
+			switch(get_class($oReply)){
+				case 'HomeLan\FileStore\Messages\FsReply':
+					$aReturn[] = $oReply->buildEconetpacket();
+					break;
+				case 'HomeLan\FileStore\Messages\EconetPacket':
+					$aReturn[] = $oReply;
+					break;
+				default:
+					$this->oLogger->warning("Service provider filestore produced a reply of the invalid type ".get_class($oReply)." dropping");
+					break;
+			}
+		}
+		$this->aReplyBuffer = [];
+		return $aReturn;
+	}
+
+	/**
+	 * Deals with inbound packets for io streams (e.g. save, putbytes) 
+	*/
+	private function streamPacketIn(EconetPacket $oPacket): void
+	{
+		if(isset($this->aStreamsIn[$oPacket->getSourceNetwork()][$oPacket->getSourceStation()])){
+			$this->aStreamsIn[$oPacket->getSourceNetwork()][$oPacket->getSourceStation()]->inboundPacket($oPacket);
+		}	
+	}
+
+	/**
+	 * Adds a new io stream (e.g. save, putbytes)
+	*/
+	private function addStream(StreamIn $oStream,int $iNetwork, int $iStation): void
+	{
+		if(!is_array($this->aStreamsIn[$iNetwork])){
+			$this->aStreamsIn[$iNetwork]=[];
+		}
+		$this->aStreamsIn[$iNetwork][$iStation]=$oStream;
+	}
+
+	/**
+	 * Frees an existing io stream
+	*/
+	private function freeStream(StreamIn $oStream,int $iNetwork, int $iStation): void
+	{
+		unset($this->aStreamsIn[$iNetwork][$iStation]);
+		unset ($oStream);
+	}
+
+	public function houseKeeping(): void
+	{
+		$aStreamsToTest =  $this->aStreamsIn;
+		foreach($aStreamsToTest as $iNetwork=>$aStations){
+			foreach($aStations as $iStation=>$oStream){
+				//If the stream has timeout it will call its own fail event that
+				//should clean up the stream and references in $this->aStreamsIn 
+				$oStream->checkTimedOut();	
+			}
+		}
 	}
 
 	/**
@@ -70,7 +191,7 @@ class FileServer {
 	 * The fsrequest object contains the request the fileserver must process 
 	 * @param object fsrequest $oFsRequest
 	*/
-	public function processRequest($oFsRequest)
+	public function processRequest($oFsRequest): void
 	{
 		$sFunction = $oFsRequest->getFunction();
 		$this->oLogger->debug("FS function ".$sFunction);
@@ -92,7 +213,7 @@ class FileServer {
 		if(!Security::isLoggedIn($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation())){
 			$oReply = $oFsRequest->buildReply();
 			$oReply->setError(0xbf,"Who are you?");
-			$this->_addReplyToBuffer($oReply);
+			$this->addReplyToBuffer($oReply);
 			return;
 		}
 
@@ -199,7 +320,7 @@ class FileServer {
 	/**
 	 * Reads which file handle is stored in the requests csd and lib byte, and updates the users csd and lib 
 	*/
-	public function updateCsdLib($oFsRequest)
+	public function updateCsdLib($oFsRequest): void
 	{
 		$oUser = Security::getUser($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation());
 		try {
@@ -233,7 +354,7 @@ class FileServer {
 	 *
 	 * @param object $oFsRequest
 	*/
-	public function cliDecode($oFsRequest)
+	public function cliDecode(object $oFsRequest): void
 	{
 		$sData = $oFsRequest->getData();
 		$aDataAs8BitInts = unpack('C*',$sData);
@@ -245,7 +366,7 @@ class FileServer {
 		$this->oLogger->debug("Command: ".$sDataAsString.".");
 
 		foreach($this->aCommands as $sCommand){
-			$iPos = stripos($sDataAsString,$sCommand);
+			$iPos = stripos($sDataAsString,(string) $sCommand);
 			if($iPos===0){
 				//Found cli command found
 				$iOptionsPos = $iPos+strlen($sCommand);
@@ -258,7 +379,7 @@ class FileServer {
 		$oReply = $oFsRequest->buildReply();
 		$oReply->UnrecognisedOk();
 		$oReply->appendString($sCommand);
-		$this->_addReplyToBuffer($oReply);
+		$this->addReplyToBuffer($oReply);
 	}
 
 	/**
@@ -268,7 +389,7 @@ class FileServer {
 	 * @param string $sCommand The command to run
 	 * @param string $sOptions The command arguments
 	*/
-	public function runCli($oFsRequest,$sCommand,$sOptions)
+	public function runCli($oFsRequest,string $sCommand,string $sOptions): void
 	{
 		switch(strtoupper($sCommand)){
 				case 'BYE':
@@ -330,7 +451,7 @@ class FileServer {
 				$this->oLogger->debug("Un-handled command ".$sCommand);
 				$oReply = $oFsRequest->buildReply();
 				$oReply->setError(0x99,"Un-implemented command");
-				$this->_addReplyToBuffer($oReply);
+				$this->addReplyToBuffer($oReply);
 				break;
 		}
 	}
@@ -340,7 +461,7 @@ class FileServer {
 	 * 
 	 * @param object fsrequest $oFsRequest
 	*/
-	public function loadCommand($oFsRequest)
+	public function loadCommand($oFsRequest): void
 	{
 		$this->loadFile($oFsRequest);	
 	}
@@ -351,7 +472,7 @@ class FileServer {
 	 * @param object fsrequest $oFsRequest
 	 * @param string $sOptions The arguments passed to *I AM (e.g. username password)
 	*/
-	public function login($oFsRequest,$sOptions)
+	public function login($oFsRequest,string $sOptions): void
 	{
 		$this->oLogger->debug("fileserver: Login called ".$sOptions);
 		$aOptions = explode(" ",$sOptions);
@@ -374,7 +495,7 @@ class FileServer {
 
 			//Send Wrong Password
 			$oReply->setError(0xbb,"Incorrect password");
-			$this->_addReplyToBuffer($oReply);
+			$this->addReplyToBuffer($oReply);
 			return;
 		}
 
@@ -402,7 +523,7 @@ class FileServer {
 			$oReply = $oFsRequest->buildReply();
 			$this->oLogger->debug("fileserver: Login ok urd:".$oUrd->getId()." csd:".$oCsd->getId()." lib:".$oLib->getId());
 			$oReply->loginRespone($oUrd->getId(),$oCsd->getId(),$oLib->getId(),$oUser->getBootOpt());
-			$this->_addReplyToBuffer($oReply);
+			$this->addReplyToBuffer($oReply);
 		}else{
 			//Login failed
 			$oReply = $oFsRequest->buildReply();
@@ -410,7 +531,7 @@ class FileServer {
 			//Send Wrong Password
 			$this->oLogger->info("Login Failed: For user ".$sUser." invalid password/no such user");
 			$oReply->setError(0xbb,"Incorrect password");
-			$this->_addReplyToBuffer($oReply);
+			$this->addReplyToBuffer($oReply);
 		}
 			
 	}
@@ -421,7 +542,7 @@ class FileServer {
 	 * We can be called as a cli command (*bye) and by its own function call
 	 * @param object fsrequest $oFsRequest
 	*/
-	public function logout($oFsRequest)
+	public function logout($oFsRequest): void
 	{
 		try{
 			Security::logout($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation());
@@ -431,15 +552,16 @@ class FileServer {
 			$oReply = $oFsRequest->buildReply();
 			$oReply->setError(0xbf,"Who are you?");
 		}
-		$this->_addReplyToBuffer($oReply);
+		$this->addReplyToBuffer($oReply);
 	}
+
 	/**
 	 * Handles the *info command
 	 *
 	 * @param object fsrequest $oFsRequest
 	 * @param string 
 	*/
-	public function cmdInfo($oFsRequest,$sFile)
+	public function cmdInfo($oFsRequest,$sFile): void
 	{
 		$this->oLogger->debug("cmdInfo for path ".$sFile."");
 		$oReply = $oFsRequest->buildReply();
@@ -453,7 +575,7 @@ class FileServer {
 		}catch(Exception $oException){
 			$oReply->setError(0xff,"No such file");
 		}
-		$this->_addReplyToBuffer($oReply);
+		$this->addReplyToBuffer($oReply);
 	}
 
 	/**
@@ -462,7 +584,7 @@ class FileServer {
 	 * This method is called when the client uses *. to produce the directory header
 	 * @param objects fsrequest $oFsRequest
 	*/
-	public function getInfo($oFsRequest)
+	public function getInfo($oFsRequest): void
 	{
 		$sDir = $oFsRequest->getString(2);
 		$this->oLogger->debug("getInfo for path ".$sDir." (".$oFsRequest->getByte(1).")");
@@ -486,7 +608,7 @@ class FileServer {
 					$oReply->appendByte(0x00);
 					$oReply->appendByte(0x00);
 				}
-				$this->_addReplyToBuffer($oReply);
+				$this->addReplyToBuffer($oReply);
 				return;
 				break;
 			case 5:
@@ -517,7 +639,7 @@ class FileServer {
 					$oReply->appendByte(0x00);
 					$oReply->appendByte(0x00);
 				}	
-				$this->_addReplyToBuffer($oReply);
+				$this->addReplyToBuffer($oReply);
 				return;
 				break;
 			case 1:
@@ -539,7 +661,7 @@ class FileServer {
 					$oReply->appendByte(0x00);
 					$oReply->appendByte(0x00);
 				}
-				$this->_addReplyToBuffer($oReply);
+				$this->addReplyToBuffer($oReply);
 				return;
 				break;
 			case 2:
@@ -564,7 +686,7 @@ class FileServer {
 					$oReply->appendByte(0x00);
 					$oReply->appendByte(0x00);
 				}
-				$this->_addReplyToBuffer($oReply);
+				$this->addReplyToBuffer($oReply);
 				return;
 	
 				break;
@@ -587,7 +709,7 @@ class FileServer {
 					$oReply->appendByte(0x00);
 					$oReply->appendByte(0x00);
 				}
-				$this->_addReplyToBuffer($oReply);
+				$this->addReplyToBuffer($oReply);
 				return;
 				
 				break;
@@ -618,12 +740,12 @@ class FileServer {
 					//Cyle  always 0 probably should not be 
 					$oReply->appendByte(0);
 
-					$this->_addReplyToBuffer($oReply);
+					$this->addReplyToBuffer($oReply);
 
 				}catch(Exception $oException){
 					$oReply = $oFsRequest->buildReply();
 					$oReply->setError(0x8e,"Bad INFO argument");
-					$this->_addReplyToBuffer($oReply);
+					$this->addReplyToBuffer($oReply);
 				}
 				return;
 				break;
@@ -636,10 +758,10 @@ class FileServer {
 		}
 		$oReply = $oFsRequest->buildReply();
 		$oReply->setError(0x8e,"Bad INFO argument");
-		$this->_addReplyToBuffer($oReply);
+		$this->addReplyToBuffer($oReply);
 	}
 
-	public function setInfo($oFsRequest)
+	public function setInfo($oFsRequest): void
 	{
 		$iArg = $oFsRequest->getByte(1);
 		$oReply = $oFsRequest->buildReply();
@@ -672,10 +794,10 @@ class FileServer {
 				break;
 		}
 		$oReply->DoneOk();
-		$this->_addReplyToBuffer($oReply);
+		$this->addReplyToBuffer($oReply);
 	}
 
-	public function eof($oFsRequest)
+	public function eof($oFsRequest): void
 	{
 		$this->oLogger->debug("Eof Called by ".$oFsRequest->getSourceNetwork().".".$oFsRequest->getSourceStation());
 		//Get the file handle id
@@ -690,7 +812,7 @@ class FileServer {
 		}else{
 			$oReply->appendByte(0);
 		}
-		$this->_addReplyToBuffer($oReply);
+		$this->addReplyToBuffer($oReply);
 	}
 
 	/**
@@ -699,7 +821,7 @@ class FileServer {
  	 * This method produces the directory listing for *.
 	 * @param object fsrequest $oFsRequest
 	*/
-	public function examine($oFsRequest)
+	public function examine($oFsRequest): void
 	{
 		$oReply = $oFsRequest->buildReply();
 		$iArg = $oFsRequest->getByte(1);
@@ -803,10 +925,10 @@ class FileServer {
 				$oReply->appendByte(0x80);
 				break;
 		}
-		$this->_addReplyToBuffer($oReply);
+		$this->addReplyToBuffer($oReply);
 	}
 
-	public function getArgs($oFsRequest)
+	public function getArgs($oFsRequest): void
 	{
 		$iHandle = $oFsRequest->getByte(1);
 		$iArg = $oFsRequest->getByte(2);
@@ -844,7 +966,7 @@ class FileServer {
 				$oReply->DoneOk();
 				break;
 		}
-		$this->_addReplyToBuffer($oReply);
+		$this->addReplyToBuffer($oReply);
 	}
 
 	/**
@@ -852,7 +974,7 @@ class FileServer {
 	 *
 	 * Sends a reply with the name of the disc the csd is on the name of the csd and library
 	*/
-	public function getUenv($oFsRequest)
+	public function getUenv($oFsRequest): void
 	{
 		$oReply = $oFsRequest->buildReply();
 		$oReply->DoneOk();
@@ -875,7 +997,7 @@ class FileServer {
 			$oReply->setError(0xff,$oException->getMessage());
 		}
 
-		$this->_addReplyToBuffer($oReply);
+		$this->addReplyToBuffer($oReply);
 	}
 
 	/**
@@ -883,7 +1005,7 @@ class FileServer {
 	 *
 	 * This method is invoked by the *DIR command
 	*/
-	public function changeDirectory($oFsRequest,$sOptions)
+	public function changeDirectory($oFsRequest,$sOptions): void
 	{
 		$oReply = $oFsRequest->buildReply();
 		$oUser = Security::getUser($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation());
@@ -891,7 +1013,7 @@ class FileServer {
 		//Chech the user is logged in
 		if(!is_object($oUser)){
 			$oReply->setError(0xbf,"Who are you?");
-			$this->_addReplyToBuffer($oReply);
+			$this->addReplyToBuffer($oReply);
 			return;
 		}
 		
@@ -907,7 +1029,7 @@ class FileServer {
 					if(!$oNewCsd->isDir()){
 						$this->oLogger->debug("User tryed to change to directory ".$oNewCsd->getEconetDirName()." however its not a directory.");
 						$oReply->setError(0xbe,"Not a directory");
-						$this->_addReplyToBuffer($oReply);
+						$this->addReplyToBuffer($oReply);
 						return;
 					}
 				}
@@ -933,7 +1055,7 @@ class FileServer {
 				$oReply->setError(0xff,"No such directory.");	
 			}
 		}
-		$this->_addReplyToBuffer($oReply);
+		$this->addReplyToBuffer($oReply);
 
 
 	}
@@ -943,7 +1065,7 @@ class FileServer {
 	 *
 	 * This method is invoked by the *LIB command
 	*/
-	public function changeLibrary($oFsRequest,$sOptions)
+	public function changeLibrary($oFsRequest,$sOptions): void
 	{
 		$oReply = $oFsRequest->buildReply();
 		
@@ -953,7 +1075,7 @@ class FileServer {
 				if(!$oNewLib->isDir()){
 					$this->oLogger->debug("User tryed to change the library to ".$oNewLib->getEconetDirName()." however its not a directory.");
 					$oReply->setError(0xbe,"Not a directory");
-					$this->_addReplyToBuffer($oReply);
+					$this->addReplyToBuffer($oReply);
 					return;
 				}
 				Vfs::closeFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oFsRequest->getLib());
@@ -967,7 +1089,7 @@ class FileServer {
 		}else{
 			$oReply->setError(0xff,"Syntax ?");	
 		}
-		$this->_addReplyToBuffer($oReply);
+		$this->addReplyToBuffer($oReply);
 
 
 	}
@@ -977,17 +1099,17 @@ class FileServer {
 	 *
 	 * This method in invoked by the *CDIR command
 	*/
-	public function createDirectory($oFsRequest,$sOptions)
+	public function createDirectory($oFsRequest,$sOptions): void
 	{
 		$oReply = $oFsRequest->buildReply();
 		if(strlen($sOptions)<1){
 			$oReply->setError(0xff,"Syntax");
-			$this->_addReplyToBuffer($oReply);
+			$this->addReplyToBuffer($oReply);
 			return;
 		}
 		if(strlen($sOptions)>10){
 			$oReply->setError(0xff,"Maximum directory name length is 10");
-			$this->_addReplyToBuffer($oReply);
+			$this->addReplyToBuffer($oReply);
 			return;
 		}
 
@@ -997,7 +1119,7 @@ class FileServer {
 		}catch(Exception $oException){
 			$oReply->setError(0xff,"Unable to create directory");
 		}
-		$this->_addReplyToBuffer($oReply);
+		$this->addReplyToBuffer($oReply);
 	}
 
 	/**
@@ -1005,7 +1127,7 @@ class FileServer {
 	 *
 	 * This method is invoked as either a cli or a file server command depending on the nfs version
 	*/
-	public function deleteFile($oFsRequest,$sOptions)
+	public function deleteFile($oFsRequest,$sOptions): void
 	{
 		$oReply = $oFsRequest->buildReply();
 		if(strlen($sOptions)<1){
@@ -1018,7 +1140,7 @@ class FileServer {
 				$oReply->setError(0xff,"Unable to delete");
 			}
 		}
-		$this->_addReplyToBuffer($oReply);
+		$this->addReplyToBuffer($oReply);
 	}
 
 	/**
@@ -1026,7 +1148,7 @@ class FileServer {
 	 *
 	 * This method is invoked as the cli command *RENAME
 	*/ 
-	public function renameFile($oFsRequest,$sOptions)
+	public function renameFile($oFsRequest,$sOptions): void
 	{
 		$oReply = $oFsRequest->buildReply();
 		if(strlen($sOptions)<2){
@@ -1040,7 +1162,7 @@ class FileServer {
 				$oReply->setError(0xff,"No such file");
 			}
 		}
-		$this->_addReplyToBuffer($oReply);
+		$this->addReplyToBuffer($oReply);
 		
 	}
 
@@ -1048,7 +1170,7 @@ class FileServer {
 	 * Opens a file
 	 *
 	*/
-	public function openFile($oFsRequest)
+	public function openFile($oFsRequest): void
 	{
 		$iMustExist = $oFsRequest->getByte(1);
 		$iReadOnly = $oFsRequest->getByte(2);
@@ -1071,23 +1193,23 @@ class FileServer {
 		}catch(Exception $oException){
 			$oReply->setError(0xff,"No such file");
 		}
-		$this->_addReplyToBuffer($oReply);
+		$this->addReplyToBuffer($oReply);
 	}
 
 	/**
 	 * Closes a file
 	 *
 	*/
-	public function closeFile($oFsRequest)
+	public function closeFile($oFsRequest): void
 	{
 		$iHandle = $oFsRequest->getByte(1);
 		Vfs::closeFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$iHandle);
 		$oReply = $oFsRequest->buildReply();
 		$oReply->DoneOk();
-		$this->_addReplyToBuffer($oReply);
+		$this->addReplyToBuffer($oReply);
 	}
 
-	public function getBytes($oFsRequest)
+	public function getBytes($oFsRequest): void
 	{
 		//The urd becomes the port to send the data to
 		$iDataPort = $oFsRequest->getUrd();
@@ -1104,70 +1226,90 @@ class FileServer {
 
 		$oFsHandle = Vfs::getFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$iHandle);	
 		
+		//Send reply directly
 		$oReply = $oFsRequest->buildReply();
 		$oReply->DoneOk();
-		//Send reply directly
-		$oReplyEconetPacket = $oReply->buildEconetpacket();
-		$this->oMainApp->dispatchReply($oReplyEconetPacket);	
-		try {
-			$this->oMainApp->waitForAck($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation());
-		}catch(Exception $oException){
-			return;
-		}
+		$this->addReplyToBuffer($oReply);
 
-		//Break the data into blocks and send it
-//		if($iUserPtr!=0){
-			//Move the file pointer to offset
+		$_this = $this;
+		$oServiceDispatcher = $this->oServiceDispatcher;
+	
+		$this->oServiceDispatcher->addAckEvent($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),function() use ($_this, $oFsHandle, $oFsRequest, $iBytes, $iOffset, $iDataPort, $oServiceDispatcher){
 			$oFsHandle->setPos($iOffset);
-//		}
-		$bLoop = TRUE;
-		$iFullBlocks = round($iBytes/256,0,PHP_ROUND_HALF_DOWN);
-		$iBytesToRead = $iBytes;
-		while($bLoop){
-			if($iFullBlocks>1){
+			$iBytesToRead = $iBytes;
+			if($iBytesToRead>256){
 				$sBlock = $oFsHandle->read(256);
-				$iFullBlocks--;
 				$iBytesToRead=$iBytesToRead-256;
 			}else{
 				$sBlock = $oFsHandle->read($iBytesToRead);
 				$iBytesToRead = $iBytesToRead-strlen($sBlock);
 			}
+
 			$oEconetPacket = new EconetPacket();
 			$oEconetPacket->setDestinationNetwork($oFsRequest->getSourceNetwork());
 			$oEconetPacket->setDestinationStation($oFsRequest->getSourceStation());
 			$oEconetPacket->setPort($iDataPort);
 			$oEconetPacket->setData($sBlock);
-			$this->oMainApp->dispatchReply($oEconetPacket);
-			try {
-				$this->oLogger->debug("Waitinig for ack");
-				$oAck = $this->oMainApp->waitForAck($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation());
-			}catch(Exception $oException){
-				return;
-			}
 
-			if($iBytesToRead==0 OR $oFsHandle->isEof()){
-				$bLoop=FALSE;
-			}
-		}
-		$oReply2 = $oFsRequest->buildReply();
-		$oReply2->DoneOk();
-		//Flag
-		if($oFsHandle->isEof()){
-			//As we have hit EOF the number of bytes sent has fallen short of the ammount requested send the remaining bytes
-			$iOutstandingBytes = $iBytes - strlen($sBlock);
-			$oEconetPacket->setData(str_pad("",$iOutstandingBytes,0));
-			$this->oMainApp->dispatchReply($oEconetPacket);
-			$oReply2->appendByte(0x80);
-		}else{
-			$oReply2->appendByte(0);
-		}
-		//Number of bytes sent
-		$oReply2->append24bitIntLittleEndian($iBytes-$iBytesToRead);
-		$oReply2->setFlags($oAck->getFlags());
-		$this->_addReplyToBuffer($oReply2);
+			$this->addReplyToBuffer($oEconetPacket);
+			$this->oServiceDispatcher->sendPackets($this);
+
+			$cAckHandler = function($oAckPacket, $_this, $oFsRequest, $oServiceDispatcher, $iBytes, $iBytesToRead, $oFsHandle, $iDataPort, &$cAckHandler){
+				if($iBytesToRead==0 OR $oFsHandle->isEof()){
+					$oReply2 = $oFsRequest->buildReply();
+					$oReply2->DoneOk();
+					//Flag
+					if($oFsHandle->isEof()){
+						//As we have hit EOF the number of bytes sent has fallen short of the ammount requested send the remaining bytes
+						$oEconetPacket = new EconetPacket();
+						$oEconetPacket->setDestinationNetwork($oFsRequest->getSourceNetwork());
+						$oEconetPacket->setDestinationStation($oFsRequest->getSourceStation());
+						$oEconetPacket->setPort($iDataPort);
+						$oEconetPacket->setData(str_pad("",$iBytesToRead,0));
+						$_this->addReplyToBuffer($oEconetPacket);
+						$oReply2->appendByte(0x80);
+					}else{
+						$oReply2->appendByte(0);
+					}
+					//Number of bytes sent
+					$oReply2->append24bitIntLittleEndian($iBytes-$iBytesToRead);
+					$oReply2->setFlags($oAckPacket->getFlags());
+					$_this->addReplyToBuffer($oReply2);
+					$oServiceDispatcher->sendPackets($_this);
+
+				}else{
+					if($iBytesToRead>256){
+						$sBlock = $oFsHandle->read(256);
+					}else{
+						$sBlock = $oFsHandle->read($iBytesToRead);
+					}
+					$iBytesToRead = $iBytesToRead-strlen($sBlock);
+
+					$oEconetPacket = new EconetPacket();
+					$oEconetPacket->setDestinationNetwork($oFsRequest->getSourceNetwork());
+					$oEconetPacket->setDestinationStation($oFsRequest->getSourceStation());
+					$oEconetPacket->setPort($iDataPort);
+					$oEconetPacket->setData($sBlock);
+
+					$_this->addReplyToBuffer($oEconetPacket);
+					$oServiceDispatcher->addAckEvent($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),function() use ($_this, $oFsRequest, $oServiceDispatcher, $iBytes, $iBytesToRead, $oFsHandle, $iDataPort, $cAckHandler){
+						($cAckHandler)($_this, $oFsRequest, $oServiceDispatcher, $iBytes, $iBytesToRead, $oFsHandle, $iDataPort, $cAckHandler);
+					});
+					$oServiceDispatcher->sendPackets($_this);
+				}
+
+			};
+
+			$oServiceDispatcher->addAckEvent($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),function($oAckPacket) use (&$cAckHandler, $_this, $oFsRequest, $oServiceDispatcher, $iBytes, $iBytesToRead, $oFsHandle, $iDataPort) {
+				($cAckHandler)($oAckPacket, $_this, $oFsRequest, $oServiceDispatcher, $iBytes, $iBytesToRead, $oFsHandle, $iDataPort, $cAckHandler) ;
+			});
+		});
+
+		$this->oServiceDispatcher->sendPackets($this);
+
 	}
 
-	public function putBytes($oFsRequest)
+	public function putBytes($oFsRequest): void
 	{
 		//File handle
 		$iHandle = $oFsRequest->getByte(1);
@@ -1194,43 +1336,44 @@ class FileServer {
 		$oReply->append16bitIntLittleEndian(256);
 
 		//Send reply directly
-		$oReplyEconetPacket = $oReply->buildEconetpacket();
-		$this->oMainApp->dispatchReply($oReplyEconetPacket);	
-		$sData = "";
+		$this->addReplyToBuffer($oReply);
 
-		while(strlen($sData)<$iBytes){
-			try {
-				usleep(config::getValue('bbc_default_pkg_sleep'));
-				//We now need to take over the receving of packets breifly going to our streaming port
-				$oEconetPacket = $this->oMainApp->directStream($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),config::getValue('econet_data_stream_port'));
+		$_this = $this;
 
-			}catch(Exception $oException){
-				$this->oLogger->debug("Putbytes timed out waiting for data");
-				//$oFailReply=$oFsRequest->buildReply();
-				//$oFailReply->setError(0xff,"Timeout");
-				//$this->_addReplyToBuffer($oReply);
-				//return;
-			}
-			//We got the data send a reply
-			usleep(config::getValue('bbc_default_pkg_sleep'));
-			$oAck = $oFsRequest->buildReply();
-			$oAck->DoneOk();
-			$oAckPackage = $oAck->buildEconetpacket();
-			$oAckPackage->setPort(0x91);
-			$this->oMainApp->dispatchReply($oAckPackage);
+		$this->addStream($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(), 
+			new StreamIn(
+				config::getValue('econet_data_stream_port'),
+				$iBytes,
+				function($oStream,$oPacket) use ($oFsRequest, $_this) {
+					$oAck = $oFsRequest->buildReply();
+					$oAck->DoneOk();
+					$oAckPackage = $oAck->buildEconetpacket();
+					$oAckPackage->setPort(0x91);
+					$_this->addReplyToBuffer($oAckPackage);
+				},
+				function($oStream,$sData) use ($oFsRequest, $oFsHandle, $_this){
+					$oFsHandle->write($sData);
+					usleep(config::getValue('bbc_default_pkg_sleep'));
+					$oReply2 = $oFsRequest->buildReply();
+			                $oReply2->DoneOk();
+			                $oReply2->appendByte(0);
+					$oReply2->append24bitIntLittleEndian(strlen($sData));
+					$_this->addReplyToBuffer($oReply2);
+					$_this->freeStream($oStream,$oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation());
+				},
+				function($oStream, $sError) use($oFsRequest, $_this) {
+					$_this->oLogger->debug("Putbytes waiting for data (".$sError.")");
+					$_this->freeStream($oStream,$oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation());
+					$oFailReply=$oFsRequest->buildReply();
+					$oFailReply->setError(0xff,"Timeout");
+					$this->addReplyToBuffer($oFailReply);
+				}
+			)
+		);
 
-			$sData=$sData.$oEconetPacket->getData();
-		}
-		$oFsHandle->write($sData);
-		usleep(config::getValue('bbc_default_pkg_sleep'));
-		$oReply2 = $oFsRequest->buildReply();
-		$oReply2->DoneOk();
-		$oReply2->appendByte(0);
-		$oReply2->append24bitIntLittleEndian(strlen($sData));
-		$this->_addReplyToBuffer($oReply2);
 	}
 
-	public function getByte($oFsRequest)
+	public function getByte($oFsRequest): void
 	{
 		$iHandle = $oFsRequest->getByte(1);
 		$oReply = $oFsRequest->buildReply();
@@ -1247,11 +1390,11 @@ class FileServer {
 			$oReply->appendByte(0);
 		}
 
-		$this->_addReplyToBuffer($oReply);
+		$this->addReplyToBuffer($oReply);
 		
 	}
 
-	public function putByte($oFsRequest)
+	public function putByte($oFsRequest): void
 	{
 		$iHandle = $oFsRequest->getByte(1);
 		$iByte = $oFsRequest->getByte(2);
@@ -1263,7 +1406,7 @@ class FileServer {
 		$oFsRequest->write($iByte);
 
 		$oReply->DoneOk();
-		$this->_addReplyToBuffer($oReply);
+		$this->addReplyToBuffer($oReply);
 	}
 
 	/**
@@ -1271,7 +1414,7 @@ class FileServer {
 	 *
 	 * This method if invoked by the use saving a basic program 
 	*/
-	public function saveFile($oFsRequest)
+	public function saveFile($oFsRequest): void
 	{
 		//For save operation the urd is replaced with the ackport
 		$iAckPort = $oFsRequest->getUrd();
@@ -1300,53 +1443,51 @@ class FileServer {
 		$this->oLogger->debug("Save File ".$sPath." of size ".$iSize);
 		//Send reply directly
 		$oReplyEconetPacket = $oReply->buildEconetpacket();
-		$this->oMainApp->dispatchReply($oReplyEconetPacket);	
+		$this->addReplyToBuffer($oReplyEconetPacket);	
 		$sData = '';
+		$_this = $this;
 
-		//Get the data from the cleint
-		while(strlen($sData)<$iSize){
-			try {
-				//We now need to take over the receving of packets breifly going to our streaming port
-				$this->oLogger->debug("Direct stream (".strlen($sData)."/".$iSize.")");
-				$oEconetPacket = $this->oMainApp->directStream($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),config::getValue('econet_data_stream_port'));
-			}catch(Exception $oException){
-				$this->oLogger->debug("Client failed to send direct stream during save operation (".$oException->getMessage().")");
-				$oFailReply=$oFsRequest->buildReply();
-				$oFailReply->setError(0xff,"Timeout");
-				$this->_addReplyToBuffer($oReply);
-				return;
-			}
-			$oReply = $oFsRequest->buildReply();
-			$oReply->DoneOk();
-			$oReplyEconetPacket = $oReply->buildEconetpacket();
-			//Set the port to be the requested ack port
-			$oReplyEconetPacket->setPort($iAckPort);
-			$this->oMainApp->dispatchReply($oReplyEconetPacket);	
-			$this->oLogger->debug("Replay sent for block of ".strlen($oEconetPacket->getData()));
-			try {
-				$this->oMainApp->waitForAck($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation());
-			}catch(Exception $oException){
-				$this->oLogger->debug($oException->getMessage());
-			}
-			$sData=$sData.$oEconetPacket->getData();
-		}
-		Vfs::saveFile($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sPath,$sData,$iLoad,$iExec);
-	
-		//File is saved 	
-		$oReply2 = $oFsRequest->buildReply();
-		$oReply2->DoneOk();
-		$oReply2->appendByte(15);
-		//Add current date
-		
-		$iDay = date('j',time());
-		$oReply2->appendByte($iDay);
-		//The last byte is month and year, first 4 bits year, last 4 bits month
-		$iYear= date('y',time());
-		$iYear << 4;
+		$this->addStream($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(), 
+			new StreamIn(
+				config::getValue('econet_data_stream_port'),
+				$iSize,
+				function($oStream,$oPacket) use ($oFsRequest, $iAckPort, $_this) {
+					$oReply = $oFsRequest->buildReply();
+					$oReply->DoneOk();
+					$oReplyEconetPacket = $oReply->buildEconetpacket();
+					$oReplyEconetPacket->setPort($iAckPort);
+					$_this->addReplyToBuffer($oReplyEconetPacket);
+					$_this->oLogger->debug("Replay sent for block of ".strlen($oPacket->getData()));
+				},
+				function($oStream,$sData) use ($oFsRequest, $sPath, $iLoad, $iExec, $_this){
+					Vfs::saveFile($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sPath,$sData,$iLoad,$iExec);
+				
+					//File is saved 	
+					$oReply2 = $oFsRequest->buildReply();
+					$oReply2->DoneOk();
+					$oReply2->appendByte(15);
 
-		$iYear = $iYear+date('n',time());
-		$oReply2->appendByte($iYear);
-		$this->_addReplyToBuffer($oReply2);
+					//Add current date	
+					$iDay = date('j',time());
+					$oReply2->appendByte($iDay);
+
+					//The last byte is month and year, first 4 bits year, last 4 bits month
+					$iYear= date('y',time());
+					$iYear << 4;
+					$iYear = $iYear+date('n',time());
+					$oReply2->appendByte($iYear);
+					$_this->addReplyToBuffer($oReply2);
+					$_this->freeStream($oStream,$oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation());
+				},
+				function($oStream, $sError) use($oFsRequest, $_this) {
+					$_this->oLogger->debug("Filesave failed (".$sError.")");
+					$_this->freeStream($oStream,$oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation());
+					$oFailReply=$oFsRequest->buildReply();
+					$oFailReply->setError(0xff,"Timeout");
+					$this->addReplyToBuffer($oFailReply);
+				}
+			)
+		);
 		
 	}
 
@@ -1355,7 +1496,7 @@ class FileServer {
 	 *
 	 * This methos is invoked by the use of LOAD "filename"
 	*/
-	public function loadFile($oFsRequest)
+	public function loadFile($oFsRequest): void
 	{
 		//The urd handle in the request is not the urd when load is called but denotes the port to stream the data to
 		$iDataPort = $oFsRequest->getUrd();
@@ -1368,7 +1509,7 @@ class FileServer {
 			$oMeta = Vfs::getMeta($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sPath);
 		}catch(Exception $oException){
 			$oReply->setError(0x99,"No such file");
-			$this->_addReplyToBuffer($oReply);
+			$this->addReplyToBuffer($oReply);
 			return;			
 		}
 
@@ -1381,12 +1522,16 @@ class FileServer {
 		//Add ctime 2 bytes day,year+month
 		$oReply->appendRaw($oMeta->getCTime());
 		$oReplyEconetPacket = $oReply->buildEconetpacket();
-		$this->oMainApp->dispatchReply($oReplyEconetPacket);	
+		$this->addReplyToBuffer($oReplyEconetPacket);	
+
+		$_this = $this;
+		$oLoop = $this->oServiceDispatcher->getLoop();
+		$fTime = config::getValue('bbc_default_pkg_sleep');
+		$oServiceDispatcher = $this->oServiceDispatcher;
 
 		//Break the data into blocks and send it
 		while(strlen($sFileData)>0){
 			
-			usleep(config::getValue('bbc_default_pkg_sleep'));
 			//Build a 256 byte block
 			$sBlock = substr($sFileData,0,256);
 			//Remote 256 byte from the string
@@ -1396,12 +1541,20 @@ class FileServer {
 			$oEconetPacket->setDestinationStation($oFsRequest->getSourceStation());
 			$oEconetPacket->setPort($iDataPort);
 			$oEconetPacket->setData($sBlock);
-			$this->oMainApp->dispatchReply($oEconetPacket);
+	
+			$oLoop->setTimer($fTime/1000000,function() use ($_this, $oEconetPacket, $oServiceDispatcher){
+				$_this->addReplyToBuffer($oEconetPacket);
+				$oServiceDispatcher->sendPackets($_this);
+			});
+			$fTime = $fTime + config::getValue('bbc_default_pkg_sleep');
 		}
+
 
 		$oReply2 = $oFsRequest->buildReply();
 		$oReply2->DoneOk();
-		$this->_addReplyToBuffer($oReply2);
+		$oLoop->setTimer($fTime/1000000,function() use ($_this, $oReply2){
+			$_this->addReplyToBuffer($oReply2);
+		});
 
 	}
 
@@ -1410,7 +1563,7 @@ class FileServer {
 	 *
 	 * This method is invoked by the *PASS command
 	*/
-	public function setPassword($oFsRequest,$sOptions)
+	public function setPassword($oFsRequest,$sOptions): void
 	{
 		$aOptions = explode(' ',$sOptions);
 		$oReply = $oFsRequest->buildReply();
@@ -1448,14 +1601,14 @@ class FileServer {
 				$oReply->setError(0xff,$oException->getMessage());
 			}
 		}
-		$this->_addReplyToBuffer($oReply);
+		$this->addReplyToBuffer($oReply);
 	}
 
 	/**
 	 * Creates a new user (*NEWUSER)
 	 *
 	*/
-	public function createUser($oFsRequest,$sOptions)
+	public function createUser($oFsRequest,$sOptions): void
 	{
 		$oReply = $oFsRequest->buildReply();
 		if(strlen($sOptions)<1){
@@ -1487,14 +1640,14 @@ class FileServer {
 			}
 		
 		}
-		$this->_addReplyToBuffer($oReply);
+		$this->addReplyToBuffer($oReply);
 	}
 
 	/**
 	 * Removes a user (*REMUSER)
 	 *
 	*/
-	public function removeUser($oFsRequest,$sOptions)
+	public function removeUser($oFsRequest,$sOptions): void
 	{
 		$oReply = $oFsRequest->buildReply();
 		if(strlen($sOptions)<1 OR !ctype_alnum($sOptions)){
@@ -1510,14 +1663,14 @@ class FileServer {
 				$oReply->setError(0xff,"You do not have admin rights");
 			}
 		}
-		$this->_addReplyToBuffer($oReply);
+		$this->addReplyToBuffer($oReply);
 	}
 
 	/**
 	 * Set the privalage of a given user
 	 *
 	*/
-	public function privUser($oFsRequest,$sOptions)
+	public function privUser($oFsRequest,$sOptions): void
 	{
 		$aOptions = explode(' ',$sOptions);
 		$oReply = $oFsRequest->buildReply();
@@ -1537,14 +1690,14 @@ class FileServer {
 			}
 			
 		}
-		$this->_addReplyToBuffer($oReply);
+		$this->addReplyToBuffer($oReply);
 	}
 
 	/**
 	 * Implements the commnad sdisc
 	 *
 	*/
-	public function sDisc($oFsRequest,$sOptions)
+	public function sDisc($oFsRequest,$sOptions): void
 	{
 		//As we can only ever have one disc this command has rather little todo
 		$oReply = $oFsRequest->buildReply();
@@ -1552,10 +1705,10 @@ class FileServer {
 		$oReply->appendByte($oFsRequest->getUrd());
 		$oReply->appendByte($oFsRequest->getCsd());
 		$oReply->appendByte($oFsRequest->getLib());
-		$this->_addReplyToBuffer($oReply);
+		$this->addReplyToBuffer($oReply);
 	}
 
-	public function chroot($oFsRequest,$sOptions)
+	public function chroot($oFsRequest,$sOptions): void
 	{
 		$oReply = $oFsRequest->buildReply();
 		$oUser = security::getUser($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation());
@@ -1572,7 +1725,7 @@ class FileServer {
 		if(!$oNewRootDir->isDir()){
 			$this->oLogger->debug("User tryed to change to directory ".$oNewRootDir->getEconetDirName()." however its not a directory.");
 			$oReply->setError(0xbe,"Not a directory");
-			$this->_addReplyToBuffer($oReply);
+			$this->addReplyToBuffer($oReply);
 			return;
 		}
 
@@ -1584,7 +1737,7 @@ class FileServer {
 		$oReply->DirOk();
 		$oReply->appendByte($oNewCsd->getID());
 		$oUser->setCsd($oNewCsd->getEconetPath());
-		$this->_addReplyToBuffer($oReply);
+		$this->addReplyToBuffer($oReply);
 			
 	}
 
@@ -1592,7 +1745,7 @@ class FileServer {
 	 * Turns off the chroot feature reverting back to the true root of the filestore 
 	 *
 	*/
-	public function chrootoff($oFsRequest,$sOptions)
+	public function chrootoff($oFsRequest,$sOptions): void
 	{
 		$oReply = $oFsRequest->buildReply();
 		$oUser = security::getUser($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation());
@@ -1604,14 +1757,14 @@ class FileServer {
 		$oReply->DirOk();
 		$oReply->appendByte($oNewCsd->getID());
 		$oUser->setCsd($oNewCsd->getEconetPath());
-		$this->_addReplyToBuffer($oReply);
+		$this->addReplyToBuffer($oReply);
 	}
 
 	/**
 	 * Lists the users logged in
 	 *
 	*/
-	public function usersOnline($oFsRequest)
+	public function usersOnline($oFsRequest): void
 	{
 		$iStart = $oFsRequest->getByte(1);
 		$iCount	= $oFsRequest->getByte(2);
@@ -1641,18 +1794,18 @@ class FileServer {
 					}
 				}
 				if($i>($iStart+$iCount)){
-					$this->_addReplyToBuffer($oReply);
+					$this->addReplyToBuffer($oReply);
 					return;
 				}
 			}
 		}
-		$this->_addReplyToBuffer($oReply);
+		$this->addReplyToBuffer($oReply);
 	}
 
 	/**
 	 * Get the network and station number for a given user
 	*/
-	public function getUsersStation($oFsRequest)
+	public function getUsersStation($oFsRequest): void
 	{
 		$sUser = $oFsRequest->getString(1);
 		$oReply = $oFsRequest->buildReply();
@@ -1670,13 +1823,13 @@ class FileServer {
 		}else{
 			$oReply->DoneNoton();
 		}
-		$this->_addReplyToBuffer($oReply);	
+		$this->addReplyToBuffer($oReply);	
 	}
 
 	/**
 	 * Gets a list of discs
 	*/
-	public function getDiscs($oFsRequest)
+	public function getDiscs($oFsRequest): void
 	{
 		$iDrive = $oFsRequest->getByte(1);
 		$iNDrives = $oFsRequest->getByte(2);
@@ -1695,7 +1848,7 @@ class FileServer {
 			//Indicate that no more discs are present
 			$oReply->appendByte(0);
 		}
-		$this->_addReplyToBuffer($oReply);	
+		$this->addReplyToBuffer($oReply);	
 	}
 
 	/**
@@ -1703,7 +1856,7 @@ class FileServer {
 	 * 
 	 * The answer is fake a BBCs can't handle the same sizes as Linux
 	*/
-	public function getDiscFree($oFsRequest)
+	public function getDiscFree($oFsRequest): void
 	{
 		$sDisc = $oFsRequest->getString(1);
 		$oReply = $oFsRequest->buildReply();
@@ -1711,25 +1864,25 @@ class FileServer {
 		$oReply->DoneOk();
 		$oReply->append32bitIntLittleEndian(config::getValue('vfs_default_disc_free'));
 		$oReply->append32bitIntLittleEndian(config::getValue('vfs_default_disc_size'));
-		$this->_addReplyToBuffer($oReply);
+		$this->addReplyToBuffer($oReply);
 	}
 
 	/**
 	 * Gets the version of the server
 	 *
 	*/
-	public function getVersion($oFsRequest)
+	public function getVersion($oFsRequest): void
 	{
 		$oReply = $oFsRequest->buildReply();
 		$oReply->DoneOk();
 		$oReply->appendString("aunfs_srv ".config::getValue('version'));
-		$this->_addReplyToBuffer($oReply);
+		$this->addReplyToBuffer($oReply);
 	}
 
 	/**
 	 * Gets the time
 	*/
-	public function getTime($oFsRequest)
+	public function getTime($oFsRequest): void
 	{
 		$oReply = $oFsRequest->buildReply();
 		$iTime = time();
@@ -1744,14 +1897,14 @@ class FileServer {
 		//Min
 		$oReply->appendByte(ltrim(date('i',$iTime),0));
 
-		$this->_addReplyToBuffer($oReply);
+		$this->addReplyToBuffer($oReply);
 	}
 
 	/**
 	 * Creates a file
 	 *
 	*/
-	public function createFile($oFsRequest)
+	public function createFile($oFsRequest): void
 	{
 		$iAckPort = $oFsRequest->getUrd();
 
@@ -1783,7 +1936,7 @@ class FileServer {
 		$iYear = $iYear+date('n',time());
 		$oReply->appendByte($iYear);
 		
-		$this->_addReplyToBuffer($oReply);
+		$this->addReplyToBuffer($oReply);
 	}
 
 	/**
@@ -1792,7 +1945,7 @@ class FileServer {
 	 * Given we can't map the scale of Linux storage sizes to bbc storage sizes, the amount of free space is just a constant.
 	 * Maybe at some point this could be mapped to a unix users quota if the system has quotas setup
 	*/
-	public function getUserDiscFree($oFsRequest)
+	public function getUserDiscFree($oFsRequest): void
 	{
 		//Username
 		$sUsername = $oFsRequest->getString(1);
@@ -1801,6 +1954,6 @@ class FileServer {
 		$oReply->DoneOk();
 		$oReply->append24bitIntLittleEndian(config::getValue('vfs_default_disc_free'));
 
-		$this->_addReplyToBuffer($oReply);
+		$this->addReplyToBuffer($oReply);
 	}
 }

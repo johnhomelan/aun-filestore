@@ -71,7 +71,7 @@ class Request {
 		return NULL;
 	}
 
-	public function getString($iStart)
+	public function getString($iStart): string
 	{
 		$aBytes = unpack('C*',$this->sData);
 		$sRetstr = "";
@@ -92,14 +92,14 @@ class Request {
 		return $aInt[1];
 	}
 
-	public function get24bitIntLittleEndian($iStart)
+	public function get24bitIntLittleEndian($iStart): int
 	{
 		$aBytes = unpack('C*',$this->sData);
 		$iInt= bindec(str_pad(decbin($aBytes[$iStart+2]),8,"0",STR_PAD_LEFT).str_pad(decbin($aBytes[$iStart+1]),8,"0",STR_PAD_LEFT).str_pad(decbin($aBytes[$iStart]),8,"0",STR_PAD_LEFT));
 		return $iInt;
 	}
 
-	public function get16bitIntLittleEndian($iStart)
+	public function get16bitIntLittleEndian($iStart): void
 	{
 		$sStr = substr($this->sData,$iStart-1,2);
 		$aInt = unpack('v',$sStr);

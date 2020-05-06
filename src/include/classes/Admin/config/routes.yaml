@@ -1,0 +1,6 @@
+index:
+    path: /
+    defaults: { _controller: 'HomeLan\FileStore\Admin\Controller\IndexController::index' }
+service_page:
+    path: service
+    defaults: { _controller: 'HomeLan\FileStore\Admin\Controller\ServiceController::index' }

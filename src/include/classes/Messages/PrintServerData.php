@@ -46,7 +46,7 @@ class PrintServerData {
 		return $this->iSourceNetwork;
 	}
 
-	public function getReplyPort()
+	public function getReplyPort(): int
 	{
 		return 0xD1;
 	}
@@ -70,7 +70,7 @@ class PrintServerData {
 	 *
 	 * @param string $sBinaryString
 	*/
-	public function decode($sBinaryString)
+	public function decode(string $sBinaryString): void
 	{
 	
 		//The reset is data
@@ -87,7 +87,7 @@ class PrintServerData {
 		return NULL;
 	}
 
-	public function getString($iStart,$iLen=NULL)
+	public function getString($iStart,$iLen=NULL): string
 	{
 		$aBytes = unpack('C*',$this->sData);
 		if(is_null($iLen)){
@@ -111,25 +111,25 @@ class PrintServerData {
 		return $aInt[1];
 	}
 
-	public function get24bitIntLittleEndian($iStart)
+	public function get24bitIntLittleEndian($iStart): int
 	{
 		$aBytes = unpack('C*',$this->sData);
 		$iInt= bindec(str_pad(decbin($aBytes[$iStart+2]),8,"0",STR_PAD_LEFT).str_pad(decbin($aBytes[$iStart+1]),8,"0",STR_PAD_LEFT).str_pad(decbin($aBytes[$iStart]),8,"0",STR_PAD_LEFT));
 		return $iInt;
 	}
 
-	public function get16bitIntLittleEndian($iStart)
+	public function get16bitIntLittleEndian($iStart): void
 	{
 		$sStr = substr($this->sData,$iStart-1,2);
 		$aInt = unpack('v',$sStr);
 	}
 
-	public function buildReply()
+	public function buildReply(): \HomeLan\FileStore\Messages\Reply
 	{
 		return new Reply($this);
 	}
 
-	public function getLen()
+	public function getLen(): int
 	{
 		return strlen($this->sData);
 	}

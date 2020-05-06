@@ -43,7 +43,7 @@ interface PluginInterface {
 	 * @param string $sEconetPath The econet file path
 	 * @param array $aDirectoryListing An array of file data
 	*/
-	public static function getDirectoryListing($sEconetPath,$aDirectoryListing);
+	public static function getDirectoryListing(string $sEconetPath,array $aDirectoryListing);
 
 	/**
 	 * Creates a directory
@@ -79,7 +79,7 @@ interface PluginInterface {
 	 * @param int $iLoadAddr The load address for the file
 	 * @param int $iExecAddr The execute address for the file
 	*/
-	public static function saveFile($oUser,FilePath $oEconetPath,$sData,$iLoadAddr,$iExecAddr);
+	public static function saveFile($oUser,FilePath $oEconetPath,string $sData,int $iLoadAddr,int $iExecAddr);
 
 	/**
 	 * Creates and empty file
@@ -90,7 +90,7 @@ interface PluginInterface {
 	 * @param int $iLoadAddr The load address for the file
 	 * @param int $iExecAddr The execute address for the file
 	*/
-	public static function createFile($oUser,FilePath $oEconetPath,$iSize,$iLoadAddr,$iExecAddr);
+	public static function createFile($oUser,FilePath $oEconetPath,int $iSize,int $iLoadAddr,int $iExecAddr);
 
 	/**
 	 * Gets the data from a file
@@ -99,7 +99,7 @@ interface PluginInterface {
 	 * @param object FilePath $oEconetPath The file path to read 
 	 * @return string Binary string containing the data stored in the file
 	*/
-	public static function getFile($oUser,FilePath $oEconetPath);
+	public static function getFile($oUser,FilePath $oEconetPath): string;
 
 	/**
 	 * Set the metadata for a given file
@@ -109,7 +109,7 @@ interface PluginInterface {
 	 * @param int $iExecAddr The execute address for the file
 	 * @param int $iAccess The access mode
 	*/
-	public static function setMeta($sEconetPath,$iLoad,$iExec,$iAccess);
+	public static function setMeta(string $sEconetPath,$iLoad,$iExec,int $iAccess);
 
 	public static function fsFtell($oUser,$fLocalHandle);
 

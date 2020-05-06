@@ -16,6 +16,7 @@ use HomeLan\FileStore\Messages\EconetPacket;
 use HomeLan\FileStore\Aun\AunPacket; 
 use HomeLan\FileStore\Aun\Map; 
 use HomeLan\FileStore\Services\ProviderInterface;
+use HomeLan\FileStore\Services\ServiceDispatcher;
 
 use config;
 
@@ -28,17 +29,15 @@ class WebSocketHandler implements MessageComponentInterface {
 
 	private $iConnectionSequence = 0;
 	private $oConnections;
+	private $oLogger;
+	private $oServices;
 
 
-	public function __construct(\Psr\Log\LoggerInterface $oLogger, array $aServices) 
+	public function __construct(\Psr\Log\LoggerInterface $oLogger,  ServiceDispatcher $oServices) 
 	{
 		$this->oConnections = new \SplObjectStorage;
 		$this->oLogger = $oLogger;	
-
-		//Takes and array of serivce providers and adds them the the ServiceDispatcher so they get packets 
-		foreach($aServices as $oService){
-			$this->addService($oService);
-		}
+		$this->oServices = $oServices;
 	}
 
 	public function onOpen(ConnectionInterface $oConnection)

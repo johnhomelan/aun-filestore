@@ -215,7 +215,7 @@ EOF;
 		$oReturnSocket = null;
 
 		$oAunServer = $oDatagramFactory->createServer(config::getValue('aun_listen_address').':'.config::getValue('aun_listen_port'))
-	  		->then(function (\React\Datagram\Socket $oAunServer) use ($oServices, $oLogger, $oLoop, &$oReturnSocket) {
+	  		->then(function (\React\Datagram\Socket $oAunServer) use ($oServices, $oLogger, &$oReturnSocket) {
 				$oAunServer->on('message', function($sMessage, $sSrcAddress, $sDstAddress) use ($oServices, $oLogger, $oAunServer){
 					$oAunPacket = new AunPacket();
 					
@@ -259,7 +259,7 @@ EOF;
 	{
 
 		//Add udp handling for AUN 
-		$oWebSocketTransport = new React\Socket\Server($oLoop);
+		$oWebSocketTransport = new \React\Socket\Server($oLoop);
 		$oWebSocketTransport->listen('8890', '0.0.0.0');
 
 		$oServices = $this->oServices;

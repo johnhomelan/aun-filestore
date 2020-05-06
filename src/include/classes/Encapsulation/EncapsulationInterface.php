@@ -16,16 +16,16 @@ interface EncapsulationInterface {
 
 	public function getReplies(): array;
 
-        public function getPort(): int
+        public function getPort(): int;
 
-        public function getPacketType(): string
+        public function getPacketType(): string;
 
-        public function getData(): string
+        public function getData(): string;
 
-        public function decode(string $sBinaryString): void
+        public function decode(string $sBinaryString): void;
 
-        public function buildEconetPacket(): \HomeLan\FileStore\Messages\EconetPacket
+        public function buildEconetPacket(): \HomeLan\FileStore\Messages\EconetPacket;
 
-        public function toString(): string
+        public function toString(): string;
 
 } 

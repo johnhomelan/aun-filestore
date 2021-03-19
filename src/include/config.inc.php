@@ -19,7 +19,7 @@ safe_define('CONFIG_security_max_session_idle',2400);
 
 safe_define('CONFIG_library_path','$.LIBRARY');
 
-safe_define('CONFIG_vfs_plugins','DfsSsd,AdfsAdl,LocalFile');
+safe_define('CONFIG_vfs_plugins','DfsSsd,AdfsAdl,AfsImg,LocalFile');
 safe_define('CONFIG_vfs_plugin_localfile_root','/var/lib/aun-filestore-root');
 safe_define('CONFIG_vfs_disc_name','VFSROOT');
 safe_define('CONFIG_vfs_home_dir_path','$.home');
@@ -28,5 +28,6 @@ safe_define('CONFIG_vfs_default_disc_size',0x9000);
 
 safe_define('CONFIG_vfs_plugin_localdfsssd_root','/var/lib/aun-filestore-root');
 safe_define('CONFIG_vfs_plugin_localadfsadl_root','/var/lib/aun-filestore-root');
+safe_define('CONFIG_vfs_plugin_localafsimg_root','/var/lib/aun-filestore-root');
 
 safe_define('CONFIG_print_server_spool_dir','/tmp/econetprint');

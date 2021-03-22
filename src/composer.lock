@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "5e74334b7b87f06c49311849376689b7",
+    "content-hash": "de6239794176089707b76399a3124283",
     "packages": [
         {
             "name": "cboden/ratchet",
@@ -357,16 +357,16 @@
         },
         {
             "name": "guzzlehttp/psr7",
-            "version": "1.7.0",
+            "version": "1.8.1",
             "source": {
                 "type": "git",
                 "url": "https://github.com/guzzle/psr7.git",
-                "reference": "53330f47520498c0ae1f61f7e2c90f55690c06a3"
+                "reference": "35ea11d335fd638b5882ff1725228b3d35496ab1"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/guzzle/psr7/zipball/53330f47520498c0ae1f61f7e2c90f55690c06a3",
-                "reference": "53330f47520498c0ae1f61f7e2c90f55690c06a3",
+                "url": "https://api.github.com/repos/guzzle/psr7/zipball/35ea11d335fd638b5882ff1725228b3d35496ab1",
+                "reference": "35ea11d335fd638b5882ff1725228b3d35496ab1",
                 "shasum": ""
             },
             "require": {
@@ -424,7 +424,7 @@
                 "uri",
                 "url"
             ],
-            "time": "2020-09-30T07:37:11+00:00"
+            "time": "2021-03-21T16:25:00+00:00"
         },
         {
             "name": "homelan/acorn-disk",
@@ -468,6 +468,47 @@
                 "adfs"
             ],
             "time": "2019-02-14T16:25:13+00:00"
+        },
+        {
+            "name": "homelan/l3fsreader",
+            "version": "v0.1",
+            "source": {
+                "type": "git",
+                "url": "https://github.com/johnhomelan/acorn-l3-fs.git",
+                "reference": "1a0441508ddd49fe1722ca5a80c8976307211fd0"
+            },
+            "dist": {
+                "type": "zip",
+                "url": "https://api.github.com/repos/johnhomelan/acorn-l3-fs/zipball/1a0441508ddd49fe1722ca5a80c8976307211fd0",
+                "reference": "1a0441508ddd49fe1722ca5a80c8976307211fd0",
+                "shasum": ""
+            },
+            "require": {
+                "php": ">=7.1"
+            },
+            "type": "project",
+            "autoload": {
+                "psr-4": {
+                    "HomeLan\\Retro\\Acorn\\Disk\\": "src/"
+                }
+            },
+            "notification-url": "https://packagist.org/downloads/",
+            "license": [
+                "MIT"
+            ],
+            "authors": [
+                {
+                    "name": "John Brown",
+                    "email": "packaging@home-lan.co.uk"
+                }
+            ],
+            "description": "Provides class for reading disk images from the Acorn Econet level 3 fileserver, and the Acorn Econet filestore.",
+            "keywords": [
+                "afs",
+                "econet filestore",
+                "econet level 3"
+            ],
+            "time": "2021-03-19T15:30:08+00:00"
         },
         {
             "name": "jean85/pretty-package-versions",
@@ -5878,16 +5919,16 @@
         },
         {
             "name": "phpstan/phpdoc-parser",
-            "version": "0.3.5",
+            "version": "0.3.3",
             "source": {
                 "type": "git",
                 "url": "https://github.com/phpstan/phpdoc-parser.git",
-                "reference": "8c4ef2aefd9788238897b678a985e1d5c8df6db4"
+                "reference": "472d3161d289f652713a5e353532fa4592663a57"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/phpstan/phpdoc-parser/zipball/8c4ef2aefd9788238897b678a985e1d5c8df6db4",
-                "reference": "8c4ef2aefd9788238897b678a985e1d5c8df6db4",
+                "url": "https://api.github.com/repos/phpstan/phpdoc-parser/zipball/472d3161d289f652713a5e353532fa4592663a57",
+                "reference": "472d3161d289f652713a5e353532fa4592663a57",
                 "shasum": ""
             },
             "require": {
@@ -5921,7 +5962,7 @@
                 "MIT"
             ],
             "description": "PHPDoc parser with support for nullable, intersection and generic types",
-            "time": "2019-06-07T19:13:52+00:00"
+            "time": "2019-04-23T20:26:19+00:00"
         },
         {
             "name": "phpstan/phpstan",
@@ -6430,42 +6471,43 @@
         },
         {
             "name": "rector/rector",
-            "version": "v0.4.11",
+            "version": "v0.4.12",
             "source": {
                 "type": "git",
                 "url": "https://github.com/rectorphp/rector.git",
-                "reference": "655a3b4568ad3ec9ca6d7034161ad26996f2d191"
+                "reference": "c2495c1759498b1cdfcd0962b99afbf30ee1021b"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/rectorphp/rector/zipball/655a3b4568ad3ec9ca6d7034161ad26996f2d191",
-                "reference": "655a3b4568ad3ec9ca6d7034161ad26996f2d191",
+                "url": "https://api.github.com/repos/rectorphp/rector/zipball/c2495c1759498b1cdfcd0962b99afbf30ee1021b",
+                "reference": "c2495c1759498b1cdfcd0962b99afbf30ee1021b",
                 "shasum": ""
             },
             "require": {
                 "composer/xdebug-handler": "^1.3",
                 "jean85/pretty-package-versions": "^1.2",
                 "nette/robot-loader": "^3.1",
-                "nette/utils": "^2.5",
+                "nette/utils": "^2.5|^3.0",
                 "nikic/php-parser": "^4.2.1",
                 "php": "^7.1",
+                "phpstan/phpdoc-parser": "0.3.3",
                 "phpstan/phpstan": "0.11.5",
                 "sebastian/diff": "^3.0",
                 "symfony/console": "^3.4|^4.2",
                 "symfony/dependency-injection": "^3.4|^4.2",
                 "symfony/finder": "^3.4|^4.2",
                 "symfony/process": "^3.4|^4.2",
-                "symplify/package-builder": "^5.4.6"
+                "symplify/package-builder": "^5.4.16"
             },
             "require-dev": {
                 "friendsofphp/php-cs-fixer": "^2.14",
-                "ocramius/package-versions": "^1.3",
+                "ocramius/package-versions": "^1.4",
                 "phpunit/phpunit": "^7.5|^8.0",
-                "symplify/changelog-linker": "^5.4",
-                "symplify/easy-coding-standard": "^5.4.6",
-                "symplify/monorepo-builder": "^5.4.6",
-                "symplify/phpstan-extensions": "^5.4.6",
-                "thecodingmachine/phpstan-strict-rules": "^0.11.0",
+                "symplify/changelog-linker": "^5.4.16",
+                "symplify/easy-coding-standard": "^5.4.16",
+                "symplify/monorepo-builder": "^5.4.16",
+                "symplify/phpstan-extensions": "^5.4.16",
+                "thecodingmachine/phpstan-strict-rules": "^0.11",
                 "tracy/tracy": "^2.5"
             },
             "suggest": {
@@ -6497,6 +6539,7 @@
                     "Rector\\CakePHP\\": "packages/CakePHP/src",
                     "Rector\\Php\\": "packages/Php/src",
                     "Rector\\Jms\\": "packages/Jms/src",
+                    "Rector\\RemovingStatic\\": "packages/RemovingStatic/src",
                     "Rector\\Silverstripe\\": "packages/Silverstripe/src",
                     "Rector\\Sensio\\": "packages/Sensio/src",
                     "Rector\\Sylius\\": "packages/Sylius/src",
@@ -6533,7 +6576,7 @@
                     "type": "github"
                 }
             ],
-            "time": "2019-04-13T23:10:57+00:00"
+            "time": "2019-05-01T23:59:42+00:00"
         },
         {
             "name": "sebastian/code-unit-reverse-lookup",

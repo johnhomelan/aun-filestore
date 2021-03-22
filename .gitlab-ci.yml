@@ -30,21 +30,7 @@ phpunit_tests_php73:
      paths:
       - junit.xml   
       
-phpunit_tests_php72:
-   image: registry.home-lan.co.uk/php-72-testing:latest
-   stage: test
-   services:
-    - docker:stable-dind
-   script:
-     - cd src; composer --no-scripts install; cd ..
-     - mkdir coverage
-     - ./src/vendor/bin/phpunit --log-junit junit.xml --coverage-xml coverage --coverage-text --colors=never
-   artifacts:
-     paths:
-      - coverage
-      - junit.xml   
 
-      
 container_build:
    image: docker:dind
    stage: build

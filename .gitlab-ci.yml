@@ -14,6 +14,7 @@ phpunit_phpstan_php73:
    services:
     - docker:stable-dind
    script:
+     - cat src/composer.json
      - cd src; composer --no-scripts install; cd ..
      - ./src/vendor/bin/phpstan analyse -n --no-ansi --no-progress src/include src/react-test
 

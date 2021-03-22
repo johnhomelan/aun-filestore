@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "de6239794176089707b76399a3124283",
+    "content-hash": "f7caa5680901ff01516a8eea2ee6af36",
     "packages": [
         {
             "name": "cboden/ratchet",
@@ -471,16 +471,16 @@
         },
         {
             "name": "homelan/l3fsreader",
-            "version": "v0.1",
+            "version": "v0.2.1",
             "source": {
                 "type": "git",
                 "url": "https://github.com/johnhomelan/acorn-l3-fs.git",
-                "reference": "1a0441508ddd49fe1722ca5a80c8976307211fd0"
+                "reference": "5fdb796f8782b6173b0a1cb28103ea108b1d2315"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/johnhomelan/acorn-l3-fs/zipball/1a0441508ddd49fe1722ca5a80c8976307211fd0",
-                "reference": "1a0441508ddd49fe1722ca5a80c8976307211fd0",
+                "url": "https://api.github.com/repos/johnhomelan/acorn-l3-fs/zipball/5fdb796f8782b6173b0a1cb28103ea108b1d2315",
+                "reference": "5fdb796f8782b6173b0a1cb28103ea108b1d2315",
                 "shasum": ""
             },
             "require": {
@@ -508,7 +508,7 @@
                 "econet filestore",
                 "econet level 3"
             ],
-            "time": "2021-03-19T15:30:08+00:00"
+            "time": "2021-03-22T23:06:46+00:00"
         },
         {
             "name": "jean85/pretty-package-versions",

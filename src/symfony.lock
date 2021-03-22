@@ -29,6 +29,9 @@
     "homelan/acorn-disk": {
         "version": "v1.0.2"
     },
+    "homelan/l3fsreader": {
+        "version": "v0.1"
+    },
     "illuminate/contracts": {
         "version": "v5.8.14"
     },

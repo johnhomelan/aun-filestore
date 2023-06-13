@@ -16,12 +16,9 @@ use HomeLan\FileStore\Authentication\Security;
 
 class Admin implements AdminInterface 
 {
-	private $oProvider;
-
-	public function __construct(ProviderInterface $oProvider)
-	{
-		$this->oProvider = $oProvider;
-	}
+	public function __construct(private readonly ProviderInterface $oProvider)
+ {
+ }
 
 	/**
 	 * Gets the human readable name of the service provider

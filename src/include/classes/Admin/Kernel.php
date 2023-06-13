@@ -16,9 +16,9 @@ class Kernel extends BaseKernel
     use MicroKernelTrait;
 
     private const CONFIG_EXTS = '.{php,xml,yaml,yml}';
-    private $projectDir = __DIR__;
+    private string $projectDir = __DIR__;
 
-    public function getProjectDir()
+    public function getProjectDir(): string
     {
 	return $this->projectDir;
     }
@@ -55,7 +55,7 @@ class Kernel extends BaseKernel
         $loader->load($confDir.'/{services}_'.$this->environment.self::CONFIG_EXTS, 'glob');
     }
 
-    protected function configureRoutes(RouteCollectionBuilder $routes): void
+    protected function configureRoutes(\Symfony\Component\Routing\Loader\Configurator\RoutingConfigurator $routes): void
     {
         $confDir = $this->getProjectDir().'/config';
 

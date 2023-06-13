@@ -27,17 +27,13 @@ use config;
 */
 class WebSocketHandler implements MessageComponentInterface {
 
-	private $iConnectionSequence = 0;
-	private $oConnections;
-	private $oLogger;
-	private $oServices;
+	private int $iConnectionSequence = 0;
+	private readonly \SplObjectStorage $oConnections;
 
 
-	public function __construct(\Psr\Log\LoggerInterface $oLogger,  ServiceDispatcher $oServices) 
+	public function __construct(private readonly \Psr\Log\LoggerInterface $oLogger,  private readonly ServiceDispatcher $oServices) 
 	{
 		$this->oConnections = new \SplObjectStorage;
-		$this->oLogger = $oLogger;	
-		$this->oServices = $oServices;
 	}
 
 	public function onOpen(ConnectionInterface $oConnection)

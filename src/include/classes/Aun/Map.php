@@ -24,24 +24,23 @@ use config;
 */
 class Map {
 
-	static $aHostMap = array();
+	static $aHostMap = [];
 
-	static $aSubnetMap = array();
+	static $aSubnetMap = [];
 
 	//Cache of the reverse ip to network.station lookup
-	static $aIPLookupCache = array();
+	static $aIPLookupCache = [];
 
-	static $aIpCounter = array();
+	static $aIpCounter = [];
 
 	static $oLogger;
 
 	/**
-	 * Loads the aun map from the configured aun map file
-	 *
-	 * @param \Psr\Log\LoggerInterface $oLogger
-	 * @param string $sMap The text for the map file can be supplied as a string, this is intended largley for unit testing this function
-	*/
-	public static function init(\Psr\Log\LoggerInterface $oLogger, string $sMap=NULL): void
+  * Loads the aun map from the configured aun map file
+  *
+  * @param string $sMap The text for the map file can be supplied as a string, this is intended largley for unit testing this function
+  */
+ public static function init(\Psr\Log\LoggerInterface $oLogger, string $sMap=NULL): void
 	{
 		self::$oLogger = $oLogger;
 		if(is_null($sMap)){
@@ -85,7 +84,7 @@ class Map {
 		$aIPParts = explode('.',$sIP);
 
 		foreach(Map::$aSubnetMap as $iNetworkNumber=>$sSubnet){
-			$aSubnetParts = explode('/',$sSubnet);
+			$aSubnetParts = explode('/',(string) $sSubnet);
 			$aSubnetIPParts = explode('.',$aSubnetParts[0]);
 			if($aSubnetIPParts[0]==$aIPParts[0] AND $aSubnetIPParts[1]==$aIPParts[1] AND $aSubnetIPParts[2]==$aIPParts[2]){
 				Map::$aIPLookupCache[$sIP]=$iNetworkNumber.'.'.$aIPParts[3];
@@ -102,13 +101,11 @@ class Map {
 	}
 
 	/**
-	 * Converts a econet network and station number to a ip address and port 
-	 *
-	 * @param int $iNetworkNumber
-	 * @param int $iStationNumber
-	 * @return string ip address
-	*/
-	public static function ecoAddrToIpAddr(int $iNetworkNumber,int $iStationNumber):string
+  * Converts a econet network and station number to a ip address and port 
+  *
+  * @return string ip address
+  */
+ public static function ecoAddrToIpAddr(int $iNetworkNumber,int $iStationNumber):string
 	{
 		//Test to see if we are in the cached index
 		$sIndex = array_search($iNetworkNumber.'.'.$iStationNumber,Map::$aIPLookupCache);
@@ -125,7 +122,7 @@ class Map {
 		}
 		//Check the subnet map
 		if(array_key_exists($iNetworkNumber,Map::$aSubnetMap)){
-			list($sIP,$sMask) = explode("/",Map::$aSubnetMap[$iNetworkNumber]);
+			[$sIP, $sMask] = explode("/",(string) Map::$aSubnetMap[$iNetworkNumber]);
 			$aIPParts = explode('.',$sIP);
 			//Update the cache
 			Map::$aIPLookupCache[$aIPParts[0].'.'.$aIPParts[1].'.'.$aIPParts[2].'.'.$iStationNumber]=$iNetworkNumber.'.'.$iStationNumber;
@@ -135,12 +132,11 @@ class Map {
 	}
 
 	/**
-	 * Tests if a econet network is know to the aunmap
-	 *
-	 * @param int $iNetworkNumber
-	 * @return boolean
-	*/
-	public static function networkKnown(int $iNetworkNumber):bool
+  * Tests if a econet network is know to the aunmap
+  *
+  * @return boolean
+  */
+ public static function networkKnown(int $iNetworkNumber):bool
 	{
 		//Check subnet map
 		if(array_key_exists($iNetworkNumber,Map::$aSubnetMap)){
@@ -149,7 +145,7 @@ class Map {
 
 		//Check the station map
 		foreach(Map::$aHostMap as $sKey=>$sIP){
-			list($iNetNumber,$iStationNumber) = explode('.',$sKey);
+			[$iNetNumber, $iStationNumber] = explode('.',(string) $sKey);
 			if($iNetworkNumber==$iNetNumber){
 				return TRUE;
 			}
@@ -184,7 +180,7 @@ class Map {
 	{
 		if(preg_match('/[0-9]*\.[0-9]*\.[0-9]*\.[0-9]*\/[0-9]*/',$sSubnet)>0){
 			//Blank the reverse mapping cache 
-			Map::$aIPLookupCache=array();
+			Map::$aIPLookupCache=[];
 			Map::$aSubnetMap[$iNetworkNumber]=$sSubnet;
 		}else{
 			self::$oLogger->info("aunmapper: An invaild subnet was tried to be used as a aunmap entry (".$sSubnet.").");

@@ -18,7 +18,7 @@ use config;
 */
 class EncapsulationTypeMap {
 
-	static private $oSingleton;
+	static private ?\HomeLan\FileStore\Encapsulation\EncapsulationTypeMap $oSingleton = null;
 
 	/**
 	 * Keeping this class as a singleton, this is static method should be used to get references to this object

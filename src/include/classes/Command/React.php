@@ -42,13 +42,9 @@ use Exception;
 */
 class React extends Command {
 
-	private $oLogger; 
-	private $oServices;
-
-	public function __construct(\Psr\Log\LoggerInterface $oLogger, ServiceDispatcher $oServices)
+	protected static $defaultDescription = 'Start the file, print and bridge services';
+ public function __construct(private readonly \Psr\Log\LoggerInterface $oLogger, private readonly ServiceDispatcher $oServices)
 	{
-		$this->oServices = $oServices;
-		$this->oLogger = $oLogger;
 		parent::__construct();
 	}
 
@@ -58,7 +54,7 @@ class React extends Command {
 	 * This does not contain the main loop, it just initializes the system
 	 * then jumps to the main loop.
 	*/
-	protected function execute(InputInterface $oInput, OutputInterface $oOutput): void
+	protected function execute(InputInterface $oInput, OutputInterface $oOutput): int
 	{
 		$bDaemonize = FALSE;
 		$sPidFile = "";
@@ -86,8 +82,8 @@ class React extends Command {
 		//Initialize the system
 		try {
 			//Setup signle handler
-			pcntl_signal(SIGCHLD,array($this,'sigHandler'));
-			pcntl_signal(SIGTERM,array($this,'sigHandler'));
+			pcntl_signal(SIGCHLD,$this->sigHandler(...));
+			pcntl_signal(SIGTERM,$this->sigHandler(...));
 
 			Map::init($this->oLogger);
 
@@ -99,6 +95,7 @@ class React extends Command {
 		}
 
 		$this->MainLoop();
+  return 0;
 	}
 
 	/**
@@ -112,7 +109,7 @@ class React extends Command {
 		$oLoop = ReactFactory::create();
 		$oLogger = $this->oLogger;
 		
-		$this->oLogger->info("core: Using ".get_class($oLoop)." as the primary event loop handler");
+		$this->oLogger->info("core: Using ".$oLoop::class." as the primary event loop handler");
 
 		$oAunServer = $this->aunService($oLoop);
 		$this->adminService($oLoop);
@@ -159,7 +156,6 @@ EOF;
 
 		parent::configure();
 		$this->setName('filestore')
-			->setDescription('Start the file, print and bridge services')
 			->addOption(
 				'config',
 				'c',
@@ -293,19 +289,19 @@ EOF;
 			$sContent = $oRequest->getBody();
 			$oLogger->info("Admin page request ".$oRequest->getUri()->getPath());
 
-			$aPost = array();
-			if (in_array(strtoupper($sMethod), array('POST', 'PUT', 'DELETE', 'PATCH')) &&
-				isset($aHeaders['Content-Type']) && (0 === strpos($aHeaders['Content-Type'], 'application/x-www-form-urlencoded'))
+			$aPost = [];
+			if (in_array(strtoupper($sMethod), ['POST', 'PUT', 'DELETE', 'PATCH']) &&
+				isset($aHeaders['Content-Type']) && (str_starts_with($aHeaders['Content-Type'], 'application/x-www-form-urlencoded'))
 			) {
 				parse_str($sContent, $result);
 			}
 			$sfRequest = new \Symfony\Component\HttpFoundation\Request(
 				$oRequest->getQueryParams(),
 				$aPost,
-				array(),
+				[],
 				$oRequest->getCookieParams(), // To get the cookies, we'll need to parse the aHeaders
 				$oRequest->getUploadedFiles(),
-				array(), // Server is partially filled a few lines below
+				[], // Server is partially filled a few lines below
 				$sContent
 			);
 			$sfRequest->setMethod($sMethod);
@@ -317,7 +313,7 @@ EOF;
 			
 			try {
 				$sfResponse = $oKernel->handle($sfRequest);
-			}catch(NotFoundHttpException $oException){
+			}catch(NotFoundHttpException){
 				$oLogger->info("Admin page not found (".$oRequest->getUri()->getPath().")");
 				return  new  \React\Http\Response(
 						404,

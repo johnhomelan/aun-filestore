@@ -31,11 +31,10 @@ class PrintServerEnquiry extends Request{
 	}
 
 	/**
-	 * Decodes an AUN packet 
-	 *
-	 * @param string $sBinaryString
-	*/
-	public function decode(string $sBinaryString): void
+  * Decodes an AUN packet 
+  *
+  */
+ public function decode(string $sBinaryString): void
 	{
 	
 		//The reset is data

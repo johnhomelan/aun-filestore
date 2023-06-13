@@ -44,7 +44,7 @@ class AunPacket implements EncapsulationInterface {
 
 	protected $sDestinationIP = NULL;
 
-	protected $aTypeMap = array(1=>'Broadcast',2=>'Unicast',3=>'Ack',4=>'Reject',5=>'Immediate',6=>'ImmediateReply');
+	protected $aTypeMap = [1=>'Broadcast', 2=>'Unicast', 3=>'Ack', 4=>'Reject', 5=>'Immediate', 6=>'ImmediateReply'];
 
 	/**
 	 * Get the econet port number the aun packet is for
@@ -163,8 +163,8 @@ class AunPacket implements EncapsulationInterface {
 
 	public function setSourceIP($sHost): void
 	{
-		if(strpos($sHost,':')!==FALSE){
-			$aIPParts = explode(':',$sHost);
+		if(str_contains((string) $sHost,':')){
+			$aIPParts = explode(':',(string) $sHost);
 			$this->sSoruceIP=$aIPParts[0];
 			$this->sSourceUdpPort=$aIPParts[1];
 		}else{
@@ -189,8 +189,8 @@ class AunPacket implements EncapsulationInterface {
 
 	public function setDestinationIP($sHost): void
 	{
-		if(strpos($sHost,':')!==FALSE){
-			$aIPParts = explode(':',$sHost);
+		if(str_contains((string) $sHost,':')){
+			$aIPParts = explode(':',(string) $sHost);
 			$this->sDestinationIP = $aIPParts[0];
 		}else{
 			$this->sDestinationIP=$sHost;

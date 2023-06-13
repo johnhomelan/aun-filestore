@@ -12,7 +12,7 @@ function safe_define($sName, $sDefine): bool {
 require_once (__DIR__.DIRECTORY_SEPARATOR."/../vendor/autoload.php");
 require_once (__DIR__.DIRECTORY_SEPARATOR."config.inc.php");
 
-function pearErrorHandler($error): void
+function pearErrorHandler($error): never
 {
 	 throw new Exception($error->getMessage().' -- '.$error->getDebugInfo());
 }

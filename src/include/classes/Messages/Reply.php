@@ -24,7 +24,7 @@ class Reply {
 
 	public function __construct($oRequest)
 	{
-		if(is_object($oRequest) AND (get_class($oRequest)=='fsrequest' or get_class($oRequest)=='printserverenquiry' OR get_class($oRequest)=='printserverdata')){
+		if(is_object($oRequest) AND ($oRequest::class=='fsrequest' or $oRequest::class=='printserverenquiry' OR $oRequest::class=='printserverdata')){
 			$this->oRequest = $oRequest;
 			$this->iFlags = $oRequest->getFlags();
 		}else{
@@ -39,7 +39,7 @@ class Reply {
 
 	public function appendString($sString): void
 	{
-		$aChars = str_split($sString);
+		$aChars = str_split((string) $sString);
 		foreach($aChars as $sChar)
 		{
 			$this->sPkt = $this->sPkt.pack('C',ord($sChar));

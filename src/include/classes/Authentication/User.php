@@ -35,7 +35,7 @@ class User {
 
 	public function setUsername($sUsername): void
 	{
-		$this->sUsername=strtoupper($sUsername);
+		$this->sUsername=strtoupper((string) $sUsername);
 	}
 
 	public function getUsername()
@@ -75,14 +75,10 @@ class User {
 
 	public function setPriv($sPriv): void
 	{
-		switch(strtoupper($sPriv)){
-			case 'S':
-				$this->bIsAdmin = TRUE;
-				break;
-			default:
-				$this->bIsAdmin = FALSE;
-				break;
-		}
+		$this->bIsAdmin = match (strtoupper((string) $sPriv)) {
+      'S' => TRUE,
+      default => FALSE,
+  };
 	}
 
 	public function getPriv(): string

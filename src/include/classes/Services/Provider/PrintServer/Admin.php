@@ -15,12 +15,9 @@ use HomeLan\FileStore\Services\ProviderInterface;
 
 class Admin implements AdminInterface 
 {
-	private $oProvider;
-
-	public function __construct(ProviderInterface $oProvider)
-	{
-		$this->oProvider = $oProvider;
-	}
+	public function __construct(private readonly ProviderInterface $oProvider)
+ {
+ }
 
 	/**
 	 * Gets the human readable name of the service provider
@@ -105,9 +102,7 @@ class Admin implements AdminInterface
 		switch($sType){
 			case 'jobs':
 				$aJobs = $this->oProvider->getJobs();
-				$aReturn = AdminEntity::createCollection($sType,$this->getEntityFields($sType),$aJobs,function($aRow){
-									return $aRow['network'].'_'.$aRow['station'];
-					});
+				$aReturn = AdminEntity::createCollection($sType,$this->getEntityFields($sType),$aJobs,fn($aRow) => $aRow['network'].'_'.$aRow['station']);
 				return $aReturn;
 				break;
 		}

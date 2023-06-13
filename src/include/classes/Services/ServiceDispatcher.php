@@ -24,17 +24,16 @@ use config;
 */
 class ServiceDispatcher {
 
-	static private $oSingleton;
-	private $oEncapsulationTypeMap;
-	private $oLoop;
-	private $oAunServer;
-	private $aPorts = [];
-	private $oLogger;
-	private $aReplies = [];
-	private $iStreamPortStart=20;
-	private $aPortTimeLimits = [];
-	private $aHouseKeepingTasks = [];
-	private $aAckEvents = [];
+	static private ?\HomeLan\FileStore\Services\ServiceDispatcher $oSingleton = null;
+	private ?\HomeLan\FileStore\Encapsulation\EncapsulationTypeMap $oEncapsulationTypeMap = null;
+	private ?\React\EventLoop\LoopInterface $oLoop = null;
+	private ?\React\Datagram\Socket $oAunServer = null;
+	private array $aPorts = [];
+	private array $aReplies = [];
+	private int $iStreamPortStart=20;
+	private array $aPortTimeLimits = [];
+	private array $aHouseKeepingTasks = [];
+	private array $aAckEvents = [];
 
 	/**
 	 * Keeping this class as a singleton, this is static method should be used to get references to this object
@@ -52,10 +51,8 @@ class ServiceDispatcher {
 	 * Constructor registers the Logger and all the services 
 	 *  
 	*/
-	public function __construct(\Psr\Log\LoggerInterface $oLogger, array $aServices)
+	public function __construct(private readonly \Psr\Log\LoggerInterface $oLogger, array $aServices)
 	{		
-		$this->oLogger = $oLogger;	
-
 		//Takes and array of serivce providers and adds them the the ServiceDispatcher so they get packets 
 		foreach($aServices as $oService){
 			$this->addService($oService);

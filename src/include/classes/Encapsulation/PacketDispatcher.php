@@ -22,10 +22,7 @@ use config;
 */
 class PacketDispatcher {
 
-	static private $oSingleton;
-	private $oEncapsulationTypeMap;
-	private $oLoop;
-	private $oAunServer;
+	static private ?\HomeLan\FileStore\Encapsulation\PacketDispatcher $oSingleton = null;
 
 	/**
 	 * Keeping this class as a singleton, this is static method should be used to get references to this object
@@ -43,12 +40,9 @@ class PacketDispatcher {
 	 * Constructor registers the Logger and all the services 
 	 *  
 	*/
-	public function __construct(EncapsulationTypeMap $oEncapsulationTypeMap, \React\EventLoop\LoopInterface $oLoop, \React\Datagram\Socket $oAunServer)
-	{		
-		$this->oEncapsulationTypeMap = $oEncapsulationTypeMap;
-		$this->oLoop = $oLoop;
-		$this->oAunServer = $oAunServer;
-	}
+	public function __construct(private readonly EncapsulationTypeMap $oEncapsulationTypeMap, private readonly \React\EventLoop\LoopInterface $oLoop, private readonly \React\Datagram\Socket $oAunServer)
+ {
+ }
 
 	/**
 	 * Gets a reference to the main event loop
@@ -75,7 +69,7 @@ class PacketDispatcher {
 			case 'AUN':
 			default:
 				$sIP = Map::ecoAddrToIpAddr($oPacket->getDestinationNetwork(),$oPacket->getDestinationStation());
-				if(strpos($sIP,':')===FALSE){
+				if(!str_contains($sIP,':')){
 					$sHost=$sIP.':'.config::getValue('aun_default_port');
 				}else{
 					$sHost=$sIP;

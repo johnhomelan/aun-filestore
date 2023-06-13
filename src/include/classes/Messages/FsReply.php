@@ -23,7 +23,7 @@ class FsReply extends Reply {
 	protected $iFlags = NULL;
 
 
-	protected $aTypeMap = array('DONE'=>0,'SAVE'=>1,'LOAD'=>2,'CAT'=>3,'INFO'=>4,'LOGIN'=>5,'SDISC'=>6,'DIR'=>7,'UNREC'=>8,'LIB'=>9,'DISCS'=>10);
+	protected $aTypeMap = ['DONE'=>0, 'SAVE'=>1, 'LOAD'=>2, 'CAT'=>3, 'INFO'=>4, 'LOGIN'=>5, 'SDISC'=>6, 'DIR'=>7, 'UNREC'=>8, 'LIB'=>9, 'DISCS'=>10];
 
 	/**
 	 * Sets the reply to be an error indicator

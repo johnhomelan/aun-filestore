@@ -6,19 +6,15 @@ use HomeLan\FileStore\Messages\EconetPacket;
 
 class StreamIn {
 
-	private $iPort;
-	private $iBytes;
 	private $fRecivedPacket;
 	private $fSucessCallback;
 	private $fFailCallback;
-	private $iTimeout;
-	private $iNoPktTimeout;
-	private $sData;
+	private readonly int $iTimeout;
+	private readonly int $iNoPktTimeout;
+	private ?string $sData = null;
 
-	public function __construct(int $iPort, int $iBytes,callable $fRecivedPacket, callable $fSucessCallback, callable $fFailCallback,int $iTimeout=60)
+	public function __construct(private readonly int $iPort, private readonly int $iBytes,callable $fRecivedPacket, callable $fSucessCallback, callable $fFailCallback,int $iTimeout=60)
 	{
-		$this->iPort = $iPort;
-		$this->iBytes = $iBytes;
 		$this->fRecivedPacket = $fRecivedPacket;
 		$this->fSucessCallback = $fSucessCallback;
 		$this->fFailCallback = $fFailCallback;
@@ -42,7 +38,7 @@ class StreamIn {
 				($this->fFailCallback)("timeout");
 			}else{
 				//Pkt recevied reset the timeout
-				$$this->iTimeout = time() + $this->iNoPktTimeout;
+				${$this}->iTimeout = time() + $this->iNoPktTimeout;
 				($this->fRecivedPacket)($this,$oPacket);
 			}
 		}else{

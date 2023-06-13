@@ -23,9 +23,9 @@ use config;
 */
 class DfsSsd implements PluginInterface {
 
-	protected static $aImageReaders = array();
+	protected static $aImageReaders = [];
 
-	protected static $aFileHandles = array();
+	protected static $aFileHandles = [];
 
 	protected static $iFileHandle = 0;
 
@@ -69,7 +69,7 @@ class DfsSsd implements PluginInterface {
 	protected static function _econetToUnix($sEconetPath): string
 	{
 		//Trim leading $.
-		$sEconetPath = substr($sEconetPath,2);
+		$sEconetPath = substr((string) $sEconetPath,2);
 		$aFileParts = explode('.',$sEconetPath);
 		$sUnixPath = "";
 		foreach($aFileParts as $sPart){
@@ -87,7 +87,7 @@ class DfsSsd implements PluginInterface {
 				//Just test if dir exists in the correct case and only the file name is case incorrect
 				$aFiles = scandir($sDir);
 				foreach($aFiles as $sFile){
-					if(strtolower($sFile)==$sTestFileName){
+					if(strtolower((string) $sFile)==$sTestFileName){
 						return $sDir.DIRECTORY_SEPARATOR.$sFile;
 					}
 				}
@@ -104,11 +104,11 @@ class DfsSsd implements PluginInterface {
 					}else{
 						$aFiles = scandir($sNewDirPath);
 						foreach($aFiles as $sFile){
-							if(strtolower($sFile)==strtolower($sDirPart)){
+							if(strtolower((string) $sFile)==strtolower($sDirPart)){
 								$iMatches++;
 								$sNewDirPath .= DIRECTORY_SEPARATOR.$sFile;
 								continue;
-							}elseif(strtolower($sFile)===strtolower($sDirPart).'.ssd'){
+							}elseif(strtolower((string) $sFile)===strtolower($sDirPart).'.ssd'){
 								//The file is inside an image file so just return the Unix path
 								$sNewDirPath .= DIRECTORY_SEPARATOR.$sDirPart;
 								return $sNewDirPath; 
@@ -145,10 +145,10 @@ class DfsSsd implements PluginInterface {
 	protected static function _getPathInsideImage($sEconetPath,$sImageFile): string
 	{
 		//Trim leading $.
-		$sEconetPath = substr($sEconetPath,2);
+		$sEconetPath = substr((string) $sEconetPath,2);
 
-		$sPathPreFix = substr($sImageFile,0,strlen($sImageFile)-4);
-		$sPathPreFix = str_ireplace(config::getValue('vfs_plugin_localdfsssd_root'),'',$sPathPreFix);
+		$sPathPreFix = substr((string) $sImageFile,0,strlen((string) $sImageFile)-4);
+		$sPathPreFix = str_ireplace((string) config::getValue('vfs_plugin_localdfsssd_root'),'',$sPathPreFix);
 		$sPathPreFix = str_ireplace(DIRECTORY_SEPARATOR,'.',ltrim($sPathPreFix,'/'));
 		return ltrim(str_ireplace($sPathPreFix,'',$sEconetPath),'.');
 	} 
@@ -157,16 +157,16 @@ class DfsSsd implements PluginInterface {
 	{
 		$oDfs = DfsSsd::_getImageReader($sImageFile);
 		$aCat = $oDfs->getCatalogue();
-		$aPathInsideImage = explode('.',$sPathInsideImage);
+		$aPathInsideImage = explode('.',(string) $sPathInsideImage);
 		$bFound = FALSE;
-		if(count($sPathInsideImage)==2){
+		if((is_countable($sPathInsideImage) ? count($sPathInsideImage) : 0)==2){
 			if(array_key_exists($aPathInsideImage[0],$aCat)){
 				if(array_key_exists($aPathInsideImage[1],$aCat[$aPathInsideImage[0]])){
 					$bFound = TRUE;
 				}
 			}
 		}
-		if(count($sPathInsideImage)==1){
+		if((is_countable($sPathInsideImage) ? count($sPathInsideImage) : 0)==1){
 			if(array_key_exists($aPathInsideImage[0],$aCat['$'])){
 				$bFound = TRUE;
 			}
@@ -186,7 +186,7 @@ class DfsSsd implements PluginInterface {
 			if(DfsSsd::_checkImageFileExists($sImageFile,$sPathInsideImage)){
 				$iEconetHandle = Vfs::getFreeFileHandleID($oUser);
 				$iVfsHandle = DfsSsd::$iFileHandle++;
-				DfsSsd::$aFileHandles[$iVfsHandle]=array('image-file'=>$sImageFile,'path-inside-image'=>$sPathInsideImage,'pos'=>0);
+				DfsSsd::$aFileHandles[$iVfsHandle]=['image-file'=>$sImageFile, 'path-inside-image'=>$sPathInsideImage, 'pos'=>0];
 				$oDfs =  DfsSsd::_getImageReader($sImageFile);
 				return new FileDescriptor(self::$oLogger,'DfsSsd',$oUser,$sImageFile,$oEconetPath->getFilePath(),$iVfsHandle,$iEconetHandle,$oDfs->isFile($sPathInsideImage),$oDfs->isDir($sPathInsideImage));
 			}
@@ -198,7 +198,7 @@ class DfsSsd implements PluginInterface {
 			//Disk Image found
 			$iEconetHandle = Vfs::getFreeFileHandleID($oUser);
 			$iVfsHandle = DfsSsd::$iFileHandle++;
-			DfsSsd::$aFileHandles[$iVfsHandle]=array('image-file'=>$sUnixPath.'.ssd','path-inside-image'=>'','pos'=>0);
+			DfsSsd::$aFileHandles[$iVfsHandle]=['image-file'=>$sUnixPath.'.ssd', 'path-inside-image'=>'', 'pos'=>0];
 			return new FileDescriptor(self::$oLogger,'DfsSsd',$oUser,$sUnixPath.'.ssd',$oEconetPath->getFilePath(),$iVfsHandle,$iEconetHandle,FALSE,TRUE);
 		}
 	
@@ -218,17 +218,17 @@ class DfsSsd implements PluginInterface {
 				if(array_key_exists($sPathInsideImage,$aCat)){
 					$aImageStat = stat($sImageFile);
 					foreach($aCat[$sPathInsideImage] as $sFile=>$aMeta){
-						$aDirectoryListing[$sFile] = new DirectoryEntry($sFile,$sImageFile,'DfsSsd',$aMeta['loadaddr'],$aMeta['execaddr'],$aMeta['size'],FALSE,$sEconetPath.'.'.$sFile,$aImageStat['ctime'],'-r/-r');
+						$aDirectoryListing[$sFile] = new DirectoryEntry($sFile,$sImageFile,'DfsSsd',$aMeta['loadaddr'],$aMeta['execaddr'],$aMeta['size'],$sEconetPath.'.'.$sFile,$aImageStat['ctime'],'-r/-r', FALSE);
 					}
 				}
 			}else{
 				$aImageStat = stat($sImageFile);
 				foreach($aCat['$'] as $sFile=>$aMeta){
-					$aDirectoryListing[$sFile] = new DirectoryEntry($sFile,$sImageFile,'DfsSsd',$aMeta['loadaddr'],$aMeta['execaddr'],$aMeta['size'],FALSE,$sEconetPath.'.'.$sFile,$aImageStat['ctime'],'-r/-r');
+					$aDirectoryListing[$sFile] = new DirectoryEntry($sFile,$sImageFile,'DfsSsd',$aMeta['loadaddr'],$aMeta['execaddr'],$aMeta['size'],$sEconetPath.'.'.$sFile,$aImageStat['ctime'],'-r/-r', FALSE);
 				}
 				foreach(array_keys($aCat) as $sDir){
 					if($sDir!='$'){
-						$aDirectoryListing[$sDir] = new DirectoryEntry($sDir,$sImageFile,'DfsSsd',NULL,NULL,0,TRUE,$sEconetPath.'.'.$sDir,$aImageStat['ctime'],'-r/-r');
+						$aDirectoryListing[$sDir] = new DirectoryEntry($sDir,$sImageFile,'DfsSsd',NULL,NULL,0,$sEconetPath.'.'.$sDir,$aImageStat['ctime'],'-r/-r', TRUE);
 					}
 				}
 			}
@@ -239,11 +239,11 @@ class DfsSsd implements PluginInterface {
 		if(is_dir($sUnixPath)){
 			$aFiles = scandir($sUnixPath);
 			foreach($aFiles as $sFile){
-				if(stripos($sFile,'.ssd')!==FALSE){
+				if(stripos((string) $sFile,'.ssd')!==FALSE){
 					//Disk Image found
-					if(!array_key_exists(substr($sFile,0,strlen($sFile)-4),$aDirectoryListing)){
+					if(!array_key_exists(substr((string) $sFile,0,strlen((string) $sFile)-4),$aDirectoryListing)){
 						$aStat = stat($sUnixPath.DIRECTORY_SEPARATOR.$sFile);
-						$aDirectoryListing[$sFile]=new DirectoryEntry(substr($sFile,0,strlen($sFile)-4),$sFile,'DfsSsd',NULL,NULL,0,TRUE,$sEconetPath.'.'.substr($sFile,0,strlen($sFile)-4),$aStat['ctime'],'-r/-r');
+						$aDirectoryListing[$sFile]=new DirectoryEntry(substr((string) $sFile,0,strlen((string) $sFile)-4),$sFile,'DfsSsd',NULL,NULL,0,$sEconetPath.'.'.substr((string) $sFile,0,strlen((string) $sFile)-4),$aStat['ctime'],'-r/-r', TRUE);
 					}
 				}
 			}
@@ -251,7 +251,7 @@ class DfsSsd implements PluginInterface {
 
 
 		//Rip out and .ssd files from the list
-		$aReturn = array();
+		$aReturn = [];
 		foreach($aDirectoryListing as $sFile => $oFile){
 			if(stripos($sFile,"\/ssd")===FALSE){
 				$aReturn[$sFile]=$oFile;
@@ -319,7 +319,7 @@ class DfsSsd implements PluginInterface {
 		if(array_key_exists($fLocalHandle,DfsSsd::$aFileHandles)){
 			$oDfs = DfsSsd::_getImageReader(DfsSsd::$aFileHandles[$fLocalHandle]['image-file']);
 			$aStat = $oDfs->getStat(DfsSsd::$aFileHandles[$fLocalHandle]['path-inside-image']);
-			return array('dev'=>null,'ino'=>$aStat['sector'],'size'=>$aStat['size'],'nlink'=>1);
+			return ['dev'=>null, 'ino'=>$aStat['sector'], 'size'=>$aStat['size'], 'nlink'=>1];
 		}
 		throw new VfsException("Invalid handle");
 	}
@@ -351,7 +351,7 @@ class DfsSsd implements PluginInterface {
 		if(array_key_exists($fLocalHandle,DfsSsd::$aFileHandles)){
 			$oDfs = DfsSsd::_getImageReader(DfsSsd::$aFileHandles[$fLocalHandle]['image-file']);
 			$sFileData = $oDfs->getFile(DfsSsd::$aFileHandles[$fLocalHandle]['path-inside-image']);
-			return substr($sFileData,DfsSsd::$aFileHandles[$fLocalHandle]['pos'],$iLength);
+			return substr((string) $sFileData,DfsSsd::$aFileHandles[$fLocalHandle]['pos'],$iLength);
 		}
 		throw new VfsException("Invalid handle");
 	}

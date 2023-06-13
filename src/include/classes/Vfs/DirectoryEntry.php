@@ -14,37 +14,10 @@ namespace HomeLan\FileStore\Vfs;
 */
 class DirectoryEntry {
 
-	protected $sVfsPlugin = NULL;
-
-	protected $sUnixName = NULL;
-
-	protected $sEconetName = NULL;
-
-	protected $iLoadAddr = NULL;
-
-	protected $iExecAddr = NULL;
-
-	protected $iSize = NULL;
-
-	protected $bDir = NULL;
-
 	protected $iAccess = 15;
 
-	protected $iCTime = NULL;
-	
-	protected $sEconetFullFilePath = NULL;
-
-	public function __construct($sEconetName,$sUnixName,$sVfsPlugin,$iLoadAddr,$iExecAddr,$iSize,$bDir=FALSE,$sEconetFullFilePath,$iCTime,$sMode)
+	public function __construct(protected $sEconetName,protected $sUnixName,protected $sVfsPlugin,protected $iLoadAddr,protected $iExecAddr,protected $iSize,protected $sEconetFullFilePath,protected $iCTime,$sMode, protected $bDir=FALSE)
 	{
-		$this->sEconetName=$sEconetName;
-		$this->sUnixName=$sUnixName;
-		$this->sVfsPlugin=$sVfsPlugin;
-		$this->iLoadAddr=$iLoadAddr;
-		$this->iExecAddr=$iExecAddr;
-		$this->iSize=$iSize;
-		$this->bDir=$bDir;
-		$this->iCTime = $iCTime;
-		$this->sEconetFullFilePath = $sEconetFullFilePath;
 		$this->setAccessByStr($sMode);
 	}
 
@@ -91,19 +64,19 @@ class DirectoryEntry {
 	public function setAccessByStr($sAccess): void
 	{
 		$iMode = 0;
-		if(substr($sAccess,0,1)=='w'){
+		if(str_starts_with((string) $sAccess, 'w')){
 			$iMode = $iMode+8;
 		}else{
 			//Mark unwriteable files as Locked
 			$iMode = $iMode+16;
 		}
-		if(substr($sAccess,1,1)=='r'){
+		if(substr((string) $sAccess,1,1)=='r'){
 			$iMode = $iMode+4;
 		}
-		if(substr($sAccess,3,1)=='w'){
+		if(substr((string) $sAccess,3,1)=='w'){
 			$iMode = $iMode+2;
 		}
-		if(substr($sAccess,4,1)=='r'){
+		if(substr((string) $sAccess,4,1)=='r'){
 			$iMode = $iMode+1;
 		}
 		if($this->isDir()){

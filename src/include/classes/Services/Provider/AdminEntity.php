@@ -13,11 +13,7 @@ namespace HomeLan\FileStore\Services\Provider;
 */
 class AdminEntity {
 
-	private $sType;
-	private $aFields = [];
-	private $aData = [];
 	private $fComputeId;
-	private $sIdField;
 
 	static function createCollection(string $sType, array $aFields, array $aRows, callable $fComputeId=null, string $sIdField=null): array
 	{
@@ -28,13 +24,9 @@ class AdminEntity {
 		return $aReturn;
 	}
 
-	public function __construct(string $sType, array $aFields, array $aData, callable $fComputeId=null, string $sIdField=null)
+	public function __construct(private readonly string $sType, private readonly array $aFields, private readonly array $aData, callable $fComputeId=null, private readonly ?string $sIdField=null)
 	{
-		$this->sType = $sType;
-		$this->aFields = $aFields;
-		$this->aData = $aData;
 		$this->fComputeId = $fComputeId;
-		$this->sIdField = $sIdField;
 	}
 
 	public function getFields(): array

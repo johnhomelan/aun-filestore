@@ -22,7 +22,7 @@ use Exception;
 */
 class Bridge implements ProviderInterface {
 
-	protected $aReplyBuffer = array();
+	protected $aReplyBuffer = [];
 
 	protected $oLogger;
 
@@ -30,7 +30,7 @@ class Bridge implements ProviderInterface {
 	 * Holds a list of networks discovered that are reachable through other bridges 
 	 *
 	*/
-	protected $aRemoteNetworks = array();
+	protected $aRemoteNetworks = [];
 
 	/**
 	 * Initializes the service

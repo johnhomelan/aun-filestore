@@ -30,7 +30,8 @@ use Exception;
 */
 class Filestore extends Command {
 
-	/**
+	protected static $defaultDescription = 'Start the file, print and bridge services';
+ /**
 	 * Hold the single instance of the fileserver object
 	 *
 	 * @var object fileserver
@@ -61,7 +62,7 @@ class Filestore extends Command {
 	 *	
 	 * @var array
 	*/
-	protected $aAllReadableSockets = array();
+	protected $aAllReadableSockets = [];
 
 
 	/**
@@ -89,7 +90,7 @@ class Filestore extends Command {
 	 * This does not contain the main loop, it just initializes the system
 	 * then jumps to the main loop.
 	*/
-	protected function execute(InputInterface $oInput, OutputInterface $oOutput): void
+	protected function execute(InputInterface $oInput, OutputInterface $oOutput): int
 	{
 		$bDaemonize = FALSE;
 		$sPidFile = "";
@@ -112,9 +113,9 @@ class Filestore extends Command {
 		//Initialize the system
 		try {
 			//Setup signle handler
-			pcntl_signal(SIGCHLD,array($this,'sigHandler'));
-			pcntl_signal(SIGALRM, array($this, 'sigHandler'));
-			pcntl_signal(SIGTERM,array($this,'sigHandler'));
+			pcntl_signal(SIGCHLD,$this->sigHandler(...));
+			pcntl_signal(SIGALRM, $this->sigHandler(...));
+			pcntl_signal(SIGTERM,$this->sigHandler(...));
 			$this->registerNextAlarm();
 
 			//Create a file server instance and start it
@@ -141,6 +142,7 @@ class Filestore extends Command {
 		//Enter main loop
 		$this->oLogger->debug("Starting primary loop.");
 		$this->loop();
+  return \Symfony\Component\Console\Command\Command::SUCCESS;
 	}
 
 	/**
@@ -155,7 +157,6 @@ EOF;
 
 		parent::configure();
 		$this->setName('filestore')
-			->setDescription('Start the file, print and bridge services')
 			->addOption(
 				'config',
 				'c',
@@ -247,7 +248,7 @@ EOF;
 		if($this->oAunSocket===FALSE){
 			throw new Exception("Un-able to bind AUN socket (".$sErrstr.")",$iErrno);
 		}
-		$this->aAllReadableSockets=array($this->oAunSocket);
+		$this->aAllReadableSockets=[$this->oAunSocket];
 	}
 
 	/**
@@ -261,7 +262,7 @@ EOF;
 		$iErrno=NULL;
 		$bLoop=TRUE;
 		$aWriteSet=NULL;
-		$aAllExpSockets=array(NULL);
+		$aAllExpSockets=[NULL];
 
 		//Main Loop
 		while($bLoop){
@@ -462,14 +463,14 @@ EOF;
 		$sIP = Map::ecoAddrToIpAddr($oReplyEconetPacket->getDestinationNetwork(),$oReplyEconetPacket->getDestinationStation());
 		if(strlen($sIP)>0){
 			$sPacket = $oReplyEconetPacket->getAunFrame();
-			$this->oLogger->debug("filestore: AUN packet to ".$sIP." (".implode(':',unpack('C*',$sPacket)).")");
-			if(strlen($sPacket)>0){
-				if(strpos($sIP,':')===FALSE){
+			$this->oLogger->debug("filestore: AUN packet to ".$sIP." (".implode(':',unpack('C*',(string) $sPacket)).")");
+			if(strlen((string) $sPacket)>0){
+				if(!str_contains($sIP,':')){
 					$sHost=$sIP.':'.config::getValue('aun_default_port');
 				}else{
 					$sHost=$sIP;
 				}
-				stream_socket_sendto($this->oAunSocket,$sPacket,0,$sHost);
+				stream_socket_sendto($this->oAunSocket,(string) $sPacket,0,$sHost);
 			}
 		}
 	}
@@ -487,7 +488,7 @@ EOF;
 		}
 		$aReadSet=$this->aAllReadableSockets;
 		$aWriteSet=NULL;
-		$aAllExpSockets=array(NULL);
+		$aAllExpSockets=[NULL];
 		$aExpSet=$aAllExpSockets;
 
 		//Wait for an aun packet
@@ -553,7 +554,7 @@ EOF;
 
 		$aReadSet=$this->aAllReadableSockets;
 		$aWriteSet=NULL;
-		$aAllExpSockets=array(NULL);
+		$aAllExpSockets=[NULL];
 		$aExpSet=$aAllExpSockets;
 
 		//Wait for an aun packet

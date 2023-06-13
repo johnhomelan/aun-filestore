@@ -23,9 +23,9 @@ use config;
 */
 class PrintServer implements ProviderInterface {
 
-	protected $aReplyBuffer = array();
+	protected $aReplyBuffer = [];
 
-	protected $aPrintBuffer = array();
+	protected $aPrintBuffer = [];
 
 	protected $oLogger;
 
@@ -161,18 +161,18 @@ class PrintServer implements ProviderInterface {
 			//Spool started create buffer
 			$this->oLogger->info("Station ".$oPrintData->getSourceNetwork().":".$oPrintData->getSourceStation()." started a print job");
 			if(!array_key_exists($oPrintData->getSourceNetwork(),$this->aPrintBuffer)){
-				$this->aPrintBuffer[$oPrintData->getSourceNetwork()]=array();
+				$this->aPrintBuffer[$oPrintData->getSourceNetwork()]=[];
 			}
 
-			$this->aPrintBuffer[$oPrintData->getSourceNetwork()][$oPrintData->getSourceStation()]=array('data'=>'','began'=>time());
+			$this->aPrintBuffer[$oPrintData->getSourceNetwork()][$oPrintData->getSourceStation()]=['data'=>'', 'began'=>time()];
 			
 		}else{
 			//Add bytes to print buffer
 			if(!array_key_exists($oPrintData->getSourceNetwork(),$this->aPrintBuffer)){
-				$this->aPrintBuffer[$oPrintData->getSourceNetwork()]=array();
+				$this->aPrintBuffer[$oPrintData->getSourceNetwork()]=[];
 			}
 			if(!array_key_exists($oPrintData->getSourceStation(),$this->aPrintBuffer[$oPrintData->getSourceNetwork()])){
-				$this->aPrintBuffer[$oPrintData->getSourceNetwork()][$oPrintData->getSourceStation()]=array('data'=>'','began'=>time());
+				$this->aPrintBuffer[$oPrintData->getSourceNetwork()][$oPrintData->getSourceStation()]=['data'=>'', 'began'=>time()];
 			}
 			$this->aPrintBuffer[$oPrintData->getSourceNetwork()][$oPrintData->getSourceStation()]['data'] .= $oPrintData->getString(1,$oPrintData->getLen());
 			if($oPrintData->getByte($oPrintData->getLen())==3){
@@ -207,7 +207,7 @@ class PrintServer implements ProviderInterface {
 		$aJobs = [];
 		foreach($this->aPrintBuffer as $iNetwork=>$aData){
 			foreach($aData as $iStation=>$aBufferInfo){
-				$aJobs[] = ['network'=>$iNetwork, 'station'=>$iStation, 'began'=>$aBufferInfo['began'], 'size'=>strlen($aBufferInfo['data'])];
+				$aJobs[] = ['network'=>$iNetwork, 'station'=>$iStation, 'began'=>$aBufferInfo['began'], 'size'=>strlen((string) $aBufferInfo['data'])];
 			}
 		}
 		return $aJobs;

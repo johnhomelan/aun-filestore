@@ -30,9 +30,9 @@ class FileServer implements ProviderInterface{
 
 	protected $oServiceDispatcher = NULL ;
 
-	protected $aCommands = array('BYE','CAT','CDIR','DELETE','DIR','FSOPT','INFO','I AM','LIB','LOAD','LOGOFF','PASS','RENAME','SAVE','SDISC','NEWUSER','PRIV','REMUSER','i.','CHROOT','CHROOTOFF');
+	protected $aCommands = ['BYE', 'CAT', 'CDIR', 'DELETE', 'DIR', 'FSOPT', 'INFO', 'I AM', 'LIB', 'LOAD', 'LOGOFF', 'PASS', 'RENAME', 'SAVE', 'SDISC', 'NEWUSER', 'PRIV', 'REMUSER', 'i.', 'CHROOT', 'CHROOTOFF'];
 	
-	protected $aReplyBuffer = array();
+	protected $aReplyBuffer = [];
 
 	protected $oLogger;
 
@@ -127,15 +127,15 @@ class FileServer implements ProviderInterface{
 	{
 		$aReturn = [];
 		foreach($this->aReplyBuffer as $oReply){
-			switch(get_class($oReply)){
-				case 'HomeLan\FileStore\Messages\FsReply':
+			switch($oReply::class){
+				case \HomeLan\FileStore\Messages\FsReply::class:
 					$aReturn[] = $oReply->buildEconetpacket();
 					break;
-				case 'HomeLan\FileStore\Messages\EconetPacket':
+				case \HomeLan\FileStore\Messages\EconetPacket::class:
 					$aReturn[] = $oReply;
 					break;
 				default:
-					$this->oLogger->warning("Service provider filestore produced a reply of the invalid type ".get_class($oReply)." dropping");
+					$this->oLogger->warning("Service provider filestore produced a reply of the invalid type ".$oReply::class." dropping");
 					break;
 			}
 		}
@@ -356,8 +356,9 @@ class FileServer implements ProviderInterface{
 	*/
 	public function cliDecode(object $oFsRequest): void
 	{
-		$sData = $oFsRequest->getData();
-		$aDataAs8BitInts = unpack('C*',$sData);
+		$sCommand = null;
+  $sData = $oFsRequest->getData();
+		$aDataAs8BitInts = unpack('C*',(string) $sData);
 		$sDataAsString = "";
 		foreach($aDataAs8BitInts as $iChar){
 			$sDataAsString = $sDataAsString.chr($iChar);
@@ -369,7 +370,7 @@ class FileServer implements ProviderInterface{
 			$iPos = stripos($sDataAsString,(string) $sCommand);
 			if($iPos===0){
 				//Found cli command found
-				$iOptionsPos = $iPos+strlen($sCommand);
+				$iOptionsPos = $iPos+strlen((string) $sCommand);
 				$sOptions = substr($sDataAsString,$iOptionsPos);
 				$this->runCli($oFsRequest,$sCommand,trim($sOptions));
 				return;
@@ -482,7 +483,7 @@ class FileServer implements ProviderInterface{
 			if(array_key_exists(1,$aOptions)){
 				$sPass = trim($aOptions[1]);
 				if(substr_count($sPass,"\r")>0){
-					list($sPass) = explode("\r",$sPass);
+					[$sPass] = explode("\r",$sPass);
 				}
 			}else{
 				$sPass="";
@@ -508,14 +509,14 @@ class FileServer implements ProviderInterface{
 			try {
 				$oUrd = Vfs::createFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oUser->getHomedir());
 				$oCsd = Vfs::createFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oUser->getHomedir());	
-			}catch(Exception $oException){
+			}catch(Exception){
 				$this->oLogger->info("fileserver: Login unable to open homedirectory for user ".$oUser->getUsername());
 				$oUrd = Vfs::createFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),'$');
 				$oCsd = Vfs::createFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),'$');
 			}
 			try {
 				$oLib = Vfs::createFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oUser->getLib());
-			}catch(Exception $oException){
+			}catch(Exception){
 				$this->oLogger->info("fileserver: Login unable to open library dir setting library to $ for user ".$oUser->getUsername());
 				$oLib = Vfs::createFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),'');
 			}
@@ -548,7 +549,7 @@ class FileServer implements ProviderInterface{
 			Security::logout($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation());
 			$oReply = $oFsRequest->buildReply();	
 			$oReply->DoneOk();
-		}catch(Exception $oException){
+		}catch(Exception){
 			$oReply = $oFsRequest->buildReply();
 			$oReply->setError(0xbf,"Who are you?");
 		}
@@ -572,7 +573,7 @@ class FileServer implements ProviderInterface{
 			$oReply->InfoOk();
 			//Append Type
 			$oReply->appendString($sReplyData);
-		}catch(Exception $oException){
+		}catch(Exception){
 			$oReply->setError(0xff,"No such file");
 		}
 		$this->addReplyToBuffer($oReply);
@@ -602,7 +603,7 @@ class FileServer implements ProviderInterface{
 						$oReply->appendByte(0x01);
 					}
 					$oReply->appendByte($oMeta->getAccess());
-				}catch(Exception $oException){
+				}catch(Exception){
 					$oReply->DoneOk();
 					$oReply->appendByte(0x00);
 					$oReply->appendByte(0x00);
@@ -629,7 +630,7 @@ class FileServer implements ProviderInterface{
 					$oReply->appendByte($oMeta->getAccess());
 					//Add current date
 					$oReply->appendRaw($oMeta->getCTime());
-				}catch(Exception $oException){
+				}catch(Exception){
 					$oReply->DoneOk();
 					$oReply->appendByte(0x00);
 					$oReply->append32bitIntLittleEndian(0x0);
@@ -655,7 +656,7 @@ class FileServer implements ProviderInterface{
 						$oReply->appendByte(0x01);
 					}
 					$oReply->appendRaw($oMeta->getCTime());
-				}catch(Exception $oException){
+				}catch(Exception){
 					$oReply->DoneOk();
 					$oReply->appendByte(0x00);
 					$oReply->appendByte(0x00);
@@ -680,7 +681,7 @@ class FileServer implements ProviderInterface{
 					}
 					$oReply->append32bitIntLittleEndian($oMeta->getLoadAddr());
 					$oReply->append32bitIntLittleEndian($oMeta->getExecAddr());
-				}catch(Exception $oException){
+				}catch(Exception){
 					$oReply->DoneOk();
 					$oReply->appendByte(0x00);
 					$oReply->appendByte(0x00);
@@ -703,7 +704,7 @@ class FileServer implements ProviderInterface{
 						$oReply->appendByte(0x01);
 					}
 					$oReply->append24bitIntLittleEndian($oMeta->getSize());
-				}catch(Exception $oException){
+				}catch(Exception){
 					$oReply->DoneOk();
 					$oReply->appendByte(0x00);
 					$oReply->appendByte(0x00);
@@ -729,9 +730,9 @@ class FileServer implements ProviderInterface{
 					if($sDir==""){
 						//No dir requested so use csd
 						$oFd = Vfs::getFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oFsRequest->getCsd());
-						$oReply->appendString(str_pad(substr($oFd->getEconetDirName(),0,10),10,' '));
+						$oReply->appendString(str_pad(substr((string) $oFd->getEconetDirName(),0,10),10,' '));
 					}else{
-						$oReply->appendString(str_pad(substr($sDir,0,10),10,' '));
+						$oReply->appendString(str_pad(substr((string) $sDir,0,10),10,' '));
 					}
 
 					//FS_DIR_ACCESS_PUBLIC
@@ -742,7 +743,7 @@ class FileServer implements ProviderInterface{
 
 					$this->addReplyToBuffer($oReply);
 
-				}catch(Exception $oException){
+				}catch(Exception){
 					$oReply = $oFsRequest->buildReply();
 					$oReply->setError(0x8e,"Bad INFO argument");
 					$this->addReplyToBuffer($oReply);
@@ -846,7 +847,7 @@ class FileServer implements ProviderInterface{
 
 				foreach($aDirEntries as $oFile){
 					//Append the file name (limit 10 chars)
-					$oReply->appendString(str_pad(substr($oFile->getEconetName(),0,11),11,' '));
+					$oReply->appendString(str_pad(substr((string) $oFile->getEconetName(),0,11),11,' '));
 					$oReply->append32bitIntLittleEndian($oFile->getLoadAddr());
 					$oReply->append32bitIntLittleEndian($oFile->getExecAddr());
 					//Access mode
@@ -878,7 +879,7 @@ class FileServer implements ProviderInterface{
 
 				foreach($aDirEntries as $oFile){
 					//Append the file name (limit 10 chars)
-					$oReply->appendString(str_pad(substr($oFile->getEconetName(),0,11),11,' '));
+					$oReply->appendString(str_pad(substr((string) $oFile->getEconetName(),0,11),11,' '));
 					$oReply->appendString(sprintf("%08X %08X   %06X   %-6.6s  %02d:%02d:%02d %06x",$oFile->getLoadAddr(),$oFile->getExecAddr(),$oFile->getSize(),$oFile->getEconetMode(),$oFile->getDay(),$oFile->getMonth(),$oFile->getYear(),$oFile->getSin()));
 					//End this directory entry
 					$oReply->appendByte(0);
@@ -912,7 +913,7 @@ class FileServer implements ProviderInterface{
 
 				foreach($aDirEntries as $oFile){
 					//Append the file name (limit 10 chars)
-					$oReply->appendString(str_pad(substr($oFile->getEconetName(),0,11),11,' '));
+					$oReply->appendString(str_pad(substr((string) $oFile->getEconetName(),0,11),11,' '));
 					//Add 0x20
 					$oReply->appendByte(0x20);
 					//Add the file mode e.g DRW/r   (alway 6 bytes space padded)
@@ -983,15 +984,15 @@ class FileServer implements ProviderInterface{
 		$oReply->appendByte(16);
 
 		//csd Disc name String 16 bytes
-		$oReply->appendString(str_pad(substr(config::getValue('vfs_disc_name'),0,16),16,' '));
+		$oReply->appendString(str_pad(substr((string) config::getValue('vfs_disc_name'),0,16),16,' '));
 		try {	
 			//csd Leaf name String 10 bytes
 			$oCsd = Vfs::getFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oFsRequest->getCsd());	
-			$oReply->appendString(str_pad(substr($oCsd->getEconetDirName(),0,10),10,' '));
+			$oReply->appendString(str_pad(substr((string) $oCsd->getEconetDirName(),0,10),10,' '));
 
 			//lib leaf name String 10 bytes
 			$oLib = Vfs::getFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oFsRequest->getLib());	
-			$oReply->appendString(str_pad(substr($oLib->getEconetDirName(),0,10),10,' '));
+			$oReply->appendString(str_pad(substr((string) $oLib->getEconetDirName(),0,10),10,' '));
 		}catch(Exception $oException){
 			$oReply = $oFsRequest->buildReply();
 			$oReply->setError(0xff,$oException->getMessage());
@@ -1017,7 +1018,7 @@ class FileServer implements ProviderInterface{
 			return;
 		}
 		
-		if(strlen($sOptions)>0){
+		if(strlen((string) $sOptions)>0){
 			try {
 				if($sOptions=="^"){
 					//Change to parent dir
@@ -1039,7 +1040,7 @@ class FileServer implements ProviderInterface{
 				$oReply->appendByte($oNewCsd->getID());
 				$oUser->setCsd($oNewCsd->getEconetPath());
 
-			}catch(Exception $oException){
+			}catch(Exception){
 				//The directory did no exist
 				$oReply->setError(0xff,"No such directory.");	
 			}
@@ -1051,7 +1052,7 @@ class FileServer implements ProviderInterface{
 				$oReply->DirOk();
 				$oReply->appendByte($oNewCsd->getID());
 				$oUser->setCsd($oNewCsd->getEconetPath());
-			}catch(Exception $oException){
+			}catch(Exception){
 				$oReply->setError(0xff,"No such directory.");	
 			}
 		}
@@ -1069,7 +1070,7 @@ class FileServer implements ProviderInterface{
 	{
 		$oReply = $oFsRequest->buildReply();
 		
-		if(strlen($sOptions)>0){
+		if(strlen((string) $sOptions)>0){
 			try {
 				$oNewLib = Vfs::createFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sOptions);	
 				if(!$oNewLib->isDir()){
@@ -1082,7 +1083,7 @@ class FileServer implements ProviderInterface{
 				$oReply->LibOk();
 				//Send new csd handle
 				$oReply->appendByte($oNewLib->getID());
-			}catch(Exception $oException){
+			}catch(Exception){
 				//The directory did no exist
 				$oReply->setError(0xff,"No such directory.");	
 			}
@@ -1102,12 +1103,12 @@ class FileServer implements ProviderInterface{
 	public function createDirectory($oFsRequest,$sOptions): void
 	{
 		$oReply = $oFsRequest->buildReply();
-		if(strlen($sOptions)<1){
+		if(strlen((string) $sOptions)<1){
 			$oReply->setError(0xff,"Syntax");
 			$this->addReplyToBuffer($oReply);
 			return;
 		}
-		if(strlen($sOptions)>10){
+		if(strlen((string) $sOptions)>10){
 			$oReply->setError(0xff,"Maximum directory name length is 10");
 			$this->addReplyToBuffer($oReply);
 			return;
@@ -1116,7 +1117,7 @@ class FileServer implements ProviderInterface{
 		try {
 			Vfs::createDirectory($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sOptions);
 			$oReply->DoneOk();
-		}catch(Exception $oException){
+		}catch(Exception){
 			$oReply->setError(0xff,"Unable to create directory");
 		}
 		$this->addReplyToBuffer($oReply);
@@ -1130,13 +1131,13 @@ class FileServer implements ProviderInterface{
 	public function deleteFile($oFsRequest,$sOptions): void
 	{
 		$oReply = $oFsRequest->buildReply();
-		if(strlen($sOptions)<1){
+		if(strlen((string) $sOptions)<1){
 			$oReply->setError(0xff,"Syntax");
 		}else{
 			try{
 				Vfs::deleteFile($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sOptions);
 				$oReply->DoneOk();
-			}catch(Exception $oException){
+			}catch(Exception){
 				$oReply->setError(0xff,"Unable to delete");
 			}
 		}
@@ -1151,14 +1152,14 @@ class FileServer implements ProviderInterface{
 	public function renameFile($oFsRequest,$sOptions): void
 	{
 		$oReply = $oFsRequest->buildReply();
-		if(strlen($sOptions)<2){
+		if(strlen((string) $sOptions)<2){
 			$oReply->setError(0xff,"Syntax");
 		}else{
 			try{
-				list($sFrom,$sTo) = explode(' ',$sOptions);
+				[$sFrom, $sTo] = explode(' ',(string) $sOptions);
 				Vfs::moveFile($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sFrom,$sTo);
 				$oReply->DoneOk();
-			}catch(Exception $oException){
+			}catch(Exception){
 				$oReply->setError(0xff,"No such file");
 			}
 		}
@@ -1190,7 +1191,7 @@ class FileServer implements ProviderInterface{
 			$oFsHandle = Vfs::createFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sPath,$bMustExist,$bReadOnly);
 			$oReply->DoneOk();
 			$oReply->appendByte($oFsHandle->getID());
-		}catch(Exception $oException){
+		}catch(Exception){
 			$oReply->setError(0xff,"No such file");
 		}
 		$this->addReplyToBuffer($oReply);
@@ -1283,7 +1284,7 @@ class FileServer implements ProviderInterface{
 					}else{
 						$sBlock = $oFsHandle->read($iBytesToRead);
 					}
-					$iBytesToRead = $iBytesToRead-strlen($sBlock);
+					$iBytesToRead = $iBytesToRead-strlen((string) $sBlock);
 
 					$oEconetPacket = new EconetPacket();
 					$oEconetPacket->setDestinationNetwork($oFsRequest->getSourceNetwork());
@@ -1457,7 +1458,7 @@ class FileServer implements ProviderInterface{
 					$oReplyEconetPacket = $oReply->buildEconetpacket();
 					$oReplyEconetPacket->setPort($iAckPort);
 					$_this->addReplyToBuffer($oReplyEconetPacket);
-					$_this->oLogger->debug("Replay sent for block of ".strlen($oPacket->getData()));
+					$_this->oLogger->debug("Replay sent for block of ".strlen((string) $oPacket->getData()));
 				},
 				function($oStream,$sData) use ($oFsRequest, $sPath, $iLoad, $iExec, $_this){
 					Vfs::saveFile($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sPath,$sData,$iLoad,$iExec);
@@ -1507,7 +1508,7 @@ class FileServer implements ProviderInterface{
 		try {
 			$sFileData = Vfs::getFile($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sPath);
 			$oMeta = Vfs::getMeta($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sPath);
-		}catch(Exception $oException){
+		}catch(Exception){
 			$oReply->setError(0x99,"No such file");
 			$this->addReplyToBuffer($oReply);
 			return;			
@@ -1530,19 +1531,19 @@ class FileServer implements ProviderInterface{
 		$oServiceDispatcher = $this->oServiceDispatcher;
 
 		//Break the data into blocks and send it
-		while(strlen($sFileData)>0){
+		while(strlen((string) $sFileData)>0){
 			
 			//Build a 256 byte block
-			$sBlock = substr($sFileData,0,256);
+			$sBlock = substr((string) $sFileData,0,256);
 			//Remote 256 byte from the string
-			$sFileData=substr($sFileData,256);
+			$sFileData=substr((string) $sFileData,256);
 			$oEconetPacket = new EconetPacket();
 			$oEconetPacket->setDestinationNetwork($oFsRequest->getSourceNetwork());
 			$oEconetPacket->setDestinationStation($oFsRequest->getSourceStation());
 			$oEconetPacket->setPort($iDataPort);
 			$oEconetPacket->setData($sBlock);
 	
-			$oLoop->setTimer($fTime/1000000,function() use ($_this, $oEconetPacket, $oServiceDispatcher){
+			$oLoop->setTimer($fTime/1_000_000,function() use ($_this, $oEconetPacket, $oServiceDispatcher){
 				$_this->addReplyToBuffer($oEconetPacket);
 				$oServiceDispatcher->sendPackets($_this);
 			});
@@ -1552,7 +1553,7 @@ class FileServer implements ProviderInterface{
 
 		$oReply2 = $oFsRequest->buildReply();
 		$oReply2->DoneOk();
-		$oLoop->setTimer($fTime/1000000,function() use ($_this, $oReply2){
+		$oLoop->setTimer($fTime/1_000_000,function() use ($_this, $oReply2){
 			$_this->addReplyToBuffer($oReply2);
 		});
 
@@ -1565,17 +1566,17 @@ class FileServer implements ProviderInterface{
 	*/
 	public function setPassword($oFsRequest,$sOptions): void
 	{
-		$aOptions = explode(' ',$sOptions);
+		$aOptions = explode(' ',(string) $sOptions);
 		$oReply = $oFsRequest->buildReply();
 		if(count($aOptions)!=2){
 			$oReply->setError(0xff,"Syntax");
 		}else{
 			//Filter out the string added by the use of *pass :
 			if(substr_count($aOptions[0],"\r")>0){
-				list($aOptions[0]) = explode("\r",$aOptions[0]);
+				[$aOptions[0]] = explode("\r",$aOptions[0]);
 			}
 			if(substr_count($aOptions[1],"\r")>0){
-				list($aOptions[1]) = explode("\r",$aOptions[1]);
+				[$aOptions[1]] = explode("\r",$aOptions[1]);
 			}
 
 
@@ -1611,10 +1612,10 @@ class FileServer implements ProviderInterface{
 	public function createUser($oFsRequest,$sOptions): void
 	{
 		$oReply = $oFsRequest->buildReply();
-		if(strlen($sOptions)<1){
+		if(strlen((string) $sOptions)<1){
 			$oReply->setError(0xff,"Syntax");
 		}else{
-			$aOptions = explode(' ',$sOptions);
+			$aOptions = explode(' ',(string) $sOptions);
 			if(strlen($aOptions[0])>3 AND strlen($aOptions[0])<11 AND ctype_upper($aOptions[0]) AND ctype_alpha($aOptions[0])){
 				$oUser = new User();
 				$oUser->setUsername($aOptions[0]);
@@ -1650,7 +1651,7 @@ class FileServer implements ProviderInterface{
 	public function removeUser($oFsRequest,$sOptions): void
 	{
 		$oReply = $oFsRequest->buildReply();
-		if(strlen($sOptions)<1 OR !ctype_alnum($sOptions)){
+		if(strlen((string) $sOptions)<1 OR !ctype_alnum((string) $sOptions)){
 			$oReply->setError(0xff,"Syntax");
 		}else{
 			try {
@@ -1659,7 +1660,7 @@ class FileServer implements ProviderInterface{
 				}else{
 					$oReply->setError(0xff,"No such user");
 				}
-			}catch(Exception $oException){
+			}catch(Exception){
 				$oReply->setError(0xff,"You do not have admin rights");
 			}
 		}
@@ -1672,7 +1673,7 @@ class FileServer implements ProviderInterface{
 	*/
 	public function privUser($oFsRequest,$sOptions): void
 	{
-		$aOptions = explode(' ',$sOptions);
+		$aOptions = explode(' ',(string) $sOptions);
 		$oReply = $oFsRequest->buildReply();
 		if(count($aOptions)!=2){
 			$oReply->setError(0xff,"Syntax");
@@ -1750,7 +1751,7 @@ class FileServer implements ProviderInterface{
 		$oReply = $oFsRequest->buildReply();
 		$oUser = security::getUser($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation());
 		$oCsd = Vfs::getFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oFsRequest->getCsd());
-		$sNewPath = str_replace('$',$oUser->getRoot(),$oCsd->getEconetDirName());
+		$sNewPath = str_replace('$',$oUser->getRoot(),(string) $oCsd->getEconetDirName());
 		$oUser->setRoot('$');
 		Vfs::closeFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oFsRequest->getCsd());
 		$oNewCsd = Vfs::createFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sNewPath);
@@ -1785,7 +1786,7 @@ class FileServer implements ProviderInterface{
 					$oUser = $aData['user'];
 					$oReply->appendByte($iNetwork);
 					$oReply->appendByte($iStation);
-					$oReply->appendString(substr($oUser->getUsername(),0,10));
+					$oReply->appendString(substr((string) $oUser->getUsername(),0,10));
 					$oReply->appendByte(0x0d);
 					if($oUser->isAdmin()){
 						$oReply->appendByte(1);
@@ -1843,7 +1844,7 @@ class FileServer implements ProviderInterface{
 			//Add the drive number
 			$oReply->appendByte(0);
 			//Add the drive name
-			$oReply->appendString(str_pad(substr(config::getValue('vfs_disc_name'),0,16),16,' '));
+			$oReply->appendString(str_pad(substr((string) config::getValue('vfs_disc_name'),0,16),16,' '));
 		}else{
 			//Indicate that no more discs are present
 			$oReply->appendByte(0);

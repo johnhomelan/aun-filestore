@@ -29,7 +29,7 @@ class BridgeRequest extends Request {
 
 	protected $sData = NULL;
 
-	protected $aFunctionMap = array(0x80=>'EC_BR_QUERY',0x81=>'EC_BR_QUERY2',0x82=>'EC_BR_LOCALNET',0x83=>'EC_BR_NETKNOWN');
+	protected $aFunctionMap = [0x80=>'EC_BR_QUERY', 0x81=>'EC_BR_QUERY2', 0x82=>'EC_BR_LOCALNET', 0x83=>'EC_BR_NETKNOWN'];
 
 
 	public function __construct($oEconetPacket, \Psr\Log\LoggerInterface $oLogger)
@@ -56,11 +56,10 @@ class BridgeRequest extends Request {
 	}
 
 	/**
-	 * Decodes an AUN packet 
-	 *
-	 * @param string $sBinaryString
-	*/
-	public function decode(string $sBinaryString): void
+  * Decodes an AUN packet 
+  *
+  */
+ public function decode(string $sBinaryString): void
 	{
 		//Read the function code 1 byte unsigned int
 		$aHeader=unpack('C',$sBinaryString);

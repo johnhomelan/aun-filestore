@@ -42,7 +42,7 @@ class JsonPacket {
 
 	protected $iStationNumber = NULL;
 
-	protected $aTypeMap = array(1=>'Broadcast',2=>'Unicast',3=>'Ack',4=>'Reject',5=>'Immediate',6=>'ImmediateReply');
+	protected $aTypeMap = [1=>'Broadcast', 2=>'Unicast', 3=>'Ack', 4=>'Reject', 5=>'Immediate', 6=>'ImmediateReply'];
 
 	protected $sSoruceIP = NULL;
 
@@ -84,7 +84,7 @@ class JsonPacket {
 	*/
 	public function decode($sJsonString): void
 	{
-		$aPacket = json_decode($sJsonString,true, null, JSON_THROW_ON_ERROR);
+		$aPacket = json_decode((string) $sJsonString,true, null, JSON_THROW_ON_ERROR);
 		if(is_null($aPacket)){
 			throw new Exception("Invalid json encoded econet packet");
 		}
@@ -95,9 +95,9 @@ class JsonPacket {
 		//Read the header
 
 		//Read the aun packet type 1 byte unsigned int
-		$aHeader=unpack('C',$aPacket['payload']);
+		$aHeader=unpack('C',(string) $aPacket['payload']);
 		$this->iPktType = $aHeader[1];
-		$sBinaryString = substr($aPacket['payload'],1);
+		$sBinaryString = substr((string) $aPacket['payload'],1);
 		
 		//Read the dst port 1 byte unsigned int
 		$aHeader=unpack('C',$sBinaryString);

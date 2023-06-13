@@ -13,7 +13,7 @@
 class config {
 
 	static protected $aFileSettings=NULL;
-	static protected $_aConfigCache=array();
+	static protected $_aConfigCache=[];
 	static protected $_aVarSpec=NULL;
 	
 
@@ -109,12 +109,12 @@ class config {
 			$aFiles=preg_grep($sPat,$aFiles);
 			$aFiles=array_values($aFiles);
 
-			if(count($aFiles)==0){
+			if((is_countable($aFiles) ? count($aFiles) : 0)==0){
 				return NULL;
 			}
 
 			//Parse Each conf file
-			$aSettings=array();
+			$aSettings=[];
 			foreach($aFiles as $sFile){
 				$sFile=CONFIG_CONF_FILE_PATH.DIRECTORY_SEPARATOR.$sFile;
 				$aSettings = array_merge($aSettings,parse_ini_file($sFile, true));

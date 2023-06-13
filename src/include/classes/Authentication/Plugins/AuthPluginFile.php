@@ -20,13 +20,13 @@ use Exception;
 
 class AuthPluginFile implements AuthPluginInterface {
 
-	protected static $aUsers = array();
+	protected static $aUsers = [];
 	protected static $oLogger;
 
 	static protected function _writeOutUserFile(): void
 	{
 		$sUserFileContents = "";
-		if(strlen(config::getValue('security_plugin_file_user_file'))>0){
+		if(strlen((string) config::getValue('security_plugin_file_user_file'))>0){
 			foreach(AuthPluginFile::$aUsers as $aUserInfo){
 				$sUserFileContents = $sUserFileContents . $aUserInfo['username'].':'.$aUserInfo['password'].':'.$aUserInfo['homedir'].':'.$aUserInfo['unixuid'].':'.$aUserInfo['opt'].":".$aUserInfo['priv']."\n";
 			}
@@ -44,7 +44,7 @@ class AuthPluginFile implements AuthPluginInterface {
 	{
 		self::$oLogger = $oLogger;
 
-		AuthPluginFile::$aUsers = array();
+		AuthPluginFile::$aUsers = [];
 		if(is_null($sUsers)){
 			if(!file_exists(config::getValue('security_plugin_file_user_file'))){
 				self::$oLogger->error("AuthPluginFile: The user file (".config::getValue('security_plugin_file_user_file').") does not exist.");
@@ -52,17 +52,17 @@ class AuthPluginFile implements AuthPluginInterface {
 			}
 			$sUsers = file_get_contents(config::getValue('security_plugin_file_user_file'));
 		}
-		$aLines = explode("\n",$sUsers);
+		$aLines = explode("\n",(string) $sUsers);
 		foreach($aLines as $sLine){
-			$aMatches = array();
+			$aMatches = [];
 			//The file format is username:pwhashtype-hash:homedir:unixuid:opt
 			if(preg_match('/([a-zA-Z0-9]+):([a-z0-9]+-[a-zA-Z0-9]+):([$a-z0-9A-Z\-._]+):([0-9]+):([0-9]):([A-Za-z])/',$sLine,$aMatches)>0){
-				AuthPluginFile::$aUsers[strtoupper($aMatches[1])]=array('username'=>strtoupper($aMatches[1]),'password'=>$aMatches[2],'homedir'=>$aMatches[3],'unixuid'=>$aMatches[4],'opt'=>$aMatches[5],'priv'=>$aMatches[6]);
+				AuthPluginFile::$aUsers[strtoupper($aMatches[1])]=['username'=>strtoupper($aMatches[1]), 'password'=>$aMatches[2], 'homedir'=>$aMatches[3], 'unixuid'=>$aMatches[4], 'opt'=>$aMatches[5], 'priv'=>$aMatches[6]];
 			}
 			//Match with no password set
-			$aMatches=array();
+			$aMatches=[];
 			if(preg_match('/([a-zA-Z0-9]+)::([$a-z0-9A-Z\-._]+):([0-9]+):([0-9]):([A-Za-z])/',$sLine,$aMatches)>0){
-				AuthPluginFile::$aUsers[strtoupper($aMatches[1])]=array('username'=>strtoupper($aMatches[1]),'password'=>'','homedir'=>$aMatches[2],'unixuid'=>$aMatches[3],'opt'=>$aMatches[4],'priv'=>$aMatches[5]);
+				AuthPluginFile::$aUsers[strtoupper($aMatches[1])]=['username'=>strtoupper($aMatches[1]), 'password'=>'', 'homedir'=>$aMatches[2], 'unixuid'=>$aMatches[3], 'opt'=>$aMatches[4], 'priv'=>$aMatches[5]];
 			}
 		}
 	}
@@ -82,8 +82,8 @@ class AuthPluginFile implements AuthPluginInterface {
 		if(!array_key_exists(strtoupper($sUsername),AuthPluginFile::$aUsers)){
 			return FALSE;
 		}
-		if(strpos(AuthPluginFile::$aUsers[strtoupper($sUsername)]['password'],'-')!==FALSE){
-			list($sHashType,$sHash) = explode('-',AuthPluginFile::$aUsers[strtoupper($sUsername)]['password']);
+		if(str_contains((string) AuthPluginFile::$aUsers[strtoupper($sUsername)]['password'],'-')){
+			[$sHashType, $sHash] = explode('-',(string) AuthPluginFile::$aUsers[strtoupper($sUsername)]['password']);
 		}else{
 			$sHashType='plain';
 			$sHash = AuthPluginFile::$aUsers[strtoupper($sUsername)]['password'];
@@ -158,18 +158,11 @@ class AuthPluginFile implements AuthPluginInterface {
 			if(is_null($sPassword)){
 				AuthPluginFile::$aUsers[strtoupper($sUsername)]['password']=NULL;
 			}else{
-				switch(config::getValue('security_plugin_file_default_crypt')){
-					case 'plain':
-						AuthPluginFile::$aUsers[strtoupper($sUsername)]['password']='plain-'.$sPassword;
-						break;
-					case 'sha1':
-						AuthPluginFile::$aUsers[strtoupper($sUsername)]['password']='sha1-'.sha1($sPassword);
-						break;
-					case 'md5':
-					default:
-						AuthPluginFile::$aUsers[strtoupper($sUsername)]['password']='md5-'.md5($sPassword);
-						break;
-				}
+				AuthPluginFile::$aUsers[strtoupper($sUsername)]['password'] = match (config::getValue('security_plugin_file_default_crypt')) {
+        'plain' => 'plain-'.$sPassword,
+        'sha1' => 'sha1-'.sha1($sPassword),
+        default => 'md5-'.md5($sPassword),
+    };
 			}
 		}
 		AuthPluginFile::_writeOutUserFile();
@@ -184,8 +177,8 @@ class AuthPluginFile implements AuthPluginInterface {
 	*/
 	static public function createUser($oUser): void
 	{
-		if(!array_key_exists(strtoupper($oUser->getUsername()),AuthPluginFile::$aUsers)){
-			AuthPluginFile::$aUsers[strtoupper($oUser->getUsername())]=array('username'=>$oUser->getUsername(),'password'=>'','homedir'=>$oUser->getHomedir(),'unixuid'=>$oUser->getUnixUid(),'opt'=>$oUser->getBootOpt(),'priv'=>$oUser->getPriv());
+		if(!array_key_exists(strtoupper((string) $oUser->getUsername()),AuthPluginFile::$aUsers)){
+			AuthPluginFile::$aUsers[strtoupper((string) $oUser->getUsername())]=['username'=>$oUser->getUsername(), 'password'=>'', 'homedir'=>$oUser->getHomedir(), 'unixuid'=>$oUser->getUnixUid(), 'opt'=>$oUser->getBootOpt(), 'priv'=>$oUser->getPriv()];
 			AuthPluginFile::_writeOutUserFile();
 		}else{
 			throw new Exception("User exists");

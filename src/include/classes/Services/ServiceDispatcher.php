@@ -84,7 +84,7 @@ class ServiceDispatcher {
 	/**
 	 * Adds a single service to the service dispatcher
 	 *
-	 * @param object ServicesInterface $oService
+	 * @param ProviderInterface $oService
 	*/
 	public function addService(ProviderInterface $oService): void
 	{
@@ -141,7 +141,7 @@ class ServiceDispatcher {
 	/**
 	 * Allows a service to claim port temp bais for directly streaming data with a client
 	 *
-	 * @param object ServicesInterface $oService 
+	 * @param ProviderInterface $oService 
 	 * @param int $iTimeOut If no packets are recived after this timeout the port is free'd 
 	 * @return int The port allocated for streaming by the service handler 
 	*/

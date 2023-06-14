@@ -31,10 +31,13 @@ class BridgeRequest extends Request {
 
 	protected $aFunctionMap = [0x80=>'EC_BR_QUERY', 0x81=>'EC_BR_QUERY2', 0x82=>'EC_BR_LOCALNET', 0x83=>'EC_BR_NETKNOWN'];
 
+	protected $oEconetPacket = NULL;
+
 
 	public function __construct($oEconetPacket, \Psr\Log\LoggerInterface $oLogger)
 	{
 		parent:: __construct($oEconetPacket,$oLogger);
+		$this->oEconetPacket = $oEconetPacket;
 		$this->decode($oEconetPacket->getData());
 	}	
 
@@ -56,10 +59,10 @@ class BridgeRequest extends Request {
 	}
 
 	/**
-  * Decodes an AUN packet 
-  *
-  */
- public function decode(string $sBinaryString): void
+	  * Decodes an AUN packet 
+ 	  *
+ 	*/
+	public function decode(string $sBinaryString): void
 	{
 		//Read the function code 1 byte unsigned int
 		$aHeader=unpack('C',$sBinaryString);
@@ -82,6 +85,14 @@ class BridgeRequest extends Request {
 		//The reset is data
 		$this->sData = $sBinaryString;
 		
+	}
+
+	public function getNetwork():int
+	{
+		//This first byte after the reply port is the network number the bridge is being queried about
+		$aData = unpack('C',$this->sData);
+		return (int) $aData[2];
+
 	}
 
 	public function buildReply(): \HomeLan\FileStore\Messages\FsReply

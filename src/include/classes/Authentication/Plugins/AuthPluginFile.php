@@ -38,7 +38,7 @@ class AuthPluginFile implements AuthPluginInterface {
 	 * Intiailizes this plugins data structures
 	 *
 	 * Load the user list from disk
-	 * @param string $sUser The contents of the userfile can be supplied as an arg, this should be mainly used for testing
+	 * @param string $sUsers The contents of the userfile can be supplied as an arg, this should be mainly used for testing
 	*/
 	static public function init(\Psr\Log\LoggerInterface $oLogger, $sUsers=NULL): void
 	{
@@ -110,8 +110,8 @@ class AuthPluginFile implements AuthPluginInterface {
 	/**
 	 * Creates a user object based of the auth data stored in the plugin 
 	 *
-	 * @param string $sUsername
-	 * @return object user
+	 * @param string $sUsername The username of the user to be built
+	 * @return \HomeLan\FileStore\Authentication\User
 	*/
 	static public function buildUserObject(string $sUsername): \HomeLan\FileStore\Authentication\User
 	{
@@ -147,7 +147,7 @@ class AuthPluginFile implements AuthPluginInterface {
 	 * @param string $sOldPassword Can be null if the old password is blank
 	 * @param string $sPassword
 	*/
-	static public function setPassword(string $sUsername,string $sOldPassword,string $sPassword): void
+	static public function setPassword(string $sUsername,?string $sOldPassword,?string $sPassword): void
 	{
 		//Test old password
 		if(!AuthPluginFile::login($sUsername,$sOldPassword,NULL,NULL)){
@@ -173,9 +173,9 @@ class AuthPluginFile implements AuthPluginInterface {
 	 * 
 	 * This method should not dertain if a user can create another security does that
 	 *
-	 * @param object user $oUser The user object that should be added to the backend
+	 * @param \HomeLan\FileStore\Authentication\User $oUser The user object that should be added to the backend
 	*/
-	static public function createUser($oUser): void
+	static public function createUser(\HomeLan\FileStore\Authentication\User $oUser): void
 	{
 		if(!array_key_exists(strtoupper((string) $oUser->getUsername()),AuthPluginFile::$aUsers)){
 			AuthPluginFile::$aUsers[strtoupper((string) $oUser->getUsername())]=['username'=>$oUser->getUsername(), 'password'=>'', 'homedir'=>$oUser->getHomedir(), 'unixuid'=>$oUser->getUnixUid(), 'opt'=>$oUser->getBootOpt(), 'priv'=>$oUser->getPriv()];
@@ -190,7 +190,7 @@ class AuthPluginFile implements AuthPluginInterface {
 	 * 
 	 * This method should not dertain if a user can remove another security does that
 	 *
-	 * @param string username
+	 * @param string $sUsername
 	*/
 	static public function removeUser(string $sUsername): bool
 	{

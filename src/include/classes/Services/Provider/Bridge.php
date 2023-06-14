@@ -112,9 +112,9 @@ class Bridge implements ProviderInterface {
 	 * This is the main entry point to this class 
 	 *
 	 * The bridgerequest object contains the request the bridge must process 
-	 * @param object bridgerequest $oBridgeRequest
+	 * @param bridgerequest $oBridgeRequest
 	*/
-	public function processRequest($oBridgeRequest): void
+	public function processRequest(BridgeRequest $oBridgeRequest): void
 	{
 		$sFunction = $oBridgeRequest->getFunction();
 		$this->oLogger->debug("Bridge function ".$sFunction);
@@ -140,9 +140,9 @@ class Bridge implements ProviderInterface {
 	/**
 	 * Handle the request to identify the local network
 	 *
-	 * @param object bridgerequest $oBridgeRequest
+	 * @param bridgerequest $oBridgeRequest
 	*/
-	protected function queryLocalNet($oBridgeRequest): void
+	protected function queryLocalNet(BridgeRequest $oBridgeRequest): void
 	{
 		$oReply = $oBridgeRequest->buildReply();
 		//The first byte of the reply is the local network number	
@@ -155,12 +155,12 @@ class Bridge implements ProviderInterface {
 	/**
 	 * Handle the request to determine if the birdge knows about a given network
 	 *
-	 * @param object bridgerequest $oBridgeRequest
+	 * @param bridgerequest $oBridgeRequest
 	*/ 
-	protected function queryNetKnown($oBridgeRequest): void
+	protected function queryNetKnown(BridgeRequest $oBridgeRequest): void
 	{
 		//This first byte after the reply port is the network number the bridge is being queried about
-		$iNetworNumber = $oBridgeRequest->getByte();
+		$iNetworNumber = $oBridgeRequest->getNetwork();
 		$oReply = $oBridgeRequest->buildReply();
 
 		//Check if the AUN Map knows about the network (as aun is currently our only econet emulation)
@@ -174,5 +174,10 @@ class Bridge implements ProviderInterface {
 			//Network exists (we only reply if we know about a network)
 			$this->_addReplyToBuffer($oReply);
 		}
+	}
+
+	public function getJobs(): array
+	{
+		return [];
 	}
 }

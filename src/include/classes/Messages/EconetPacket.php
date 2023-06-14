@@ -50,6 +50,7 @@ class EconetPacket {
 		if(array_key_exists($this->iPort,$this->aPortMap)){
 			return $this->aPortMap[$this->iPort];
 		}
+		return '';
 	}
 
 	public function getPortByName(string $sName): void
@@ -161,7 +162,7 @@ class EconetPacket {
 			
 			return $sPacket;	
 		}
-
+		return '';
 	}
 
 	/**

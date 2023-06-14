@@ -80,7 +80,7 @@ class JsonPacket {
 	/**
 	 * Decodes an AUN packet 
 	 *
-	 * @param string $sBinaryString
+	 * @param string $sJsonString
 	*/
 	public function decode($sJsonString): void
 	{
@@ -181,7 +181,7 @@ class JsonPacket {
 	 *
 	 * All the sub applications FileServer, PrintServer uses the econetpacket object so
 	 * that we can support more than 1 type of econet emulation/encapsulation
-	 * @return object econetpacket
+	 * @return econetpacket
 	*/
 	public function buildEconetPacket(): \HomeLan\FileStore\Messages\EconetPacket
 	{

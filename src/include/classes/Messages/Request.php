@@ -62,7 +62,7 @@ class Request {
 		return $this->sData;
 	}
 
-	public function getByte($iIndex)
+	public function getByte(int $iIndex)
 	{
 		$aBytes = unpack('C*',(string) $this->sData);
 		if(array_key_exists($iIndex,$aBytes)){
@@ -71,7 +71,7 @@ class Request {
 		return NULL;
 	}
 
-	public function getString($iStart): string
+	public function getString(int $iStart): string
 	{
 		$aBytes = unpack('C*',(string) $this->sData);
 		$sRetstr = "";
@@ -85,24 +85,25 @@ class Request {
 		return $sRetstr;
 	}
 
-	public function get32bitIntLittleEndian($iStart)
+	public function get32bitIntLittleEndian(int $iStart)
 	{
 		$sStr = substr((string) $this->sData,$iStart-1,4);
 		$aInt = unpack('V',$sStr);
 		return $aInt[1];
 	}
 
-	public function get24bitIntLittleEndian($iStart): int
+	public function get24bitIntLittleEndian(int $iStart): int
 	{
 		$aBytes = unpack('C*',(string) $this->sData);
 		$iInt= bindec(str_pad(decbin($aBytes[$iStart+2]),8,"0",STR_PAD_LEFT).str_pad(decbin($aBytes[$iStart+1]),8,"0",STR_PAD_LEFT).str_pad(decbin($aBytes[$iStart]),8,"0",STR_PAD_LEFT));
 		return $iInt;
 	}
 
-	public function get16bitIntLittleEndian($iStart): void
+	public function get16bitIntLittleEndian(int $iStart): int
 	{
 		$sStr = substr((string) $this->sData,$iStart-1,2);
 		$aInt = unpack('v',$sStr);
+		return $aInt[1];
 	}
 
 }

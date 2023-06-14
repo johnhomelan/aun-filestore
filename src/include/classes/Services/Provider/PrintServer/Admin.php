@@ -15,9 +15,11 @@ use HomeLan\FileStore\Services\ProviderInterface;
 
 class Admin implements AdminInterface 
 {
+
+
 	public function __construct(private readonly ProviderInterface $oProvider)
- {
- }
+ 	{
+	 }
 
 	/**
 	 * Gets the human readable name of the service provider
@@ -91,6 +93,7 @@ class Admin implements AdminInterface
 				return ['network'=>'int', 'station'=>'int', 'began'=>'datatime', 'size'=>'int'];	
 				break;
 		}
+		return [];
 	}
 
 	/**
@@ -106,6 +109,7 @@ class Admin implements AdminInterface
 				return $aReturn;
 				break;
 		}
+		return [];
 	}
 
 	/**
@@ -113,7 +117,7 @@ class Admin implements AdminInterface
 	*/
 	public function getCommands(): array
 	{
-			
+		return [];
 	}
 
 

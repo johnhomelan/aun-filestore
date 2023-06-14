@@ -74,7 +74,10 @@ class PacketDispatcher {
 				}else{
 					$sHost=$sIP;
 				}
-				$this->oAunServer->send($oPacket->getAunFrame(),$sHost);
+				$sAunFrame = $oPacket->getAunFrame();
+				if(strlen($sAunFrame)>0){
+					$this->oAunServer->send($oPacket->getAunFrame(),$sHost);
+				}
 				break;
 		}
 		

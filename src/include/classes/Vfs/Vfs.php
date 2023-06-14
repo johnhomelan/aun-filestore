@@ -86,7 +86,7 @@ class Vfs {
 	 * Converts Econet style path to unix Abosolute of relative path to a fullpath
 	 *
 	 * This takes chroot in to account converting absolute chrooted path to real absolute path
-	 * @return object FilePath
+	 * @return FilePath
 	 */ 
 	private static function buildFullPath(int $iNetwork,int $iStation,string $sEconetPath): FilePath
 	{
@@ -143,13 +143,13 @@ class Vfs {
 	/**
 	 * Builds a file descriptor object from an econet path
 	 * 
-	 * @param object $oUser The user the file descriptor is being created for 
-	 * @param string $oEconetPath The econet file path
+	 * @param \HomeLan\FileStore\Authentication\User  $oUser The user the file descriptor is being created for 
+	 * @param FilePath $oEconetPath The econet file path
 	 * @param boolean $bMustExist The path must exist
 	 * @param boolean $bReadOnly If the file descriptor should be read-only
-	 * @return object file-descriptor
+	 * @return object 
 	*/	
-	static protected function _buildFiledescriptorFromEconetPath(object $oUser,FilePath $oEconetPath,bool $bMustExist,bool $bReadOnly): object
+	static protected function _buildFiledescriptorFromEconetPath(\HomeLan\FileStore\Authentication\User  $oUser,FilePath $oEconetPath,bool $bMustExist,bool $bReadOnly): object
 	{
 		$aPlugins = Vfs::getVfsPlugins();
 		$oHandle=NULL;
@@ -200,10 +200,10 @@ class Vfs {
 	 * Only 255 file handles a allowed per user, as file handle is identified by a single byte on the client
 	 * The orignal file server only allowed 255 file handles total for the server, as we do it per user we
 	 * can support as many clients as we want 
-	 * @param object user $oUser
+	 * @param \HomeLan\FileStore\Authentication\User $oUser
 	 * @return int
 	*/
-	static public function getFreeFileHandleID($oUser): int
+	static public function getFreeFileHandleID(\HomeLan\FileStore\Authentication\User $oUser): int
 	{
 		if(!array_key_exists($oUser->getUserName(),Vfs::$aFileHandleIDs)){
 			Vfs::$aFileHandleIDs[$oUser->getUserName()]=0;

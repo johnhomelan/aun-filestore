@@ -18,7 +18,7 @@ interface AuthPluginInterface {
 	 * Intiailizes this plugins data structures
 	 *
 	 * @param \Psr\Log\LoggerInterface $oLogger A psr compatable logger
-	 * @param string $sUser The users details should be suppliable as a string for unit tests
+	 * @param string $sUsers The users details should be suppliable as a string for unit tests
 	*/
 	static public function init(\Psr\Log\LoggerInterface $oLogger, $sUsers=NULL): void;
 
@@ -38,7 +38,7 @@ interface AuthPluginInterface {
 	 * Creates a user object based of the auth data used by the plugin
 	 *
 	 * @param string $sUsername
-	 * @return object user
+	 * @return \HomeLan\FileStore\Authentication\User
 	*/
 	static public function buildUserObject(string $sUsername): \HomeLan\FileStore\Authentication\User;
 
@@ -62,16 +62,16 @@ interface AuthPluginInterface {
 	 * This method should not determine if a user can create another, the class security does that.
 	 * If the plugin can't create users in it backend (e.g. its read only) then it should throw an exception
 	 *
-	 * @param object user $oUser The user object that should be added to the backend
+	 * @param \HomeLan\FileStore\Authentication\User $oUser The user object that should be added to the backend
 	*/
-	static public function createUser($oUser): void;
+	static public function createUser(\HomeLan\FileStore\Authentication\User $oUser): void;
 
 	/**
 	 * Removes a given user
 	 *
 	 * This method should not determin if a user can remove another user, the class security does that 
 	 *
-	 * @throws Exception If the user does not exist
+	 * @throws \Exception If the user does not exist
 	 * @param string $sUsername
 	 * @return boolean
 	*/

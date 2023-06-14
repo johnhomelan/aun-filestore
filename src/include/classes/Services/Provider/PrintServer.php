@@ -115,11 +115,11 @@ class PrintServer implements ProviderInterface {
 	/**
 	 * This method handles print enquires
 	 *
-	 * @param object fsrequest $oEquiry
+	 * @param PrintServerEnquiry $oEnquiry
 	*/
-	public function processEnquiry($oEnquiry): void
+	public function processEnquiry(PrintServerEnquiry $oEnquiry): void
 	{
-		$sPrinterName = $oEnquiry->getString(1,6);
+		$sPrinterName = substr($oEnquiry->getString(1),0,6);
 		$iRequestCode = $oEnquiry->get16bitIntLittleEndian(7);
 		$this->oLogger->debug("Printer enquiry for ".$sPrinterName." code ".$iRequestCode);
 

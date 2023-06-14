@@ -127,6 +127,7 @@ class LocalFile implements PluginInterface {
 			$iEconetHandle = vfs::getFreeFileHandleID($oUser);
 			return new FileDescriptor(self::$oLogger,'LocalFile',$oUser,$sUnixPath,$oEconetPath->getFilePath(),$iVfsHandle,$iEconetHandle,is_file($sUnixPath),is_dir($sUnixPath));
 		}
+		throw new VfsException("No such file");
 	}
 
 	public static function _getAccessMode($iGid,$iUid,$iMode): string

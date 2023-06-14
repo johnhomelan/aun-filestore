@@ -15,7 +15,7 @@ phpunit_phpstan_php73:
     - docker:stable-dind
    script:
      - cd src; composer --no-scripts install; cd ..
-     - ./src/vendor/bin/phpstan analyse -n --no-ansi --no-progress src/include src/react-test
+     - ./src/vendor/bin/phpstan analyse -n --no-ansi --no-progress src/include src/react-test --level 3
 
       
 phpunit_tests_php73:

@@ -201,6 +201,7 @@ class DfsSsd implements PluginInterface {
 			DfsSsd::$aFileHandles[$iVfsHandle]=['image-file'=>$sUnixPath.'.ssd', 'path-inside-image'=>'', 'pos'=>0];
 			return new FileDescriptor(self::$oLogger,'DfsSsd',$oUser,$sUnixPath.'.ssd',$oEconetPath->getFilePath(),$iVfsHandle,$iEconetHandle,FALSE,TRUE);
 		}
+		throw new VfsException("No such file");
 	
 	}
 

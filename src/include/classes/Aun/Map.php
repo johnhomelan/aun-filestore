@@ -129,6 +129,7 @@ class Map {
 			//Return the IP Address
 			return $aIPParts[0].'.'.$aIPParts[1].'.'.$aIPParts[2].'.'.$iStationNumber;
 		}
+		return '';
 	}
 
 	/**

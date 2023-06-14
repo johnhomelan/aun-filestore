@@ -201,7 +201,8 @@ class AdfsAdl implements PluginInterface {
 			AdfsAdl::$aFileHandles[$iVfsHandle]=['image-file'=>$sUnixPath.'.adl', 'path-inside-image'=>'', 'pos'=>0];
 			return new FileDescriptor(self::$oLogger,'AdfsAdl',$oUser,$sUnixPath.'.adl',$oEconetPath->getFilePath(),$iVfsHandle,$iEconetHandle,FALSE,TRUE);
 		}
-	
+		throw new VfsException("No such file");
+			
 	}
 
 

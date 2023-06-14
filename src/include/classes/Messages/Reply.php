@@ -24,6 +24,7 @@ class Reply {
 
 	public function __construct($oRequest)
 	{
+		//@phpstan-ignore-next-line
 		if(is_object($oRequest) AND ($oRequest::class=='fsrequest' or $oRequest::class=='printserverenquiry' OR $oRequest::class=='printserverdata')){
 			$this->oRequest = $oRequest;
 			$this->iFlags = $oRequest->getFlags();

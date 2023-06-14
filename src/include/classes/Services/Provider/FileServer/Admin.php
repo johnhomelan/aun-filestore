@@ -99,6 +99,7 @@ class Admin implements AdminInterface
 				return ['plugin'=>'string', 'username'=>'string', 'priv'=>'string' , 'homedir'=>'string', 'bootopt'=>'int'];
 				break;
 		}
+		return [];
 	}
 
 	/**
@@ -112,7 +113,7 @@ class Admin implements AdminInterface
 				$aUsers = Security::getUsersOnline();
 				$aUserData=[];
 				foreach($aUsers as $iNetwork=>$aStationData){
-					foreach($aData as $iStation=>$aData){
+					foreach($aStationData as $iStation=>$aData){
 						$aUserData[] = ['network'=>$iNetwork, 'station'=>$iStation, 'user'=>$aData['user']->getUsername()];
 					}
 				}
@@ -131,6 +132,7 @@ class Admin implements AdminInterface
 			case 'stream':
 				return [];
 		}
+		return [];
 	}
 
 	/**
@@ -138,7 +140,7 @@ class Admin implements AdminInterface
 	*/
 	public function getCommands(): array
 	{
-			
+		return [];		
 	}
 
 }

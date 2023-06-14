@@ -133,9 +133,9 @@ class Security {
 	/**
   * Get the user object for the user logged in at the given network/station
   *
-  * @return object user
+  * @return null|\HomeLan\FileStore\Authentication\User
   */
- public static function getUser(int $iNetwork,int $iStation): ?User
+ public static function getUser(int $iNetwork,int $iStation): ?\HomeLan\FileStore\Authentication\User
 	{
 		if(array_key_exists($iNetwork,Security::$aSessions) AND array_key_exists($iStation,Security::$aSessions[$iNetwork])){
 			return Security::$aSessions[$iNetwork][$iStation]['user'];
@@ -208,7 +208,7 @@ class Security {
 	/**
   * Creates a new user (assuming the user logged in on the given network/station has admin rights)
   *
-  * @param object user $oUser
+  * @param null|\HomeLan\FileStore\Authentication\User $oUser
   */
  public static function createUser(int $iNetwork,int $iStation,$oUser): void
 	{
@@ -264,7 +264,6 @@ class Security {
 		foreach($aPlugins as $sPlugin){
 			try {
 				return $sPlugin::removeUser($sUsername);
-				break;
 			}catch(Exception $oException){
 				self::$oLogger->debug("Security: Exception thrown by plugin ".$sPlugin." when attempting to remove user ".$sUsername." (".$oException->getMessage().")");
 			}

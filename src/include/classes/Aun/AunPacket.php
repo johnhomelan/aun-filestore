@@ -207,7 +207,6 @@ class AunPacket implements EncapsulationInterface {
 	 *
 	 * All the sub applications FileServer, PrintServer uses the econetpacket object so
 	 * that we can support more than 1 type of econet emulation/encapsulation
-	 * @return object econetpacket
 	*/
 	public function buildEconetPacket(): \HomeLan\FileStore\Messages\EconetPacket
 	{
@@ -243,6 +242,6 @@ class AunPacket implements EncapsulationInterface {
 	 */ 	  
 	public function getReplies(): array
 	{
-
+		return [];
 	}
 }

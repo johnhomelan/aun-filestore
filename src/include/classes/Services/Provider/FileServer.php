@@ -189,9 +189,9 @@ class FileServer implements ProviderInterface{
 	 * This is the main entry point to this class 
 	 *
 	 * The fsrequest object contains the request the fileserver must process 
-	 * @param object fsrequest $oFsRequest
+	 * @param fsrequest $oFsRequest
 	*/
-	public function processRequest($oFsRequest): void
+	public function processRequest(FsRequest $oFsRequest): void
 	{
 		$sFunction = $oFsRequest->getFunction();
 		$this->oLogger->debug("FS function ".$sFunction);
@@ -320,7 +320,7 @@ class FileServer implements ProviderInterface{
 	/**
 	 * Reads which file handle is stored in the requests csd and lib byte, and updates the users csd and lib 
 	*/
-	public function updateCsdLib($oFsRequest): void
+	public function updateCsdLib(FsRequest $oFsRequest): void
 	{
 		$oUser = Security::getUser($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation());
 		try {
@@ -357,7 +357,7 @@ class FileServer implements ProviderInterface{
 	public function cliDecode(object $oFsRequest): void
 	{
 		$sCommand = null;
-  $sData = $oFsRequest->getData();
+  		$sData = $oFsRequest->getData();
 		$aDataAs8BitInts = unpack('C*',(string) $sData);
 		$sDataAsString = "";
 		foreach($aDataAs8BitInts as $iChar){
@@ -386,11 +386,11 @@ class FileServer implements ProviderInterface{
 	/**
 	 * This method runs the cli command, or delegate to an approriate method
 	 *
-	 * @param object fsrequest $oFsRequest The fsrequest
+	 * @param fsrequest $oFsRequest The fsrequest
 	 * @param string $sCommand The command to run
 	 * @param string $sOptions The command arguments
 	*/
-	public function runCli($oFsRequest,string $sCommand,string $sOptions): void
+	public function runCli(FsRequest $oFsRequest,string $sCommand,string $sOptions): void
 	{
 		switch(strtoupper($sCommand)){
 				case 'BYE':
@@ -460,9 +460,9 @@ class FileServer implements ProviderInterface{
 	/**
 	 * Handles loading *COMMANDs stored on the server
 	 * 
-	 * @param object fsrequest $oFsRequest
+	 * @param fsrequest $oFsRequest
 	*/
-	public function loadCommand($oFsRequest): void
+	public function loadCommand(FsRequest $oFsRequest): void
 	{
 		$this->loadFile($oFsRequest);	
 	}
@@ -470,10 +470,10 @@ class FileServer implements ProviderInterface{
 	/**
 	 * Handles login requests (*I AM)
 	 *
-	 * @param object fsrequest $oFsRequest
+	 * @param fsrequest $oFsRequest
 	 * @param string $sOptions The arguments passed to *I AM (e.g. username password)
 	*/
-	public function login($oFsRequest,string $sOptions): void
+	public function login(FsRequest $oFsRequest,string $sOptions): void
 	{
 		$this->oLogger->debug("fileserver: Login called ".$sOptions);
 		$aOptions = explode(" ",$sOptions);
@@ -541,9 +541,9 @@ class FileServer implements ProviderInterface{
 	 * Handle logouts (*bye)
 	 *
 	 * We can be called as a cli command (*bye) and by its own function call
-	 * @param object fsrequest $oFsRequest
+	 * @param fsrequest $oFsRequest
 	*/
-	public function logout($oFsRequest): void
+	public function logout(FsRequest $oFsRequest): void
 	{
 		try{
 			Security::logout($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation());
@@ -559,10 +559,10 @@ class FileServer implements ProviderInterface{
 	/**
 	 * Handles the *info command
 	 *
-	 * @param object fsrequest $oFsRequest
-	 * @param string 
+	 * @param fsrequest $oFsRequest
+	 * @param string $sFile
 	*/
-	public function cmdInfo($oFsRequest,$sFile): void
+	public function cmdInfo(FsRequest $oFsRequest,string $sFile): void
 	{
 		$this->oLogger->debug("cmdInfo for path ".$sFile."");
 		$oReply = $oFsRequest->buildReply();
@@ -583,9 +583,9 @@ class FileServer implements ProviderInterface{
 	 * Handles requests for information on directories and files
 	 *
 	 * This method is called when the client uses *. to produce the directory header
-	 * @param objects fsrequest $oFsRequest
+	 * @param fsrequest $oFsRequest
 	*/
-	public function getInfo($oFsRequest): void
+	public function getInfo(FsRequest $oFsRequest): void
 	{
 		$sDir = $oFsRequest->getString(2);
 		$this->oLogger->debug("getInfo for path ".$sDir." (".$oFsRequest->getByte(1).")");
@@ -762,7 +762,7 @@ class FileServer implements ProviderInterface{
 		$this->addReplyToBuffer($oReply);
 	}
 
-	public function setInfo($oFsRequest): void
+	public function setInfo(FsRequest $oFsRequest): void
 	{
 		$iArg = $oFsRequest->getByte(1);
 		$oReply = $oFsRequest->buildReply();
@@ -798,7 +798,7 @@ class FileServer implements ProviderInterface{
 		$this->addReplyToBuffer($oReply);
 	}
 
-	public function eof($oFsRequest): void
+	public function eof(FsRequest $oFsRequest): void
 	{
 		$this->oLogger->debug("Eof Called by ".$oFsRequest->getSourceNetwork().".".$oFsRequest->getSourceStation());
 		//Get the file handle id
@@ -820,9 +820,9 @@ class FileServer implements ProviderInterface{
 	 * Gets the details of a director/file 
 	 * 
  	 * This method produces the directory listing for *.
-	 * @param object fsrequest $oFsRequest
+	 * @param fsrequest $oFsRequest
 	*/
-	public function examine($oFsRequest): void
+	public function examine(FsRequest $oFsRequest): void
 	{
 		$oReply = $oFsRequest->buildReply();
 		$iArg = $oFsRequest->getByte(1);
@@ -929,7 +929,7 @@ class FileServer implements ProviderInterface{
 		$this->addReplyToBuffer($oReply);
 	}
 
-	public function getArgs($oFsRequest): void
+	public function getArgs(FsRequest $oFsRequest): void
 	{
 		$iHandle = $oFsRequest->getByte(1);
 		$iArg = $oFsRequest->getByte(2);
@@ -975,7 +975,7 @@ class FileServer implements ProviderInterface{
 	 *
 	 * Sends a reply with the name of the disc the csd is on the name of the csd and library
 	*/
-	public function getUenv($oFsRequest): void
+	public function getUenv(FsRequest $oFsRequest): void
 	{
 		$oReply = $oFsRequest->buildReply();
 		$oReply->DoneOk();
@@ -1006,7 +1006,7 @@ class FileServer implements ProviderInterface{
 	 *
 	 * This method is invoked by the *DIR command
 	*/
-	public function changeDirectory($oFsRequest,$sOptions): void
+	public function changeDirectory(FsRequest $oFsRequest,$sOptions): void
 	{
 		$oReply = $oFsRequest->buildReply();
 		$oUser = Security::getUser($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation());
@@ -1066,7 +1066,7 @@ class FileServer implements ProviderInterface{
 	 *
 	 * This method is invoked by the *LIB command
 	*/
-	public function changeLibrary($oFsRequest,$sOptions): void
+	public function changeLibrary(FsRequest $oFsRequest,?string $sOptions): void
 	{
 		$oReply = $oFsRequest->buildReply();
 		
@@ -1100,7 +1100,7 @@ class FileServer implements ProviderInterface{
 	 *
 	 * This method in invoked by the *CDIR command
 	*/
-	public function createDirectory($oFsRequest,$sOptions): void
+	public function createDirectory(FsRequest $oFsRequest,?string $sOptions): void
 	{
 		$oReply = $oFsRequest->buildReply();
 		if(strlen((string) $sOptions)<1){
@@ -1128,7 +1128,7 @@ class FileServer implements ProviderInterface{
 	 *
 	 * This method is invoked as either a cli or a file server command depending on the nfs version
 	*/
-	public function deleteFile($oFsRequest,$sOptions): void
+	public function deleteFile(FsRequest $oFsRequest,?string $sOptions): void
 	{
 		$oReply = $oFsRequest->buildReply();
 		if(strlen((string) $sOptions)<1){
@@ -1149,7 +1149,7 @@ class FileServer implements ProviderInterface{
 	 *
 	 * This method is invoked as the cli command *RENAME
 	*/ 
-	public function renameFile($oFsRequest,$sOptions): void
+	public function renameFile(FsRequest $oFsRequest,?string $sOptions): void
 	{
 		$oReply = $oFsRequest->buildReply();
 		if(strlen((string) $sOptions)<2){
@@ -1171,7 +1171,7 @@ class FileServer implements ProviderInterface{
 	 * Opens a file
 	 *
 	*/
-	public function openFile($oFsRequest): void
+	public function openFile(FsRequest $oFsRequest): void
 	{
 		$iMustExist = $oFsRequest->getByte(1);
 		$iReadOnly = $oFsRequest->getByte(2);
@@ -1201,7 +1201,7 @@ class FileServer implements ProviderInterface{
 	 * Closes a file
 	 *
 	*/
-	public function closeFile($oFsRequest): void
+	public function closeFile(FsRequest $oFsRequest): void
 	{
 		$iHandle = $oFsRequest->getByte(1);
 		Vfs::closeFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$iHandle);
@@ -1210,7 +1210,7 @@ class FileServer implements ProviderInterface{
 		$this->addReplyToBuffer($oReply);
 	}
 
-	public function getBytes($oFsRequest): void
+	public function getBytes(FsRequest $oFsRequest): void
 	{
 		//The urd becomes the port to send the data to
 		$iDataPort = $oFsRequest->getUrd();
@@ -1310,7 +1310,7 @@ class FileServer implements ProviderInterface{
 
 	}
 
-	public function putBytes($oFsRequest): void
+	public function putBytes(FsRequest $oFsRequest): void
 	{
 		//File handle
 		$iHandle = $oFsRequest->getByte(1);
@@ -1374,7 +1374,7 @@ class FileServer implements ProviderInterface{
 
 	}
 
-	public function getByte($oFsRequest): void
+	public function getByte(FsRequest $oFsRequest): void
 	{
 		$iHandle = $oFsRequest->getByte(1);
 		$oReply = $oFsRequest->buildReply();
@@ -1387,7 +1387,7 @@ class FileServer implements ProviderInterface{
 			$oReply->appendByte(0);
 			$oReply->appendByte(0x80);
 		}else{
-			$oReply->appendByte($oFsRequest->read(1));
+			$oReply->appendByte($oFsHandle->read(1));
 			$oReply->appendByte(0);
 		}
 
@@ -1395,7 +1395,7 @@ class FileServer implements ProviderInterface{
 		
 	}
 
-	public function putByte($oFsRequest): void
+	public function putByte(FsRequest $oFsRequest): void
 	{
 		$iHandle = $oFsRequest->getByte(1);
 		$iByte = $oFsRequest->getByte(2);
@@ -1404,7 +1404,7 @@ class FileServer implements ProviderInterface{
 		$this->oLogger->debug("Putbyte handle ".$iHandle." ");
 		//Writes a byte to the file handle
 		$oFsHandle = Vfs::getFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$iHandle);	
-		$oFsRequest->write($iByte);
+		$oFsHandle->write($iByte);
 
 		$oReply->DoneOk();
 		$this->addReplyToBuffer($oReply);
@@ -1415,7 +1415,7 @@ class FileServer implements ProviderInterface{
 	 *
 	 * This method if invoked by the use saving a basic program 
 	*/
-	public function saveFile($oFsRequest): void
+	public function saveFile(FsRequest $oFsRequest): void
 	{
 		//For save operation the urd is replaced with the ackport
 		$iAckPort = $oFsRequest->getUrd();
@@ -1497,7 +1497,7 @@ class FileServer implements ProviderInterface{
 	 *
 	 * This methos is invoked by the use of LOAD "filename"
 	*/
-	public function loadFile($oFsRequest): void
+	public function loadFile(FsRequest $oFsRequest): void
 	{
 		//The urd handle in the request is not the urd when load is called but denotes the port to stream the data to
 		$iDataPort = $oFsRequest->getUrd();
@@ -1564,7 +1564,7 @@ class FileServer implements ProviderInterface{
 	 *
 	 * This method is invoked by the *PASS command
 	*/
-	public function setPassword($oFsRequest,$sOptions): void
+	public function setPassword(FsRequest $oFsRequest,$sOptions): void
 	{
 		$aOptions = explode(' ',(string) $sOptions);
 		$oReply = $oFsRequest->buildReply();
@@ -1609,7 +1609,7 @@ class FileServer implements ProviderInterface{
 	 * Creates a new user (*NEWUSER)
 	 *
 	*/
-	public function createUser($oFsRequest,$sOptions): void
+	public function createUser(FsRequest $oFsRequest,$sOptions): void
 	{
 		$oReply = $oFsRequest->buildReply();
 		if(strlen((string) $sOptions)<1){
@@ -1648,7 +1648,7 @@ class FileServer implements ProviderInterface{
 	 * Removes a user (*REMUSER)
 	 *
 	*/
-	public function removeUser($oFsRequest,$sOptions): void
+	public function removeUser(FsRequest $oFsRequest,?string $sOptions): void
 	{
 		$oReply = $oFsRequest->buildReply();
 		if(strlen((string) $sOptions)<1 OR !ctype_alnum((string) $sOptions)){
@@ -1671,7 +1671,7 @@ class FileServer implements ProviderInterface{
 	 * Set the privalage of a given user
 	 *
 	*/
-	public function privUser($oFsRequest,$sOptions): void
+	public function privUser(FsRequest $oFsRequest, ?string $sOptions): void
 	{
 		$aOptions = explode(' ',(string) $sOptions);
 		$oReply = $oFsRequest->buildReply();
@@ -1698,7 +1698,7 @@ class FileServer implements ProviderInterface{
 	 * Implements the commnad sdisc
 	 *
 	*/
-	public function sDisc($oFsRequest,$sOptions): void
+	public function sDisc(FsRequest $oFsRequest,$sOptions): void
 	{
 		//As we can only ever have one disc this command has rather little todo
 		$oReply = $oFsRequest->buildReply();
@@ -1709,7 +1709,7 @@ class FileServer implements ProviderInterface{
 		$this->addReplyToBuffer($oReply);
 	}
 
-	public function chroot($oFsRequest,$sOptions): void
+	public function chroot(FsRequest $oFsRequest,string $sOptions): void
 	{
 		$oReply = $oFsRequest->buildReply();
 		$oUser = security::getUser($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation());
@@ -1746,7 +1746,7 @@ class FileServer implements ProviderInterface{
 	 * Turns off the chroot feature reverting back to the true root of the filestore 
 	 *
 	*/
-	public function chrootoff($oFsRequest,$sOptions): void
+	public function chrootoff(FsRequest $oFsRequest,$sOptions): void
 	{
 		$oReply = $oFsRequest->buildReply();
 		$oUser = security::getUser($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation());
@@ -1765,7 +1765,7 @@ class FileServer implements ProviderInterface{
 	 * Lists the users logged in
 	 *
 	*/
-	public function usersOnline($oFsRequest): void
+	public function usersOnline(FsRequest $oFsRequest): void
 	{
 		$iStart = $oFsRequest->getByte(1);
 		$iCount	= $oFsRequest->getByte(2);
@@ -1782,6 +1782,7 @@ class FileServer implements ProviderInterface{
 		$i = 0;
 		foreach($aUsers as $iNetwork=>$aStationUsers){
 			foreach($aStationUsers as $iStation=>$aData){
+				//@phpstan-ignore-next-line
 				if($iStart <= $i AND $i <= ($iStart+$iCount)){
 					$oUser = $aData['user'];
 					$oReply->appendByte($iNetwork);
@@ -1794,6 +1795,7 @@ class FileServer implements ProviderInterface{
 						$oReply->appendByte(0);
 					}
 				}
+				//@phpstan-ignore-next-line
 				if($i>($iStart+$iCount)){
 					$this->addReplyToBuffer($oReply);
 					return;
@@ -1806,7 +1808,7 @@ class FileServer implements ProviderInterface{
 	/**
 	 * Get the network and station number for a given user
 	*/
-	public function getUsersStation($oFsRequest): void
+	public function getUsersStation(FsRequest $oFsRequest): void
 	{
 		$sUser = $oFsRequest->getString(1);
 		$oReply = $oFsRequest->buildReply();
@@ -1830,7 +1832,7 @@ class FileServer implements ProviderInterface{
 	/**
 	 * Gets a list of discs
 	*/
-	public function getDiscs($oFsRequest): void
+	public function getDiscs(FsRequest $oFsRequest): void
 	{
 		$iDrive = $oFsRequest->getByte(1);
 		$iNDrives = $oFsRequest->getByte(2);
@@ -1857,7 +1859,7 @@ class FileServer implements ProviderInterface{
 	 * 
 	 * The answer is fake a BBCs can't handle the same sizes as Linux
 	*/
-	public function getDiscFree($oFsRequest): void
+	public function getDiscFree(FsRequest $oFsRequest): void
 	{
 		$sDisc = $oFsRequest->getString(1);
 		$oReply = $oFsRequest->buildReply();
@@ -1872,7 +1874,7 @@ class FileServer implements ProviderInterface{
 	 * Gets the version of the server
 	 *
 	*/
-	public function getVersion($oFsRequest): void
+	public function getVersion(FsRequest $oFsRequest): void
 	{
 		$oReply = $oFsRequest->buildReply();
 		$oReply->DoneOk();
@@ -1883,7 +1885,7 @@ class FileServer implements ProviderInterface{
 	/**
 	 * Gets the time
 	*/
-	public function getTime($oFsRequest): void
+	public function getTime(FsRequest $oFsRequest): void
 	{
 		$oReply = $oFsRequest->buildReply();
 		$iTime = time();
@@ -1905,7 +1907,7 @@ class FileServer implements ProviderInterface{
 	 * Creates a file
 	 *
 	*/
-	public function createFile($oFsRequest): void
+	public function createFile(FsRequest $oFsRequest): void
 	{
 		$iAckPort = $oFsRequest->getUrd();
 
@@ -1946,7 +1948,7 @@ class FileServer implements ProviderInterface{
 	 * Given we can't map the scale of Linux storage sizes to bbc storage sizes, the amount of free space is just a constant.
 	 * Maybe at some point this could be mapped to a unix users quota if the system has quotas setup
 	*/
-	public function getUserDiscFree($oFsRequest): void
+	public function getUserDiscFree(FsRequest $oFsRequest): void
 	{
 		//Username
 		$sUsername = $oFsRequest->getString(1);
@@ -1956,5 +1958,10 @@ class FileServer implements ProviderInterface{
 		$oReply->append24bitIntLittleEndian(config::getValue('vfs_default_disc_free'));
 
 		$this->addReplyToBuffer($oReply);
+	}
+
+	public function getJobs(): array
+	{
+		return [];
 	}
 }

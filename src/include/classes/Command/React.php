@@ -102,7 +102,7 @@ class React extends Command {
 	 * Creates the primary react php loop, and starts it 
 	 *
 	*/
-	private function MainLoop(): \React\Datagram\Socket
+	private function MainLoop()
 	{
 
 		//Setup the main react loop
@@ -141,7 +141,6 @@ class React extends Command {
 
 		//Enter main loop
 		$this->oLogger->debug("Starting primary loop.");
-		$oLoop->run();
 	}
 
 	/**
@@ -198,7 +197,7 @@ EOF;
 	/**
 	  * Adds all the AUN handling services to the event loop
 	  *
-	  * @param object LoopInterface $oLoop
+	  * @param LoopInterface $oLoop
 	*/
 	public function aunService(LoopInterface $oLoop)
 	{
@@ -249,14 +248,13 @@ EOF;
 	/**
 	  * Adds all the websocket handling services to the event loop
 	  *
-	  * @param object LoopInterface $oLoop
+	  * @param LoopInterface $oLoop
 	*/
 	public function websocketService(LoopInterface $oLoop)
 	{
 
 		//Add udp handling for AUN 
-		$oWebSocketTransport = new \React\Socket\Server(8080,$oLoop);
-		$oWebSocketTransport->listen('8890', '0.0.0.0');
+		$oWebSocketTransport = new \React\Socket\SocketServer('0.0.0.0:8090',$oLoop);
 
 		$oServices = $this->oServices;
 		$oLogger = $this->oLogger;
@@ -277,7 +275,7 @@ EOF;
 	/** 
 	  * Seetup the Admin web interface service
 	  *
-	  * @param object LoopInterface $oLoop The loop to add the service to
+	  * @param LoopInterface $oLoop The loop to add the service to
 	*/
 	public function adminService(LoopInterface $oLoop)
 	{

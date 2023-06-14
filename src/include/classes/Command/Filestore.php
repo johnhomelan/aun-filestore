@@ -264,7 +264,7 @@ EOF;
 		$aWriteSet=NULL;
 		$aAllExpSockets=[NULL];
 
-		//Main Loop
+		//Main Loop @phpstan-ignore-next-line
 		while($bLoop){
 			try{
 				$aReadSet=$this->aAllReadableSockets;
@@ -322,13 +322,14 @@ EOF;
 				break;
 			case 'Broadcast':
 				$this->oLogger->debug("filestore: Received broadcast packet ");
-				switch($oAunPacket->getPortName()){
+				$oEconetPacket = $oAunPacket->buildEconetPacket();
+				switch($oEconetPacket->getPortName()){
 					case 'Bridge':
-						$this->bridgeCommand($oAunPacket->buildEconetPacket());
+						//Bridge discovery etc takes place over broadcast
+						$this->bridgeCommand($oEconetPacket);
 						break;
 					case 'FileServerCommand':
 						//Some fileserver commands can be send via broadcase (e.g. getDiscs which is used to find servers)
-						$oEconetPacket = $oAunPacket->buildEconetPacket();
 						$this->processEconetPacket($oEconetPacket);
 						break;
 					
@@ -340,9 +341,10 @@ EOF;
 	/**
 	 * Read the econet packet and passes it to the class to deal with that type of packet
 	 *
-	 * Only the file server is implemented at the moment so only file server packets are processed 
+	 * Only the file server and print servers are implimented atm
+	 * @param \HomeLan\FileStore\Messages\EconetPacket $oEconetPacket
 	*/
-	public function processEconetPacket($oEconetPacket): void
+	public function processEconetPacket(\HomeLan\FileStore\Messages\EconetPacket $oEconetPacket): void
 	{
 	
 		$sPort = $oEconetPacket->getPortName();
@@ -369,9 +371,9 @@ EOF;
 	 *
 	 * It build an fsrequest from the econet packet and dispatches it to the fileserver class to be dealt with
 	 * Any reply packets produced by the file server class at this point are dispatched	
-	 * @param object econetpacket $oEconetPacket
+	 * @param \HomeLan\FileStore\Messages\EconetPacket $oEconetPacket
 	*/
-	public function fileServerCommand($oEconetPacket): void
+	public function fileServerCommand(\HomeLan\FileStore\Messages\EconetPacket $oEconetPacket): void
 	{
 		$oFsRequest = new FsRequest($oEconetPacket, $this->oLogger);
 		$this->oFileServer->processRequest($oFsRequest);
@@ -386,9 +388,9 @@ EOF;
 	/**
 	 * This handles print server enquires 
 	 *
-	 * @param object econetpacket $oEconetPacket The packet from the client to the print server enquiry port
+	 * @param \HomeLan\FileStore\Messages\EconetPacket $oEconetPacket The packet from the client to the print server enquiry port
 	*/
-	public function printServerEnquiry($oEconetPacket): void
+	public function printServerEnquiry(\HomeLan\FileStore\Messages\EconetPacket $oEconetPacket): void
 	{
 		$oPrintServerEnquiry = new PrintServerEnquiry($oEconetPacket, $this->oLogger);
 		$this->oPrintServer->processEnquiry($oPrintServerEnquiry);
@@ -399,9 +401,9 @@ EOF;
 	/**
 	 * This handles print data from the client
 	 *
-	 * @param object econetpacket $oEconetPacket The print data from the client 
+	 * @param \HomeLan\FileStore\Messages\EconetPacket $oEconetPacket The print data from the client 
 	*/
-	public function printerServerData($oEconetPacket): void
+	public function printerServerData(\HomeLan\FileStore\Messages\EconetPacket $oEconetPacket): void
 	{
 		$oPrintServerData = new PrintServerData($oEconetPacket);
 		$this->oPrintServer->processData($oPrintServerData);
@@ -411,9 +413,9 @@ EOF;
 	/**
 	 * This dispatches inbound bridge commands to the birdge service 
 	 *
-	 * @param object econetpacket $oEconetPacket The bridge command from the client
+	 * @param \HomeLan\FileStore\Messages\EconetPacket $oEconetPacket The bridge command from the client
 	*/
-	public function bridgeCommand($oEconetPacket): void
+	public function bridgeCommand(\HomeLan\FileStore\Messages\EconetPacket $oEconetPacket): void
 	{
 		try{
 			$oBridgeRequest = new BridgeRequest($oEconetPacket, $this->oLogger);
@@ -455,9 +457,9 @@ EOF;
 	/**
 	 * Sends a replay packet to a remote machine
 	 *
-	 * @param object econetpacket $oReplyEconetPacket
+	 * @param \HomeLan\FileStore\Messages\EconetPacket $oReplyEconetPacket
 	*/
-	public function dispatchReply($oReplyEconetPacket): void
+	public function dispatchReply(\HomeLan\FileStore\Messages\EconetPacket $oReplyEconetPacket): void
 	{
 		usleep(config::getValue('bbc_default_pkg_sleep'));
 		$sIP = Map::ecoAddrToIpAddr($oReplyEconetPacket->getDestinationNetwork(),$oReplyEconetPacket->getDestinationStation());

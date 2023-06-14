@@ -29,6 +29,8 @@ interface ProviderInterface {
 	public function getServicePorts(): array; 
 
 	public function registerService(ServiceDispatcher $oServiceDispatcher): void;
+	
+	public function getJobs(): array;
 
 	public function getReplies(): array;
 } 

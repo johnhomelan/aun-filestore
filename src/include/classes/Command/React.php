@@ -95,7 +95,7 @@ class React extends Command {
 		}
 
 		$this->MainLoop();
-  return 0;
+  return \Symfony\Component\Console\Command\Command::SUCCESS;
 	}
 
 	/**
@@ -195,11 +195,9 @@ EOF;
 	}
 
 	/**
-	  * Adds all the AUN handling services to the event loop
-	  *
-	  * @param LoopInterface $oLoop
-	*/
-	public function aunService(LoopInterface $oLoop)
+  * Adds all the AUN handling services to the event loop
+  */
+ public function aunService(LoopInterface $oLoop)
 	{
 
 		//Add udp handling for AUN 
@@ -246,11 +244,9 @@ EOF;
 	}
 
 	/**
-	  * Adds all the websocket handling services to the event loop
-	  *
-	  * @param LoopInterface $oLoop
-	*/
-	public function websocketService(LoopInterface $oLoop)
+  * Adds all the websocket handling services to the event loop
+  */
+ public function websocketService(LoopInterface $oLoop)
 	{
 
 		//Add udp handling for AUN 

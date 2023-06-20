@@ -90,7 +90,7 @@ class BridgeRequest extends Request {
 	public function getNetwork():int
 	{
 		//This first byte after the reply port is the network number the bridge is being queried about
-		$aData = unpack('C',$this->sData);
+		$aData = unpack('C',(string) $this->sData);
 		return (int) $aData[2];
 
 	}

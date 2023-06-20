@@ -165,7 +165,7 @@ class AdfsAdl implements PluginInterface {
 			foreach($aKeys as $sKey){
 				if(strtoupper($sKey)==strtoupper($sPathPart)){
 					$iCount++;
-					if($aCat[$sKey]['type']='dir'){
+					if($aCat[$sKey]['type']=='dir'){
 						$aCat=$aCat[$sKey]['dir'];
 					}
 					break;

@@ -20,6 +20,12 @@ class Admin implements AdminInterface
  {
  }
 
+
+	public function getProvider(): ProviderInterface
+	{
+		return $this->oProvider;
+	}
+
 	/**
 	 * Gets the human readable name of the service provider
 	 *
@@ -90,14 +96,11 @@ class Admin implements AdminInterface
 		switch($sType){
 			case 'session':
 				return ['network'=>'int', 'station'=>'int', 'user'=>'string'];	
-				break;
 			case 'stream':
 				return [];
 				return ['network'=>'int', 'station'=>'int', 'user'=>'string', 'path'=>'string'];
-				break;
 			case 'user':
 				return ['plugin'=>'string', 'username'=>'string', 'priv'=>'string' , 'homedir'=>'string', 'bootopt'=>'int'];
-				break;
 		}
 		return [];
 	}
@@ -119,7 +122,6 @@ class Admin implements AdminInterface
 				}
 				$aReturn = AdminEntity::createCollection($sType,$this->getEntityFields($sType),$aUserData,null,'user');
 				return $aReturn;
-				break;
 			case 'user':
 				$aUsers = Security::getAllUsers();
 				$aUserData = [];
@@ -128,7 +130,6 @@ class Admin implements AdminInterface
 				}
 				$aReturn = AdminEntity::createCollection($sType,$this->getEntityFields($sType),$aUserData,null,'username');
 				return $aReturn;
-				break;
 			case 'stream':
 				return [];
 		}

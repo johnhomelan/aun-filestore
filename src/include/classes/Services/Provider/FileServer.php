@@ -205,7 +205,6 @@ class FileServer implements ProviderInterface{
 			case 'EC_FS_FUNC_CLI':
 				$this->cliDecode($oFsRequest);
 				return;
-				break;
 
 		}
 
@@ -374,7 +373,6 @@ class FileServer implements ProviderInterface{
 				$sOptions = substr($sDataAsString,$iOptionsPos);
 				$this->runCli($oFsRequest,$sCommand,trim($sOptions));
 				return;
-				break;
 			}			
 		}
 		$oReply = $oFsRequest->buildReply();
@@ -471,9 +469,9 @@ class FileServer implements ProviderInterface{
 	 * Handles login requests (*I AM)
 	 *
 	 * @param fsrequest $oFsRequest
-	 * @param string $sOptions The arguments passed to *I AM (e.g. username password)
+	 * @param ?string $sOptions The arguments passed to *I AM (e.g. username password)
 	*/
-	public function login(FsRequest $oFsRequest,string $sOptions): void
+	public function login(FsRequest $oFsRequest,?string $sOptions): void
 	{
 		$this->oLogger->debug("fileserver: Login called ".$sOptions);
 		$aOptions = explode(" ",$sOptions);
@@ -557,12 +555,11 @@ class FileServer implements ProviderInterface{
 	}
 
 	/**
-	 * Handles the *info command
-	 *
-	 * @param fsrequest $oFsRequest
-	 * @param string $sFile
-	*/
-	public function cmdInfo(FsRequest $oFsRequest,string $sFile): void
+  * Handles the *info command
+  *
+  * @param fsrequest $oFsRequest
+  */
+ public function cmdInfo(FsRequest $oFsRequest,string $sFile): void
 	{
 		$this->oLogger->debug("cmdInfo for path ".$sFile."");
 		$oReply = $oFsRequest->buildReply();
@@ -611,7 +608,6 @@ class FileServer implements ProviderInterface{
 				}
 				$this->addReplyToBuffer($oReply);
 				return;
-				break;
 			case 5:
 				//EC_FS_GET_INFO_ALL
 				$oReply = $oFsRequest->buildReply();
@@ -642,7 +638,6 @@ class FileServer implements ProviderInterface{
 				}	
 				$this->addReplyToBuffer($oReply);
 				return;
-				break;
 			case 1:
 				//EC_FS_GET_INFO_CTIME
 				$oReply = $oFsRequest->buildReply();
@@ -664,7 +659,6 @@ class FileServer implements ProviderInterface{
 				}
 				$this->addReplyToBuffer($oReply);
 				return;
-				break;
 			case 2:
 				//EC_FS_GET_INFO_META
 				$oReply = $oFsRequest->buildReply();
@@ -689,8 +683,6 @@ class FileServer implements ProviderInterface{
 				}
 				$this->addReplyToBuffer($oReply);
 				return;
-	
-				break;
 			case 3:
 				//EC_FS_GET_INFO_SIZE
 				$oReply = $oFsRequest->buildReply();
@@ -712,8 +704,6 @@ class FileServer implements ProviderInterface{
 				}
 				$this->addReplyToBuffer($oReply);
 				return;
-				
-				break;
 			case 6:
 				//EC_FS_GET_INFO_DIR
 				try {
@@ -749,7 +739,6 @@ class FileServer implements ProviderInterface{
 					$this->addReplyToBuffer($oReply);
 				}
 				return;
-				break;
 			case 7:
 				//EC_FS_GET_INFO_UID
 				break;
@@ -887,8 +876,6 @@ class FileServer implements ProviderInterface{
 				}
 				//Close the set	with 0x80
 				$oReply->appendByte(0x80);
-				break;
-	
 				break;
 			case 2:
 				//EXAMINE_NAME
@@ -1564,9 +1551,9 @@ class FileServer implements ProviderInterface{
 	 *
 	 * This method is invoked by the *PASS command
 	*/
-	public function setPassword(FsRequest $oFsRequest,$sOptions): void
+	public function setPassword(FsRequest $oFsRequest,string $sOptions): void
 	{
-		$aOptions = explode(' ',(string) $sOptions);
+		$aOptions = explode(' ',$sOptions);
 		$oReply = $oFsRequest->buildReply();
 		if(count($aOptions)!=2){
 			$oReply->setError(0xff,"Syntax");

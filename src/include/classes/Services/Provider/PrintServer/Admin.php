@@ -87,14 +87,12 @@ class Admin implements AdminInterface
 	 *
 	*/ 
 	public function getEntityFields(string $sType): array
-	{
-		switch($sType){
-			case 'jobs':
-				return ['network'=>'int', 'station'=>'int', 'began'=>'datatime', 'size'=>'int'];	
-				break;
-		}
-		return [];
-	}
+ {
+     return match ($sType) {
+         'jobs' => ['network'=>'int', 'station'=>'int', 'began'=>'datatime', 'size'=>'int'],
+         default => [],
+     };
+ }
 
 	/**
 	 * Gets the entity instances of a given type for this service 
@@ -107,7 +105,6 @@ class Admin implements AdminInterface
 				$aJobs = $this->oProvider->getJobs();
 				$aReturn = AdminEntity::createCollection($sType,$this->getEntityFields($sType),$aJobs,fn($aRow) => $aRow['network'].'_'.$aRow['station']);
 				return $aReturn;
-				break;
 		}
 		return [];
 	}

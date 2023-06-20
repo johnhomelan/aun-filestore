@@ -455,11 +455,9 @@ EOF;
 	}
 
 	/**
-	 * Sends a replay packet to a remote machine
-	 *
-	 * @param \HomeLan\FileStore\Messages\EconetPacket $oReplyEconetPacket
-	*/
-	public function dispatchReply(\HomeLan\FileStore\Messages\EconetPacket $oReplyEconetPacket): void
+  * Sends a replay packet to a remote machine
+  */
+ public function dispatchReply(\HomeLan\FileStore\Messages\EconetPacket $oReplyEconetPacket): void
 	{
 		usleep(config::getValue('bbc_default_pkg_sleep'));
 		$sIP = Map::ecoAddrToIpAddr($oReplyEconetPacket->getDestinationNetwork(),$oReplyEconetPacket->getDestinationStation());

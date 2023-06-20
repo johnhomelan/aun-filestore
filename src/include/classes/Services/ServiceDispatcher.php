@@ -82,11 +82,9 @@ class ServiceDispatcher {
 	}
 
 	/**
-	 * Adds a single service to the service dispatcher
-	 *
-	 * @param ProviderInterface $oService
-	*/
-	public function addService(ProviderInterface $oService): void
+  * Adds a single service to the service dispatcher
+  */
+ public function addService(ProviderInterface $oService): void
 	{
 		$aPorts = $oService->getServicePorts();
 
@@ -139,13 +137,12 @@ class ServiceDispatcher {
 	}
 
 	/**
-	 * Allows a service to claim port temp bais for directly streaming data with a client
-	 *
-	 * @param ProviderInterface $oService 
-	 * @param int $iTimeOut If no packets are recived after this timeout the port is free'd 
-	 * @return int The port allocated for streaming by the service handler 
-	*/
-	public function claimStreamPort(ProviderInterface $oService, int $iTimeOut=60): int
+  * Allows a service to claim port temp bais for directly streaming data with a client
+  *
+  * @param int $iTimeOut If no packets are recived after this timeout the port is free'd 
+  * @return int The port allocated for streaming by the service handler 
+  */
+ public function claimStreamPort(ProviderInterface $oService, int $iTimeOut=60): int
 	{
 		for($i=$this->iStreamPortStart;$i<($this->iStreamPortStart+20);$i++){
 			if(!array_key_exists($i,$this->aPorts)){

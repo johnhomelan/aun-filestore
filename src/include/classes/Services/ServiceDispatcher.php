@@ -35,6 +35,7 @@ class ServiceDispatcher {
 	private array $aHouseKeepingTasks = [];
 	private array $aAckEvents = [];
 
+	const MAX_STREAMS = 20;
 	/**
 	 * Keeping this class as a singleton, this is static method should be used to get references to this object
 	 *
@@ -137,14 +138,14 @@ class ServiceDispatcher {
 	}
 
 	/**
-  * Allows a service to claim port temp bais for directly streaming data with a client
-  *
-  * @param int $iTimeOut If no packets are recived after this timeout the port is free'd 
-  * @return int The port allocated for streaming by the service handler 
-  */
- public function claimStreamPort(ProviderInterface $oService, int $iTimeOut=60): int
+	  * Allows a service to claim port temp bais for directly streaming data with a client
+	  *
+	  * @param int $iTimeOut If no packets are recived after this timeout the port is free'd 
+	  * @return int The port allocated for streaming by the service handler 
+	*/
+	public function claimStreamPort(ProviderInterface $oService, int $iTimeOut=60): int
 	{
-		for($i=$this->iStreamPortStart;$i<($this->iStreamPortStart+20);$i++){
+		for($i=$this->iStreamPortStart;$i<($this->iStreamPortStart+self::MAX_STREAMS);$i++){
 			if(!array_key_exists($i,$this->aPorts)){
 				$this->aPorts[$i] = $oService;
 				$this->aPortTimeLimits[$i] = time ()+$iTimeOut;
@@ -251,8 +252,25 @@ class ServiceDispatcher {
 	*/ 
 	public function houseKeeping(): void
 	{
+		//Run registred house keeping tasks
 		foreach($this->aHouseKeepingTasks as $fTask){
 			($fTask)();
 		}
+
+		//Free up timed out streaming ports by building a new list without timed out ports
+		$aPorts = [];
+		$aPortTimeLimits = [];
+		for($i=$this->iStreamPortStart;$i<($this->iStreamPortStart+self::MAX_STREAMS);$i++){
+			if(!array_key_exists($i,$this->aPorts)){
+				if($this->aPortTimeLimits[$i]<time()){
+					//The stream port has NOT timed out
+					$aPorts[$i]=$this->aPorts[$i];
+					$aPortTimeLimits[$i]=$this->$aPortTimeLimits[$i];
+				}
+			}
+		}
+		$this->aPorts = $aPorts;
+		$this->aPortTimeLimits = $aPortTimeLimits;
+	
 	}
 } 

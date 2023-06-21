@@ -475,7 +475,7 @@ class FileServer implements ProviderInterface{
 	{
 		$this->oLogger->debug("fileserver: Login called ".$sOptions);
 		$aOptions = explode(" ",$sOptions);
-		if(count($aOptions)>0){
+		if(strlen($sOptions)>0){
 			//Creditials supplied, decode username and password
 			$sUser = $aOptions[0];
 			if(array_key_exists(1,$aOptions)){
@@ -1330,7 +1330,6 @@ class FileServer implements ProviderInterface{
 
 		$this->addStream($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(), 
 			new StreamIn(
-				config::getValue('econet_data_stream_port'),
 				$iBytes,
 				function($oStream,$oPacket) use ($oFsRequest, $_this) {
 					$oAck = $oFsRequest->buildReply();
@@ -1437,7 +1436,6 @@ class FileServer implements ProviderInterface{
 
 		$this->addStream($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(), 
 			new StreamIn(
-				config::getValue('econet_data_stream_port'),
 				$iSize,
 				function($oStream,$oPacket) use ($oFsRequest, $iAckPort, $_this) {
 					$oReply = $oFsRequest->buildReply();

@@ -41,6 +41,11 @@ class AdminEntity {
 		}
 	}
 
+	public function getType():string
+	{	
+		return $this->sType;
+	}
+
 	public function getId()
 	{
 		if(is_callable($this->fComputeId)){

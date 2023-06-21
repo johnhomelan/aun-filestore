@@ -203,10 +203,12 @@ class LocalFile implements PluginInterface {
 			if(file_exists(rtrim($sUnixDirPath,DIRECTORY_SEPARATOR).DIRECTORY_SEPARATOR.$oEconetPath->sFile)){
 				$bReturn =  unlink(rtrim($sUnixDirPath,DIRECTORY_SEPARATOR).DIRECTORY_SEPARATOR.$oEconetPath->sFile);
 
-				if($bReturn AND file_exists(rtrim($sUnixDirPath,DIRECTORY_SEPARATOR).DIRECTORY_SEPARATOR.$oEconetPath->sFile).'.inf'){
+				if($bReturn AND file_exists(rtrim($sUnixDirPath,DIRECTORY_SEPARATOR).DIRECTORY_SEPARATOR.$oEconetPath->sFile.'.inf')){
 					unlink(rtrim($sUnixDirPath,DIRECTORY_SEPARATOR).DIRECTORY_SEPARATOR.$oEconetPath->sFile.'.inf');
 				}
+				return $bReturn;
 			}
+			
 		}
 		return FALSE;
 	}
@@ -267,7 +269,7 @@ class LocalFile implements PluginInterface {
 		throw new VfsException("No such file");
 	}
 
-	public static function setMeta(string $sEconetPath,$iLoad,$iExec,int $iAccess): void
+	public static function setMeta(string $sEconetPath,?int $iLoad,?int $iExec,int $iAccess): void
 	{
 		$sUnixPath = LocalFile::_econetToUnix($sEconetPath);
 		if(file_exists($sUnixPath) AND file_exists($sUnixPath.'.inf')){

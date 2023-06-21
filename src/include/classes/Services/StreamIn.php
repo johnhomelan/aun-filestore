@@ -13,7 +13,7 @@ class StreamIn {
 	private readonly int $iNoPktTimeout;
 	private ?string $sData = null;
 
-	public function __construct(private readonly int $iPort, private readonly int $iBytes,callable $fRecivedPacket, callable $fSucessCallback, callable $fFailCallback,int $iTimeout=60)
+	public function __construct(private readonly int $iBytes,callable $fRecivedPacket, callable $fSucessCallback, callable $fFailCallback,int $iTimeout=60)
 	{
 		$this->fRecivedPacket = $fRecivedPacket;
 		$this->fSucessCallback = $fSucessCallback;

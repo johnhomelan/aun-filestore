@@ -98,7 +98,7 @@ class Admin implements AdminInterface
 				return ['network'=>'int', 'station'=>'int', 'user'=>'string'];	
 			case 'stream':
 				return [];
-				return ['network'=>'int', 'station'=>'int', 'user'=>'string', 'path'=>'string'];
+				//return ['network'=>'int', 'station'=>'int', 'user'=>'string', 'path'=>'string'];
 			case 'user':
 				return ['plugin'=>'string', 'username'=>'string', 'priv'=>'string' , 'homedir'=>'string', 'bootopt'=>'int'];
 		}

@@ -21,7 +21,7 @@ use HomeLan\FileStore\Services\ServiceDispatcher;
 use config;
 
 /**
- * This class deals with taking date submitted via websocket and passing it to the services
+ * This class deals with taking data submitted via websocket and passing it to the services
  *
  * @package core
 */
@@ -33,6 +33,7 @@ class WebSocketHandler implements MessageComponentInterface {
 
 	public function __construct(private readonly \Psr\Log\LoggerInterface $oLogger,  private readonly ServiceDispatcher $oServices) 
 	{
+		$this->oLogger->debug("Starting websocket handler");
 		$this->oConnections = new \SplObjectStorage;
 	}
 

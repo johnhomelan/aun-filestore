@@ -95,7 +95,7 @@ class React extends Command {
 		}
 
 		$this->MainLoop();
-  return \Symfony\Component\Console\Command\Command::SUCCESS;
+  		return \Symfony\Component\Console\Command\Command::SUCCESS;
 	}
 
 	/**
@@ -195,9 +195,9 @@ EOF;
 	}
 
 	/**
-  * Adds all the AUN handling services to the event loop
-  */
- public function aunService(LoopInterface $oLoop)
+	  * Adds all the AUN handling services to the event loop
+	*/
+	public function aunService(LoopInterface $oLoop)
 	{
 
 		//Add udp handling for AUN 

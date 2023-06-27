@@ -2,10 +2,22 @@
 safe_define('CONFIG_aun_listen_address','0.0.0.0');
 safe_define('CONFIG_aun_listen_port',32768);
 
+safe_define('CONFIG_websocket_listen_address','0.0.0.0');
+safe_define('CONFIG_websocket_listen_port','8090');
+safe_define('CONFIG_websocket_network_address','128');
+safe_define('CONFIG_websocket_station_address','254');
+
+
+
+safe_define('CONFIG_webadmin_listen_address','0.0.0.0');
+safe_define('CONFIG_webadmin_listen_port','8080');
+
+
 safe_define('CONFIG_econet_data_stream_port',0x97);
 safe_define('CONFIG_bbc_default_pkg_sleep',40000);
 
 safe_define('CONFIG_aunmap_file','aunmap.txt');
+safe_define('CONFIG_websocketmap_file','websocket_map.cfg');
 safe_define('CONFIG_aunmap_autonet',200);
 safe_define('CONFIG_aun_default_port',32768);
 safe_define('CONFIG_version','1.01');

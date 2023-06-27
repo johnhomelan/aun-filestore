@@ -38,7 +38,7 @@ class FileDescriptor {
 
 	protected $oLogger;
 
-	public function __construct(\Psr\Log\LoggerInterface $oLogger,string $sVfsPlugin, User $oUser, string $sUnixFilePath, string $sEconetFilePath, int $iVfsHandle, int $iEconetHandle, bool $bFile=FALSE, bool $bDir=FALSE)
+	public function __construct(\Psr\Log\LoggerInterface $oLogger,string $sVfsPlugin, User $oUser, string $sUnixFilePath, string $sEconetFilePath, ?int $iVfsHandle, int $iEconetHandle, bool $bFile=FALSE, bool $bDir=FALSE)
 	{
 		$this->oLogger = $oLogger;
 		$this->sVfsPlugin = $sVfsPlugin;

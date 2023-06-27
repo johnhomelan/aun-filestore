@@ -53,10 +53,10 @@ class Map {
 		$aLines = explode("\n",$sMap);
 		foreach($aLines as $sLine){
 			if(preg_match('/([0-9]*\.[0-9]*\.[0-9]*\.[0-9]*\/[0-9]*) ([0-9]*)/',$sLine,$aMatches)>0){
-				Map::addSubnetMapping($aMatches[1],$aMatches[2]);
+				Map::addSubnetMapping($aMatches[1],(int) $aMatches[2]);
 			}
 			if(preg_match('/([0-9]*\.[0-9]*\.[0-9]*\.[0-9]*) ([0-9]*)\.([0-9]*)/',$sLine,$aMatches)>0){
-				Map::addHostMapping($aMatches[1],$aMatches[2],$aMatches[3]);
+				Map::addHostMapping($aMatches[1],(int) $aMatches[2],(int) $aMatches[3]);
 			}
 		}
 	}

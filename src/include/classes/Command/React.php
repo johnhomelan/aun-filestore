@@ -23,7 +23,7 @@ use Ratchet\Http\HttpServer;
 use Ratchet\WebSocket\WsServer;
 
 use HomeLan\FileStore\Services\ServiceDispatcher;
-use HomeLan\FileStore\Services\WebSocketHandler;
+use HomeLan\FileStore\WebSocket\Handler as WebSocketHandler;
 use HomeLan\FileStore\Aun\Map; 
 use HomeLan\FileStore\Aun\AunPacket; 
 use HomeLan\FileStore\Authentication\Security; 
@@ -112,6 +112,8 @@ class React extends Command {
 		$this->oLogger->info("core: Using ".$oLoop::class." as the primary event loop handler");
 
 		$oAunServer = $this->aunService($oLoop);
+
+		$this->websocketService($oLoop);
 		$this->adminService($oLoop);
 
 		$oEncapsulationTypeMap = EncapsulationTypeMap::create();
@@ -141,6 +143,8 @@ class React extends Command {
 
 		//Enter main loop
 		$this->oLogger->debug("Starting primary loop.");
+
+		$oLoop->run();
 	}
 
 	/**
@@ -250,7 +254,7 @@ EOF;
 	{
 
 		//Add udp handling for AUN 
-		$oWebSocketTransport = new \React\Socket\SocketServer('0.0.0.0:8090',$oLoop);
+		$oWebSocketTransport = new \React\Socket\SocketServer(config::getValue('websocket_listen_address').':'.config::getValue('websocket_listen_port'));
 
 		$oServices = $this->oServices;
 		$oLogger = $this->oLogger;
@@ -285,7 +289,7 @@ EOF;
 
 			$aPost = [];
 			if (in_array(strtoupper($sMethod), ['POST', 'PUT', 'DELETE', 'PATCH']) &&
-				isset($aHeaders['Content-Type']) && (str_starts_with($aHeaders['Content-Type'], 'application/x-www-form-urlencoded'))
+				isset($aHeaders['Content-Type']) && (str_starts_with($aHeaders['Content-Type'], 'application/x-www-form-urlencoded')) //@phpstan-ignore-line
 			) {
 				parse_str($sContent, $result);
 			}
@@ -325,7 +329,7 @@ EOF;
 			return $oResponse;
 		};
 
-		$oHttpSocket = new \React\Socket\Server('0.0.0.0:8080',$oLoop);
+		$oHttpSocket = new \React\Socket\Server(config::getValue('webadmin_listen_address').':'.config::getValue('webadmin_listen_port'),$oLoop);
 		$oHttpServer = new \React\Http\Server($callback);
 		$oHttpServer->listen($oHttpSocket);
 	}

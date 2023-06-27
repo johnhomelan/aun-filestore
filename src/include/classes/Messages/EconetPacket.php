@@ -9,6 +9,7 @@ namespace HomeLan\FileStore\Messages;
 
 use HomeLan\FileStore\Aun\Map; 
 use Exception;
+use config;
 
 /** 
  * This class is used to represcent an econet packet
@@ -137,32 +138,58 @@ class EconetPacket {
 		return $this->iDstNet;
 	}
 
+
+	private function _getAunRaw($sKey):string
+	{
+		//Set the packet type to unicast
+		$sPacket = pack('C',2);
+	
+		//Set the port
+		$sPacket=$sPacket.pack('C',$this->iPort);
+
+	
+		//Set the flags
+		$sPacket=$sPacket.pack('C',$this->iCb);
+		
+		//Add the pad
+		$sPacket=$sPacket.pack('C',0);
+	
+		//Sequence 4 bytes little-endian
+		$sPacket=$sPacket.pack('V',Map::incAunCounter($sKey));
+
+		//Add the data
+		$sPacket=$sPacket.$this->sData;
+		
+		return $sPacket;	
+
+	}
+
 	public function getAunFrame():string
 	{
 		$sIP = Map::ecoAddrToIpAddr($this->getDestinationNetwork(),$this->getDestinationStation());
 		if(strlen($sIP)>0){
-			//Set the packet type to unicast
-			$sPacket = pack('C',2);
-		
-			//Set the port
-			$sPacket=$sPacket.pack('C',$this->iPort);
-
-		
-			//Set the flags
-			$sPacket=$sPacket.pack('C',$this->iCb);
-			
-			//Add the pad
-			$sPacket=$sPacket.pack('C',0);
-		
-			//Sequence 4 bytes little-endian
-			$sPacket=$sPacket.pack('V',Map::incAunCounter($sIP));
-
-			//Add the data
-			$sPacket=$sPacket.$this->sData;
-			
-			return $sPacket;	
+			return $this->_getAunRaw($sIP);
 		}
 		return '';
+	}
+	
+	public function getWebSocketFrame():string
+	{
+		return json_encode(
+			[
+				'type'=>'pkt',
+				'dst'=>[
+					'station'=>$this->getDestinationStation(),
+					'network'=>$this->getDestinationNetwork()
+				],
+				'src'=>[
+					'station'=>config::getValue('websocket_station_address'),
+					'network'=>config::getValue('websocket_network_address')
+				],
+				'payload'=>$this->_getAunRaw('ws_'.$this->getDestinationNetwork().'_'.$this->getDestinationStation())
+			], 
+			JSON_THROW_ON_ERROR);
+
 	}
 
 	/**

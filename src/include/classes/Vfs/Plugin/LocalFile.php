@@ -125,6 +125,7 @@ class LocalFile implements PluginInterface {
 				$iVfsHandle = NULL;
 			}
 			$iEconetHandle = vfs::getFreeFileHandleID($oUser);
+			//@phpstan-ignore-next-line
 			return new FileDescriptor(self::$oLogger,'LocalFile',$oUser,$sUnixPath,$oEconetPath->getFilePath(),$iVfsHandle,$iEconetHandle,is_file($sUnixPath),is_dir($sUnixPath));
 		}
 		throw new VfsException("No such file");
@@ -235,7 +236,7 @@ class LocalFile implements PluginInterface {
 		$sUnixDirPath = LocalFile::_econetToUnix($oEconetPath->sDir);
 		if(is_dir($sUnixDirPath)){
 			file_put_contents($sUnixDirPath.DIRECTORY_SEPARATOR.$oEconetPath->sFile,$sData);
-			file_put_contents($sUnixDirPath.DIRECTORY_SEPARATOR.$oEconetPath->sFile.'.inf',"TAPE file ".str_pad(dechex($iLoadAddr),8,0,STR_PAD_LEFT)." ".str_pad(dechex($iExecAddr),8,0,STR_PAD_LEFT));
+			file_put_contents($sUnixDirPath.DIRECTORY_SEPARATOR.$oEconetPath->sFile.'.inf',"TAPE file ".str_pad(dechex($iLoadAddr),8,"0",STR_PAD_LEFT)." ".str_pad(dechex($iExecAddr),8,"0",STR_PAD_LEFT));
 			return TRUE;
 		}
 		return FALSE;
@@ -249,7 +250,7 @@ class LocalFile implements PluginInterface {
 			$hFile = fopen($sUnixDirPath.DIRECTORY_SEPARATOR.$oEconetPath->sFile,'r+');
 			ftruncate($hFile,$iSize);
 			fclose($hFile);
-			file_put_contents($sUnixDirPath.DIRECTORY_SEPARATOR.$oEconetPath->sFile.'.inf',"TAPE file ".str_pad(dechex($iLoadAddr),8,0,STR_PAD_LEFT)." ".str_pad(dechex($iExecAddr),8,0,STR_PAD_LEFT));
+			file_put_contents($sUnixDirPath.DIRECTORY_SEPARATOR.$oEconetPath->sFile.'.inf',"TAPE file ".str_pad(dechex($iLoadAddr),8,"0",STR_PAD_LEFT)." ".str_pad(dechex($iExecAddr),8,"0",STR_PAD_LEFT));
 			return TRUE;
 		}
 		return FALSE;

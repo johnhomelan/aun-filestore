@@ -9,6 +9,8 @@
 namespace HomeLan\FileStore\Encapsulation; 
 
 use HomeLan\FileStore\Messages\EconetPacket; 
+use HomeLan\FileStore\WebSocket\Map as WebSocketMap; 
+use HomeLan\FileStore\Aun\Map as AunMap; 
 use config;
 
 /**
@@ -41,6 +43,11 @@ class EncapsulationTypeMap {
 
 	public function getType(EconetPacket $oPacket) :string
 	{
+		$iDstStation = $oPacket->getDestinationStation();
+		$iDstNetwork = $oPacket->getDestinationNetwork();
+		if(is_object(WebSocketMap::ecoAddrToSocket($iDstNetwork, $iDstStation))){
+			return 'WebSocket';
+		}
 		return 'AUN';
 	}
 

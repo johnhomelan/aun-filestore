@@ -11,7 +11,9 @@ namespace HomeLan\FileStore\Encapsulation;
 use HomeLan\FileStore\Encapsulation\EncapsulationTypeMap;
 use HomeLan\FileStore\Messages\EconetPacket; 
 use HomeLan\FileStore\Aun\AunPacket; 
-use HomeLan\FileStore\Aun\Map; 
+use HomeLan\FileStore\Aun\Map as AunMap; 
+use HomeLan\FileStore\WebSocket\Map as WebSocketMap; 
+use React\Datagram\Socket;
 
 use config;
 
@@ -28,7 +30,7 @@ class PacketDispatcher {
 	 * Keeping this class as a singleton, this is static method should be used to get references to this object
 	 *
 	*/
-	public static function create(EncapsulationTypeMap $oEncapsulationTypeMap, \React\EventLoop\LoopInterface $oLoop, \React\Datagram\Socket $oAunServer)
+	public static function create(EncapsulationTypeMap $oEncapsulationTypeMap, \React\EventLoop\LoopInterface $oLoop, Socket $oAunServer):PacketDispatcher
 	{
 		if(!is_object(PacketDispatcher::$oSingleton)){
 			PacketDispatcher::$oSingleton = new PacketDispatcher($oEncapsulationTypeMap, $oLoop, $oAunServer);
@@ -40,9 +42,9 @@ class PacketDispatcher {
 	 * Constructor registers the Logger and all the services 
 	 *  
 	*/
-	public function __construct(private readonly EncapsulationTypeMap $oEncapsulationTypeMap, private readonly \React\EventLoop\LoopInterface $oLoop, private readonly \React\Datagram\Socket $oAunServer)
- {
- }
+	public function __construct(private readonly EncapsulationTypeMap $oEncapsulationTypeMap, private readonly \React\EventLoop\LoopInterface $oLoop, private readonly Socket $oAunServer)
+ 	{
+ 	}
 
 	/**
 	 * Gets a reference to the main event loop
@@ -54,6 +56,7 @@ class PacketDispatcher {
 		return $this->oLoop;
 	}
 
+
 	/**
 	 * Sends all the packets a Service has queues up
 	 *
@@ -63,12 +66,13 @@ class PacketDispatcher {
 		//Get the packets destination encapsulation
 		
 		switch($this->oEncapsulationTypeMap->getType($oPacket)){
-			case 'WEBSOCKET':
-				//@TODO
+			case 'WebSocket':
+				$oWebsocket = WebsocketMap::ecoAddrToSocket($oPacket->getDestinationNetwork(),$oPacket->getDestinationStation());
+				$oWebsocket->send($oPacket->getWebSocketFrame());
 				break;
 			case 'AUN':
 			default:
-				$sIP = Map::ecoAddrToIpAddr($oPacket->getDestinationNetwork(),$oPacket->getDestinationStation());
+				$sIP = AunMap::ecoAddrToIpAddr($oPacket->getDestinationNetwork(),$oPacket->getDestinationStation());
 				if(!str_contains($sIP,':')){
 					$sHost=$sIP.':'.config::getValue('aun_default_port');
 				}else{

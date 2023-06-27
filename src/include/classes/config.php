@@ -12,9 +12,16 @@
 
 class config {
 
-	static protected $aFileSettings=NULL;
-	static protected $_aConfigCache=[];
-	static protected $_aVarSpec=NULL;
+	/**
+ 	 * @var array<string, string>
+ 	*/ 	
+	static protected ?array $aFileSettings=NULL;
+
+	/**
+ 	 * @var array<string, string>
+ 	*/
+ 	static protected array $_aConfigCache=[];
+
 	
 
 	/**
@@ -48,7 +55,7 @@ class config {
 		return $mReturn;
 	}
 
-	static public function overrideValue(string $sKey,$sValue): void
+	static public function overrideValue(string $sKey,string|int $sValue): void
 	{
 		config::$_aConfigCache[$sKey] = $sValue;
 	}

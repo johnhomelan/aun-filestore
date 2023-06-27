@@ -14,6 +14,7 @@ use HomeLan\FileStore\Aun\Map;
 use HomeLan\FileStore\Services\ProviderInterface;
 use HomeLan\FileStore\Encapsulation\PacketDispatcher;
 use HomeLan\FileStore\Encapsulation\EncapsulationTypeMap;
+use HomeLan\FileStore\Encapsulation\EncapsulationInterface;
 
 use config;
 
@@ -61,7 +62,7 @@ class ServiceDispatcher {
 	}
 
 	/**
-	 * Called when the application is jusp about to start the main loop
+	 * Called when the application is just about to start the main loop
 	 *
 	 * It passes the loop in so providers can register events with the loop
 	*/
@@ -83,9 +84,9 @@ class ServiceDispatcher {
 	}
 
 	/**
-  * Adds a single service to the service dispatcher
-  */
- public function addService(ProviderInterface $oService): void
+	  * Adds a single service to the service dispatcher
+	 */
+	public function addService(ProviderInterface $oService): void
 	{
 		$aPorts = $oService->getServicePorts();
 
@@ -158,7 +159,7 @@ class ServiceDispatcher {
 	/**
 	 * Handles an inbound packet $oService
 	*/
-	public function inboundPacket(AunPacket $oPacket): void
+	public function inboundPacket(EncapsulationInterface $oPacket): void
 	{
 		if(array_key_exists($oPacket->getPort(),$this->aPorts)){
 			switch($oPacket->getPacketType()){
@@ -237,7 +238,7 @@ class ServiceDispatcher {
 	 * Checks to see if an Ack should tirgger an event, and if so tirgger it
 	 *
 	*/ 
-	public function ackEvents(AunPacket $oPacket): void
+	public function ackEvents(EncapsulationInterface $oPacket): void
 	{
 		$oEconetPacket = $oPacket->buildEconetPacket();
 		if(array_key_exists($oEconetPacket->getSourceNetwork(),$this->aAckEvents) AND array_key_exists($oEconetPacket->getSourceStation(),$this->aAckEvents[$oEconetPacket->getSourceNetwork()])){

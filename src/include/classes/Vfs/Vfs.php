@@ -438,7 +438,7 @@ class Vfs {
 	 * @param int $iExec
 	 * @param int $iAccess
 	*/
-	static public function setMeta(int $iNetwork,int $iStation,string $sEconetPath,int $iLoad,int $iExec,int $iAccess): void
+	static public function setMeta(int $iNetwork,int $iStation,string $sEconetPath,?int $iLoad,?int $iExec,?int $iAccess): void
 	{	
 		if(!Security::isLoggedIn($iNetwork,$iStation)){
 			self::$oLogger->debug("vfs: Un-able to create a handle for a station that is not logged in (Who are you?)");

@@ -3,7 +3,14 @@
 namespace HomeLan\FileStore\Services;
 
 use HomeLan\FileStore\Messages\EconetPacket; 
-
+/**
+ * Some services make use of another port for streaming data from the client.  Each client stream will get its own unique port when its in use, the port is then cleared down once the 
+ * data has been streamed.
+ *
+ * For example the fileserver uses it to stream binary data from the client to write into a file handle
+ *
+ * This class deals with streaming in data from a port, that any service can make use of.
+*/
 class StreamIn {
 
 	private $fRecivedPacket;

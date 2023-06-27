@@ -108,23 +108,22 @@ class React extends Command {
 		//Setup the main react loop
 		$oLoop = ReactFactory::create();
 		$oLogger = $this->oLogger;
+		$oEncapsulationTypeMap = EncapsulationTypeMap::create();
 		
 		$this->oLogger->info("core: Using ".$oLoop::class." as the primary event loop handler");
 
-		$oAunServer = $this->aunService($oLoop);
+		$oAunServer = $this->aunService($oLoop, $oEncapsulationTypeMap);
+		$oPacketDispatcher = PacketDispatcher::create($oEncapsulationTypeMap, $oLoop, $oAunServer);
 
-		$this->websocketService($oLoop);
+		$this->websocketService($oLoop,$oPacketDispatcher);
 		$this->adminService($oLoop);
 
-		$oEncapsulationTypeMap = EncapsulationTypeMap::create();
 		
 		//Send any outstanding replies, normally its one request in one reply out.  However some services (e.g. File) have direct streams that can generate 
 		//mutiple replies to an initial request.
 		$oServices = $this->oServices;
 		$oServices->start($oEncapsulationTypeMap, $oLoop, $oAunServer);
-		$oLoop->addPeriodicTimer(1, function(\React\EventLoop\Timer\Timer $oTimer) use ($oServices, $oEncapsulationTypeMap, $oLoop, $oAunServer) {
-			//Get packet dispatcher
-		        $oPacketDispatcher = PacketDispatcher::create($oEncapsulationTypeMap, $oLoop, $oAunServer);
+		$oLoop->addPeriodicTimer(1, function(\React\EventLoop\Timer\Timer $oTimer) use ($oPacketDispatcher, $oServices ) {
 			//Send any messages for the services
 			$aReplies = $oServices->getReplies();
 			foreach($aReplies as $oReply){
@@ -201,7 +200,7 @@ EOF;
 	/**
 	  * Adds all the AUN handling services to the event loop
 	*/
-	public function aunService(LoopInterface $oLoop)
+	private function aunService(LoopInterface $oLoop, EncapsulationTypeMap $oEncapsulationTypeMap)
 	{
 
 		//Add udp handling for AUN 
@@ -212,8 +211,8 @@ EOF;
 		$oReturnSocket = null;
 
 		$oAunServer = $oDatagramFactory->createServer(config::getValue('aun_listen_address').':'.config::getValue('aun_listen_port'))
-	  		->then(function (\React\Datagram\Socket $oAunServer) use ($oServices, $oLogger, &$oReturnSocket) {
-				$oAunServer->on('message', function($sMessage, $sSrcAddress, $sDstAddress) use ($oServices, $oLogger, $oAunServer){
+	  		->then(function (\React\Datagram\Socket $oAunServer) use ($oServices, $oLogger, &$oReturnSocket,$oEncapsulationTypeMap, $oLoop) {
+				$oAunServer->on('message', function($sMessage, $sSrcAddress, $sDstAddress) use ($oServices, $oLogger, $oAunServer, $oEncapsulationTypeMap, $oLoop){
 					$oAunPacket = new AunPacket();
 					
 					//Read the UDP data
@@ -236,9 +235,11 @@ EOF;
 					
 					//Send all replies here
 					//@TODO replace this a better abstaction 
+					$oPacketDispatcher = PacketDispatcher::create($oEncapsulationTypeMap, $oLoop, $oAunServer);
+					//Send any messages for the services
 					$aReplies = $oServices->getReplies();
-					foreach($aReplies as $sTarget=>$sReply){
-						$oAunServer->send($sReply,$sTarget);
+					foreach($aReplies as $oReply){
+						$oPacketDispatcher->sendPacket($oReply);
 					}
 				});
 				$oReturnSocket = $oAunServer;
@@ -248,9 +249,9 @@ EOF;
 	}
 
 	/**
-  * Adds all the websocket handling services to the event loop
-  */
- public function websocketService(LoopInterface $oLoop)
+	 * Adds all the websocket handling services to the event loop
+	*/
+	public function websocketService(LoopInterface $oLoop,PacketDispatcher $oPacketDispatcher):void
 	{
 
 		//Add udp handling for AUN 
@@ -258,7 +259,7 @@ EOF;
 
 		$oServices = $this->oServices;
 		$oLogger = $this->oLogger;
-		$oWebSocketHandler = new WebSocketHandler($this->oLogger, $oServices);
+		$oWebSocketHandler = new WebSocketHandler($this->oLogger, $oServices, $oPacketDispatcher);
 
 		$oWebsocketServer = new IoServer(
 			new HttpServer(
@@ -269,7 +270,6 @@ EOF;
 			$oWebSocketTransport,
 			$oLoop
 		);
-		return $oWebSocketHandler;
 	}
 
 	/** 

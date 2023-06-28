@@ -235,13 +235,4 @@ class AunPacket implements EncapsulationInterface {
 		return $sReturn;	
 	}
 
-	/**
-	  * At the moment just a sub function to be compatible with the EncapsulationInterface 
-	  *
-	  * @TODO Implment this method as part of the move to the Encapsulation Abstraction so websocket clients, and server to server encapuslations will work
-	 */ 	  
-	public function getReplies(): array
-	{
-		return [];
-	}
 }

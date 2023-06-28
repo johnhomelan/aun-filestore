@@ -14,8 +14,6 @@ namespace HomeLan\FileStore\Encapsulation;
 */
 interface EncapsulationInterface {
 
-	public function getReplies(): array;
-
         public function getPort(): int;
 
         public function getPacketType(): string;

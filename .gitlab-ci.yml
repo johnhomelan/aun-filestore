@@ -14,7 +14,7 @@ phpunit_phpstan_php81:
     - docker:stable-dind
    script:
      - cd src; composer --no-scripts install; cd ..
-     - ./src/vendor/bin/phpstan analyse -n --no-ansi --no-progress src/include src/react-test --level 5
+     - ./src/vendor/bin/phpstan analyse -n --no-ansi --no-progress src/include src/filestored --level 5
 
 phpunit_tests_php81:
    image: registry.home-lan.co.uk/php-81-testing:latest

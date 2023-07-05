@@ -13,6 +13,7 @@ use HomeLan\FileStore\Messages\EconetPacket;
 use HomeLan\FileStore\Aun\AunPacket; 
 use HomeLan\FileStore\Aun\Map as AunMap; 
 use HomeLan\FileStore\WebSocket\Map as WebSocketMap; 
+use HomeLan\FileStore\Piconet\Handler as PiconetHandler;
 use React\Datagram\Socket;
 
 use config;
@@ -30,10 +31,10 @@ class PacketDispatcher {
 	 * Keeping this class as a singleton, this is static method should be used to get references to this object
 	 *
 	*/
-	public static function create(EncapsulationTypeMap $oEncapsulationTypeMap, \React\EventLoop\LoopInterface $oLoop, Socket $oAunServer):PacketDispatcher
+	public static function create(EncapsulationTypeMap $oEncapsulationTypeMap, \React\EventLoop\LoopInterface $oLoop, Socket $oAunServer,PiconetHandler $oPiconet):PacketDispatcher
 	{
 		if(!is_object(PacketDispatcher::$oSingleton)){
-			PacketDispatcher::$oSingleton = new PacketDispatcher($oEncapsulationTypeMap, $oLoop, $oAunServer);
+			PacketDispatcher::$oSingleton = new PacketDispatcher($oEncapsulationTypeMap, $oLoop, $oAunServer, $oPiconet);
 		}
 		return PacketDispatcher::$oSingleton;	
 	}
@@ -42,7 +43,7 @@ class PacketDispatcher {
 	 * Constructor registers the Logger and all the services 
 	 *  
 	*/
-	public function __construct(private readonly EncapsulationTypeMap $oEncapsulationTypeMap, private readonly \React\EventLoop\LoopInterface $oLoop, private readonly Socket $oAunServer)
+	public function __construct(private readonly EncapsulationTypeMap $oEncapsulationTypeMap, private readonly \React\EventLoop\LoopInterface $oLoop, private readonly Socket $oAunServer, private readonly PiconetHandler $oPiconet)
  	{
  	}
 
@@ -69,6 +70,9 @@ class PacketDispatcher {
 			case 'WebSocket':
 				$oWebsocket = WebsocketMap::ecoAddrToSocket($oPacket->getDestinationNetwork(),$oPacket->getDestinationStation());
 				$oWebsocket->send($oPacket->getWebSocketFrame());
+				break;
+			case 'Piconet':
+				$this->oPiconet->send($oPacket);
 				break;
 			case 'AUN':
 			default:

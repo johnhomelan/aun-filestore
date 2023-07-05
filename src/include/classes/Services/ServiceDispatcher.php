@@ -15,7 +15,7 @@ use HomeLan\FileStore\Services\ProviderInterface;
 use HomeLan\FileStore\Encapsulation\PacketDispatcher;
 use HomeLan\FileStore\Encapsulation\EncapsulationTypeMap;
 use HomeLan\FileStore\Encapsulation\EncapsulationInterface;
-
+use HomeLan\FileStore\Piconet\Handler as PiconetHandler;
 use config;
 
 /**
@@ -29,6 +29,7 @@ class ServiceDispatcher {
 	private ?\HomeLan\FileStore\Encapsulation\EncapsulationTypeMap $oEncapsulationTypeMap = null;
 	private ?\React\EventLoop\LoopInterface $oLoop = null;
 	private ?\React\Datagram\Socket $oAunServer = null;
+	private ?PiconetHandler $oPiconetHandler = null;
 	private array $aPorts = [];
 	private array $aReplies = [];
 	private int $iStreamPortStart=20;
@@ -66,11 +67,12 @@ class ServiceDispatcher {
 	 *
 	 * It passes the loop in so providers can register events with the loop
 	*/
-	public function start(EncapsulationTypeMap $oEncapsulationTypeMap, \React\EventLoop\LoopInterface $oLoop, \React\Datagram\Socket $oAunServer): void
+	public function start(EncapsulationTypeMap $oEncapsulationTypeMap, \React\EventLoop\LoopInterface $oLoop, \React\Datagram\Socket $oAunServer, PiconetHandler $oPiconetHandler): void
 	{
 		$this->oEncapsulationTypeMap = $oEncapsulationTypeMap;
 		$this->oLoop = $oLoop;
 		$this->oAunServer = $oAunServer;
+		$this->oPiconetHandler = $oPiconetHandler;
 	}
 
 	/**
@@ -215,7 +217,7 @@ class ServiceDispatcher {
 	*/
 	public function sendPackets(ProviderInterface $oService): void
 	{
-		$oPacketDispatcher = PacketDispatcher::create($this->oEncapsulationTypeMap, $this->oLoop, $this->oAunServer);
+		$oPacketDispatcher = PacketDispatcher::create($this->oEncapsulationTypeMap, $this->oLoop, $this->oAunServer, $this->oPiconetHandler);
 		$aReplys = $oService->getReplies();
 		foreach($aReplys as $oPacket){
 			$oPacketDispatcher->sendPacket($oPacket);

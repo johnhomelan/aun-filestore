@@ -36,7 +36,7 @@ class Map {
 	static LoggerInterface $oLogger;
 
 	/**
-	  * Loads the aun map from the configured aun map file
+	  * Loads the websocket map from the configured websocket map file
 	  *
 	  * @param string $sMap The text for the map file can be supplied as a string, this is intended largley for unit testing this function
 	*/

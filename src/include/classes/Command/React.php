@@ -21,9 +21,11 @@ use React\Datagram\Factory as DatagramFactory;
 use Ratchet\Server\IoServer;
 use Ratchet\Http\HttpServer;
 use Ratchet\WebSocket\WsServer;
+use Ratchet\Socket\UnixConnector;
 
 use HomeLan\FileStore\Services\ServiceDispatcher;
 use HomeLan\FileStore\WebSocket\Handler as WebSocketHandler;
+use HomeLan\FileStore\Piconet\Handler as PiconetHandler;
 use HomeLan\FileStore\Aun\Map; 
 use HomeLan\FileStore\Aun\AunPacket; 
 use HomeLan\FileStore\Authentication\Security; 
@@ -113,7 +115,8 @@ class React extends Command {
 		$this->oLogger->info("core: Using ".$oLoop::class." as the primary event loop handler");
 
 		$oAunServer = $this->aunService($oLoop, $oEncapsulationTypeMap);
-		$oPacketDispatcher = PacketDispatcher::create($oEncapsulationTypeMap, $oLoop, $oAunServer);
+		$oPiconet = $this->piconetService($oLoop,$oPacketDispatcher);
+		$oPacketDispatcher = PacketDispatcher::create($oEncapsulationTypeMap, $oLoop, $oAunServer, $oPiconet);
 
 		$this->websocketService($oLoop,$oPacketDispatcher);
 		$this->adminService($oLoop);
@@ -122,7 +125,7 @@ class React extends Command {
 		//Send any outstanding replies, normally its one request in one reply out.  However some services (e.g. File) have direct streams that can generate 
 		//mutiple replies to an initial request.
 		$oServices = $this->oServices;
-		$oServices->start($oEncapsulationTypeMap, $oLoop, $oAunServer);
+		$oServices->start($oEncapsulationTypeMap, $oLoop, $oAunServer, $oPiconet);
 		$oLoop->addPeriodicTimer(1, function(\React\EventLoop\Timer\Timer $oTimer) use ($oPacketDispatcher, $oServices ) {
 			//Send any messages for the services
 			$aReplies = $oServices->getReplies();
@@ -271,6 +274,37 @@ EOF;
 			$oLoop
 		);
 	}
+
+	/**
+	 * Adds all the piconet handling services to the event loop
+	*/
+	public function piconetService(LoopInterface $oLoop,PacketDispatcher $oPacketDispatcher):PiconetHandler
+	{
+
+		//Add udp handling for AUN
+		$oPiconet = new UnixConnector($loop); 
+		$oPiconetHandler = new PiconetHandler($this->oLogger, $oServices, $oPacketDispatcher);
+		$oPiconet->on('data',function ($sMessage) use ($oPiconetHandler) {
+			$oPiconetHandler->onMessage($sMessage);
+		});
+		
+		$oPiconet->on('close',function ($sChunk) use ($oPiconetHandler) {
+			$oPiconetHandler->onClose($oPiconet);
+		});
+		$oPiconet->on('error', function(\Exception $e) use ($oPiconetHandler){
+			$oPiconetHandler->onError($e);
+		});
+		$oPiconet->on('connect', function() use ($oPiconetHandler){
+			$oPiconetHandler->onConnect();
+		});
+		$oPiconet->connect('udg://'.config::getVale('piconet_device'))->then(function (ConnectionInterface $oConnection) use ($oPiconetHandler){
+			$oPiconetHandler->onOpen($oConnection);
+		});
+
+		return $oPiconetHandler;
+
+	}
+
 
 	/** 
 	  * Seetup the Admin web interface service

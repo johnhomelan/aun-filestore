@@ -10,6 +10,7 @@ namespace HomeLan\FileStore\Encapsulation;
 
 use HomeLan\FileStore\Messages\EconetPacket; 
 use HomeLan\FileStore\WebSocket\Map as WebSocketMap; 
+use HomeLan\FileStore\Piconet\Map as PiconetMap; 
 use HomeLan\FileStore\Aun\Map as AunMap; 
 use config;
 
@@ -47,6 +48,9 @@ class EncapsulationTypeMap {
 		$iDstNetwork = $oPacket->getDestinationNetwork();
 		if(is_object(WebSocketMap::ecoAddrToSocket($iDstNetwork, $iDstStation))){
 			return 'WebSocket';
+		}
+		if(PiconetMap::networkKnown($iDstNetwork)){
+			return 'Piconet';
 		}
 		return 'AUN';
 	}

@@ -52,7 +52,7 @@ class Map {
 		}
 		$aLines = explode("\n",$sMap);
 		foreach($aLines as $sLine){
-			if(preg_match('/([0-9]{1-3})/',$sLine,$aMatches)>0){
+			if(preg_match('/([0-9]{1,3})/',$sLine,$aMatches)>0){
 				self::addDynamicRangeNetwork((int) $aMatches[1]);
 			}
 		}

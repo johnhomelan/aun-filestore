@@ -9,7 +9,7 @@ namespace HomeLan\FileStore\Piconet;
 
 use config;
 use Exception;
-use Ratchet\ConnectionInterface;
+use HomeLan\FileStore\Piconet\Handler;
 use \Psr\Log\LoggerInterface;
 /**
  * This class maps a which networks are accessed via the piconet interface (max 8 networks)
@@ -24,6 +24,9 @@ class Map {
  	*/
 	static array $aNetworks = [];
 
+
+	static Handler $oPiconetHandler;
+
 	static LoggerInterface $oLogger;
 
 	/**
@@ -31,9 +34,10 @@ class Map {
 	  *
 	  * @param string $sMap The text for the map file can be supplied as a string, this is intended largley for unit testing this function
 	*/
-	public static function init(LoggerInterface $oLogger, string $sMap=NULL): void
+	public static function init(LoggerInterface $oLogger, Handler $oPiconetHandler, string $sMap=NULL): void
 	{
 		self::$oLogger = $oLogger;
+		self::$oPiconetHandler = $oPiconetHandler;
 		if(is_null($sMap)){
 			if(!file_exists(config::getValue('piconetmap_file'))){
 				self::$oLogger->info("piconetmapper: The configuration files for the piconet map does not exist.");
@@ -43,7 +47,7 @@ class Map {
 		}
 		$aLines = explode("\n",$sMap);
 		foreach($aLines as $sLine){
-			if(preg_match('/([0-9]{1-3})/',$sLine,$aMatches)>0){
+			if(preg_match('/([0-9]{1,3})/',$sLine,$aMatches)>0){
 				self::addNetwork((int) $aMatches[1]);
 			}
 		}
@@ -56,7 +60,13 @@ class Map {
 		}
 	}
 
-
+	public static function ecoAddrToHandler(int $iNetwork,int $iStation):?Handler
+	{
+		if(in_array($iNetwork,self::$aNetworks)){
+			return self::$oPiconetHandler;
+		}
+		return NULL;
+	}
 	/**
 	  * Tests if a econet network is know to the map
 	  *

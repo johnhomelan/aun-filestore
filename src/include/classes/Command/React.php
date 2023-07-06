@@ -17,15 +17,17 @@ use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 use React\EventLoop\LoopInterface;
 use React\EventLoop\Factory as ReactFactory;
 use React\Datagram\Factory as DatagramFactory;
+use React\Socket\UnixConnector;
+use React\Socket\ConnectionInterface;
 
 use Ratchet\Server\IoServer;
 use Ratchet\Http\HttpServer;
 use Ratchet\WebSocket\WsServer;
-use Ratchet\Socket\UnixConnector;
 
 use HomeLan\FileStore\Services\ServiceDispatcher;
 use HomeLan\FileStore\WebSocket\Handler as WebSocketHandler;
 use HomeLan\FileStore\Piconet\Handler as PiconetHandler;
+use HomeLan\FileStore\Piconet\Map as PiconetMap;
 use HomeLan\FileStore\Aun\Map; 
 use HomeLan\FileStore\Aun\AunPacket; 
 use HomeLan\FileStore\Authentication\Security; 
@@ -114,11 +116,21 @@ class React extends Command {
 		
 		$this->oLogger->info("core: Using ".$oLoop::class." as the primary event loop handler");
 
+		//Create the AUN packet handler
 		$oAunServer = $this->aunService($oLoop, $oEncapsulationTypeMap);
-		$oPiconet = $this->piconetService($oLoop,$oPacketDispatcher);
-		$oPacketDispatcher = PacketDispatcher::create($oEncapsulationTypeMap, $oLoop, $oAunServer, $oPiconet);
 
+		//Setup the handler for all the services 
+		$oPacketDispatcher = PacketDispatcher::create($oEncapsulationTypeMap, $oLoop, $oAunServer);
+
+		//Setup the Piconet interface handler 
+		$oPiconet = $this->piconetService($oLoop,$oPacketDispatcher);
+		PiconetMap::init($oLogger, $oPiconet);
+
+
+		//Setup the websocket handler 
 		$this->websocketService($oLoop,$oPacketDispatcher);
+
+		//Setup the Web admin handler
 		$this->adminService($oLoop);
 
 		
@@ -145,7 +157,6 @@ class React extends Command {
 
 		//Enter main loop
 		$this->oLogger->debug("Starting primary loop.");
-
 		$oLoop->run();
 	}
 
@@ -278,27 +289,26 @@ EOF;
 	/**
 	 * Adds all the piconet handling services to the event loop
 	*/
-	public function piconetService(LoopInterface $oLoop,PacketDispatcher $oPacketDispatcher):PiconetHandler
+	public function piconetService(LoopInterface $oLoop, PacketDispatcher $oPacketDispatcher):PiconetHandler
 	{
 
-		//Add udp handling for AUN
-		$oPiconet = new UnixConnector($loop); 
-		$oPiconetHandler = new PiconetHandler($this->oLogger, $oServices, $oPacketDispatcher);
-		$oPiconet->on('data',function ($sMessage) use ($oPiconetHandler) {
-			$oPiconetHandler->onMessage($sMessage);
-		});
-		
-		$oPiconet->on('close',function ($sChunk) use ($oPiconetHandler) {
-			$oPiconetHandler->onClose($oPiconet);
-		});
-		$oPiconet->on('error', function(\Exception $e) use ($oPiconetHandler){
-			$oPiconetHandler->onError($e);
-		});
-		$oPiconet->on('connect', function() use ($oPiconetHandler){
-			$oPiconetHandler->onConnect();
-		});
-		$oPiconet->connect('udg://'.config::getVale('piconet_device'))->then(function (ConnectionInterface $oConnection) use ($oPiconetHandler){
+		$oPiconet = new UnixConnector($oLoop); 
+		$oPiconetHandler = new PiconetHandler($this->oLogger, $this->oServices, $oPacketDispatcher);
+		$oPiconet->connect('udg://'.config::getValue('piconet_device'))->then(function (ConnectionInterface $oConnection) use ($oPiconetHandler){
+
 			$oPiconetHandler->onOpen($oConnection);
+			$oPiconetHandler->onConnect();
+			
+
+			$oConnection->on('data',function ($sMessage) use ($oPiconetHandler) {
+				$oPiconetHandler->onMessage($sMessage);
+			});
+			$oConnection->on('close',function ($sChunk) use ($oPiconetHandler) {
+				$oPiconetHandler->onClose();
+			});
+			$oConnection->on('error', function(\Exception $e) use ($oPiconetHandler){
+				$oPiconetHandler->onError($e);
+			});
 		});
 
 		return $oPiconetHandler;

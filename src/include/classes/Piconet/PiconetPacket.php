@@ -111,6 +111,10 @@ class PiconetPacket implements EncapsulationInterface {
 				$sScout = $aPacket[2];
 				$sData = $aPacket[3];
 				break;
+			default:
+				$sData="";
+				$sScout="";
+				break;
 		}
 		$sRawScout = (string) base64_decode($sScout);
 
@@ -142,7 +146,7 @@ class PiconetPacket implements EncapsulationInterface {
 				$this->sData = substr($sRawScout,0,4);	
 				break;
 			case 'RX_TRANSMIT':
-				$sRawData = (string) base64_decode($sData);
+				$sRawData = "".(string) base64_decode($sData);
 				$this->sData = substr($sRawData,4,strlen($sRawData)-6);
 				break;
 		}

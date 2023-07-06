@@ -217,7 +217,7 @@ class ServiceDispatcher {
 	*/
 	public function sendPackets(ProviderInterface $oService): void
 	{
-		$oPacketDispatcher = PacketDispatcher::create($this->oEncapsulationTypeMap, $this->oLoop, $this->oAunServer, $this->oPiconetHandler);
+		$oPacketDispatcher = PacketDispatcher::create($this->oEncapsulationTypeMap, $this->oLoop, $this->oAunServer);
 		$aReplys = $oService->getReplies();
 		foreach($aReplys as $oPacket){
 			$oPacketDispatcher->sendPacket($oPacket);
@@ -261,18 +261,18 @@ class ServiceDispatcher {
 		}
 
 		//Free up timed out streaming ports by building a new list without timed out ports
-		$aPorts = [];
 		$aPortTimeLimits = [];
 		for($i=$this->iStreamPortStart;$i<($this->iStreamPortStart+self::MAX_STREAMS);$i++){
-			if(!array_key_exists($i,$this->aPorts)){
+			if(array_key_exists($i,$this->aPorts)){
 				if($this->aPortTimeLimits[$i]<time()){
 					//The stream port has NOT timed out
-					$aPorts[$i]=$this->aPorts[$i];
 					$aPortTimeLimits[$i]=$this->$aPortTimeLimits[$i];
+				}else{
+					//Timed out clear the port
+					unset($this->aPorts[$i]);
 				}
 			}
 		}
-		$this->aPorts = $aPorts;
 		$this->aPortTimeLimits = $aPortTimeLimits;
 	
 	}

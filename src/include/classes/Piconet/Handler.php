@@ -9,8 +9,7 @@
 */
 namespace HomeLan\FileStore\Piconet;
 
-use Ratchet\MessageComponentInterface;
-use Ratchet\ConnectionInterface;
+use React\Socket\ConnectionInterface;
 
 use HomeLan\FileStore\Messages\EconetPacket; 
 use HomeLan\FileStore\Services\ProviderInterface;
@@ -25,9 +24,8 @@ use config;
  *
  * @package core
 */
-class Handler implements MessageComponentInterface {
+class Handler {
 
-	private int $iConnectionSequence = 0;
 	private ConnectionInterface $oConnection;
 
 	public function __construct(private readonly \Psr\Log\LoggerInterface $oLogger,  private readonly ServiceDispatcher $oServices, private readonly PacketDispatcher $oPacketDispatcher) 
@@ -38,6 +36,9 @@ class Handler implements MessageComponentInterface {
 	public function onOpen(ConnectionInterface $oConnection):void
 	{
 		$this->oConnection = $oConnection;
+	}
+
+	public function onConnect(){
 		$this->oConnection->write('RESTART');
 		$this->oConnection->write('SET_STATION '.config::getValue('piconet_station'));
 		$this->oConnection->write('SET_MODE 1');
@@ -46,6 +47,7 @@ class Handler implements MessageComponentInterface {
 
 	public function onClose():void
 	{
+		$this->oConnection->write("STOP");
 	}
 
 	public function onMessage($sMessage):void
@@ -114,10 +116,10 @@ class Handler implements MessageComponentInterface {
 		}
 		switch($oPacket->getDestinationStation()){
 			case 255:
-				$this->oConnection->send("BCAST ".base64_encode($oPacket->getData()));
+				$this->oConnection->write("BCAST ".base64_encode($oPacket->getData()));
 				break;
 			default:
-				$this->oConnection->send("TX ".$oPacket->getDestinationStation()." ".$iDstNetwork." ".$oPacket->getFlags()." ".$oPacket->getPort()." ".base64_encode($oPacket->getData()));
+				$this->oConnection->write("TX ".$oPacket->getDestinationStation()." ".$iDstNetwork." ".$oPacket->getFlags()." ".$oPacket->getPort()." ".base64_encode($oPacket->getData()));
 				break;
 		}
 	}

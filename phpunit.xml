@@ -9,6 +9,8 @@
 <testsuites>
    <testsuite name="Project Test Suite">
             <directory>unit-tests/aunmap/</directory>
+            <directory>unit-tests/piconetmap/</directory>
+            <directory>unit-tests/wsmap/</directory>
             <directory>unit-tests/authplugins/</directory>
             <directory>unit-tests/protocol/</directory>
             <directory>unit-tests/vfs/</directory>

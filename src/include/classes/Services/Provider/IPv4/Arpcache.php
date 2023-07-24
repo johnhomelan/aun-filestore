@@ -12,6 +12,8 @@ use HomeLan\FileStore\Services\Provider\IPv4\Exceptions\ArpEntryNotFound as NotF
 
 use HomeLan\FileStore\Services\ProviderInterface;
 
+use config;
+
 class Arpcache 
 {
 	private array $aCache = [];

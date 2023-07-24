@@ -11,6 +11,8 @@ namespace HomeLan\FileStore\Services\Provider\IPv4;
 
 use HomeLan\FileStore\Services\ProviderInterface;
 
+use config;
+
 class Routes
 {
 

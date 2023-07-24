@@ -72,8 +72,8 @@ class Map {
 	*/
 	public static function webSocketToEconetAddress(ConnectionInterface $oSocket):?string 
 	{
-		if(array_key_exists($oSocket->resourceId,self::$aSocketList)){
-			return self::$aSocketList[$oSocket->resourceId]['network'].".".self::$aSocketList[$oSocket->resourceId]['station'];
+		if(array_key_exists(spl_object_id($oSocket),self::$aSocketList)){
+			return self::$aSocketList[spl_object_id($oSocket)]['network'].".".self::$aSocketList[spl_object_id($oSocket)]['station'];
 		}
 		return null;
 	}
@@ -121,7 +121,7 @@ class Map {
 					for($i=1;$i<254;$i++){
 						if(!array_key_exists($i,$aStations)){
 							self::$aDynamicNetworks[$iNetwork][$i]=$oSocket;
-							self::$aSocketList[$oSocket->resourceId] = ['network'=>$iNetwork, 'station'=>$i, 'socket'=>$oSocket];
+							self::$aSocketList[spl_object_id($oSocket)] = ['network'=>$iNetwork, 'station'=>$i, 'socket'=>$oSocket];
 							return $iNetwork.".".$i;
 						}
 					}
@@ -139,8 +139,8 @@ class Map {
 	{
 		foreach(self::$aDynamicNetworks as $iNetwork=>$aStations){
 			foreach($aStations as $iStation=>$oStationSocket){
-				if($oSocket->resourceId == $oStationSocket->resourceId){
-					unset(self::$aSocketList[$oSocket->resourceId]);
+				if(spl_object_id($oSocket) == spl_object_id($oStationSocket)){
+					unset(self::$aSocketList[spl_object_id($oSocket)]);
 					unset(self::$aDynamicNetworks[$iNetwork][$iStation]);
 					return TRUE;
 				}

@@ -18,15 +18,19 @@ class StreamIn {
 	private $fFailCallback;
 	private readonly int $iTimeout;
 	private readonly int $iNoPktTimeout;
+	private readonly string $sPath;
+	private readonly string $sUser;
 	private ?string $sData = null;
 
-	public function __construct(private readonly int $iBytes,callable $fRecivedPacket, callable $fSucessCallback, callable $fFailCallback,int $iTimeout=60)
+	public function __construct(private readonly int $iBytes,callable $fRecivedPacket, callable $fSucessCallback, callable $fFailCallback,int $iTimeout=60, string $sPath, string $sUser)
 	{
 		$this->fRecivedPacket = $fRecivedPacket;
 		$this->fSucessCallback = $fSucessCallback;
 		$this->fFailCallback = $fFailCallback;
 		$this->iTimeout = time() + $iTimeout;
 		$this->iNoPktTimeout = $iTimeout;
+		$this->sPath = $sPath;
+		$this->sUser = $sUser;
 	}
 
 	/** 
@@ -65,5 +69,15 @@ class StreamIn {
 			//Timed out 
 			($this->fFailCallback)("timeout");
 		}
+	}
+
+	public function getPath():string
+	{
+		return $this->sPath;
+	}
+	
+	public function getUser():string
+	{
+		return $this->sUser;
 	}
 }

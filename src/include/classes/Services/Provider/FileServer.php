@@ -173,6 +173,17 @@ class FileServer implements ProviderInterface{
 		unset ($oStream);
 	}
 
+	public function getStreams(): array
+	{
+		$aStreams = [];
+		foreach ($this->aStreamsIn as $iNework=>$aStations){
+			foreach($aStations as $iStation=>$oStream){
+				$aStreams[] = ['network'=>$iNetwork,'station'=>$iStation,'stream'=>$oStream];
+			}
+		}
+		return $aStreams;
+	}
+
 	public function houseKeeping(): void
 	{
 		$aStreamsToTest =  $this->aStreamsIn;
@@ -1354,7 +1365,10 @@ class FileServer implements ProviderInterface{
 					$oFailReply=$oFsRequest->buildReply();
 					$oFailReply->setError(0xff,"Timeout");
 					$this->addReplyToBuffer($oFailReply->buildEconetpacket());
-				}
+				},
+				$oFsHandle->getEconetPath(),
+				Security::getUser($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation())
+
 			)
 		);
 
@@ -1471,7 +1485,10 @@ class FileServer implements ProviderInterface{
 					$oFailReply=$oFsRequest->buildReply();
 					$oFailReply->setError(0xff,"Timeout");
 					$this->addReplyToBuffer($oFailReply->buildEconetpacket());
-				}
+				},
+				$sPath,
+				Security::getUser($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation())
+				
 			)
 		);
 		

@@ -10,7 +10,7 @@ use PHPUnit\Framework\TestCase;
 use Monolog\Logger;
 use HomeLan\FileStore\WebSocket\Map as WebSocketMap;
 use HomeLan\FileStore\Piconet\Handler;
-
+use Ratchet\ConnectionInterface;
 class websocketmapTest extends TestCase {
 
 	protected function setup(): void
@@ -32,4 +32,10 @@ class websocketmapTest extends TestCase {
 		
 	}
 
+	public function testallocateAddress()
+	{
+		$oConnection  = $this->getMockBuilder(ConnectionInterface::class)->getMock();
+		$sEconetAddr = WebSocketMap::allocateAddress($oConnection);
+		$this->assertIsString($sEconetAddr);
+	}
 }

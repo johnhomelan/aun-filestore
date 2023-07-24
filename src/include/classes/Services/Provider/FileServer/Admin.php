@@ -97,8 +97,7 @@ class Admin implements AdminInterface
 			case 'session':
 				return ['network'=>'int', 'station'=>'int', 'user'=>'string'];	
 			case 'stream':
-				return [];
-				//return ['network'=>'int', 'station'=>'int', 'user'=>'string', 'path'=>'string'];
+				return ['network'=>'int', 'station'=>'int', 'user'=>'string', 'path'=>'string'];
 			case 'user':
 				return ['plugin'=>'string', 'username'=>'string', 'priv'=>'string' , 'homedir'=>'string', 'bootopt'=>'int'];
 		}
@@ -131,7 +130,13 @@ class Admin implements AdminInterface
 				$aReturn = AdminEntity::createCollection($sType,$this->getEntityFields($sType),$aUserData,null,'username');
 				return $aReturn;
 			case 'stream':
-				return [];
+				$aStreams=$this->oProvider->getStreams();
+				$aSteamData = [];
+				foreach($aStreams as $aStream){
+					$aSteamData[] = ['network'=>$aStream['network'], 'station'=>$aStream['station'], 'user'=>$aStream['stream']->getUser(), 'path'=>$aStream['stream']->getPath()];
+				}
+				$aReturn = AdminEntity::createCollection($sType,$this->getEntityFields($sType),$aSteamData,null,'path');
+				return $aReturn;
 		}
 		return [];
 	}

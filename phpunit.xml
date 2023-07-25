@@ -14,6 +14,7 @@
             <directory>unit-tests/authplugins/</directory>
             <directory>unit-tests/protocol/</directory>
             <directory>unit-tests/vfs/</directory>
+            <directory>unit-tests/ipv4/</directory>
    </testsuite>
 </testsuites>
 

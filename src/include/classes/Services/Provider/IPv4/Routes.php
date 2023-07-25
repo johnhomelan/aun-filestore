@@ -31,12 +31,12 @@ class Routes
 			if(!file_exists(config::getValue('ipv4_routes_file'))){
 				return;
 			}
-			$sMap = file_get_contents(config::getValue('ipv4_routes_file'));
+			$sRoutes = file_get_contents(config::getValue('ipv4_routes_file'));
 		}
-		$aLines = explode("\n",$sMap);
+		$aLines = explode("\n",$sRoutes);
 		foreach($aLines as $sLine){
 			//Matchs the form "192.168.4.0/255.255.255.0 192.168.0.1", also matches "192.168.4.0/255.255.255.0 192.168.0.1 50" to allow the metric to be optional.
-			if(preg_match('/^([0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3})\/([0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3})\s+([0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3})\s+([0-9]+)?/',$sLine,$aMatches)>0){
+			if(preg_match('/^([0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3})\/([0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3})\s+([0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3})\s?+([0-9]+)?/',$sLine,$aMatches)>0){
 				if(array_key_exists(4,$aMatches)){
 					$this->addRoute($aMatches[1],$aMatches[2],$aMatches[3],$aMatches[4]);
 				}else{
@@ -53,7 +53,7 @@ class Routes
 	*/
 	public function addRoute(string $sIPv4NetworkAddr, string $sIPv4NetworkSubnet, string $sIPv4Via, int $iMetric):void
 	{
-		$this->aRoutes[$sIPv4NetworkAddr."/".$sIPv4NetworkSubnet] = ['network'=>$sIPv4NetworkAddr,'networkint'=>long2ip($sIPv4NetworkAddr),'subnet'=>$sIPv4NetworkAddr,'via'=>$sIPv4Via,'cidr'=>$this->subnetToCidr($sIPv4NetworkSubnet),'metric'=>$iMetric];
+		$this->aRoutes[] = ['network'=>$sIPv4NetworkAddr,'networkint'=>ip2long($sIPv4NetworkAddr),'subnet'=>$sIPv4NetworkAddr,'via'=>$sIPv4Via,'cidr'=>$this->subnetToCidr($sIPv4NetworkSubnet),'metric'=>$iMetric];
 	}
 
 	/**
@@ -72,10 +72,10 @@ class Routes
 		}
 		//Sort the routes (smallest cidr, followed by lowest metric for identical cidrs), if there are less than 2 routes this wont do anything
 		usort($aOrderedRoutes,function($aRouteA, $aRouteB){
-			if($aRouteA['cdir']!=$aRouteB['cdir']){
-				return ($aRouteA['cdir'] < $aRouteB['cdir']) ? -1 : 1;
+			if($aRouteA['cidr']!=$aRouteB['cidr']){
+				return ($aRouteA['cidr'] < $aRouteB['cidr']) ? 1 : -1;
 			}
-			return ($aRouteB['metric'] < $aRouteA['metric']) ? -1 : 1;
+			return ($aRouteB['metric'] < $aRouteA['metric']) ? 1 : -1;
 		});
 		return (count($aOrderedRoutes)>0) ? array_shift($aOrderedRoutes) : null;
 			
@@ -101,7 +101,7 @@ class Routes
  	 *
  	 * @param int $iIPAddr Ip address as a 32bit int, as provided by ip2long
  	 * @param int $iIpv4Network The network address as a 32bit int, as provided by ip2long
- 	 * @param int $iMask The cdir as a number betweeen 0-32
+ 	 * @param int $iMask The cidr as a number betweeen 0-32
  	*/	 
 	private function networkContains(int $iIPAddr,int $iIpv4Network,int $iMask):bool
 	{
@@ -111,9 +111,10 @@ class Routes
 		}
 
 
-		if ($iMask < 0 || $iMask > 32) {
+		if ($iMask > 0 || $iMask < 32) {
 			$iBitmask = -1 << (32 - $iMask);
-			
+			$iIpv4Network &= $iBitmask; # nb: in case the supplied subnet wasn't correctly aligned
+			return ($iIPAddr & $iBitmask) == $iIpv4Network;
 		}
 		return false;
 	}

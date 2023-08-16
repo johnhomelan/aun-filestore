@@ -11,6 +11,7 @@ namespace HomeLan\FileStore\Services\Provider\IPv4;
 
 use HomeLan\FileStore\Services\ProviderInterface;
 use HomeLan\FileStore\Services\Provider\IPv4\Exceptions\InterfaceNotFound as NotFoundException;
+use config;
 
 class Interfaces
 {
@@ -40,7 +41,7 @@ class Interfaces
 	*/  	
 	public function addInterface(int $iNetwork, int $iStation, string $sIP, string $sSubnetMask)
 	{
-		$this->aInterfaces[] = ['network'=>$iNetwork,'station'=>$iStation,'ipaddr'=>$sIP,'ipint'=>ip2long($sIP),'mask'=>$sSubnetMask,'cidr'=>$this->subnetToCidr($sSubnetMask)];
+		$this->aInterfaces[$sIP] = ['network'=>$iNetwork,'station'=>$iStation,'ipaddr'=>$sIP,'ipint'=>ip2long($sIP),'mask'=>$sSubnetMask,'cidr'=>$this->subnetToCidr($sSubnetMask)];
 	}
 
 	/**
@@ -67,6 +68,11 @@ class Interfaces
 			}
 		}
 		throw new NotFoundException("No interface has a subnet that can directly reach ".$sIP);
+	}
+
+	public function isInterfaceIP($sIP):bool
+	{
+		return array_key_exists($sIP,$this->aInterfaces);
 	}
 
 	/**

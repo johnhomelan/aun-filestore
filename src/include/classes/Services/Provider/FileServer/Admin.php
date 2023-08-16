@@ -16,6 +16,9 @@ use HomeLan\FileStore\Authentication\Security;
 
 class Admin implements AdminInterface 
 {
+
+	private bool $bEnabled = true;
+
 	public function __construct(private readonly ProviderInterface $oProvider)
  {
  }
@@ -50,7 +53,7 @@ class Admin implements AdminInterface
 	 */  
 	public function isDisabled(): bool
 	{
-		return false;
+		return !$this->bEnabled;
 	}
 
 	/**
@@ -59,6 +62,9 @@ class Admin implements AdminInterface
 	*/ 
 	public function setDisabled(): void
 	{
+		$oServices = ServiceDispatcher::create();
+		$oServices->disableService($this->oProvider);
+		$this->bEnabled = false;
 	}
 
 	/**
@@ -67,6 +73,9 @@ class Admin implements AdminInterface
 	*/
 	public function setEnabled(): void
 	{
+		$oServices = ServiceDispatcher::create();
+		$oServices->enableService($this->oProvider);
+		$this->bEnabled = true;
 	}
 
 	/**
@@ -75,7 +84,11 @@ class Admin implements AdminInterface
 	*/ 
 	public function getStatus(): string
 	{
-		return "On-line";
+		if($this->bEnabled){
+			return "On-line";
+		}else{
+			return "Disabled";
+		}
 	}
 
 	/**

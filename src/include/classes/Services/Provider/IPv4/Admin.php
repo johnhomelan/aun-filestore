@@ -12,10 +12,12 @@ namespace HomeLan\FileStore\Services\Provider\IPv4;
 use HomeLan\FileStore\Services\Provider\AdminInterface;
 use HomeLan\FileStore\Services\Provider\AdminEntity;
 use HomeLan\FileStore\Services\ProviderInterface;
+use HomeLan\FileStore\Services\ServiceDispatcher;
 
 class Admin implements AdminInterface 
 {
 
+	private bool $bEnabled = true;
 
 	public function __construct(private readonly ProviderInterface $oProvider)
  	{
@@ -45,7 +47,7 @@ class Admin implements AdminInterface
 	 */  
 	public function isDisabled(): bool
 	{
-		return false;
+		return !$this->bEnabled;
 	}
 
 	/**
@@ -54,6 +56,9 @@ class Admin implements AdminInterface
 	*/ 
 	public function setDisabled(): void
 	{
+		$oServices = ServiceDispatcher::create();
+		$oServices->disableService($this->oProvider);
+		$this->bEnabled = false;
 	}
 
 	/**
@@ -62,6 +67,9 @@ class Admin implements AdminInterface
 	*/
 	public function setEnabled(): void
 	{
+		$oServices = ServiceDispatcher::create();
+		$oServices->enableService($this->oProvider);
+		$this->bEnabled = true;
 	}
 
 	/**
@@ -70,7 +78,11 @@ class Admin implements AdminInterface
 	*/ 
 	public function getStatus(): string
 	{
-		return "On-line";
+		if($this->bEnabled){
+			return "On-line";
+		}else{
+			return "Disabled";
+		}
 	}
 
 	/**
@@ -90,8 +102,8 @@ class Admin implements AdminInterface
  	{
      		return match ($sType) {
          		'arp' => ['network'=>'int', 'station'=>'int', 'ipv4'=>'string', 'timeout'=>'int'],
-			'interfaces'=>['network'=>'int', 'station'=>'int', 'ipv4'=>'string', 'subnet'=>'string'],
-			'routes'=>['network'=>'int','ipv4'=>'string', 'subnet'=>'string','metric'=>'int'],
+			'interfaces'=>['network'=>'int', 'station'=>'int', 'ipaddr'=>'string', 'mask'=>'string'],
+			'routes'=>['network'=>'string','subnet'=>'string','gw'=>'string','metric'=>'int'],
          	default => [],
      		};
  	}
@@ -104,10 +116,19 @@ class Admin implements AdminInterface
 	{
 		switch($sType){
 			case 'arp':
-				//$aJobs = $this->oProvider->getJobs();
-				//$aReturn = AdminEntity::createCollection($sType,$this->getEntityFields($sType),$aJobs,fn($aRow) => $aRow['network'].'_'.$aRow['station']);
-				//return $aReturn;
-				break;
+				$aArpEntries = $this->oProvider->getArpEntries();
+				$aReturn = AdminEntity::createCollection($sType,$this->getEntityFields($sType),$aArpEntries,null,'ipv4');
+				return $aReturn;
+			case 'interfaces':
+				$aInterfaces = $this->oProvider->getInterfaces();
+				$aReturn = AdminEntity::createCollection($sType,$this->getEntityFields($sType),$aInterfaces,null,'ipaddr');
+				return $aReturn;
+			case 'routes':
+				$aRoutes = $this->oProvider->getRoutes();
+				$aReturn = AdminEntity::createCollection($sType,$this->getEntityFields($sType),$aRoutes,null,'network');
+				return $aReturn;
+	
+	
 		}
 		return [];
 	}

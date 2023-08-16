@@ -30,6 +30,7 @@ class ServiceDispatcher {
 	private ?\React\EventLoop\LoopInterface $oLoop = null;
 	private ?\React\Datagram\Socket $oAunServer = null;
 	private ?PiconetHandler $oPiconetHandler = null;
+	private array $aProviders = [];
 	private array $aPorts = [];
 	private array $aReplies = [];
 	private int $iStreamPortStart=20;
@@ -90,8 +91,16 @@ class ServiceDispatcher {
 	 */
 	public function addService(ProviderInterface $oService): void
 	{
+		if(in_array($oService, $this->aProviders)){
+			throw new Exception("Service has already been added.");
+		}
+
+		$this->aProviders[] = $oService;
+
+		//Start dealing with the ports needed for a service
 		$aPorts = $oService->getServicePorts();
 
+		//Check the service is not regisitered
 		//Check if any of the ports the service uses are in use
 		foreach($aPorts as $iPort){
 			if(array_key_exists($iPort,$this->aPorts)){
@@ -101,9 +110,7 @@ class ServiceDispatcher {
 
 		//Add the service for all the ports it provides service via
 		$oService->registerService($this);
-		foreach($aPorts as $iPort){
-			$this->aPorts[$iPort]=$oService;
-		}
+		$this->enableService($oService);
 	}
 
 	/**
@@ -112,13 +119,7 @@ class ServiceDispatcher {
 	*/
 	public function getServices(): array
 	{
-		$aReturn=[];
-		foreach($this->aPorts as $oService){
-			if(!in_array($oService,$aReturn)){
-				$aReturn[] = $oService;
-			}
-		}
-		return $aReturn;
+		return $this->aProviders;
 	}
 
 	public function getServiceByPort(int $iPort): ?ProviderInterface
@@ -248,6 +249,38 @@ class ServiceDispatcher {
 			unset($this->aAckEvents[$oEconetPacket->getSourceNetwork()][$oEconetPacket->getSourceStation()]);
 			($fCallable)($oPacket);
 		}
+	}
+
+	/** 
+	 * Disables a service from receiving packets on thier service ports
+	 * 
+	*/ 	
+	public function disableService(ProviderInterface $oService):void
+	{
+		$aPorts = $oService->getServicePorts();
+
+		foreach($aPorts as $iPort){
+			unset($this->aPorts[$iPort]);
+		}
+
+	}
+
+	/** 
+	 * Enables a service letting it receive packets on thier service ports
+	 * 
+	*/ 	
+	public function enableService(ProviderInterface $oService):void
+	{
+		if(!in_array($oService, $this->aProviders)){
+			return;
+		}
+
+		$aPorts = $oService->getServicePorts();
+
+		foreach($aPorts as $iPort){
+			$this->aPorts[$iPort]=$oService;
+		}
+
 	}
 
 	/**

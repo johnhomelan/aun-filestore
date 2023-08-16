@@ -63,7 +63,7 @@ class PrintServer implements ProviderInterface {
 	*/
 	public function getServicePorts(): array
 	{
-		return [0xA0, 0xD2];
+		return [0x9F, 0xD1];
 	}
 
 	/** 

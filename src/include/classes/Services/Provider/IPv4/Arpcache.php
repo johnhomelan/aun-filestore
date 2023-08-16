@@ -79,7 +79,7 @@ class Arpcache
 	{
 		$aReturn = [];
 		foreach($this->aCache as $aArp){
-			$aReturn[] = $aArp;
+			$aReturn[] = ['network'=>$aArp['network'], 'station'=>$aArp['station'], 'ipv4'=>$aArp['ip'], 'timeout'=>$aArp['timeout']-time()];
 		}
 		return $aReturn;
 	}

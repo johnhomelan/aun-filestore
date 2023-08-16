@@ -17,7 +17,10 @@ use Exception;
 class ArpRequest extends Request {
 
 
-	protected $sIPv4Addr = NULL;
+	private ?string $sSourceIP = NULL;
+	private ?string $sIPv4Addr = NULL;
+	private int $iSourceStation;
+	private int $iSourceNetwork;
 
 	//The types use by econet to presesent the std arp operations
 	private  array $aArpTypes = [0x0a=>'ECOTYPE_ARP',0x09=>'ECOTYPE_REVARP',0x20=>'ECOTYPE_ARP_REPLY',0x21=>'ECOTYPE_ARP_REQUEST',0x22=>'ECOTYPE_ARP_REPLY',0x23=>'ECOTYPE_REVARP_REQUEST',0x24=>'ECOTYPE_REVARP_REPLY'];
@@ -28,55 +31,54 @@ class ArpRequest extends Request {
 	{
 		parent:: __construct($oEconetPacket, $oLogger);
 		$this->decode($oEconetPacket->getData());
+		$this->iSourceStation($oEconetPacket->setSourceStation());
+		$this->iSourceNetwork($oEconetPacket->setSourceNetwork());
 	}	
 
 	/**
-	  * Decodes an AUN packet 
+	  * Decodes an arp request
 	  *
 	*/
 	public function decode(string $sBinaryString): void
 	{
 
-		switch($this->aArpTypes[$this->getFlags()]){
-			case 'ECOTYPE_ARP':
-				break;
-			case 'ECOTYPE_REVARP':
+		switch($this->getFlags()){
+			case 0xA1: //Arp request type
+				//The first 4 bytes is the ipv4 addr of the requesting host
+				$this->sSourceIP = inet_ntop($sBinaryString[0].$sBinaryString[1].$sBinaryString[2].$sBinaryString[3]);
+				//The second 4 bytes is the ipv4 address the remote host is requesting the layer address for 
+				$this->sIPv4Addr = inet_ntop($sBinaryString[4].$sBinaryString[5].$sBinaryString[6].$sBinaryString[7]);
 				break;
 		}
-		//Read the header
-
-		//Read the reply port type 1 byte unsigned int
-		$aHeader=unpack('C',$sBinaryString);
-		$this->iReplyPort = $aHeader[1];
-		$sBinaryString = substr($sBinaryString,1);
-		
-		//Read the function code 1 byte unsigned int
-		$aHeader=unpack('C',$sBinaryString);
-		$this->iFunction = $aHeader[1];
-		$sBinaryString = substr($sBinaryString,1);
-	
-		//Read the urd code 1 byte unsigned int
-		$aHeader=unpack('C',$sBinaryString);
-		$this->iUrd = $aHeader[1];
-		$sBinaryString = substr($sBinaryString,1);
-
-		//Read the csd code 1 byte unsigned int
-		$aHeader=unpack('C',$sBinaryString);
-		$this->iCsd = $aHeader[1];
-		$sBinaryString = substr($sBinaryString,1);
-
-		//Read the lib code 1 byte unsigned int
-		if(strlen($sBinaryString)>0){
-			$aHeader=unpack('C',$sBinaryString);
-			$this->iLib = $aHeader[1];
-			$sBinaryString = substr($sBinaryString,1);
-		}
-	
-		//The reset is data
-		$this->sData = $sBinaryString;
 		
 	}
 
+	public function getReplyPort():int
+	{
+		return 0xd2;
+	}
+
+	public function getSourceIP():string
+	{
+		return $this->sSourceIP;
+	}
+
+	public function getRequestedIP():string
+	{
+		return $this->sIPv4Addr;
+	}
+
+	public function getSourceStation():int
+	{
+		return $this->iSourceStation;
+	}
+
+	public function getSourceNetwork():int
+	{
+		return $this->iSourceNetwork;
+	}
+
+	
 	public function buildReply(): \HomeLan\FileStore\Messages\ArpReply
 	{
 		return new ArpReply($this);

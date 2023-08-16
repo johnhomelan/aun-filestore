@@ -36,11 +36,11 @@ class Map {
 	static $oLogger;
 
 	/**
-  * Loads the aun map from the configured aun map file
-  *
-  * @param string $sMap The text for the map file can be supplied as a string, this is intended largley for unit testing this function
-  */
- public static function init(\Psr\Log\LoggerInterface $oLogger, string $sMap=NULL): void
+	  * Loads the aun map from the configured aun map file
+	  *
+	  * @param string $sMap The text for the map file can be supplied as a string, this is intended largley for unit testing this function
+	 */
+	 public static function init(\Psr\Log\LoggerInterface $oLogger, string $sMap=NULL): void
 	{
 		self::$oLogger = $oLogger;
 		if(is_null($sMap)){
@@ -101,11 +101,11 @@ class Map {
 	}
 
 	/**
-  * Converts a econet network and station number to a ip address and port 
-  *
-  * @return string ip address
-  */
- public static function ecoAddrToIpAddr(int $iNetworkNumber,int $iStationNumber):string
+	  * Converts a econet network and station number to a ip address and port 
+	  *
+	  * @return string ip address
+	 */
+	public static function ecoAddrToIpAddr(int $iNetworkNumber,int $iStationNumber):string
 	{
 		//Test to see if we are in the cached index
 		$sIndex = array_search($iNetworkNumber.'.'.$iStationNumber,Map::$aIPLookupCache);
@@ -133,11 +133,11 @@ class Map {
 	}
 
 	/**
-  * Tests if a econet network is know to the aunmap
-  *
-  * @return boolean
-  */
- public static function networkKnown(int $iNetworkNumber):bool
+	  * Tests if a econet network is know to the aunmap
+	  *
+	  * @return boolean
+	*/
+	public static function networkKnown(int $iNetworkNumber):bool
 	{
 		//Check subnet map
 		if(array_key_exists($iNetworkNumber,Map::$aSubnetMap)){

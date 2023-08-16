@@ -40,9 +40,13 @@ class ArpReply extends Reply {
 	}
 
 
+
 	public function buildEconetpacket(): \HomeLan\FileStore\Messages\EconetPacket
 	{
-		
+		$this->iFlags = 0xa2; //Arp reply type
+		$this->sPkt .= inet_pton($this->oRequest->getRequestedIP());
+		$this->sPkt .= inet_pton($this->oRequest->getSourceIP());
+	
 		return parent::buildEconetpacket();
 	}
 }

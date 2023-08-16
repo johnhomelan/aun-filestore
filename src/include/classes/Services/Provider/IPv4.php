@@ -124,7 +124,13 @@ class IPv4 implements ProviderInterface {
 		switch($oPacket->getFlags()){
 			case 0x1:
 				//Regular IPv4 Frame
-				$oIPv4 = new IPv4Request($oPacket,$this->oLogger);
+				try {
+					$oIPv4 = new IPv4Request($oPacket,$this->oLogger);
+				}catch(\Exception $oException){
+					//If the IPv4 packet is invalid log an perform no more processing on it (effetively dropping the packet)
+					$this->oLogger->debug($oException->getMessage());
+					return;
+				}
 
 				//If the IP is for this machine respond
 				if($this->oInterfaceTable->isInterfaceIP($oIPv4->getDstIP())){

@@ -25,7 +25,7 @@ class Routes
  	 *
 	 * Will load all the routes from a string (this is mostly used for unit testing), or from the routes config file
 	 */
-	public function __construct(private readonly ProviderInterface $oProvider,?string $sRoutes)
+	public function __construct(private readonly ProviderInterface $oProvider,?string $sRoutes=null)
  	{
 		if(is_null($sRoutes)){
 			if(!file_exists(config::getValue('ipv4_routes_file'))){

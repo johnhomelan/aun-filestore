@@ -37,6 +37,11 @@ class IPv4 implements ProviderInterface {
 
 	protected $oLogger;
 
+	private array $aPacketQueue = [];
+	private Arpcache $oArpTable;
+	private Interfaces $oInterfaceTable;
+	private Routes $oRoutingTable;
+
 	//Default time to hold IPv4 packets, waiting for an apr response in seconds 
 	const DEFAULT_ARP_WAIT_TIMEOUT = 30;
 
@@ -174,7 +179,7 @@ class IPv4 implements ProviderInterface {
 								//
 								$oPacket->setSourceNetwork($aInterface['network']);
 								$oPacket->setSourceStation($aInterface['station']);
-								this->queuePacketWaitingOnArp($aRoute['via'],$oPacket);
+								$this->queuePacketWaitingOnArp($aRoute['via'],$oPacket);
 							}
 						}catch(InterfaceNotFound $oNotfound){
 							//There is no interface with an ip in the same subnet as the router.
@@ -192,10 +197,10 @@ class IPv4 implements ProviderInterface {
 				//     NB: We don't care if we made an arp request this is a response to, as promiscuous arp is a thing. 
 
 				$oArpIsAt = new ArpIsAt($oPacket,$this->oLogger);
-				$this->oArpTable->addEntry($oArpIsAt->getSourceNetwork(),$oArpIsAt->getSourceStation(),$oArpAsAt->getSourceIP());
+				$this->oArpTable->addEntry($oArpIsAt->getSourceNetwork(),$oArpIsAt->getSourceStation(),$oArpIsAt->getSourceIP());
 				
 				//Dispatch any IPv4 Packets waiting on the arp response for this IP
-				$this->dequeueWaitingPackets($oArpAsAt->getSourceIP());
+				$this->dequeueWaitingPackets($oArpIsAt->getSourceIP());
 				break;	
 		}
 	}
@@ -204,7 +209,7 @@ class IPv4 implements ProviderInterface {
 	public function registerService(ServiceDispatcher $oServiceDispatcher): void
 	{
 		$_this = $this;
-		$this->oServiceDispatcher->addHousingKeepingTask(function() use ($_this){
+		$oServiceDispatcher->addHousingKeepingTask(function() use ($_this){
 			$_this->houseKeeping();
 		});
 	}
@@ -228,7 +233,7 @@ class IPv4 implements ProviderInterface {
 		}
 	}
 
-	public function dequeueWatingPackets(string $sIP):void
+	public function dequeueWaitingPackets(string $sIP):void
 	{
 		if(array_key_exists($sIP,$this->aPacketQueue)){
 			$aAddress = $this->oArpTable->getNetworkAndStation($sIP);

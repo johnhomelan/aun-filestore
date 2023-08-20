@@ -30,7 +30,7 @@ class Interfaces
 		foreach($aLines as $sLine){
 			//Matchs the form "network station ip mask" e.g. "1 4 192.168.0.4 255.255.255.0"
 			if(preg_match('/^([0-9]{1,3})\s+([0-9]{1,3})\s+([0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3})\s+([0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3})/',$sLine,$aMatches)>0){
-				$this->addInterface($aMatches[1],$aMatches[2],$aMatches[3],$aMatches[4]);
+				$this->addInterface((int) $aMatches[1],(int) $aMatches[2],$aMatches[3],$aMatches[4]);
 			}
 		}
 	 }
@@ -93,7 +93,7 @@ class Interfaces
 		}
 
 
-		if ($iMask > 0 || $iMask < 32) {
+		if ($iMask > 0 AND $iMask < 32) {
 			$iBitmask = -1 << (32 - $iMask);
 			$iIpv4Network &= $iBitmask; # nb: in case the supplied subnet wasn't correctly aligned
 			return ($iIPAddr & $iBitmask) == $iIpv4Network;
@@ -113,8 +113,17 @@ class Interfaces
 		}
 		$iSubnet = ip2long($sSubnetMask);
 		$base = ip2long('255.255.255.255');
-  		return 32-log(($iSubnet ^ 4294967295)+1,2);
+  		return 32- (int) log(($iSubnet ^ 4294967295)+1,2);
 	}
 
+	/**
+	 * Get the provider using this instance of the interfaces class
+	 *
+	*/ 	
+	public function getProvider():ProviderInterface
+	{
+		return $this->oProvider;
+	}
+	
 	
 }

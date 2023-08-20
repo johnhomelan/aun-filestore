@@ -22,7 +22,7 @@ class StreamIn {
 	private readonly string $sUser;
 	private ?string $sData = null;
 
-	public function __construct(private readonly int $iBytes,callable $fRecivedPacket, callable $fSucessCallback, callable $fFailCallback,int $iTimeout=60, string $sPath, string $sUser)
+	public function __construct(private readonly int $iBytes,callable $fRecivedPacket, callable $fSucessCallback, callable $fFailCallback,int $iTimeout, string $sPath, string $sUser)
 	{
 		$this->fRecivedPacket = $fRecivedPacket;
 		$this->fSucessCallback = $fSucessCallback;

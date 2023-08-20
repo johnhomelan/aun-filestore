@@ -19,20 +19,13 @@ class ArpIsAt extends Request {
 
 	private ?string $sSourceIP = NULL;
 	private ?string $sRespodingToIP = NULL;
-	private int $iSourceStation;
-	private int $iSourceNetwork;
 
-	//The types use by econet to presesent the std arp operations
-	private  array $aArpTypes = [0x0a=>'ECOTYPE_ARP',0x09=>'ECOTYPE_REVARP',0x20=>'ECOTYPE_ARP_REPLY',0x21=>'ECOTYPE_ARP_REQUEST',0x22=>'ECOTYPE_ARP_REPLY',0x23=>'ECOTYPE_REVARP_REQUEST',0x24=>'ECOTYPE_REVARP_REPLY'];
-
-	private array $aArpOps = [1=>'ARPOP_REQUEST',2=>'ARPOP_REPLY',3=>'ARPOP_RREQUEST',4=>'ARPOP_RREPLY',8=>'ARPOP_InREQUEST',9=>'ARPOP_InREPLY',10=>'ARPOP_NAK'];
-	
 	public function __construct($oEconetPacket, \Psr\Log\LoggerInterface $oLogger)
 	{
 		parent:: __construct($oEconetPacket, $oLogger);
 		$this->decode($oEconetPacket->getData());
-		$this->iSourceStation($oEconetPacket->setSourceStation());
-		$this->iSourceNetwork($oEconetPacket->setSourceNetwork());
+		$this->iSourceStation = $oEconetPacket->setSourceStation();
+		$this->iSourceNetwork = $oEconetPacket->setSourceNetwork();
 	}	
 
 	/**
@@ -71,6 +64,11 @@ class ArpIsAt extends Request {
 	public function getSourceNetwork():int
 	{
 		return $this->iSourceNetwork;
+	}
+
+	public function getDestinationIp():string
+	{
+		return $this->sRespodingToIP;
 	}
 
 }

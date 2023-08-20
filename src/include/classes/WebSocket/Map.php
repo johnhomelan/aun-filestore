@@ -29,7 +29,7 @@ class Map {
 
 	
 	/**
- 	 * @var array<string, mixed[]>>
+ 	 * @var array<int, mixed[]>>
  	*/
 	static array $aSocketList= [];
 

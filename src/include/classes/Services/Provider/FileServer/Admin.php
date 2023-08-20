@@ -12,16 +12,18 @@ namespace HomeLan\FileStore\Services\Provider\FileServer;
 use HomeLan\FileStore\Services\Provider\AdminInterface;
 use HomeLan\FileStore\Services\Provider\AdminEntity;
 use HomeLan\FileStore\Services\ProviderInterface;
+use HomeLan\FileStore\Services\Provider\FileServer;
 use HomeLan\FileStore\Authentication\Security; 
+use HomeLan\FileStore\Services\ServiceDispatcher;
 
 class Admin implements AdminInterface 
 {
 
 	private bool $bEnabled = true;
 
-	public function __construct(private readonly ProviderInterface $oProvider)
- {
- }
+	public function __construct(private readonly FileServer $oProvider)
+	{
+	}
 
 
 	public function getProvider(): ProviderInterface

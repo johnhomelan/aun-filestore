@@ -9,6 +9,7 @@
 namespace HomeLan\FileStore\Services\Provider\IPv4; 
 
 
+use HomeLan\FileStore\Services\Provider\IPv4;
 use HomeLan\FileStore\Services\Provider\AdminInterface;
 use HomeLan\FileStore\Services\Provider\AdminEntity;
 use HomeLan\FileStore\Services\ProviderInterface;
@@ -19,7 +20,7 @@ class Admin implements AdminInterface
 
 	private bool $bEnabled = true;
 
-	public function __construct(private readonly ProviderInterface $oProvider)
+	public function __construct(private readonly IPv4 $oProvider)
  	{
 	 }
 

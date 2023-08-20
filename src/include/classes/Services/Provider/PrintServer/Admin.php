@@ -12,13 +12,15 @@ namespace HomeLan\FileStore\Services\Provider\PrintServer;
 use HomeLan\FileStore\Services\Provider\AdminInterface;
 use HomeLan\FileStore\Services\Provider\AdminEntity;
 use HomeLan\FileStore\Services\ProviderInterface;
+use HomeLan\FileStore\Services\ServiceDispatcher;
+use HomeLan\FileStore\Services\Provider\PrintServer;
 
 class Admin implements AdminInterface 
 {
 
 	private bool $bEnabled = true;
 
-	public function __construct(private readonly ProviderInterface $oProvider)
+	public function __construct(private readonly PrintServer $oProvider)
  	{
 	 }
 

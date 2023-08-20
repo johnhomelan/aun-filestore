@@ -26,7 +26,7 @@ class ArpReply extends Reply {
 
 	protected ?int $iArpResponseStation = NULL;
 
-	protected ?string iArpResponseIPv4 = NULL;
+	protected ?string $iArpResponseIPv4 = NULL;
 
 	public function	setHwAddr(int $iNetwork, int $iStation)
 	{

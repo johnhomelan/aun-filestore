@@ -22,7 +22,7 @@ class Arpcache
 
 	public function __construct(private readonly ProviderInterface $oProvider)
  	{
-	 }
+	}
 
 	/**
 	 * Adds and arp entry to the cache 
@@ -104,6 +104,15 @@ class Arpcache
 		}
 
 		$this->aCache = $aNewCache;
+	}
+
+	/**
+	 * Get the provider using this instance of the arp cache
+	 *
+	*/ 	
+	public function getProvider():ProviderInterface
+	{
+		return $this->oProvider;
 	}
 	
 

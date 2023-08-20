@@ -38,7 +38,7 @@ class Routes
 			//Matchs the form "192.168.4.0/255.255.255.0 192.168.0.1", also matches "192.168.4.0/255.255.255.0 192.168.0.1 50" to allow the metric to be optional.
 			if(preg_match('/^([0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3})\/([0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3})\s+([0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3})\s?+([0-9]+)?/',$sLine,$aMatches)>0){
 				if(array_key_exists(4,$aMatches)){
-					$this->addRoute($aMatches[1],$aMatches[2],$aMatches[3],$aMatches[4]);
+					$this->addRoute($aMatches[1],$aMatches[2],$aMatches[3],(int) $aMatches[4]);
 				}else{
 					$this->addRoute($aMatches[1],$aMatches[2],$aMatches[3],self::DEFAULT_ENTRY_METRIC);
 				}
@@ -111,7 +111,7 @@ class Routes
 		}
 
 
-		if ($iMask > 0 || $iMask < 32) {
+		if ($iMask > 0 AND $iMask < 32) {
 			$iBitmask = -1 << (32 - $iMask);
 			$iIpv4Network &= $iBitmask; # nb: in case the supplied subnet wasn't correctly aligned
 			return ($iIPAddr & $iBitmask) == $iIpv4Network;
@@ -131,7 +131,16 @@ class Routes
 		}
 		$iSubnet = ip2long($sSubnetMask);
 		$base = ip2long('255.255.255.255');
-  		return 32-log(($iSubnet ^ 4294967295)+1,2);
+  		return 32- (int) log(($iSubnet ^ 4294967295)+1,2);
 	}
 
+	/**
+	 * Get the provider using this instance of routes
+	 *
+	*/ 	
+	public function getProvider():ProviderInterface
+	{
+		return $this->oProvider;
+	}
+	
 }

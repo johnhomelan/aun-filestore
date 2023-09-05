@@ -40,5 +40,6 @@ safe_define('CONFIG_vfs_default_disc_size',0x9000);
 
 safe_define('CONFIG_vfs_plugin_localdfsssd_root','/var/lib/aun-filestore-root');
 safe_define('CONFIG_vfs_plugin_localadfsadl_root','/var/lib/aun-filestore-root');
+safe_define('CONFIG_vfs_plugin_localadfshd_root','/var/lib/aun-filestore-root');
 
 safe_define('CONFIG_print_server_spool_dir','/tmp/econetprint');

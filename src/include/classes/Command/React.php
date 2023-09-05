@@ -357,7 +357,7 @@ EOF;
 				$sfResponse = $oKernel->handle($sfRequest);
 			}catch(NotFoundHttpException){
 				$oLogger->info("Admin page not found (".$oRequest->getUri()->getPath().")");
-				return  new  \React\Http\Response(
+				return  new  \React\Http\Message\Response(
 						404,
 						[],
 						"Page \"".$oRequest->getUri()->getPath()."\" not found.");
@@ -365,7 +365,7 @@ EOF;
 				$oLogger->info("Error: ".$oException->getMessage());
 				throw $oException;
 			}
-			$oResponse = new \React\Http\Response(
+			$oResponse = new \React\Http\Message\Response(
 						200,
 						$sfResponse->headers->all(),
 						$sfResponse->getContent());
@@ -374,7 +374,7 @@ EOF;
 		};
 
 		$oHttpSocket = new \React\Socket\Server(config::getValue('webadmin_listen_address').':'.config::getValue('webadmin_listen_port'),$oLoop);
-		$oHttpServer = new \React\Http\Server($callback);
+		$oHttpServer = new \React\Http\HttpServer($callback);
 		$oHttpServer->listen($oHttpSocket);
 	}
 

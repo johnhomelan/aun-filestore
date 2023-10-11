@@ -12,7 +12,7 @@ use HomeLan\FileStore\Vfs\Vfs;
 use HomeLan\FileStore\Vfs\DirectoryEntry;
 use HomeLan\FileStore\Vfs\FileDescriptor;
 use HomeLan\FileStore\Vfs\FilePath;
-use HomeLan\Retro\Acorn\Disk\AdfsHDReader;
+use HomeLan\Retro\Acorn\Disk\AdfsReaderHD;
 use config; 
 
 /**
@@ -62,7 +62,7 @@ class AdfsHD implements PluginInterface {
 	protected static function _getImageReader($sImageFile)
 	{
 		if(!array_key_exists($sImageFile,AdfsHD::$aImageReaders)){
-			AdfsHD::$aImageReaders[$sImageFile] = new AdfsHDReader($sImageFile);
+			AdfsHD::$aImageReaders[$sImageFile] = new AdfsReaderHD($sImageFile);
 		}
 		return AdfsHD::$aImageReaders[$sImageFile];
 	}

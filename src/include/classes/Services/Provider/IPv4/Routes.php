@@ -106,7 +106,7 @@ class Routes
 	private function networkContains(int $iIPAddr,int $iIpv4Network,int $iMask):bool
 	{
 		// All IP are matched by the default route 0.0.0.0/0
-		if($iMask == 0 AND $iIPAddr == 0){
+		if($iMask == 0 AND $iIpv4Network == 0){
 			return TRUE;
 		}
 

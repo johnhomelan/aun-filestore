@@ -21,6 +21,7 @@ use HomeLan\FileStore\Messages\ArpIsAt;
 use HomeLan\FileStore\Services\Provider\IPv4\Arpcache;
 use HomeLan\FileStore\Services\Provider\IPv4\Interfaces;
 use HomeLan\FileStore\Services\Provider\IPv4\Routes;
+use HomeLan\FileStore\Services\Provider\IPv4\NAT;
 use HomeLan\FileStore\Services\Provider\IPv4\Exceptions\InterfaceNotFound;
 use HomeLan\FileStore\Services\Provider\IPv4\Exceptions\ArpEntryNotFound;
 use config;
@@ -41,6 +42,7 @@ class IPv4 implements ProviderInterface {
 	private Arpcache $oArpTable;
 	private Interfaces $oInterfaceTable;
 	private Routes $oRoutingTable;
+	private NAT $oNat;
 
 	//Default time to hold IPv4 packets, waiting for an apr response in seconds 
 	const DEFAULT_ARP_WAIT_TIMEOUT = 30;
@@ -55,6 +57,7 @@ class IPv4 implements ProviderInterface {
 		$this->oArpTable = new Arpcache($this);
 		$this->oInterfaceTable = new Interfaces($this);
 		$this->oRoutingTable = new Routes($this);
+		$this->oNat = new NAT($this);
 	}
 
 	private function addReplyToBuffer($oReply): void
@@ -143,52 +146,19 @@ class IPv4 implements ProviderInterface {
 					//@TODO Send icmp host unreachable for all other message types 
 					break;
 				};
-
-				//Forward the IP packet
+				//Deal with NAT
 				try {
-					//First see if we have an interface thats on correct subnet
-					$aInterface = $this->oInterfaceTable->getInterfaceFor($oIPv4->getDstIP());
-					
-					try{
-						$aEconetDst = $this->oArpTable->getNetworkAndStation($oIPv4->getDstIP());
-						$oEconetPacket = $oIPv4->forward($aEconetDst['network'],$aEconetDst['station'],$aInterface['network'],$aInterface['station']);
-						$this->addReplyToBuffer($oEconetPacket);
-					}catch(ArpEntryNotFound $oNotfound){
-						//The address is not in the arp cache send the arp request, and queue the packet after setting 
-						//its source l2 address as the interface that will send the packet once the arp response arrives 
-
-						$oPacket->setSourceNetwork($aInterface['network']);
-						$oPacket->setSourceStation($aInterface['station']);
-						$this->queuePacketWaitingOnArp($oIPv4->getDstIP(),$oPacket);
-
+					if($this->oNat->isNatTarget($oIPv4->getDstIP())){
+						$this->oNat->processNatPacket($oIPv4);
 					}
-				}catch (InterfaceNotFound $oNotfound){
-					//See if we have a route to the subnet 
-					$aRoute = $this->oRoutingTable->getRoute($oIPv4->getDstIP());
-					if(!is_null($aRoute)){
-						try {
-							//Get the interface used to talk to the router
-							$aInterface = $this->oInterfaceTable->getInterfaceFor($aRoute['via']);
-							try {
-								$aEconetDst = $this->oArpTable->getNetworkAndStation($aRoute['via']);
-								$oEconetPacket = $oIPv4->forward($aEconetDst['network'],$aEconetDst['station'],$aInterface['network'],$aInterface['station']);
-								$this->addReplyToBuffer($oEconetPacket);
-							}catch(ArpEntryNotFound $oNotfound){
-								//The l2 address of the router is not in the apr cache, send the  arp request, and queue the packet after setting
-								//its source l2 address as the interface that will send the packet once the arp response arrives
-								//
-								$oPacket->setSourceNetwork($aInterface['network']);
-								$oPacket->setSourceStation($aInterface['station']);
-								$this->queuePacketWaitingOnArp($aRoute['via'],$oPacket);
-							}
-						}catch(InterfaceNotFound $oNotfound){
-							//There is no interface with an ip in the same subnet as the router.
-							//Therefor its a invaild route the packet can't be forwarded, so it will be dropped.
-							//
-							//@TODO It should sened ICMP network unreachable
-						}
-					}
+
+				}catch(\Exception $oException){
+					$this->oLogger->debug($oException->getMessage());
+					return;
 				}
+
+				$this->processUnicastIPv4Pkt($oIPv4,$oPacket);
+
 
 				break;
 			case 0xA2: //ECOTYPE_ARP_REPLY
@@ -205,6 +175,56 @@ class IPv4 implements ProviderInterface {
 		}
 	}
 
+
+	public function processUnicastIPv4Pkt(IPv4Request $oIPv4,EconetPacket $oPacket)
+	{
+		//Forward the IP packet
+		try {
+			//First see if we have an interface thats on correct subnet
+			$aInterface = $this->oInterfaceTable->getInterfaceFor($oIPv4->getDstIP());
+			
+			try{
+				$aEconetDst = $this->oArpTable->getNetworkAndStation($oIPv4->getDstIP());
+				$oEconetPacket = $oIPv4->forward($aEconetDst['network'],$aEconetDst['station'],$aInterface['network'],$aInterface['station']);
+				$this->addReplyToBuffer($oEconetPacket);
+			}catch(ArpEntryNotFound $oNotfound){
+				//The address is not in the arp cache send the arp request, and queue the packet after setting 
+				//its source l2 address as the interface that will send the packet once the arp response arrives 
+
+				$oPacket->setSourceNetwork($aInterface['network']);
+				$oPacket->setSourceStation($aInterface['station']);
+				$this->queuePacketWaitingOnArp($oIPv4->getDstIP(),$oPacket);
+
+			}
+		}catch (InterfaceNotFound $oNotfound){
+			//See if we have a route to the subnet 
+			$aRoute = $this->oRoutingTable->getRoute($oIPv4->getDstIP());
+			if(!is_null($aRoute)){
+				try {
+					//Get the interface used to talk to the router
+					$aInterface = $this->oInterfaceTable->getInterfaceFor($aRoute['via']);
+					try {
+						$aEconetDst = $this->oArpTable->getNetworkAndStation($aRoute['via']);
+						$oEconetPacket = $oIPv4->forward($aEconetDst['network'],$aEconetDst['station'],$aInterface['network'],$aInterface['station']);
+						$this->addReplyToBuffer($oEconetPacket);
+					}catch(ArpEntryNotFound $oNotfound){
+						//The l2 address of the router is not in the apr cache, send the  arp request, and queue the packet after setting
+						//its source l2 address as the interface that will send the packet once the arp response arrives
+						//
+						$oPacket->setSourceNetwork($aInterface['network']);
+						$oPacket->setSourceStation($aInterface['station']);
+						$this->queuePacketWaitingOnArp($aRoute['via'],$oPacket);
+					}
+				}catch(InterfaceNotFound $oNotfound){
+					//There is no interface with an ip in the same subnet as the router.
+					//Therefor its a invaild route the packet can't be forwarded, so it will be dropped.
+					//
+					//@TODO It should sened ICMP network unreachable
+				}
+			}
+		}
+
+	}
 
 	public function registerService(ServiceDispatcher $oServiceDispatcher): void
 	{

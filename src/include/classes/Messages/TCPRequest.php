@@ -27,7 +27,14 @@ class TCPRequest extends Request {
 	private bool $bSyn;
 	private bool $bFin;
 	private bool $bAck;
-	private string $sData
+	private bool $bNonce;
+	private bool $bCrw;
+	private bool $bEcn;
+	private bool $bUrgent;
+	private bool $bPush;
+	private bool $bReset;
+	private string $sData;
+	private array $aOptions  = [];
 	private EconetPacket $oEconetPacket;
 	private int $iChecksum;
 
@@ -58,11 +65,48 @@ class TCPRequest extends Request {
 		$this->iDstPort = $this->get16bitIntLittleEndian(0);
 		$this->iSeq = $this->get32bitIntLittleEndian(0);
 		$this->iAck = $this->get32bitIntLittleEndian(0);
-		$this->sDoRsvFlags = $this->get16bitIntLittleEndian(0);
+		$sDoRsvFlags1 = $this->getByte(0);
+		$sDoRsvFlags2 = $this->getByte(0);
 		$this->iWindow =  $this->get16bitIntLittleEndian(0);
 		$this->iChecksum = $this->get16bitIntLittleEndian(0);
 		$this->iUrgent = $this->get16bitIntLittleEndian(0);
 
+		$this->iHeaderLen = $sDoRsvFlags1 >> 4;
+	
+		$this->bNonce  = (bool) $sDoRsvFlags1 & 1;
+		$this->bCrw    = (bool) $sDoRsvFlags2 & 128;
+		$this->bEcn    = (bool) $sDoRsvFlags2 & 64;
+		$this->bUrgent = (bool) $sDoRsvFlags2 & 32;
+		$this->bAck    = (bool) $sDoRsvFlags2 & 16;
+		$this->bPush   = (bool) $sDoRsvFlags2 & 8;
+		$this->bReset  = (bool) $sDoRsvFlags2 & 4;
+		$this->bSyn    = (bool) $sDoRsvFlags2 & 2;
+		$this->bFin    = (bool) $sDoRsvFlags2 & 1;
+
+		$iOptionsLen = $this->iHeaderLen - 20;
+		if($iOptionsLen>0){
+			//We have options read them
+			while($iOptionsLen>0){
+				$iOption = $this->getByte(0);
+				$iOptLen = $this->getByte(0);
+				switch($iOptLen){
+					case 1:
+						$iOptValue = $this->getByte(0);
+						break;
+					case 2:
+						$iOptValue = $this->get16bitIntLittleEndian(0);
+						break;
+					case 3: 
+						$iOptValue = $this->get24bitIntLittleEndian(0);
+						break;
+					case 4:
+						$iOptValue = $this->get32bitIntLittleEndian(0);
+						break;
+				}
+				$iOptionsLen = $iOptionsLen - (2 + $iOptLen);
+				$this->aOptions[] = ['option'=>$iOption, 'length'=>$iOptLen, 'value'=>$iOptValue];
+			}
+		}
 		//@TODO deal with options
 		
 	}

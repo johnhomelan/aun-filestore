@@ -116,13 +116,44 @@ class TCPRequest extends Request {
 		return $this->iChecksum;
 	}
 
-	public function getSorucePort():int
+	public function getSrcPort():int
 	{
 		return $this->iSrcPort;
 	}
 
-	public function getDestinationPort():int
+	public function getDstPort():int
 	{
 		return $this->iDstPort;
 	}
+
+	public function getSynFlag():bool
+	{
+		return $this->bSyn;
+	}
+
+	public function getFinFlag():bool
+	{
+		return $this->bFin
+	}
+
+	public function getAckFlag():bool
+	{
+		return $this->bAck
+	}
+
+	public function getAck():int
+	{
+		return $this->iAck;
+	}
+	
+	public function getWindow():int
+	{
+		return $this->iWindow;
+	}
+		
+	public function getSequence():int
+	{
+		return $this->iSeq;
+	}
+
 }

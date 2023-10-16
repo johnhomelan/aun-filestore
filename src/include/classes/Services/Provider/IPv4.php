@@ -89,6 +89,11 @@ class IPv4 implements ProviderInterface {
 		return [0xD2];
 	}
 
+	public function getLogger():\Psr\Log\LoggerInterface
+	{
+		return $this->oLogger;
+	}
+
 
 	/** 
 	 * Arp who has is the only messsage we deal with via broadcast (the 8byte limit for data means their is not much else we can do with it).
@@ -232,6 +237,9 @@ class IPv4 implements ProviderInterface {
 		$oServiceDispatcher->addHousingKeepingTask(function() use ($_this){
 			$_this->houseKeeping();
 		});
+
+		//Need to reference the service dispatcher so NAT can gain access to the event loop, to add its own socket handles 
+		$this->oNat->registerService($oServiceDispatcher);
 	}
 
 	public function houseKeeping():void
@@ -306,5 +314,15 @@ class IPv4 implements ProviderInterface {
 	public function getRoutes(): array
 	{
 		return $this->oRoutingTable->dumpRoutingTable();
+	}
+
+	public function getNatEntries(): array
+	{
+		return $this->oNat->dumpNatTable();
+	}
+
+	public function getConnTrack(): array
+	{
+		return $this->oNat->dumpConnTrack();
 	}
 }

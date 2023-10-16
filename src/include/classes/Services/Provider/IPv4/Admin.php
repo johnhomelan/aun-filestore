@@ -92,7 +92,7 @@ class Admin implements AdminInterface
 	*/ 
 	public function getEntityTypes(): array
 	{
-		return ['arp'=>'Arp Table','interfaces'=>'IPv4 Interfaces','routes'=>'Routing Table'];
+		return ['arp'=>'Arp Table','interfaces'=>'IPv4 Interfaces','routes'=>'Routing Table','nat'=>'Nat Rules','conntrack'=>'Conn Track Entries'];
 	}
 
 	/**
@@ -105,6 +105,8 @@ class Admin implements AdminInterface
          		'arp' => ['network'=>'int', 'station'=>'int', 'ipv4'=>'string', 'timeout'=>'int'],
 			'interfaces'=>['network'=>'int', 'station'=>'int', 'ipaddr'=>'string', 'mask'=>'string'],
 			'routes'=>['network'=>'string','subnet'=>'string','gw'=>'string','metric'=>'int'],
+			'nat'=>['ip_from'=>'string','ip_to'=>'string','port_from'=>'int','port_to'=>'int'],
+			'conntrack'=>['srcip'=>'string','dstip'=>'string','srcport'=>'int','dstport'=>'int','state'=>'string','last_activity'=>'int'],
          	default => [],
      		};
  	}
@@ -128,8 +130,14 @@ class Admin implements AdminInterface
 				$aRoutes = $this->oProvider->getRoutes();
 				$aReturn = AdminEntity::createCollection($sType,$this->getEntityFields($sType),$aRoutes,null,'network');
 				return $aReturn;
-	
-	
+			case 'nat':
+				$aNatEntires = $this->oProvider->getNatEntries();
+				$aReturn = AdminEntity::createCollection($sType,$this->getEntityFields($sType),$aNatEntires,null,'nat');
+				return $aReturn;
+			case 'conntrack':
+				$aConntrackEntires = $this->oProvider->getConnTrack();
+				$aReturn = AdminEntity::createCollection($sType,$this->getEntityFields($sType),$aConntrackEntires,null,'conntrack');
+				return $aReturn;
 		}
 		return [];
 	}

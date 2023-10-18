@@ -9,7 +9,7 @@
 namespace HomeLan\FileStore\Services\Provider\IPv4; 
 
 
-use HomeLan\FileStore\Services\ProviderInterface;
+use HomeLan\FileStore\Services\Provider\IPv4 as ProviderInterface;
 use HomeLan\FileStore\Services\ServiceDispatcher;
 use HomeLan\FileStore\Messages\IPv4Request;
 use HomeLan\FileStore\Messages\TCPRequest;
@@ -18,6 +18,7 @@ use HomeLan\FileStore\Services\Provider\IPv4\Conntrack\Exception as ConntrackExc
 use HomeLan\FileStore\Services\Provider\IPv4\Conntrack\NotReadyException as NotReadyConntrackException;
 
 use React\SocketClient\TcpConnector;
+use React\SocketClient\ConnectionInterface;
 use React\Promise\PromiseInterface as Promise;
 
 use config;
@@ -26,7 +27,7 @@ use config;
 class NAT
 {
 
-	private ?React\EventLoop\LoopInterface $oLoop = null;
+	private ?\React\EventLoop\LoopInterface $oLoop = null;
 
 	private array $aConnTrack=[];
 
@@ -121,9 +122,9 @@ class NAT
 		}
 
 		try {
-			$aConnTrack = $this->_findConntrackEntry($oIPv4->getSrcIP(),$oIPv4->getDstIP(),$oTcp->getSrcPort(),$oTcp->getDstPort());
+			$sKey = $this->_findConntrackEntry($oIPv4->getSrcIP(),$oIPv4->getDstIP(),$oTcp->getSrcPort(),$oTcp->getDstPort());
 			
-			$this->_sendDataViaSocket($aConnTrack,$oTcp->getData());
+			$this->_sendDataViaSocket($sKey, $oIPv4, $oTcp);
 		}catch(ConntrackException $oException){
 			//Unknown to conntrack
 			if($oTcp->getSynFlag()){
@@ -133,10 +134,10 @@ class NAT
 		
 	}
 
-	private function _findConntrackEntry(string $sSrcIP, string $sDstIP, int $iSrcPort, int $iDstPort):array
+	private function _findConntrackEntry(string $sSrcIP, string $sDstIP, int $iSrcPort, int $iDstPort):string
 	{
 		if(array_key_exists($sSrcIP.'_'.$sDstIP.'_'.$iSrcPort.'_'.$iDstPort, $this->aConnTrack)){
-			return $this->aConnTrack[$sSrcIP.'_'.$sDstIP.'_'.$iSrcPort.'_'.$iDstPort];
+			return $sSrcIP.'_'.$sDstIP.'_'.$iSrcPort.'_'.$iDstPort;
 		}
 		throw new ConntrackException("Connection unknown");
 	}
@@ -154,6 +155,7 @@ class NAT
 					'dstip'=>$oIPv4->getDstIP(),
 					'srcport'=>$oTcp->getSrcPort(),
 					'dstport'=>$oTcp->getDstPort(),
+					'pktid'=>$oIPv4->getId(),
 					'window_to'=>$oTcp->getWindow(),
 					'sequence'=>$oTcp->getSequence(),
 					'ack'=>$oTcp->getAck(),
@@ -186,10 +188,40 @@ class NAT
 	 * 
 	 * It also updates the last activity timer
 	*/ 	 
-	private function _sendDataViaSocket(array $aConnTrack, string $sData):void
+	private function _sendDataViaSocket(string $sKey, IPv4Request $oIPv4, TCPRequest $oTcp):void
 	{
-		$aConnTrack['socket']->write($sData);
-		$this->aConnTrack[$aConnTrack['srcip'].'_'.$aConnTrack['dstip'].'_'.$aConnTrack['srcport'].'_'.$aConnTrack['dstport']]['last_activity']=time();
+		$this->aConnTrack[$sKey]['socket']->write($oTcp->getData());
+		$this->aConnTrack[$sKey]['last_activity']=time();
+		$this->aConnTrack[$sKey]['pktid'] = $oIPv4->getId();
+		$this->aConnTrack[$sKey]['sequence'] = $oTcp->getSequence();
+		$this->aConnTrack[$sKey]['ack'] = $oTcp->getAck();
+		$this->aConnTrack[$sKey]['window_to'] = $oTcp->getWindow();
+
+		switch($this->aConnTrack[$sKey]['state']){
+			case 'connecting':
+				if(!$oTcp->getSynFlag()){
+					$this->aConnTrack[$sKey]['state']='connected';
+				}
+				if($oTcp->getFinFlag()){
+					$this->aConnTrack[$sKey]['state']='closing';
+					$this->aConnTrack[$sKey]['socket']->close();
+				}
+				break;
+			case 'connected':
+				if($oTcp->getResetFlag()){
+					$this->aConnTrack[$sKey]['state']='Error';
+					$this->aConnTrack[$sKey]['socket']->close();
+				}
+			case 'error':
+			default:
+				if($oTcp->getFinFlag()){
+					$this->aConnTrack[$sKey]['state']='closing';
+					$this->aConnTrack[$sKey]['socket']->close();
+				}
+				break;
+				
+		}
+				
 	}
 
 	/**
@@ -201,7 +233,7 @@ class NAT
 	private function _openConnection(string $sDstIP, int $iDstPort):Promise
 	{
 		if(is_null($this->oLoop)){
-			throw new ConntrackNotReadyException("Reference to loop is not ready yet, cant nat to ".$sDstIP.":".$iDstPort);
+				throw new NotReadyConntrackException("Reference to loop is not ready yet, cant nat to ".$sDstIP.":".$iDstPort);
 		}
 		
 		$oTcpConnector = new TcpConnector($this->oLoop);
@@ -219,30 +251,102 @@ class NAT
 	public function _registerConnection(string $sKey, array $aConnectionData):void
 	{
 		$this->aConnTrack[$sKey] = $aConnectionData;
+		//Create a TCP/IP packet with the basic addr/port fields filled in 
+		$oTcp = $this->_builtTcpIPReply($sKey);
 		//Send the syn/ack back
-		$oTcp = new TcpIPReply();
-		$oEconetPacket = $oTcp->getEconetPacket();
+		$oTcp->setFlagSyn(true);
+		$oTcp->setFlagAck(true);
+
+		$this->aConnTrack[$sKey]['state']='connected';
+
+		$oEconetPacket = $oTcp->buildEconetpacket();
 		$oIPv4 = new IPv4Request($oEconetPacket,$this->oProvider->getLogger());
-		$this->oProvider->processUnicastIPv4Pkt($oIPv4,$oEconetPacket)
+		$this->oProvider->processUnicastIPv4Pkt($oIPv4,$oEconetPacket);
 
 	}
 
+	/**
+	 * Handles data arriving on an external socket
+	 *
+	 * This method should never be called from outsite the class
+	 * Its only public becasuse is used by an async call back that is triggered
+	 * once the socket to an external host has been established. 
+	 */  
 	public function _socketDataIn(string $sKey, string $sData):void
 	{
 		$iLen = strlen($sData);
-		$this->aConnTrack[$sKey];
+		$this->aConnTrack[$sKey]['last_activity']=time();
+
+		//Create a TCP/IP packet with the basic addr/port fields filled in 
+		$oTcpIpPkt = $this->_builtTcpIPReply($sKey);
+
+		//Sort out seq/ack  numbers 
+		$oTcpIpPkt->setAckNumber($this->aConnTrack[$sKey]['sequence']+1);
+		$this->aConnTrack[$sKey]['ack'] = $this->aConnTrack[$sKey]['ack'] + strlen($sData);
+		$oTcpIpPkt->setSeqNumber($this->aConnTrack[$sKey]['ack']);
+
+		//Set flags
+		switch($this->aConnTrack[$sKey]['state']){
+			case 'closing':
+				$oTcpIpPkt->setFlagAck(true);
+				$oTcpIpPkt->setFlagFin(true);
+				break;
+			case 'error':
+				$oTcpIpPkt->setFlagAck(true);
+				$oTcpIpPkt->setFlagReset(true);
+				break;
+			default:
+				$oTcpIpPkt->setFlagAck(true);
+				break;
+		}
+		//Add the data to the tcp stream 
+		$oTcpIpPkt->setData($sData);
+
+		//Build the econet packet, and dipatch it 
+		$oEconetPacket = $oTcpIpPkt->buildEconetpacket();
+		$oIP = new IPv4Request($oEconetPacket, $this->oProvider->getLogger());
+		$this->oProvider->processUnicastIPv4Pkt($oIP, $oEconetPacket);
+		
 	}
 	
 	public function _socketEnd(string $sKey):void
 	{
+		$this->aConnTrack[$sKey]['state']='closing';
+		$this->_socketDataIn($sKey, "");
 	}
 
-	public function _socketError(\Exception $oException):void
+	public function _socketError(string $sKey, \Exception $oException):void
 	{
+		$this->aConnTrack[$sKey]['state']='error';
+		$this->_socketDataIn($sKey, "");
 	}
 
 	public function _socketClose(string $sKey):void
 	{
+		$this->aConnTrack[$sKey]['state']='closing';
+		$this->_socketDataIn($sKey, "");
+	}
+
+	private function _builtTcpIPReply(string $sKey):TcpIPReply
+	{
+		$oTcpIpPkt = new TcpIPReply();
+
+		//Set the econet src station
+		$oTcpIpPkt->setSrcStation(config::getValue('nat_default_station'));
+		$oTcpIpPkt->setSrcNetwork(config::getValue('nat_default_network'));
+ 
+		//Set the econet src network
+		//Set the packet id
+		$oTcpIpPkt->setId($this->aConnTrack[$sKey]['pktid']++);
+
+		//Set addressing params
+		$oTcpIpPkt->setDstIP($this->aConnTrack[$sKey]['dstip']);
+		$oTcpIpPkt->setSrcIP($this->aConnTrack[$sKey]['srcip']);
+		$oTcpIpPkt->setDstPort($this->aConnTrack[$sKey]['dstport']);
+		$oTcpIpPkt->setSrcPort($this->aConnTrack[$sKey]['srcport']);
+		$oTcpIpPkt->setWindow($this->aConnTrack[$sKey]['window_to']);
+
+		return $oTcpIpPkt;
 
 	}
 }

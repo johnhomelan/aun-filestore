@@ -24,6 +24,8 @@ class TCPRequest extends Request {
 	private int $iSeq;
 	private int $iAck;
 	private int $iWindow;
+	private int $iUrgent;
+	private int $iHeaderLen;
 	private bool $bSyn;
 	private bool $bFin;
 	private bool $bAck;
@@ -33,7 +35,6 @@ class TCPRequest extends Request {
 	private bool $bUrgent;
 	private bool $bPush;
 	private bool $bReset;
-	private string $sData;
 	private array $aOptions  = [];
 	private EconetPacket $oEconetPacket;
 	private int $iChecksum;
@@ -58,18 +59,15 @@ class TCPRequest extends Request {
 		}
 		$this->sData = $oIPv4->getData();
 
-		//Copy the full packet so we can retransmitt a copy of this packet if its not mean modified, rather than rebuilding it from the parsed structure and appending the data.
-		$this->sFullPacket = $this->sData;
-
-		$this->iSrcPort = $this->get16bitIntLittleEndian(0);
-		$this->iDstPort = $this->get16bitIntLittleEndian(0);
-		$this->iSeq = $this->get32bitIntLittleEndian(0);
-		$this->iAck = $this->get32bitIntLittleEndian(0);
+		$this->iSrcPort = $this->get16bitIntBigEndian(0);
+		$this->iDstPort = $this->get16bitIntBigEndian(0);
+		$this->iSeq = $this->get32bitIntBigEndian(0);
+		$this->iAck = $this->get32bitIntBigEndian(0);
 		$sDoRsvFlags1 = $this->getByte(0);
 		$sDoRsvFlags2 = $this->getByte(0);
-		$this->iWindow =  $this->get16bitIntLittleEndian(0);
-		$this->iChecksum = $this->get16bitIntLittleEndian(0);
-		$this->iUrgent = $this->get16bitIntLittleEndian(0);
+		$this->iWindow =  $this->get16bitIntBigEndian(0);
+		$this->iChecksum = $this->get16bitIntBigEndian(0);
+		$this->iUrgent = $this->get16bitIntBigEndian(0);
 
 		$this->iHeaderLen = $sDoRsvFlags1 >> 4;
 	
@@ -94,13 +92,13 @@ class TCPRequest extends Request {
 						$iOptValue = $this->getByte(0);
 						break;
 					case 2:
-						$iOptValue = $this->get16bitIntLittleEndian(0);
+						$iOptValue = $this->get16bitIntBigEndian(0);
 						break;
 					case 3: 
-						$iOptValue = $this->get24bitIntLittleEndian(0);
+						$iOptValue = $this->get24bitIntBigEndian(0);
 						break;
 					case 4:
-						$iOptValue = $this->get32bitIntLittleEndian(0);
+						$iOptValue = $this->get32bitIntBigEndian(0);
 						break;
 				}
 				$iOptionsLen = $iOptionsLen - (2 + $iOptLen);
@@ -133,12 +131,17 @@ class TCPRequest extends Request {
 
 	public function getFinFlag():bool
 	{
-		return $this->bFin
+		return $this->bFin;
 	}
 
 	public function getAckFlag():bool
 	{
-		return $this->bAck
+		return $this->bAck;
+	}
+
+	public function getResetFlag():bool
+	{
+		return $this->bReset;
 	}
 
 	public function getAck():int

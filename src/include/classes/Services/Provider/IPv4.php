@@ -18,6 +18,7 @@ use HomeLan\FileStore\Messages\EconetPacket;
 use HomeLan\FileStore\Messages\ArpRequest; 
 use HomeLan\FileStore\Messages\IPv4Request; 
 use HomeLan\FileStore\Messages\ArpIsAt; 
+use HomeLan\FileStore\Messages\TCPRequest; 
 use HomeLan\FileStore\Services\Provider\IPv4\Arpcache;
 use HomeLan\FileStore\Services\Provider\IPv4\Interfaces;
 use HomeLan\FileStore\Services\Provider\IPv4\Routes;
@@ -154,7 +155,7 @@ class IPv4 implements ProviderInterface {
 				//Deal with NAT
 				try {
 					if($this->oNat->isNatTarget($oIPv4->getDstIP())){
-						$this->oNat->processNatPacket($oIPv4);
+						$this->oNat->processNatPacket($oIPv4, new TCPRequest($oPacket, $this->getLogger()));
 					}
 
 				}catch(\Exception $oException){

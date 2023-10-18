@@ -14,38 +14,41 @@ use Exception;
  *
  * @package coreprotocol
 */
-class TcpIpReply extends Reply {
+class TcpIPReply extends Reply {
 
 	protected $sPkt = NULL;
+	private int $iSrcNetwork;
+	private int $iSrcStation;
+
 	private ?string $sSrcIP = NULL;
 	private ?string $sDstIP = NULL;
 
 	private string $sFullPacket;
 	private int $iVerLength;
-	private int $iTos;
-	private int $iLength;
-	private int $iPtkId;
-	private int $iFlagOffset;
-	private int $iTtl;
-	private int $iChecksum;
+	private int $iTos = 0x50;
+	private int $iPktId;
+	private int $iFlagOffset = 16384;  // 2 << 13 (Sets the dont fragment flag)
+	private int $iTtl = 64 ;
+	private int $iChecksum = 0;
 	private int $iIpHeaderLength;
-	private int $iVersion;
+	private int $iVersion = 4;
 
 	private int $iSrcPort;
 	private int $iDstPort;
 	private int $iSeq;
 	private int $iAck;
-	private int $iWindow;
-	private bool $bSyn;
-	private bool $bFin;
-	private bool $bAck;
-	private bool $bNonce;
-	private bool $bCrw;
-	private bool $bEcn;
-	private bool $bUrgent;
-	private bool $bPush;
-	private bool $bReset;
-	private string $sData;
+	private int $iWindow = 117520;
+	private int $iUrgent = 0;
+	private bool $bSyn = false;
+	private bool $bFin = false; 
+	private bool $bAck = false; 
+	private bool $bNonce = false;
+	private bool $bCrw = false;
+	private bool $bEcn = false;
+	private bool $bUrgent = false;
+	private bool $bPush = false;
+	private bool $bReset = false;
+	private string $sData = "";
 
 	public function __construct()
 	{
@@ -56,20 +59,20 @@ class TcpIpReply extends Reply {
 		//IPv4 Header
 		
 		//First byte is the version/internet header length (fisrt 4 bits being the version)
-		$iVerson = 4 << 4;
+		$iVersion = $this->iVersion << 4;
 		$this->appendByte($iVersion & $this->getIpHeaderLength());
 
 		//2nd byte is the Type of service
-		$this->appendByte($iTos);
+		$this->appendByte($this->iTos);
 
 		//Bytes 3,4 are a 16bit int with the total length of the packet including the header and data 
-		$this->iLength = $this->append16bitIntLittleEndian($this->getIpHeaderLength()+$this->getTcpHeaderLength()+strlen($this->sData));
+		$this->append16bitIntBigEndian($this->getIpHeaderLength()+$this->getTcpHeaderLength()+strlen($this->sData));
 
 		//Bytes 5,6 are a 16bit int is the identification number of the packet, this ids the packet if its broken up into smaller chunks 
-		$this->append16bitIntLittleEndian($this->iPktId);
+		$this->append16bitIntBigEndian($this->iPktId);
 
 		//Bytes 7,8 3 bit IP flags, 13 bit segment offset 
-		$this->append16bitIntLittleEndian($this->iFlagOffset);
+		$this->append16bitIntBigEndian($this->iFlagOffset);
 
 		//Byte 9 TTL
 		$this->appendByte($this->iTtl);
@@ -77,31 +80,35 @@ class TcpIpReply extends Reply {
 		//Byte 10 Protocol e.g. TCP, UDP, ICMP (0x06 is TCP)
 		$this->appendByte(0x06);
 
-		//Bytes 11-12 Header checksum
-		$this->append16bitIntLittleEndian($this->calculateIPCheckSum());
+		//Bytes 11-12 Header checksum (the intial value is 0, the checksum is calculated once the packet is fully created and needs the initial value to be 0)
+		$iIPCheckSumPos = strlen($this->sPkt);
+		$this->append16bitIntBigEndian(0);
 
 		//Bytes 13,16 Source IP address 
-		$this->append32bitIntLittleEndian(inet_pton($this->sSrcIP));
+		$this->append32bitIntBigEndian(inet_pton($this->sSrcIP));
 			
 		//Bytes 17,20 Dest IP Address 
-		$this->append32bitIntLittleEndian(inet_pton($this->sDstIP));
+		$this->append32bitIntBigEndian(inet_pton($this->sDstIP));
 
 
 		//TCP Header
+		$iTcpPos = strlen($this->sPkt);
 
 		//Bytes 1 - 2 are a 16bit int for the Source port 
-		$this->append16bitIntLittleEndian($this->iSrcPort);
+		$this->append16bitIntBigEndian($this->iSrcPort);
 
 		//Bytes 3 - 4 are a 16bit int for the Destination port
-		$this->append16bitIntLittleEndian($this->iDstPort);
+		$this->append16bitIntBigEndian($this->iDstPort);
 
 		//Bytes 5 - 8 is a 32bit int, used for the sequence number
-		$this->iSeq = $this->get32bitIntLittleEndian(0);
+		$this->append32bitIntBigEndian($this->iSeq);
 
 		//Bytes 9 - 12 is a 32bit int, used for the ack number
-		$this->iAck = $this->get32bitIntLittleEndian(0);
+		$this->append32bitIntBigEndian($this->iAck);
 
 		//Byte 13 - 14 Are the flags and do number 
+		$sDoRsvFlags1 = 0;
+		$sDoRsvFlags2 = 0;
 		$sDoRsvFlags1 = $this->bNonce  ? 1 : 0;
 		$sDoRsvFlags2 = $this->bCrw    ? $sDoRsvFlags2 + 128 : $sDoRsvFlags2;
 		$sDoRsvFlags2 = $this->bEcn    ? $sDoRsvFlags2 + 64  : $sDoRsvFlags2;
@@ -112,28 +119,171 @@ class TcpIpReply extends Reply {
 		$sDoRsvFlags2 = $this->bSyn    ? $sDoRsvFlags2 + 2   : $sDoRsvFlags2;
 		$sDoRsvFlags2 = $this->bFin    ? $sDoRsvFlags2 + 1   : $sDoRsvFlags2;
 		$this->appendByte($sDoRsvFlags1);
-		$this->appnedByte($sDoRsvFlags2);
+		$this->appendByte($sDoRsvFlags2);
 
 
 		//Bytes 15 - 16 16bit int for the Window
-		$this->iWindow =  $this->append16bitIntLittleEndian($this->iWindow;
+		$this->append16bitIntBigEndian($this->iWindow);
 		
-		//Bytes 17 -18 16bit int for the TCP checksum
-		$this->append16bitIntLittleEndian($this->getTcpChecksum());
+		//Bytes 17 -18 16bit int for the TCP checksum (the intial value is 0, the checksum is calculated once the packet is fully created and needs the initial value to be 0)
+		$iTcpCheckSumPos = strlen($this->sPkt);
+		$this->append16bitIntBigEndian(0);
 
 		//Bytes 19-20 The urgent number
-		$this->append16bitIntLittleEndian($this->iUrgent);
+		$this->append16bitIntBigEndian($this->iUrgent);
 
 		//The data for the TCP stream 	
 		$this->appendString($this->sData);
+
+		//Calclate the TCP checksum (its must be offset from where the tcp header begins)
+		$sTcpCheckSum = $this->calculateCheckSum($iTcpPos);
+
+		//Update the TCP/Checksum field in the packet 
+		$this->sPkt = substr_replace($this->sPkt,$sTcpCheckSum,$iTcpCheckSumPos,strlen($sTcpCheckSum));
+
+		//Update the IP/Checksum field in the packet 
+		$sIpCheckSum = $this->calculateCheckSum(0,20);
+		$this->sPkt = substr_replace($this->sPkt,$sIpCheckSum,$iIPCheckSumPos,strlen($sIpCheckSum));
 	
+		//Build the econet packet containing the IP packet 
 		$oEconetPacket = new EconetPacket();
 		$oEconetPacket->setPort(0xd2);  //The service port for EconetA IPv4
 		$oEconetPacket->setFlags(0x1);  //Denotes the packets as a regular IP packet and not arp etc.
-		$oEconetPacket->setDestinationStation($this->getSourceStation());
-		$oEconetPacket->setDestinationNetwork($this->getSourceNetwork());
+		$oEconetPacket->setDestinationStation($this->iSrcStation);
+		$oEconetPacket->setDestinationNetwork($this->iSrcNetwork);
 		$oEconetPacket->setData($this->sPkt);
 		return $oEconetPacket;
 	}
 
+	private function getIpHeaderLength():int
+	{
+		return 20;
+	}
+
+	private function getTcpHeaderLength():int
+	{
+		return 20;
+	}
+
+	/**
+ 	 * Calculates out the checksum for the data stored in $this->sPkt
+ 	 *
+ 	 * It can calculate the checksum from a sub part of the packet 
+ 	 *
+ 	 *  It is computed as the 16 bit one's complement of the one's Complement sum of all 16 bit words 
+ 	 *  in part of the packet thats been selected.
+ 	*/    	
+	private function calculateCheckSum(int $iStart, ?int $iLength = null):string
+	{
+
+		$sBuffer = substr($this->sPkt,$iStart,$iLength)."\x0";
+		$aPairs = unpack('n*', $sBuffer);
+		
+		$iSum = array_sum($aPairs);
+		while ($iSum >> 16){
+			$iSum = ($iSum >> 16) + ($iSum & 0xffff);
+		}
+		return pack('n', ~$iSum);
+	}
+
+	public function setSrcNetwork(int $iNetwork):void
+	{
+		$this->iSrcNetwork = $iNetwork;
+	}
+
+	public function setSrcStation(int $iStation):void
+	{
+		$this->iSrcStation = $iStation;
+	}
+
+	public function setDstIP(string $sIP):void
+	{
+		$this->sDstIP = $sIP;
+	}
+
+	public function setSrcIP(string $sIP):void
+	{
+		$this->sSrcIP = $sIP;
+	}
+
+	public function setDstPort(int $iPort):void
+	{
+		$this->iDstPort = $iPort;
+	}
+
+	public function setSrcPort(int $iPort):void
+	{
+		$this->iSrcPort = $iPort;
+	}
+
+	public function setFlagNonce(bool $bValue):void
+	{
+		$this->bNonce = $bValue;
+	}
+
+	public function setFlagCrw(bool $bValue):void
+	{
+		$this->bCrw = $bValue;
+	}
+
+	public function setFlagEcn(bool $bValue):void
+	{
+		$this->bEcn = $bValue;
+	}
+
+	public function setFlagUrgent(bool $bValue):void
+	{
+		$this->bUrgent = $bValue;
+	}
+
+	public function setFlagPush(bool $bValue):void
+	{
+		$this->bPush = $bValue;
+	}
+
+	public function setFlagReset(bool $bValue):void
+	{
+		$this->bReset = $bValue;
+	}
+
+	public function setFlagSyn(bool $bValue):void
+	{
+		$this->bSyn = $bValue;
+	}
+
+	public function setFlagAck(bool $bValue):void
+	{
+		$this->bAck = $bValue;
+	}
+
+	public function setFlagFin(bool $bValue):void
+	{
+		$this->bFin = $bValue;
+	}
+
+	public function setData(string $sData):void
+	{
+		$this->sData = $sData;
+	}
+
+	public function setSeqNumber(int $iNumber):void
+	{
+		$this->iSeq = $iNumber;
+	}
+
+	public function setAckNumber(int $iNumber):void
+	{
+		$this->iSeq = $iNumber;
+	}
+
+	public function setId(int $iNumber):void
+	{
+		$this->iPktId = $iNumber;
+	}
+
+	public function setWindown(int $iNumber):void
+	{
+		$this->iWindow = $iNumber;
+	}
+ 
 }

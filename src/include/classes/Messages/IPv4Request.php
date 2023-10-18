@@ -83,12 +83,12 @@ class IPv4Request extends Request {
 
 				//So far the header is vaild read out the other fields
 				$this->iTos = $this->getByte(0);
-				$this->iLength = $this->get16bitIntLittleEndian(0);
-				$this->iPtkId = $this->get16bitIntLittleEndian(0);
-				$this->iFlagOffset = $this->get16bitIntLittleEndian(0);
+				$this->iLength = $this->get16bitIntBigEndian(0);
+				$this->iPtkId = $this->get16bitIntBigEndian(0);
+				$this->iFlagOffset = $this->get16bitIntBigEndian(0);
 				$this->iTtl = $this->getByte(0);
 				$this->iProtocol = $this->getByte(0);
-				$this->iChecksum = $this->get16bitIntLittleEndian(0);
+				$this->iChecksum = $this->get16bitIntBigEndian(0);
 
 				
 				//The first remaining 4  bytes is the soruce ip address

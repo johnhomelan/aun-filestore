@@ -62,6 +62,22 @@ class Reply {
 		$this->sPkt = $this->sPkt.pack('V',$iInt);
 	}
 
+	public function append16bitIntBigEndian($iInt): void
+	{
+		$this->sPkt = $this->sPkt.pack('n',$iInt);
+	}
+
+	public function append24bitIntBigEndian($iInt): void
+	{
+		$this->sPkt = $this->sPkt.pack('C',0).pack('n',$iInt);
+	}
+
+	public function append32bitIntBigEndian($iInt): void
+	{
+		$this->sPkt = $this->sPkt.pack('N',$iInt);
+	}
+
+
 	public function appendRaw($sRawBytes): void
 	{
 		$this->sPkt = $this->sPkt.$sRawBytes;

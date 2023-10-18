@@ -106,4 +106,26 @@ class Request {
 		return $aInt[1];
 	}
 
+	public function get32bitIntBigEndian(int $iStart)
+	{
+		$sStr = substr((string) $this->sData,$iStart-1,4);
+		$aInt = unpack('N',$sStr);
+		return $aInt[1];
+	}
+
+	public function get24bitIntBigEndian(int $iStart): int
+	{
+		$aBytes = unpack('C*',(string) $this->sData);
+		$iInt= bindec(str_pad(decbin($aBytes[$iStart]),8,"0",STR_PAD_LEFT).str_pad(decbin($aBytes[$iStart+1]),8,"0",STR_PAD_LEFT).str_pad(decbin($aBytes[$iStart+2]),8,"0",STR_PAD_LEFT));
+		return $iInt;
+	}
+
+	public function get16bitIntBigEndian(int $iStart): int
+	{
+		$sStr = substr((string) $this->sData,$iStart-1,2);
+		$aInt = unpack('n',$sStr);
+		return $aInt[1];
+	}
+
+
 }

@@ -43,3 +43,7 @@ safe_define('CONFIG_vfs_plugin_localadfsadl_root','/var/lib/aun-filestore-root')
 safe_define('CONFIG_vfs_plugin_localadfshd_root','/var/lib/aun-filestore-root');
 
 safe_define('CONFIG_print_server_spool_dir','/tmp/econetprint');
+
+safe_define('CONFIG_nat_default_station',254);
+safe_define('CONFIG_nat_default_network',254);
+

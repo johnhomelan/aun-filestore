@@ -59,7 +59,7 @@ class PacketDispatcher {
 
 
 	/**
-	 * Sends all the packets a Service has queues up
+	 * Sends all the packets a Service has queued up
 	 *
 	*/
 	public function sendPacket(EconetPacket $oPacket): void
@@ -87,7 +87,10 @@ class PacketDispatcher {
 				}
 				$sAunFrame = $oPacket->getAunFrame();
 				if(strlen($sAunFrame)>0){
-					$this->oAunServer->send($oPacket->getAunFrame(),$sHost);
+					$oAunServer = $this->oAunServer;
+					$this->oLoop->addTimer(0.04,function() use ($oAunServer,$sAunFrame,$sHost) {
+						$oAunServer->send($sAunFrame,$sHost);
+					});
 				}
 				break;
 		}

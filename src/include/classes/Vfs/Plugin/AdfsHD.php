@@ -189,7 +189,7 @@ class AdfsHD implements PluginInterface {
 				$iVfsHandle = AdfsHD::$iFileHandle++;
 				AdfsHD::$aFileHandles[$iVfsHandle]=['image-file'=>$sImageFile, 'path-inside-image'=>$sPathInsideImage, 'pos'=>0];
 				$oAdfs =  AdfsHD::_getImageReader($sImageFile);
-				return new FileDescriptor(self::$oLogger,'AdfsHD',$oUser,$sImageFile,$oEconetPath->getFilePath(),$iVfsHandle,$iEconetHandle,$oAdfs->isFile($sPathInsideImage),$oAdfs->isDir($sPathInsideImage));
+				return new FileDescriptor(self::$oLogger,'HomeLan\FileStore\Vfs\Plugin\AdfsHD',$oUser,$sImageFile,$oEconetPath->getFilePath(),$iVfsHandle,$iEconetHandle,$oAdfs->isFile($sPathInsideImage),$oAdfs->isDir($sPathInsideImage));
 			}
 		}
 
@@ -200,7 +200,7 @@ class AdfsHD implements PluginInterface {
 			$iEconetHandle = Vfs::getFreeFileHandleID($oUser);
 			$iVfsHandle = AdfsHD::$iFileHandle++;
 			AdfsHD::$aFileHandles[$iVfsHandle]=['image-file'=>$sUnixPath.'.dat', 'path-inside-image'=>'', 'pos'=>0];
-			return new FileDescriptor(self::$oLogger,'AdfsHD',$oUser,$sUnixPath.'.dat',$oEconetPath->getFilePath(),$iVfsHandle,$iEconetHandle,FALSE,TRUE);
+			return new FileDescriptor(self::$oLogger,'HomeLan\FileStore\Vfs\Plugin\AdfsHD',$oUser,$sUnixPath.'.dat',$oEconetPath->getFilePath(),$iVfsHandle,$iEconetHandle,FALSE,TRUE);
 		}
 		throw new VfsException("No such file");
 			
@@ -230,7 +230,7 @@ class AdfsHD implements PluginInterface {
 			}
 
 			foreach($aCat as $sFile=>$aMeta){
-				$aDirectoryListing[$sFile] = new DirectoryEntry($sFile,$sImageFile,'AdfsHD',$aMeta['load'],$aMeta['exec'],$aMeta['size'] ,$sEconetPath.'.'.$sFile,$aImageStat['ctime'],'-r/-r', $aMeta['type']=='dir' ? TRUE : FALSE);
+				$aDirectoryListing[$sFile] = new DirectoryEntry($sFile,$sImageFile,'HomeLan\FileStore\Vfs\Plugin\AdfsHD',$aMeta['load'],$aMeta['exec'],$aMeta['size'] ,$sEconetPath.'.'.$sFile,$aImageStat['ctime'],'-r/-r', $aMeta['type']=='dir' ? TRUE : FALSE);
 			}
 		}
 		
@@ -243,7 +243,7 @@ class AdfsHD implements PluginInterface {
 					//Disk Image found
 					if(!array_key_exists(substr((string) $sFile,0,strlen((string) $sFile)-4),$aDirectoryListing)){
 						$aStat = stat($sUnixPath.DIRECTORY_SEPARATOR.$sFile);
-						$aDirectoryListing[$sFile]=new DirectoryEntry(substr((string) $sFile,0,strlen((string) $sFile)-4),$sFile,'AdfsHD',NULL,NULL,0,$sEconetPath.'.'.substr((string) $sFile,0,strlen((string) $sFile)-4),$aStat['ctime'],'-r/-r', TRUE);
+						$aDirectoryListing[$sFile]=new DirectoryEntry(substr((string) $sFile,0,strlen((string) $sFile)-4),$sFile,'HomeLan\FileStore\Vfs\Plugin\AdfsHD',NULL,NULL,0,$sEconetPath.'.'.substr((string) $sFile,0,strlen((string) $sFile)-4),$aStat['ctime'],'-r/-r', TRUE);
 					}
 				}
 			}

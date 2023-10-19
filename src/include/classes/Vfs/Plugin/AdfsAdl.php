@@ -188,7 +188,7 @@ class AdfsAdl implements PluginInterface {
 				$iVfsHandle = AdfsAdl::$iFileHandle++;
 				AdfsAdl::$aFileHandles[$iVfsHandle]=['image-file'=>$sImageFile, 'path-inside-image'=>$sPathInsideImage, 'pos'=>0];
 				$oAdfs =  AdfsAdl::_getImageReader($sImageFile);
-				return new FileDescriptor(self::$oLogger,'AdfsAdl',$oUser,$sImageFile,$oEconetPath->getFilePath(),$iVfsHandle,$iEconetHandle,$oAdfs->isFile($sPathInsideImage),$oAdfs->isDir($sPathInsideImage));
+				return new FileDescriptor(self::$oLogger,'HomeLan\FileStore\Vfs\Plugin\AdfsAdl',$oUser,$sImageFile,$oEconetPath->getFilePath(),$iVfsHandle,$iEconetHandle,$oAdfs->isFile($sPathInsideImage),$oAdfs->isDir($sPathInsideImage));
 			}
 		}
 
@@ -199,7 +199,7 @@ class AdfsAdl implements PluginInterface {
 			$iEconetHandle = Vfs::getFreeFileHandleID($oUser);
 			$iVfsHandle = AdfsAdl::$iFileHandle++;
 			AdfsAdl::$aFileHandles[$iVfsHandle]=['image-file'=>$sUnixPath.'.adl', 'path-inside-image'=>'', 'pos'=>0];
-			return new FileDescriptor(self::$oLogger,'AdfsAdl',$oUser,$sUnixPath.'.adl',$oEconetPath->getFilePath(),$iVfsHandle,$iEconetHandle,FALSE,TRUE);
+			return new FileDescriptor(self::$oLogger,'HomeLan\FileStore\Vfs\Plugin\AdfsAdl',$oUser,$sUnixPath.'.adl',$oEconetPath->getFilePath(),$iVfsHandle,$iEconetHandle,FALSE,TRUE);
 		}
 		throw new VfsException("No such file");
 			
@@ -229,7 +229,7 @@ class AdfsAdl implements PluginInterface {
 			}
 
 			foreach($aCat as $sFile=>$aMeta){
-				$aDirectoryListing[$sFile] = new DirectoryEntry($sFile,$sImageFile,'AdfsAdl',$aMeta['load'],$aMeta['exec'],$aMeta['size'] ,$sEconetPath.'.'.$sFile,$aImageStat['ctime'],'-r/-r', $aMeta['type']=='dir' ? TRUE : FALSE);
+				$aDirectoryListing[$sFile] = new DirectoryEntry($sFile,$sImageFile,'HomeLan\FileStore\Vfs\Plugin\AdfsAdl',$aMeta['load'],$aMeta['exec'],$aMeta['size'] ,$sEconetPath.'.'.$sFile,$aImageStat['ctime'],'-r/-r', $aMeta['type']=='dir' ? TRUE : FALSE);
 			}
 		}
 		
@@ -242,7 +242,7 @@ class AdfsAdl implements PluginInterface {
 					//Disk Image found
 					if(!array_key_exists(substr((string) $sFile,0,strlen((string) $sFile)-4),$aDirectoryListing)){
 						$aStat = stat($sUnixPath.DIRECTORY_SEPARATOR.$sFile);
-						$aDirectoryListing[$sFile]=new DirectoryEntry(substr((string) $sFile,0,strlen((string) $sFile)-4),$sFile,'AdfsAdl',NULL,NULL,0,$sEconetPath.'.'.substr((string) $sFile,0,strlen((string) $sFile)-4),$aStat['ctime'],'-r/-r', TRUE);
+						$aDirectoryListing[$sFile]=new DirectoryEntry(substr((string) $sFile,0,strlen((string) $sFile)-4),$sFile,'HomeLan\FileStore\Vfs\Plugin\AdfsAdl',NULL,NULL,0,$sEconetPath.'.'.substr((string) $sFile,0,strlen((string) $sFile)-4),$aStat['ctime'],'-r/-r', TRUE);
 					}
 				}
 			}

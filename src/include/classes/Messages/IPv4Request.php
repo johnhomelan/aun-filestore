@@ -41,6 +41,7 @@ class IPv4Request extends Request {
 		$this->decode($oEconetPacket->getData());
 		$this->iSourceStation = $oEconetPacket->getSourceStation();
 		$this->iSourceNetwork = $oEconetPacket->getSourceNetwork();
+		$oLogger->debug("IP ver ".$this->iVersion." packet, from: ".$this->sSrcIP." to: ".$this->sDstIP." id: ".$this->iPtkId." protocol: ".$this->iProtocol);
 	}	
 
 	/**

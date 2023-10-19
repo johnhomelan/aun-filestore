@@ -86,4 +86,12 @@ interface AuthPluginInterface {
 	 * @param string $sPriv
 	*/
 	static public function setPriv(string $sUsername,string $sPriv): void;
+
+	/**
+	 * Sets the opt for a given user
+	 *
+	 * @param string $sUsername
+	 * @param string $sPriv
+	*/
+	static public function setOpt(string $sUsername,string $sOpt): void;
 }

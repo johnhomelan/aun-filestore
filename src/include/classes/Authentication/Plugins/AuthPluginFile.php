@@ -203,6 +203,10 @@ class AuthPluginFile implements AuthPluginInterface {
 		}
 	}
 
+	/**
+	 * Sets the priv flag for a given user
+	 *
+	*/  	
 	static public function setPriv(string $sUsername,string $sPriv): void
 	{
 		if(array_key_exists(strtoupper($sUsername),AuthPluginFile::$aUsers)){
@@ -210,5 +214,18 @@ class AuthPluginFile implements AuthPluginInterface {
 			AuthPluginFile::_writeOutUserFile();
 		}
 	}
+
+	/**
+	 * Sets the boot option for a given user
+	 *
+	*/  
+	static public function setOpt(string $sUsername,string $sOpt): void
+	{
+		if(array_key_exists(strtoupper($sUsername),AuthPluginFile::$aUsers)){
+			AuthPluginFile::$aUsers[strtoupper($sUsername)]['opt']=$sOpt;
+			AuthPluginFile::_writeOutUserFile();
+		}
+	}
+
 
 }

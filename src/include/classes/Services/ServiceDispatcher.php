@@ -164,25 +164,32 @@ class ServiceDispatcher {
 	*/
 	public function inboundPacket(EncapsulationInterface $oPacket): void
 	{
-		if(array_key_exists($oPacket->getPort(),$this->aPorts)){
-			switch($oPacket->getPacketType()){
-				case 'Immediate':
-				case 'Unicast':
+		$this->oLogger->debug("Packet type ".$oPacket->getPacketType());
+		switch($oPacket->getPacketType()){
+			case 'Immediate':
+			case 'Unicast':
+				if(array_key_exists($oPacket->getPort(),$this->aPorts)){
 					$this->oLogger->debug("Unicast Packet in:  ".$oPacket->toString());
 					$this->aPorts[$oPacket->getPort()]->unicastPacketIn($oPacket->buildEconetPacket());
-					break;
-				case 'Ack':
-					$this->ackEvents($oPacket);
-					break;
-				case 'Broadcast':
+					$aReplies = $this->aPorts[$oPacket->getPort()]->getReplies();
+					foreach($aReplies as $oReply){
+						$this->queueReply($oReply);	
+					}	
+				}
+				break;
+			case 'Ack':
+				$this->ackEvents($oPacket);
+				break;
+			case 'Broadcast':
+				if(array_key_exists($oPacket->getPort(),$this->aPorts)){
 					$this->oLogger->debug("Broadcast Packet in:  ".$oPacket->toString());
 					$this->aPorts[$oPacket->getPort()]->broadcastPacketIn($oPacket->buildEconetPacket());
-					break;
-			}
-			$aReplies = $this->aPorts[$oPacket->getPort()]->getReplies();
-			foreach($aReplies as $oReply){
-				$this->queueReply($oReply);	
-			}
+					$aReplies = $this->aPorts[$oPacket->getPort()]->getReplies();
+					foreach($aReplies as $oReply){
+						$this->queueReply($oReply);	
+					}
+				}
+				break;
 		}
 
 	}
@@ -231,10 +238,10 @@ class ServiceDispatcher {
 	*/
 	public function addAckEvent($iNetwork, $iStation, $fCallable): void
 	{
-		if(!is_array($this->aAckEvents[$iStation])){
-			$this->aAckEvents[$iStation]=[];
+		if(!array_key_exists($iNetwork,$this->aAckEvents)){
+			$this->aAckEvents[$iNetwork]=[];
 		}
-		$this->aAckEvents[$iStation][$iStation] = $fCallable;
+		$this->aAckEvents[$iNetwork][$iStation] = $fCallable;
 	}
 
 	/**

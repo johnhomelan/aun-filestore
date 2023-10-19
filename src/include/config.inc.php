@@ -46,4 +46,6 @@ safe_define('CONFIG_print_server_spool_dir','/tmp/econetprint');
 
 safe_define('CONFIG_nat_default_station',254);
 safe_define('CONFIG_nat_default_network',254);
-
+safe_define('CONFIG_ipv4_routes_file','routes.txt');
+safe_define('CONFIG_ipv4_interfaces_file','interfaces.txt');
+safe_define('CONFIG_ipv4_nat_file','nat.txt');

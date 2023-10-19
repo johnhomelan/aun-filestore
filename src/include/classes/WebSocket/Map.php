@@ -84,7 +84,9 @@ class Map {
 	  */
  	public static function ecoAddrToSocket(int $iNetworkNumber,int $iStationNumber):?ConnectionInterface
 	{
-		if(is_object(self::$aDynamicNetworks[$iNetworkNumber][$iStationNumber])){
+		if(array_key_exists($iNetworkNumber,self::$aDynamicNetworks) AND 
+			array_key_exists($iStationNumber,$aDynamicNetworks[$iNetworkNumber]) AND
+			is_object(self::$aDynamicNetworks[$iNetworkNumber][$iStationNumber])){
 			return self::$aDynamicNetworks[$iNetworkNumber][$iStationNumber];
 		}
 		return null;

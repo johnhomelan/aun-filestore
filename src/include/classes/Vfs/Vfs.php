@@ -90,21 +90,19 @@ class Vfs {
 	 */ 
 	private static function buildFullPath(int $iNetwork,int $iStation,string $sEconetPath): FilePath
 	{
-		$oUser = null;
-  if(str_starts_with($sEconetPath, '$')){
+		$oUser = security::getUser($iNetwork,$iStation);
+  		if(str_starts_with($sEconetPath, '$')){
 			//Absolute path
 			$aPath = explode('.',$sEconetPath);
 			$sFile = array_pop($aPath);
 			$sDir = join('.',$aPath);
 		}elseif(str_contains($sEconetPath,'.')){
 			//Relitive path
-			$oUser = security::getUser($iNetwork,$iStation);
 			$aPath = explode('.',$sEconetPath);
 			$sFile = array_pop($aPath);
 			$sDir = $oUser->getCsd().'.'.join('.',$aPath);
 		}else{
 			//No path
-			$oUser = security::getUser($iNetwork,$iStation);
 			$sFile = $sEconetPath;
 			$sDir = $oUser->getCsd();
 		}
@@ -173,11 +171,11 @@ class Vfs {
 	}
 
 	/**
-  * Get the directory catalogue from the supplied file-descriptor
-  *
-  * @return array
-  */
- static public function getDirectoryListing(object $oFd): array
+	  * Get the directory catalogue from the supplied file-descriptor
+	  *
+	  * @return array
+	 */
+	static public function getDirectoryListing(object $oFd): array
 	{
 		$sPath = $oFd->getEconetPath();
 		$aDirectoryListing = [];

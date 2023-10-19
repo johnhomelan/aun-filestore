@@ -17,8 +17,8 @@ use HomeLan\FileStore\Messages\TcpIPReply;
 use HomeLan\FileStore\Services\Provider\IPv4\Conntrack\Exception as ConntrackException;
 use HomeLan\FileStore\Services\Provider\IPv4\Conntrack\NotReadyException as NotReadyConntrackException;
 
-use React\SocketClient\TcpConnector;
-use React\SocketClient\ConnectionInterface;
+use React\Socket\TcpConnector;
+use React\Socket\ConnectionInterface;
 use React\Promise\PromiseInterface as Promise;
 
 use config;

@@ -23,14 +23,11 @@ class TcpIPReply extends Reply {
 	private ?string $sSrcIP = NULL;
 	private ?string $sDstIP = NULL;
 
-	private string $sFullPacket;
-	private int $iVerLength;
 	private int $iTos = 0x50;
 	private int $iPktId;
 	private int $iFlagOffset = 16384;  // 2 << 13 (Sets the dont fragment flag)
 	private int $iTtl = 64 ;
 	private int $iChecksum = 0;
-	private int $iIpHeaderLength;
 	private int $iVersion = 4;
 
 	private int $iSrcPort;
@@ -82,7 +79,7 @@ class TcpIPReply extends Reply {
 
 		//Bytes 11-12 Header checksum (the intial value is 0, the checksum is calculated once the packet is fully created and needs the initial value to be 0)
 		$iIPCheckSumPos = strlen($this->sPkt);
-		$this->append16bitIntBigEndian(0);
+		$this->append16bitIntBigEndian($this->iChecksum);
 
 		//Bytes 13,16 Source IP address 
 		$this->append32bitIntBigEndian(inet_pton($this->sSrcIP));
@@ -273,7 +270,7 @@ class TcpIPReply extends Reply {
 
 	public function setAckNumber(int $iNumber):void
 	{
-		$this->iSeq = $iNumber;
+		$this->iAck = $iNumber;
 	}
 
 	public function setId(int $iNumber):void
@@ -281,7 +278,7 @@ class TcpIPReply extends Reply {
 		$this->iPktId = $iNumber;
 	}
 
-	public function setWindown(int $iNumber):void
+	public function setWindow(int $iNumber):void
 	{
 		$this->iWindow = $iNumber;
 	}

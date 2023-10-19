@@ -71,15 +71,15 @@ class TCPRequest extends Request {
 
 		$this->iHeaderLen = $sDoRsvFlags1 >> 4;
 	
-		$this->bNonce  = (bool) $sDoRsvFlags1 & 1;
-		$this->bCrw    = (bool) $sDoRsvFlags2 & 128;
-		$this->bEcn    = (bool) $sDoRsvFlags2 & 64;
-		$this->bUrgent = (bool) $sDoRsvFlags2 & 32;
-		$this->bAck    = (bool) $sDoRsvFlags2 & 16;
-		$this->bPush   = (bool) $sDoRsvFlags2 & 8;
-		$this->bReset  = (bool) $sDoRsvFlags2 & 4;
-		$this->bSyn    = (bool) $sDoRsvFlags2 & 2;
-		$this->bFin    = (bool) $sDoRsvFlags2 & 1;
+		$this->bNonce  = ($sDoRsvFlags1 & 1)   > 0 ? true : false;
+		$this->bCrw    = ($sDoRsvFlags2 & 128) > 0 ? true : false;
+		$this->bEcn    = ($sDoRsvFlags2 & 64)  > 0 ? true : false;
+		$this->bUrgent = ($sDoRsvFlags2 & 32)  > 0 ? true : false;
+		$this->bAck    = ($sDoRsvFlags2 & 16)  > 0 ? true : false;
+		$this->bPush   = ($sDoRsvFlags2 & 8)   > 0 ? true : false;
+		$this->bReset  = ($sDoRsvFlags2 & 4)   > 0 ? true : false;
+		$this->bSyn    = ($sDoRsvFlags2 & 2)   > 0 ? true : false;
+		$this->bFin    = ($sDoRsvFlags2 & 1)   > 0 ? true : false;
 
 		$iOptionsLen = $this->iHeaderLen - 20;
 		if($iOptionsLen>0){
@@ -87,6 +87,7 @@ class TCPRequest extends Request {
 			while($iOptionsLen>0){
 				$iOption = $this->getByte(0);
 				$iOptLen = $this->getByte(0);
+				$iOptValue = null;
 				switch($iOptLen){
 					case 1:
 						$iOptValue = $this->getByte(0);
@@ -144,6 +145,32 @@ class TCPRequest extends Request {
 		return $this->bReset;
 	}
 
+	public function getNonceFlag():bool
+	{
+		return $this->bNonce;
+	}
+
+	public function getUrgentFlag():bool
+	{
+		return $this->bUrgent;
+	}
+
+	public function getCrwFlag():bool
+	{
+		return $this->bCrw;
+	}
+
+	public function getEcnFlag():bool
+	{
+		return $this->bEcn;
+	}
+
+	public function getPushFlag():bool
+	{
+		return $this->bPush;
+	}
+
+
 	public function getAck():int
 	{
 		return $this->iAck;
@@ -157,6 +184,21 @@ class TCPRequest extends Request {
 	public function getSequence():int
 	{
 		return $this->iSeq;
+	}
+	
+	public function getUrgent():int
+	{
+		return $this->iUrgent;
+	}
+
+	public function getOptions():array
+	{
+		return $this->aOptions;
+	}
+
+	public function getEconetPacket():EconetPacket
+	{
+		return $this->oEconetPacket;
 	}
 
 }

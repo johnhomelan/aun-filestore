@@ -125,6 +125,7 @@ class LocalFile implements PluginInterface {
 				$iVfsHandle = NULL;
 			}
 			$iEconetHandle = vfs::getFreeFileHandleID($oUser);
+			//@phpstan-ignore-next-line
 			return new FileDescriptor(self::$oLogger,'LocalFile',$oUser,$sUnixPath,$oEconetPath->getFilePath(),$iVfsHandle,$iEconetHandle,is_file($sUnixPath),is_dir($sUnixPath));
 		}
 		throw new VfsException("No such file");

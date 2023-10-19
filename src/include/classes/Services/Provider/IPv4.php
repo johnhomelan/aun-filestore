@@ -138,6 +138,8 @@ class IPv4 implements ProviderInterface {
 		switch($oPacket->getFlags()){
 			case 0x1:
 				//Regular IPv4 Frame
+				$this->oLogger->debug("IPv4 packet received.");
+
 				try {
 					$oIPv4 = new IPv4Request($oPacket,$this->oLogger);
 				}catch(\Exception $oException){
@@ -168,6 +170,8 @@ class IPv4 implements ProviderInterface {
 
 				break;
 			case 0xA2: //ECOTYPE_ARP_REPLY
+
+				$this->oLogger->debug("Arp packet received");
 				//Arp: We never forward arp packets as they should not leave the layer 2 network they are on, so we only update the arp cache.
 				//
 				//     NB: We don't care if we made an arp request this is a response to, as promiscuous arp is a thing. 

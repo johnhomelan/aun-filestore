@@ -15,7 +15,7 @@ class aunmapTest extends TestCase {
 	protected function setup(): void
 	{
 		$oLogger = new Logger("filestored-unittests");
-		$sMapFile = "192.168.0.0/24 127\n192.168.0.40 127.254\n192.168.2.20 129.29\n192.168.1.0/24 128\n192.168.0.41\n192.168.2.0/24\n";
+		$sMapFile = "192.168.0.0/24 127\n192.168.0.40 127.254\n192.168.2.20 129.29\n192.168.1.0/24 128\n192.168.0.41\n192.168.2.0/24\n192.168.0.40:1000 127.200\n";
 		aunmap::init($oLogger,$sMapFile);
 	}
 
@@ -32,6 +32,9 @@ class aunmapTest extends TestCase {
 	
 		//Test host map overides subnet map
 		$this->assertEquals(aunmap::ipAddrToEcoAddr('192.168.0.40'),'127.254');
+
+		//Test host port map overides subnet map and host
+		$this->assertEquals(aunmap::ipAddrToEcoAddr('192.168.0.40:1000'),'127.200');
 		
 	}
 
@@ -47,6 +50,9 @@ class aunmapTest extends TestCase {
 		
 		//Test host map overides subnet map
 		$this->assertEquals(aunmap::ecoAddrToIpAddr('127','254'),'192.168.0.40');
+
+		//Test host port map overides subnet map and host
+		$this->assertEquals(aunmap::ecoAddrToIpAddr('127','200'),'192.168.0.40:1000');
 	}
 
 	public function testCounter()

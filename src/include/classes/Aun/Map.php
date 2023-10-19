@@ -58,6 +58,9 @@ class Map {
 			if(preg_match('/([0-9]*\.[0-9]*\.[0-9]*\.[0-9]*) ([0-9]*)\.([0-9]*)/',$sLine,$aMatches)>0){
 				Map::addHostMapping($aMatches[1],(int) $aMatches[2],(int) $aMatches[3]);
 			}
+			if(preg_match('/([0-9]*\.[0-9]*\.[0-9]*\.[0-9]*):([0-9]*) ([0-9]*)\.([0-9]*)/',$sLine,$aMatches)>0){
+				Map::addHostMapping($aMatches[1],(int) $aMatches[3],(int) $aMatches[4],(int) $aMatches[2]);
+			}
 		}
 	}
 
@@ -70,12 +73,24 @@ class Map {
 	*/
 	public static function ipAddrToEcoAddr(string $sIP,int $sPort=NULL):string 
 	{
+		//Check if there is a map in the fast cache 
+		if(array_key_exists($sIP.':'.$sPort, Map::$aIPLookupCache)){
+			return Map::$aIPLookupCache[$sIP.':'.$sPort];
+		}
 		if(array_key_exists($sIP,Map::$aIPLookupCache)){
 			return Map::$aIPLookupCache[$sIP];
 		}
 
+		//Search the map see if there is a host:port mapping
+		if(in_array($sIP.':'.$sPort,Map::$aHostMap)){
+			$sIndex = array_search($sIP,Map::$aHostMap,true);
+			Map::$aIPLookupCache[$sIP.':'.$sPort]=$sIndex;
+			return $sIndex;
+		}
+
+		//Search the map see if there is a host mapping
 		if(in_array($sIP,Map::$aHostMap)){
-			$sIndex = array_search($sIP,Map::$aHostMap);
+			$sIndex = array_search($sIP,Map::$aHostMap,true);
 			Map::$aIPLookupCache[$sIP]=$sIndex;
 			return $sIndex;
 		}
@@ -108,7 +123,7 @@ class Map {
 	public static function ecoAddrToIpAddr(int $iNetworkNumber,int $iStationNumber):string
 	{
 		//Test to see if we are in the cached index
-		$sIndex = array_search($iNetworkNumber.'.'.$iStationNumber,Map::$aIPLookupCache);
+		$sIndex = array_search($iNetworkNumber.'.'.$iStationNumber,Map::$aIPLookupCache,true);
 		if($sIndex !==FALSE){
 			return $sIndex;
 		}
@@ -161,11 +176,16 @@ class Map {
 	 * @param int $iNetworkNumber The network number
 	 * @param int $iStationNumber The station number
 	*/
-	public static function addHostMapping(string $sIP,int $iNetworkNumber,int $iStationNumber): void
+	public static function addHostMapping(string $sIP,int $iNetworkNumber,int $iStationNumber, ?int $iPort=null ): void
 	{
 		if(preg_match('/[0-9]*\.[0-9]*\.[0-9]*\.[0-9]*/',$sIP)){
-			Map::$aHostMap[$iNetworkNumber.'.'.$iStationNumber]=$sIP;
-			Map::$aIPLookupCache[$sIP]=$iNetworkNumber.'.'.$iStationNumber;
+			if(is_null($iPort)){
+				Map::$aHostMap[$iNetworkNumber.'.'.$iStationNumber]=$sIP;
+				Map::$aIPLookupCache[$sIP]=$iNetworkNumber.'.'.$iStationNumber;
+			}else{
+				Map::$aHostMap[$iNetworkNumber.'.'.$iStationNumber]=$sIP.":".$iPort;
+				Map::$aIPLookupCache[$sIP.':'.$iPort]=$iNetworkNumber.'.'.$iStationNumber;
+			}
 		}else{
 			self::$oLogger->info("aunmapper: An invaild ip was tried to be used as a aunmap entry (".$sIP.").");
 		}

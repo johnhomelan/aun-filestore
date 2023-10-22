@@ -27,6 +27,16 @@ class PacketDispatcher {
 
 	static private ?\HomeLan\FileStore\Encapsulation\PacketDispatcher $oSingleton = null;
 
+	/*
+ 	 * The delay be building a AUN packet, and dispatching it to the network.
+ 	 *
+ 	 * BBC clients can't cope with the server responding with a ack too quickly,
+ 	 * they are simply not ready for it in time, so the packet effectivly gets dropped.
+ 	 *
+ 	 * This delay prevents the server replying too quickly.
+ 	*/ 
+	const AUN_PKT_DELAY  = 0.04;
+
 	/**
 	 * Keeping this class as a singleton, this is static method should be used to get references to this object
 	 *
@@ -87,8 +97,9 @@ class PacketDispatcher {
 				}
 				$sAunFrame = $oPacket->getAunFrame();
 				if(strlen($sAunFrame)>0){
+					//Use a timer to delay the aun packet, this is allows all server I/O to be async, where as usleep would break the model.
 					$oAunServer = $this->oAunServer;
-					$this->oLoop->addTimer(0.04,function() use ($oAunServer,$sAunFrame,$sHost) {
+					$this->oLoop->addTimer(self::AUN_PKT_DELAY,function() use ($oAunServer,$sAunFrame,$sHost) {
 						$oAunServer->send($sAunFrame,$sHost);
 					});
 				}

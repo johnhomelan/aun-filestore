@@ -307,7 +307,7 @@ class Security {
 	/**
 	  * Sets the boot option for a user 
 	  *
-	  * @param string $sOpts
+	  * @param string $sOpt
 	*/
 	public static function setOpt(int $iNetwork,int $iStation,string $sOpt): void
 	{

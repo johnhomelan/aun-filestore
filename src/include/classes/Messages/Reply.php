@@ -24,7 +24,6 @@ class Reply {
 
 	public function __construct($oRequest)
 	{
-		//Main Loop @phpstan-ignore-next-line
 		if(is_object($oRequest) AND ($oRequest::class=='HomeLan\FileStore\Messages\FsRequest' or $oRequest::class=='HomeLan\FileStore\Messages\PrintServerEnquiry' OR $oRequest::class=='HomeLan\FileStore\Messages\PrintServerData' OR $oRequest::class=='HomeLan\FileStore\Messages\ArpRequest')){
 			$this->oRequest = $oRequest;
 			$this->iFlags = $oRequest->getFlags();

@@ -91,7 +91,7 @@ interface AuthPluginInterface {
 	 * Sets the opt for a given user
 	 *
 	 * @param string $sUsername
-	 * @param string $sPriv
+	 * @param string $sOpt
 	*/
 	static public function setOpt(string $sUsername,string $sOpt): void;
 }

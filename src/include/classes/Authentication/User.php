@@ -99,7 +99,7 @@ class User {
 		return $this->bIsAdmin;
 	}
 
-	public function setCsd($sCsd): void
+	public function setCsd(string $sCsd): void
 	{
 		$this->sCsd = $sCsd;
 	}

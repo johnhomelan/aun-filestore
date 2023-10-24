@@ -63,7 +63,7 @@ class EconetPacket {
 		}
 	}
 
-	public function setData(string $sData): void
+	public function setData(?string $sData): void
 	{
 		$this->sData=$sData;
 	}

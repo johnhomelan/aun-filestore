@@ -39,24 +39,30 @@ class Handler {
 	}
 
 	public function onConnect(){
-		$this->oConnection->write('RESTART');
-		$this->oConnection->write('SET_STATION '.config::getValue('piconet_station'));
-		$this->oConnection->write('SET_MODE 1');
+		$this->oLogger->debug("Piconet handler: Connected");
+		//$this->oConnection->write("RESTART\r");
+		$this->oConnection->write("STATUS\r");
+		$this->oConnection->write('SET_STATION '.config::getValue('piconet_station')."\r");
+		$this->oConnection->write("SET_MODE LISTEN\r");
 		
 	}
 
 	public function onClose():void
 	{
+		$this->oLogger->debug("Piconet handler: Closing");
 		$this->oConnection->write("STOP");
 	}
 
 	public function onMessage($sMessage):void
 	{
+		$this->oLogger->debug("Piconet handler: Message ".$sMessage);
+		
 		$aMessageParts = explode($sMessage," ");
 		switch($aMessageParts[0]){
 			case 'STATUS':
 				break;
 			case 'ERROR':
+				$this->oLogger->error("Piconet Handler: An error occured (".$sMessage.")");
 				break;
 			case 'MONITOR':
 				break;
@@ -79,24 +85,19 @@ class Handler {
 			case 'TX_RESULT':
 				switch($aMessageParts[1]){
 					case 'OK':
-						break;
 					case 'UNINITIALISED':
-						break;
 					case 'OVERFLOW':
-						break;
 					case 'UNDERRUN':
-						break;
 					case 'LINE_JAMMED':
-						break;
 					case 'NO_SCOUT_ACK':
-						break;
 					case 'NO_DATA_ACK':
-						break;
 					case 'TIMEOUT':
-						break;
 					case 'MISC':
+						$this->oLogger->info("Piconet Handler: TX failed the error ".$aMessageParts[1]);
 						break;
 					case 'UNEXPECTED':
+					default:
+						$this->oLogger->error("Piconet Handler: Encountered an internal error with the interface while transmitting (this should never happen), with the message ".$aMessageParts[1]);
 						break;
 				}
 				break;

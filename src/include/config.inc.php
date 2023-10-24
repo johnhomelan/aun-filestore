@@ -24,14 +24,14 @@ safe_define('CONFIG_version','1.01');
 safe_define('CONFIG_housekeeping_interval',300);
 
 safe_define('CONFIG_security_auth_plugins','file');
-safe_define('CONFIG_security_plugin_file_user_file','users.txt');
+safe_define('CONFIG_security_plugin_file_user_file','users-live.txt');
 safe_define('CONFIG_security_plugin_file_default_crypt','md5');
 safe_define('CONFIG_security_default_unix_uid',500);
 safe_define('CONFIG_security_max_session_idle',2400);
 
 safe_define('CONFIG_library_path','$.LIBRARY');
 
-safe_define('CONFIG_vfs_plugins','DfsSsd,AdfsAdl,LocalFile');
+safe_define('CONFIG_vfs_plugins','DfsSsd,AdfsAdl,AdfsHD,LocalFile');
 safe_define('CONFIG_vfs_plugin_localfile_root','/var/lib/aun-filestore-root');
 safe_define('CONFIG_vfs_disc_name','VFSROOT');
 safe_define('CONFIG_vfs_home_dir_path','$.home');
@@ -43,6 +43,10 @@ safe_define('CONFIG_vfs_plugin_localadfsadl_root','/var/lib/aun-filestore-root')
 safe_define('CONFIG_vfs_plugin_localadfshd_root','/var/lib/aun-filestore-root');
 
 safe_define('CONFIG_print_server_spool_dir','/tmp/econetprint');
+
+safe_define('CONFIG_piconet_device','dev/econet');
+safe_define('CONFIG_piconetmap_file','piconetmap.txt');
+safe_define('CONFIG_piconet_station','1');
 
 safe_define('CONFIG_nat_default_station',254);
 safe_define('CONFIG_nat_default_network',254);

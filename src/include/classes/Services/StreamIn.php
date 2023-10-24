@@ -16,7 +16,7 @@ class StreamIn {
 	private $fRecivedPacket;
 	private $fSucessCallback;
 	private $fFailCallback;
-	private readonly int $iTimeout;
+	private int $iTimeout;
 	private readonly int $iNoPktTimeout;
 	private readonly string $sPath;
 	private readonly string $sUser;
@@ -49,7 +49,7 @@ class StreamIn {
 				($this->fFailCallback)("timeout");
 			}else{
 				//Pkt recevied reset the timeout
-				${$this}->iTimeout = time() + $this->iNoPktTimeout;
+				$this->iTimeout = time() + $this->iNoPktTimeout;
 				($this->fRecivedPacket)($this,$oPacket);
 			}
 		}else{

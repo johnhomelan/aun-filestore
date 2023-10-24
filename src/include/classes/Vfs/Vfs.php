@@ -91,6 +91,10 @@ class Vfs {
 	private static function buildFullPath(int $iNetwork,int $iStation,string $sEconetPath): FilePath
 	{
 		$oUser = security::getUser($iNetwork,$iStation);
+		if(str_starts_with($sEconetPath, '&')){
+			$sEconetPath = str_replace('&','$',$sEconetPath);
+		}
+		echo "Econet path is ".$sEconetPath."\n";
   		if(str_starts_with($sEconetPath, '$')){
 			//Absolute path
 			$aPath = explode('.',$sEconetPath);
@@ -107,9 +111,108 @@ class Vfs {
 			$sDir = $oUser->getCsd();
 		}
 		if($oUser->getRoot()!='$'){
-			$sDir = str_replace('$',$oUser->getRoot(),(string) $sDir);
+			echo "Dir is ".$sDir."\n";
+			if(strpos($sDir,$oUser->getRoot())!==0){
+				//If the path is abosulte but does not start with the chroot prefix
+				$sDir = str_replace('$',$oUser->getRoot(),(string) $sDir);
+			}
+			if($sFile=='$'){				
+				$sDir = $oUser->getRoot();
+				$sFile =  '';
+			}
+			self::$oLogger->debug("User is chroot'd to ".$oUser->getRoot()." changeing path to ".$sDir);
 		}
+		if(strpos($sDir,'*')!==false){
+			//Deal with unsolvled directory path 
+			$sDir = self::_resolveFullPath($sDir,$iNetwork,$iStation);
+		}
+			
 		return new FilePath($sDir, $sFile);
+	}
+
+	/**
+	 * Takes an unresovled path, and resolves in to a real path
+	 *
+	 * Acorn's MOS (and RiscOS) allows for directory paths with * in them, 
+	 * i.e. $.LIB*.FIX 
+	 * The fileserver would expand out LIB* to the first matching directory 
+	 * This method does that.
+	*/    	
+	private static function _resolveFullPath(string $sDir, int $iNetwork, int $iStation):string
+	{
+		$sLocalDir = $sDir;
+		$iExpandPoint = strpos($sLocalDir,'*');
+		echo "Dir supplied is ".$sDir."\n";
+		//If there is nothing to expand return 
+		if($iExpandPoint===false){
+			return $sLocalDir;
+		}
+
+		//Find the postion of the last path seporator, before the expantion point.
+		$iLastPathSeporator = strrpos(substr($sLocalDir,0,$iExpandPoint),'.');
+
+		//Gets the path as a string before the expantion point (i.e. the directory we must search)
+		$sPath = substr($sLocalDir,0,($iLastPathSeporator));
+
+		//Get the seach string
+		$sSearch = substr($sLocalDir,($iLastPathSeporator+1),($iExpandPoint-$iLastPathSeporator-1));
+
+		if(strlen($sPath)<1){
+			//We are only expanding a filename in the Csd (there was no path before the file
+			$oUser = security::getUser($iNetwork,$iStation);
+			$sPath = $oUser->getCsd();
+		}
+
+		echo  "path is ".$sPath." expandpoint is ".$iExpandPoint." last path is ".$iLastPathSeporator." search is ".$sSearch." \n";
+		//Build a directory listing from all the plugins 
+		$aDirectoryListing = [];
+		$aPlugins = Vfs::getVfsPlugins();
+		foreach($aPlugins as $sPlugin){
+			try {
+				$aDirectoryListing = $sPlugin::getDirectoryListing($sPath,$aDirectoryListing);	
+			}catch(VfsException $oVfsException){	
+				if($oVfsException->isHard()){
+					return $sLocalDir;
+				}
+			}
+		}
+		
+		//Find directory first 
+		$bMatched = false;
+		var_dump($aDirectoryListing);
+		foreach($aDirectoryListing as $oFile){
+			if($oFile->isDir()){
+				if(stripos($oFile->getEconetName(),$sSearch)===0){
+					//We have found a match, replace and jump out of the loop
+					$sLocalDir =  str_replace($sSearch.'*',$oFile->getEconetName(),$sLocalDir);
+					echo "Dir updated to ".$sLocalDir."\n";
+					$bMatched = true;
+					break;
+				}
+			}
+		}
+
+		//No directory matched so try repeplacing with file
+		//NB I have no idea if acorns fileserver gave directories presidence, but it makes sense to me
+		if(!$bMatched){
+			foreach($aDirectoryListing as $oFile){
+				if(stripos($oFile->getEconetName(),$sSearch)===0){
+					$sLocalDir = str_replace($sSearch.'*',$oFile->getEconetName(),$sLocalDir);
+					$bMatched = true;
+					break;
+				}
+			}
+		}
+
+		//Are there other parts the need expanding after the one this call worked on 
+		if($bMatched AND strpos($sLocalDir,'*',$iExpandPoint)!==false){
+			// I know recussion naughty boy, but this time its fairly neat, 
+			// and the limit to an econet path length means this can't accidently call
+			// too many time. 
+			return self::_resolveFullPath($sLocalDir, $iNetwork, $iStation);
+		}
+		self::$oLogger->debug("Expanded path from ".$sDir." to ".$sLocalDir);
+		return  $sLocalDir;
 	}
 
 	/**
@@ -492,11 +595,27 @@ class Vfs {
 	}
 
 	/**
-  * Get a file handle object for a given network/station
-  *
-  * @param int $iHandle The filehandel used by the client
-  */
- static public function getFsHandle(int $iNetwork,int $iStation,int $iHandle)
+	 * Replaces one vfs handle with another
+	 *
+	 *
+	*/
+	static public function replaceFsHandle(int $iNetwork,int $iStation, $iHandleToReplace, $iNewHandle)
+	{
+		if(array_key_exists($iNetwork,Vfs::$aHandles) AND array_key_exists($iStation,Vfs::$aHandles[$iNetwork]) AND array_key_exists($iHandleToReplace,Vfs::$aHandles[$iNetwork][$iStation])){
+			//Found the handle to replace
+			if(array_key_exists($iNetwork,Vfs::$aHandles) AND array_key_exists($iStation,Vfs::$aHandles[$iNetwork]) AND array_key_exists($iNewHandle,Vfs::$aHandles[$iNetwork][$iStation])){
+				//New handle exists
+				Vfs::$aHandles[$iNetwork][$iStation][$iHandleToReplace] = Vfs::$aHandles[$iNetwork][$iStation][$iNewHandle];
+			}
+		}
+	} 	
+
+	/**
+	  * Get a file handle object for a given network/station
+	  *
+	  * @param int $iHandle The filehandel used by the client
+	*/
+	static public function getFsHandle(int $iNetwork,int $iStation, $iHandle)
 	{
 		if(array_key_exists($iNetwork,Vfs::$aHandles) AND array_key_exists($iStation,Vfs::$aHandles[$iNetwork]) AND array_key_exists($iHandle,Vfs::$aHandles[$iNetwork][$iStation])){
 			return Vfs::$aHandles[$iNetwork][$iStation][$iHandle];
@@ -506,11 +625,11 @@ class Vfs {
 	}
 
 	/**
-  * Closes a file handle for a given network and station
-  *
-  * @param int $iHandle The filehandel used by the client
-  */
- static public function closeFsHandle(int $iNetwork,int $iStation,int $iHandle): void
+	  * Closes a file handle for a given network and station
+	  *
+	  * @param int $iHandle The filehandel used by the client
+	*/
+	static public function closeFsHandle(int $iNetwork,int $iStation, $iHandle): void
 	{
 		if(array_key_exists($iNetwork,Vfs::$aHandles) AND array_key_exists($iStation,Vfs::$aHandles[$iNetwork]) AND array_key_exists($iHandle,Vfs::$aHandles[$iNetwork][$iStation])){
 			Vfs::$aHandles[$iNetwork][$iStation][$iHandle]->close();
@@ -520,11 +639,11 @@ class Vfs {
 
 
 	/**
-  * Gets a sin for a full econet file path
-  *
-  * @return int A uniqe 24bit int for a file
-  */
- static public function getSin(string $sEconetFullFilePath): int
+	  * Gets a sin for a full econet file path
+	  *
+	  * @return int A uniqe 24bit int for a file
+	*/
+	static public function getSin(string $sEconetFullFilePath): int
 	{
 		if(!array_key_exists($sEconetFullFilePath,Vfs::$aSinMapping)){
 			Vfs::$iSin++;

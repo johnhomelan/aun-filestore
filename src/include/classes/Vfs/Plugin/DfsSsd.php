@@ -144,6 +144,7 @@ class DfsSsd implements PluginInterface {
 
 	protected static function _getPathInsideImage($sEconetPath,$sImageFile): string
 	{
+		self::$oLogger->debug("Called _getPathInsideImage(".$sEconetPath.",".$sImageFile.")");
 		//Trim leading $.
 		$sEconetPath = substr((string) $sEconetPath,2);
 
@@ -166,7 +167,7 @@ class DfsSsd implements PluginInterface {
 				}
 			}
 		}
-		if((is_countable($sPathInsideImage) ? count($sPathInsideImage) : 0)==1){
+		if((is_countable($aPathInsideImage) ? count($aPathInsideImage) : 0)==1){
 			if(array_key_exists($aPathInsideImage[0],$aCat['$'])){
 				$bFound = TRUE;
 			}
@@ -174,7 +175,6 @@ class DfsSsd implements PluginInterface {
 				$bFound = TRUE;
 			}
 		}
-
 		return $bFound;
 	}
 
@@ -295,6 +295,7 @@ class DfsSsd implements PluginInterface {
 		$sImageFile = DfsSsd::_getImageFile($oEconetPath->getFilePath());
 		if(strlen($sImageFile)>0){
 			$sPathInsideImage = DfsSsd::_getPathInsideImage($oEconetPath->getFilePath(),$sImageFile);
+			self::$oLogger->debug("DfsSsd: Checking for file ".$sPathInsideImage." in ".$sImageFile);
 			if(DfsSsd::_checkImageFileExists($sImageFile,$sPathInsideImage)){
 				$oDfs = DfsSsd::_getImageReader($sImageFile);
 				return $oDfs->getFile($sPathInsideImage);

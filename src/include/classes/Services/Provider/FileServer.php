@@ -30,7 +30,7 @@ class FileServer implements ProviderInterface{
 
 	protected $oServiceDispatcher = NULL ;
 
-	protected $aCommands = ['BYE', 'CAT', 'CDIR', 'DELETE', 'DIR', 'FSOPT', 'INFO', 'I AM', 'LIB', 'LOAD', 'LOGOFF', 'PASS', 'RENAME', 'SAVE', 'SDISC', 'NEWUSER', 'PRIV', 'REMUSER', 'i.', 'CHROOT', 'CHROOTOFF'];
+	protected $aCommands = ['BYE', 'CAT', 'CDIR', 'DELETE', 'DIR', 'FSOPT', 'INFO', 'I AM', 'LIB', 'LOAD', 'LOGOFF', 'PASS', 'RENAME', 'SAVE', 'SDISC', 'NEWUSER', 'PRIV', 'REMUSER', 'i.' ,'i .', 'CHROOTOFF', 'CHROOT'];
 	
 	protected $aReplyBuffer = [];
 
@@ -408,6 +408,7 @@ class FileServer implements ProviderInterface{
 				$this->logout($oFsRequest);
 				break;
 			case 'I AM':
+			case 'I .':
 				$this->login($oFsRequest,$sOptions);
 				break;
 			case 'PASS':
@@ -829,7 +830,7 @@ class FileServer implements ProviderInterface{
 		$iArg = $oFsRequest->getByte(1);
 		$iStart = $oFsRequest->getByte(2);
 		$iCount = $oFsRequest->getByte(3);
-		$this->oLogger->debug("Examine Type ".$iArg." (only 3,1 is implemented)");
+		$this->oLogger->debug("Examine Type ".$iArg);
 		switch($iArg){
 			case 0:
 				//EXAMINE_ALL
@@ -891,6 +892,27 @@ class FileServer implements ProviderInterface{
 				break;
 			case 2:
 				//EXAMINE_NAME
+				$oReply->DoneOk();
+				//Get the directory listing
+				$oFd = Vfs::getFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oFsRequest->getCsd());
+				$aDirEntries=Vfs::getDirectoryListing($oFd);
+				$this->oLogger->debug("There are ".count($aDirEntries)." entries in dir ".$oFd->getEconetPath());
+
+				//Return only the entries the client requested (works like sql limit and offset)
+				$aDirEntries = array_slice($aDirEntries,$iStart,$iCount);
+
+				//Number of entries 1 Byte
+				$oReply->appendByte(count($aDirEntries));
+				//Undefined but riscos needs it 
+				$oReply->appendByte(0);
+
+				foreach($aDirEntries as $oFile){
+					$oReply->appendByte(10);
+					//Append the file name (limit 10 chars)
+					$oReply->appendString(str_pad(substr((string) $oFile->getEconetName(),0,11),11,' '));
+				}
+	
+
 				break;
 			case 3:
 				//EXAMINE_SHORTTXT
@@ -1556,8 +1578,8 @@ class FileServer implements ProviderInterface{
 			$oEconetPacket->setPort($iDataPort);
 			$oEconetPacket->setData($sBlock);
 
-			$this->addReplyToBuffer($oEconetPacket);
-			$this->oServiceDispatcher->sendPackets($this);
+			$_this->addReplyToBuffer($oEconetPacket);
+			$_this->oServiceDispatcher->sendPackets($_this);
 
 			$cAckHandler = function($oAckPacket, $_this, $oFsRequest, $oServiceDispatcher,  $sFileData, $iDataPort, &$cAckHandler){
 				if(strlen((string) $sFileData)>0){
@@ -1748,28 +1770,38 @@ class FileServer implements ProviderInterface{
 	{
 		$oReply = $oFsRequest->buildReply();
 		$oUser = security::getUser($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation());
+		try {
+			if($sOptions=="^"){
+				//Change to parent dir
+				$oCsd = Vfs::getFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oFsRequest->getCsd());
+				$sParentPath = $oCsd->getEconetParentPath();
+				$oNewRootDir = Vfs::createFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sParentPath);
+			}else{
+				$oNewRootDir = Vfs::createFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sOptions);	
+					
+			}
 
-		if($sOptions=="^"){
-			//Change to parent dir
-			$oCsd = Vfs::getFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oFsRequest->getCsd());
-			$sParentPath = $oCsd->getEconetParentPath();
-			$oNewRootDir = Vfs::createFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sParentPath);
-		}else{
-			$oNewRootDir = Vfs::createFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sOptions);	
-		}
-
-		if(!$oNewRootDir->isDir()){
-			$this->oLogger->debug("User tryed to change to directory ".$oNewRootDir->getEconetDirName()." however its not a directory.");
-			$oReply->setError(0xbe,"Not a directory");
+			if(!$oNewRootDir->isDir()){
+				$this->oLogger->debug("User tryed to change to directory ".$oNewRootDir->getEconetDirName()." however its not a directory.");
+				$oReply->setError(0xbe,"Not a directory");
+				$this->addReplyToBuffer($oReply->buildEconetpacket());
+				return;
+			}
+		}catch(Exception $oException){
+			$this->oLogger->debug("User tryed to chroot to ".$sOptions." however that is not a valid path.");
+			$oReply->setError(0xbe,"Invalid path");
 			$this->addReplyToBuffer($oReply->buildEconetpacket());
 			return;
 		}
 
-		$oUser->setRoot($oNewRootDir->getEconetDirName());
-
-		Vfs::closeFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oFsRequest->getCsd());
-		Vfs::closeFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oNewRootDir);
+		$this->oLogger->debug("User ".$oUser->getUsername()." chroot to ".$oNewRootDir->getEconetPath());
+		$oUser->setRoot($oNewRootDir->getEconetPath());
+		
+		//Vfs::closeFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oFsRequest->getCsd());
+		Vfs::closeFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oNewRootDir->getId());
 		$oNewCsd = Vfs::createFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),'$');
+		$oUser->setCsd('$');
+		Vfs::replaceFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oFsRequest->getCsd(),$oNewCsd->getId());
 		$oReply->DirOk();
 		$oReply->appendByte($oNewCsd->getID());
 		$oUser->setCsd($oNewCsd->getEconetPath());

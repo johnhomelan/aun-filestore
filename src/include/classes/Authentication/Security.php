@@ -160,7 +160,7 @@ class Security {
 	  * Set the password for the user logged in using  network/station 
 	  *
 	*/
-	public static function setConnectedUsersPassword(int $iNetwork,int $iStation,string $sOldPassword,string $sPassword): void
+	public static function setConnectedUsersPassword(int $iNetwork,int $iStation,?string $sOldPassword,?string $sPassword): void
 	{
 		if(array_key_exists($iNetwork,Security::$aSessions) AND array_key_exists($iStation,Security::$aSessions[$iNetwork])){
 			self::$oLogger->info("Security: Changing password for ".Security::$aSessions[$iNetwork][$iStation]['user']->getUsername()." using authplugin ".Security::$aSessions[$iNetwork][$iStation]['provider']);

@@ -36,6 +36,8 @@ use HomeLan\FileStore\Admin\Kernel;
 
 use HomeLan\FileStore\Encapsulation\PacketDispatcher;
 use HomeLan\FileStore\Encapsulation\EncapsulationTypeMap;
+
+use HomeLan\FileStore\React\UnixDeviceConnector;
  
 use config;
 use Exception;
@@ -292,9 +294,9 @@ EOF;
 	public function piconetService(LoopInterface $oLoop, PacketDispatcher $oPacketDispatcher):PiconetHandler
 	{
 
-		$oPiconet = new UnixConnector($oLoop); 
+		$oPiconet = new UnixDeviceConnector($oLoop);
 		$oPiconetHandler = new PiconetHandler($this->oLogger, $this->oServices, $oPacketDispatcher);
-		$oPiconet->connect('udg://'.config::getValue('piconet_device'))->then(function (ConnectionInterface $oConnection) use ($oPiconetHandler){
+		$oPiconet->connect('file:///'.config::getValue('piconet_device'))->then(function (ConnectionInterface $oConnection) use ($oPiconetHandler){
 
 			$oPiconetHandler->onOpen($oConnection);
 			$oPiconetHandler->onConnect();
@@ -303,7 +305,7 @@ EOF;
 			$oConnection->on('data',function ($sMessage) use ($oPiconetHandler) {
 				$oPiconetHandler->onMessage($sMessage);
 			});
-			$oConnection->on('close',function ($sChunk) use ($oPiconetHandler) {
+			$oConnection->on('close',function () use ($oPiconetHandler) {
 				$oPiconetHandler->onClose();
 			});
 			$oConnection->on('error', function(\Exception $e) use ($oPiconetHandler){

@@ -57,8 +57,7 @@ class TcpIPReply extends Reply {
 		
 		//First byte is the version/internet header length (fisrt 4 bits being the version)
 		$iVersion = $this->iVersion << 4;
-		$this->appendByte($iVersion & $this->getIpHeaderLength());
-
+		$this->appendByte($iVersion + $this->getIpHeaderLength());
 		//2nd byte is the Type of service
 		$this->appendByte($this->iTos);
 
@@ -82,10 +81,10 @@ class TcpIPReply extends Reply {
 		$this->append16bitIntBigEndian($this->iChecksum);
 
 		//Bytes 13,16 Source IP address 
-		$this->append32bitIntBigEndian(inet_pton($this->sSrcIP));
+		$this->sPkt = $this->sPkt.inet_pton($this->sSrcIP);
 			
 		//Bytes 17,20 Dest IP Address 
-		$this->append32bitIntBigEndian(inet_pton($this->sDstIP));
+		$this->sPkt = $this->sPkt.inet_pton($this->sDstIP);
 
 
 		//TCP Header
@@ -154,7 +153,8 @@ class TcpIPReply extends Reply {
 
 	private function getIpHeaderLength():int
 	{
-		return 20;
+		//Number of 32bit blocks 
+		return (20*8)/32;
 	}
 
 	private function getTcpHeaderLength():int
@@ -281,6 +281,11 @@ class TcpIPReply extends Reply {
 	public function setWindow(int $iNumber):void
 	{
 		$this->iWindow = $iNumber;
+	}
+
+	public function toString():string
+	{
+		return "TCP:  Src| ".$this->sSrcIP.":".$this->iSrcPort." Dst| ".$this->sDstIP.":".$this->iDstPort."  Seq| ".$this->iSeq." Ack| ".$this->iAck." Syn| ".$this->bSyn." Ack| ".$this->bAck." Fin| ".$this->bFin." Reset|".$this->bReset." Data Len|".strlen($this->sData)." Data|".$this->sData;
 	}
  
 }

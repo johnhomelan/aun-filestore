@@ -8,6 +8,7 @@ include_once(__DIR__.'/../../src/include/system.inc.php');
 
 use PHPUnit\Framework\TestCase;
 use Monolog\Logger;
+use Monolog\Handler\NullHandler;
 use HomeLan\FileStore\Services\Provider\IPv4\Exceptions\ArpEntryNotFound;
 use HomeLan\FileStore\Services\Provider\IPv4\Arpcache;
 use HomeLan\FileStore\Services\Provider\IPv4;
@@ -19,8 +20,11 @@ class arpTest extends TestCase {
 	protected function setup(): void
 	{
 		$oProvider = $this->createMock(IPv4::class);
+
+		$oLogger = new Logger("filestored-unittests");
+		$oLogger->pushHandler(new NullHandler());
 		
-		$this->oArp = new Arpcache($oProvider);
+		$this->oArp = new Arpcache($oProvider,$oLogger);
 	}
 
 	public function testAdd()

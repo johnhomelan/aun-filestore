@@ -8,6 +8,7 @@ include_once(__DIR__.'/../../src/include/system.inc.php');
 
 use PHPUnit\Framework\TestCase;
 use Monolog\Logger;
+use Monolog\Handler\NullHandler;
 use HomeLan\FileStore\Services\Provider\IPv4\NAT;
 use HomeLan\FileStore\Services\Provider\IPv4;
 
@@ -19,8 +20,11 @@ class natTest extends TestCase {
 	{
 		$oProvider = $this->createMock(IPv4::class);
 		$sNatFile = "192.168.1.1 192.168.0.1 200 23\n192.168.1.2 192.168.0.2 23 23\n192.168.1.3 192.168.0.3 200 1024";
+
+		$oLogger = new Logger("filestored-unittests");
+		$oLogger->pushHandler(new NullHandler());
 		
-		$this->oNAT = new NAT($oProvider,$sNatFile);
+		$this->oNAT = new NAT($oProvider,$oLogger,$sNatFile);
 	}
 
 	public function testAllValidRoutesRead()

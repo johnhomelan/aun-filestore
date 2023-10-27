@@ -20,7 +20,7 @@ class Arpcache
 
 	const DEFAULT_ENTRY_TIMEOUT = 3600;
 
-	public function __construct(private readonly ProviderInterface $oProvider)
+	public function __construct(private readonly ProviderInterface $oProvider, private readonly \Psr\Log\LoggerInterface $oLogger)
  	{
 	}
 

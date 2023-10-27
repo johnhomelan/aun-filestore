@@ -18,7 +18,7 @@ class Interfaces
 
 	private array $aInterfaces = [];
 
-	public function __construct(private readonly ProviderInterface $oProvider,?string $sInterfaces=null)
+	public function __construct(private readonly ProviderInterface $oProvider,private readonly \Psr\Log\LoggerInterface $oLogger, ?string $sInterfaces=null)
  	{
 		if(is_null($sInterfaces)){
 			if(!file_exists(config::getValue('ipv4_interfaces_file'))){

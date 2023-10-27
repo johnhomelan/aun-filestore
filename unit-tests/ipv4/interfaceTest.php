@@ -8,6 +8,7 @@ include_once(__DIR__.'/../../src/include/system.inc.php');
 
 use PHPUnit\Framework\TestCase;
 use Monolog\Logger;
+use Monolog\Handler\NullHandler;
 use HomeLan\FileStore\Services\Provider\IPv4\Interfaces;
 use HomeLan\FileStore\Services\Provider\IPv4;
 use HomeLan\FileStore\Services\Provider\IPv4\Exceptions\InterfaceNotFound;
@@ -20,8 +21,10 @@ class interfaceTest extends TestCase {
 	{
 		$oProvider = $this->createMock(IPv4::class);
 		$sInterfacesFile = "1 24 192.168.1.24 255.255.255.0\n2 24 192.168.2.24 255.255.255.0\n2 26 192.168.2.26 255.255.255.0\n";
-		
-		$this->oInterfaces = new Interfaces($oProvider,$sInterfacesFile);
+		$oLogger = new Logger("filestored-unittests");
+		$oLogger->pushHandler(new NullHandler());
+	
+		$this->oInterfaces = new Interfaces($oProvider,$oLogger,$sInterfacesFile);
 	}
 
 	public function testAllValidInterfacesRead()

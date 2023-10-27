@@ -29,8 +29,8 @@ class ArpRequest extends Request {
 	{
 		parent:: __construct($oEconetPacket, $oLogger);
 		$this->decode($oEconetPacket->getData());
-		$this->iSourceStation = $oEconetPacket->setSourceStation();
-		$this->iSourceNetwork = $oEconetPacket->setSourceNetwork();
+		$this->iSourceStation = $oEconetPacket->getSourceStation();
+		$this->iSourceNetwork = $oEconetPacket->getSourceNetwork();
 	}	
 
 	/**
@@ -41,7 +41,7 @@ class ArpRequest extends Request {
 	{
 
 		switch($this->getFlags()){
-			case 0xA1: //Arp request type
+			case 33: //Arp request type
 				//The first 4 bytes is the ipv4 addr of the requesting host
 				$this->sSourceIP = inet_ntop($sBinaryString[0].$sBinaryString[1].$sBinaryString[2].$sBinaryString[3]);
 				//The second 4 bytes is the ipv4 address the remote host is requesting the layer address for 

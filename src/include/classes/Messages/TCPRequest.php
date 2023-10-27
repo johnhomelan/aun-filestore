@@ -44,6 +44,7 @@ class TCPRequest extends Request {
 		parent:: __construct($oEconetPacket, $oLogger);
 		$this->oEconetPacket = $oEconetPacket;
 		$this->decode($oEconetPacket);
+		$this->oLogger->debug("Tcp  srcport: ".$this->iSrcPort." dstport: ".$this->iDstPort);
 	}
 
 	/**
@@ -59,15 +60,15 @@ class TCPRequest extends Request {
 		}
 		$this->sData = $oIPv4->getData();
 
-		$this->iSrcPort = $this->get16bitIntBigEndian(0);
-		$this->iDstPort = $this->get16bitIntBigEndian(0);
-		$this->iSeq = $this->get32bitIntBigEndian(0);
-		$this->iAck = $this->get32bitIntBigEndian(0);
-		$sDoRsvFlags1 = $this->getByte(0);
-		$sDoRsvFlags2 = $this->getByte(0);
-		$this->iWindow =  $this->get16bitIntBigEndian(0);
-		$this->iChecksum = $this->get16bitIntBigEndian(0);
-		$this->iUrgent = $this->get16bitIntBigEndian(0);
+		$this->iSrcPort = $this->get16bitIntBigEndian(1);
+		$this->iDstPort = $this->get16bitIntBigEndian(3);
+		$this->iSeq = $this->get32bitIntBigEndian(5);
+		$this->iAck = $this->get32bitIntBigEndian(9);
+		$sDoRsvFlags1 = $this->getByte(13);
+		$sDoRsvFlags2 = $this->getByte(14);
+		$this->iWindow =  $this->get16bitIntBigEndian(15);
+		$this->iChecksum = $this->get16bitIntBigEndian(17);
+		$this->iUrgent = $this->get16bitIntBigEndian(19);
 
 		$this->iHeaderLen = $sDoRsvFlags1 >> 4;
 	
@@ -199,6 +200,11 @@ class TCPRequest extends Request {
 	public function getEconetPacket():EconetPacket
 	{
 		return $this->oEconetPacket;
+	}
+
+	public function toString():string
+	{
+		return "TCP:  Src Port| ".$this->iSrcPort." Dst Port| ".$this->iDstPort."  Seq| ".$this->iSeq." Ack| ".$this->iAck." Syn| ".$this->bSyn." Ack| ".$this->bAck." Fin| ".$this->bFin." Reset|".$this->bReset." Data Len|".strlen($this->sData)." Data|".$this->sData;
 	}
 
 }

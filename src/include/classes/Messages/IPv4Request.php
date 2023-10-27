@@ -41,7 +41,7 @@ class IPv4Request extends Request {
 		$this->decode($oEconetPacket->getData());
 		$this->iSourceStation = $oEconetPacket->getSourceStation();
 		$this->iSourceNetwork = $oEconetPacket->getSourceNetwork();
-		$oLogger->debug("IP ver ".$this->iVersion." packet, from: ".$this->sSrcIP." to: ".$this->sDstIP." id: ".$this->iPtkId." protocol: ".$this->iProtocol);
+		$oLogger->debug("IP ver ".$this->iVersion." packet, from: ".$this->sSrcIP." to: ".$this->sDstIP." id: ".$this->iPtkId." protocol: ".$this->aProtocols[$this->iProtocol]);
 	}	
 
 	/**
@@ -51,8 +51,8 @@ class IPv4Request extends Request {
 	public function decode(string $sBinaryString): void
 	{
 		//Copy the full packet so we can retransmitt a copy of this packet if its not mean modified, rather than rebuilding it from the parsed structure and appending the data.
-		$this->sFullPacket = $this->sData;
-
+		$this->sFullPacket = $sBinaryString;
+		$this->sData = $sBinaryString;
 		switch($this->getFlags()){
 			case 0x1: //Regular IP packet
 				//First byte is the version/internet header length (fisrt 4 bits being the version)
@@ -69,9 +69,9 @@ class IPv4Request extends Request {
 				
 				//@TODO parse out the ip flags, and offset properly so we can deal with fragmenation properly at some point.				
 				
-				$this->iVerLength = $this->getByte(0);
+				$this->iVerLength = $this->getByte(1);
 
-				$this->iIpHeaderLength = ($this->iVerLength&15)*32;  //Mask out the highest order bits by doing a bitwise and with 00001111
+				$this->iIpHeaderLength = (($this->iVerLength&15)*32)/8;  //Mask out the highest order bits by doing a bitwise and with 00001111
 				if($this->iIpHeaderLength<20){
 					//The header is to small (or corupt) to be a vaild IPv4 header
 					throw new Exception("Invalid IPv4 packet");
@@ -83,22 +83,24 @@ class IPv4Request extends Request {
 				}
 
 				//So far the header is vaild read out the other fields
-				$this->iTos = $this->getByte(0);
-				$this->iLength = $this->get16bitIntBigEndian(0);
-				$this->iPtkId = $this->get16bitIntBigEndian(0);
-				$this->iFlagOffset = $this->get16bitIntBigEndian(0);
-				$this->iTtl = $this->getByte(0);
-				$this->iProtocol = $this->getByte(0);
-				$this->iChecksum = $this->get16bitIntBigEndian(0);
+				$this->iTos = $this->getByte(2);
+				$this->iLength = $this->get16bitIntBigEndian(3);
+				$this->iPtkId = $this->get16bitIntBigEndian(5);
+				$this->iFlagOffset = $this->get16bitIntBigEndian(7);
+				$this->iTtl = $this->getByte(9);
+				$this->iProtocol = $this->getByte(10);
+				$this->iChecksum = $this->get16bitIntBigEndian(11);
 
-				
+
+				//NB As this bit decodes direct from the binary string, it starts a offset 0 not 1. Hence looks likes its over lapping the checksum, but its not.				
+
 				//The first remaining 4  bytes is the soruce ip address
-				$this->sSrcIP = inet_ntop($this->sData[0].$this->sData[1].$this->sData[2].$this->sData[3]);
+				$this->sSrcIP = inet_ntop($this->sData[12].$this->sData[13].$this->sData[14].$this->sData[15]);
 				//The second remianing 4 bytes is the dest ip address
-				$this->sDstIP = inet_ntop($this->sData[4].$this->sData[5].$this->sData[6].$this->sData[7]);
+				$this->sDstIP = inet_ntop($this->sData[16].$this->sData[17].$this->sData[18].$this->sData[19]);
 
-				//Trim off the remaining IP header (we will not read any options if present and just skip over them)  
-				$this->sData = substr($this->sData,8+($this->iIpHeaderLength-40));  //8 is for the 2 ip addresses, the header_length - 40 gives us the length of the options.
+				//Trim off the IP header 
+				$this->sData = substr($this->sData,$this->iIpHeaderLength);  
 				break;
 		}
 		

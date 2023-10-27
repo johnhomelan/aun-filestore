@@ -46,6 +46,7 @@ class ServiceDispatcher {
 	public static function create(\Psr\Log\LoggerInterface $oLogger = null, array $aServices = null)
 	{
 		if(!is_object(ServiceDispatcher::$oSingleton)){
+			$oLogger->debug("Creating the singleton of ServiceDispatcher");
 			ServiceDispatcher::$oSingleton = new ServiceDispatcher($oLogger, $aServices);
 		}
 		return ServiceDispatcher::$oSingleton;	

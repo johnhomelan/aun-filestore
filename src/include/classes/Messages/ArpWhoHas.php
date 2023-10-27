@@ -19,6 +19,7 @@ class ArpWhoHas extends Reply {
 
 
 	private ?string $sIPv4Addr = NULL;
+	private ?string $sSourceIP = NULL;
 	private int $iSourceStation = 0;
 	private ?int $iNetwork;
 
@@ -27,9 +28,10 @@ class ArpWhoHas extends Reply {
 
 	//private array $aArpOps = [1=>'ARPOP_REQUEST',2=>'ARPOP_REPLY',3=>'ARPOP_RREQUEST',4=>'ARPOP_RREPLY',8=>'ARPOP_InREQUEST',9=>'ARPOP_InREPLY',10=>'ARPOP_NAK'];
 	
-	public function __construct(string $sIPv4Addr,int $iNetwork,int $iSourceStation)
+	public function __construct(string $sSourceIP, string $sIPv4Addr,int $iNetwork,int $iSourceStation)
 	{
 		$this->sIPv4Addr = $sIPv4Addr;
+		$this->sSourceIP = $sSourceIP;
 		$this->iNetwork = $iNetwork;
 		$this->iSourceStation = $iSourceStation;
 		
@@ -50,12 +52,12 @@ class ArpWhoHas extends Reply {
 	public function buildEconetpacket(): \HomeLan\FileStore\Messages\EconetPacket
 	{
 		//Arp how as request on EconetA 
-		$this->sPkt=inet_pton($this->sIPv4Addr);
+		$this->sPkt=inet_pton($this->sSourceIP).inet_pton($this->sIPv4Addr);
 		$this->appendByte($this->iNetwork);
 		$this->appendByte($this->iSourceStation);
 		$oEconetPacket = new EconetPacket();
 		$oEconetPacket->setPort(0xd2);
-		$oEconetPacket->setFlags(0xA1);
+		$oEconetPacket->setFlags(33);
 		$oEconetPacket->setDestinationStation(255);
 		$oEconetPacket->setDestinationNetwork($this->iNetwork);
 		$oEconetPacket->setData($this->sPkt);

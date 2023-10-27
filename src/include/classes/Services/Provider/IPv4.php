@@ -55,10 +55,10 @@ class IPv4 implements ProviderInterface {
 	public function __construct(\Psr\Log\LoggerInterface $oLogger)
 	{
 		$this->oLogger = $oLogger;
-		$this->oArpTable = new Arpcache($this);
-		$this->oInterfaceTable = new Interfaces($this);
-		$this->oRoutingTable = new Routes($this);
-		$this->oNat = new NAT($this);
+		$this->oArpTable = new Arpcache($this,$oLogger);
+		$this->oInterfaceTable = new Interfaces($this,$oLogger);
+		$this->oRoutingTable = new Routes($this,$oLogger);
+		$this->oNat = new NAT($this,$oLogger);
 	}
 
 	private function addReplyToBuffer($oReply): void
@@ -103,10 +103,10 @@ class IPv4 implements ProviderInterface {
 	public function broadcastPacketIn(EconetPacket $oPacket): void
 	{
 		//Deal with arp requests
-		if($oPacket->getFlags()==0xA1){ //In EconetA IPv4, the flag is used to indicate the type of packet 0xA1 is arp request
-
+		if($oPacket->getFlags()==33){ //In EconetA IPv4, the flag is used to indicate the type of packet 0xA1 is arp request
 			$oArpReqeust = new ArpRequest($oPacket,$this->oLogger);
 			$this->oArpTable->addEntry($oArpReqeust->getSourceNetwork(),$oArpReqeust->getSourceStation(),$oArpReqeust->getSourceIP());  //Store the requestion stations ip details in the arp cache.
+			$this->oLogger->debug("Arp reqeuest recevived via broadcast for ".$oArpReqeust->getRequestedIP());
 
 			if($this->oInterfaceTable->isInterfaceIP($oArpReqeust->getRequestedIP())){  //Only reply if the arp request if for an interface IP addr 
 
@@ -147,6 +147,7 @@ class IPv4 implements ProviderInterface {
 					$this->oLogger->debug($oException->getMessage());
 					return;
 				}
+				$this->oArpTable->addEntry($oPacket->getSourceNetwork(),$oPacket->getSourceStation(),$oIPv4->getSrcIP()); //Adds an entry to the arp cache 
 
 				//If the IP is for this machine respond
 				if($this->oInterfaceTable->isInterfaceIP($oIPv4->getDstIP())){
@@ -169,9 +170,9 @@ class IPv4 implements ProviderInterface {
 
 
 				break;
-			case 0xA2: //ECOTYPE_ARP_REPLY
+			case 0x2A: //ECOTYPE_ARP_REPLY
 
-				$this->oLogger->debug("Arp packet received");
+				$this->oLogger->debug("Arp response packet received");
 				//Arp: We never forward arp packets as they should not leave the layer 2 network they are on, so we only update the arp cache.
 				//
 				//     NB: We don't care if we made an arp request this is a response to, as promiscuous arp is a thing. 
@@ -245,6 +246,7 @@ class IPv4 implements ProviderInterface {
 
 		//Need to reference the service dispatcher so NAT can gain access to the event loop, to add its own socket handles 
 		$this->oNat->registerService($oServiceDispatcher);
+		$this->oLogger->debug("Registering the IPv4 service.");
 	}
 
 	public function houseKeeping():void

@@ -33,6 +33,10 @@ class NAT
 
 	private array $aNatTable=[];
 
+	private array $aConnTrackPending=[];
+
+	const DEFAULT_TIMEOUT = 120;
+
 	/**
  	 * Constructor 
  	 *
@@ -68,7 +72,13 @@ class NAT
 
 	public function houseKeeping()
 	{
-
+		foreach($this->aConnTrack as $sKey=>$aEntry){
+			$iAge = time()-$aEntry['last_activity'];
+			if($iAge>self::DEFAULT_TIMEOUT){
+				$this->oLogger->notice("NAT: Housing keeping timed out conntrack entry ".$sKey);
+				$aEntry['socket']->close();
+			}
+		}
 	}
 
 	/**
@@ -155,6 +165,17 @@ class NAT
 
 	private function _createConntrackEntry(IPv4Request $oIPv4, TCPRequest $oTcp)
 	{
+		$sKey = $oIPv4->getSrcIP().'_'.$oIPv4->getDstIP().'_'.$oTcp->getSrcPort().'_'.$oTcp->getDstPort();
+
+		//Deal with the fact that the connection getting established is async, so the connection may form
+		//after the client retransmitts the sync packet. 
+		if(in_array($sKey,$this->aConnTrackPending)){
+				$this->oLogger->debug("NAT: Already waiting for this connection ".$sKey);
+				return;
+		}
+		$this->aConnTrackPending[] = $sKey;
+
+
 		$aNatEntry = $this->getNatEntry($oIPv4->getDstIP(),$oTcp->getDstPort());
 
 		$oPromise = $this->_openConnection($aNatEntry['ip_to'],$aNatEntry['port_to']);
@@ -174,6 +195,7 @@ class NAT
 					'ack'=>$oTcp->getAck(),
 					'state'=>'connecting',
 					'last_activity'=>time(),
+					'sequence_sock'=>rand(0,2000),
 					'socket'=>$oSocket];
 				$_this->_registerConnection($sKey,$aConnTrack);
 				$oSocket->on("data",function($sData) use ($_this, $sKey){
@@ -193,7 +215,12 @@ class NAT
 				if(strlen($sData)>0){
 					$oSocket->write($sData);
 				}
-			});
+			},
+			function(\Exception $e) use ($_this, $oIPv4, $oTcp){
+				$sKey = $oIPv4->getSrcIP().'_'.$oIPv4->getDstIP().'_'.$oTcp->getSrcPort().'_'.$oTcp->getDstPort();
+				$_this->_remoteConnectionFailed($e, $sKey,$oIPv4, $oTcp);
+			}
+		);
 	}
 
 	/**
@@ -204,7 +231,17 @@ class NAT
 	private function _sendDataViaSocket(string $sKey, IPv4Request $oIPv4, TCPRequest $oTcp):void
 	{
 
-		$this->oLogger->debug("NAT: Recived data ".$oTcp->toString());
+		$this->oLogger->debug("NAT: Recived data, sending to remote sock ".$oTcp->toString());
+		if($oTcp->getSequence()==$this->aConnTrack[$sKey]['sequence']){
+			$this->oLogger->debug("NAT: Duplicate packet seq : ".$oTcp->getSequence()." dropping.");
+			return;
+		}
+
+		if($oTcp->getSequence()==($this->aConnTrack[$sKey]['sequence']+1)){
+			$this->oLogger->debug("NAT: Empty ack packet, just accept (dont reply)");
+			return;
+		}
+
 		$this->aConnTrack[$sKey]['socket']->write($oTcp->getData());
 		$this->aConnTrack[$sKey]['last_activity']=time();
 		$this->aConnTrack[$sKey]['pktid'] = $oIPv4->getId();
@@ -214,16 +251,8 @@ class NAT
 
 		$this->aConnTrack[$sKey]['socket']->write($oTcp->getData());
 
+		//Update the state tracking field
 		switch($this->aConnTrack[$sKey]['state']){
-			case 'connecting':
-				if(!$oTcp->getSynFlag()){
-					$this->aConnTrack[$sKey]['state']='connected';
-				}
-				if($oTcp->getFinFlag()){
-					$this->aConnTrack[$sKey]['state']='closing';
-					$this->aConnTrack[$sKey]['socket']->close();
-				}
-				break;
 			case 'connected':
 				if($oTcp->getResetFlag()){
 					$this->aConnTrack[$sKey]['state']='Error';
@@ -233,7 +262,7 @@ class NAT
 					$this->aConnTrack[$sKey]['state']='closing';
 					$this->aConnTrack[$sKey]['socket']->close();
 				}
-			case 'error':
+				break;
 			default:
 				if($oTcp->getFinFlag()){
 					$this->aConnTrack[$sKey]['state']='closing';
@@ -242,6 +271,41 @@ class NAT
 				break;
 				
 		}
+
+		//Build an ack reply (with not data contained but lets not keep the 8bit client having to keep this stuff in its buffer)
+		$oTcpIpPkt = $this->_builtTcpIPReply($sKey);
+
+		//Sort out seq/ack numbers 
+		//Ack everything we have gotton so far
+		$oTcpIpPkt->setAckNumber($this->aConnTrack[$sKey]['sequence']+1);
+
+		//Inc the sequence number 
+		$oTcpIpPkt->setSeqNumber($this->aConnTrack[$sKey]['sequence_sock']);
+
+		//Set flags
+		switch($this->aConnTrack[$sKey]['state']){
+			case 'closing':
+				$oTcpIpPkt->setFlagAck(true);
+				$oTcpIpPkt->setFlagFin(true);
+				unset($this->aConnTrack[$sKey]);
+				break;
+			case 'error':
+				$oTcpIpPkt->setFlagAck(true);
+				$oTcpIpPkt->setFlagReset(true);
+				unset($this->aConnTrack[$sKey]);
+				break;
+			default:
+				$oTcpIpPkt->setFlagAck(true);
+				break;
+		}
+		//Add the data to the tcp stream 
+		$oTcpIpPkt->setData("");
+		$this->oLogger->debug("NAT: Replied with tcp pkt ".$oTcpIpPkt->toString() );
+		//Build the econet packet, and dipatch it 
+		$oEconetPacket = $oTcpIpPkt->buildEconetpacket();
+		$oIP = new IPv4Request($oEconetPacket, $this->oProvider->getLogger());
+		$this->oProvider->processUnicastIPv4Pkt($oIP, $oEconetPacket);
+
 				
 	}
 
@@ -273,6 +337,16 @@ class NAT
 	public function _registerConnection(string $sKey, array $aConnectionData):void
 	{
 		$this->oLogger->debug("NAT: Registering external connection ".$sKey."");
+	
+		//Clear out the pending key 
+		foreach($this->aConnTrackPending as $iPendingKey=>$sPending){
+			if($sKey==$sPending){
+				unset($this->aConnTrackPending[$iKey]);
+				break;
+			}
+		}
+
+		//Ack the the syn packet now we have a connection 
 		$this->aConnTrack[$sKey] = $aConnectionData;
 		//Create a TCP/IP packet with the basic addr/port fields filled in 
 		$oTcp = $this->_builtTcpIPReply($sKey);
@@ -283,9 +357,45 @@ class NAT
 		$this->aConnTrack[$sKey]['state']='connected';
 		$this->oLogger->debug("NAT: Replied with tcp pkt ".$oTcp->toString() );
 		$oEconetPacket = $oTcp->buildEconetpacket();
-		$oIPv4 = new IPv4Request($oEconetPacket,$this->oProvider->getLogger());
+		$oIPv4 = new IPv4Request($oEconetPacket,$this->oLogger);
 		$this->oProvider->processUnicastIPv4Pkt($oIPv4,$oEconetPacket);
 
+	}
+
+	/**
+	 * This is called when we can't connect to the remote host
+	 *
+	 * This method should never be called from outsite the class
+	 * Its only public becasuse is used by an async call back that is triggered
+	 * once the socket to an external host has been established. 
+	*/  
+	private function _remoteConnectionFailed(\Exception $oException, string $sKey, IPv4Request $oIPv4, TCPRequest $oTcp)
+	{
+		$this->oLogger->debug("NAT: Could not connect to remote host (".$oException->getMessage().").");
+		$oTcpIpPkt = new TcpIPReply();
+
+		$oTcpIpPkt->setId($oIPv4->getId());
+		$oTcpIpPkt->setAckNumber($oTcp->getSequence());
+		$oTcpIpPkt->setSeqNumber(0);
+
+		//Set the econet src station
+		$oTcpIpPkt->setSrcStation(config::getValue('nat_default_station'));
+		$oTcpIpPkt->setSrcNetwork(config::getValue('nat_default_network'));
+
+		//Set addressing params
+		$oTcpIpPkt->setDstIP($oIPv4->getSrcIP());
+		$oTcpIpPkt->setSrcIP($oIPv4->getDstIP());
+		$oTcpIpPkt->setDstPort($oTcp->getDstPort());
+		$oTcpIpPkt->setSrcPort($oTcp->getSrcPort());
+		$oTcpIpPkt->setWindow(65536);
+
+		//Set the flags to show the connection has failed 
+		$oTcpIpPkt->setFlagAck(true);
+		$oTcpIpPkt->setFlagReset(true);
+
+		$oEconetPacket = $oTcp->buildEconetpacket();
+		$oIPv4 = new IPv4Request($oEconetPacket,$this->oLogger);
+		$this->oProvider->processUnicastIPv4Pkt($oIPv4,$oEconetPacket);
 	}
 
 	/**
@@ -301,15 +411,14 @@ class NAT
 		$this->aConnTrack[$sKey]['last_activity']=time();
 
 		$this->oLogger->debug("NAT: Data received from external socket (".$sKey."), data len was ".strlen($sData)." (".$sData.")");
-
+		
 		//Create a TCP/IP packet with the basic addr/port fields filled in 
 		$oTcpIpPkt = $this->_builtTcpIPReply($sKey);
 
 		//Sort out seq/ack  numbers 
-		$oTcpIpPkt->setAckNumber($this->aConnTrack[$sKey]['sequence']+1);
-		$this->aConnTrack[$sKey]['ack'] = $this->aConnTrack[$sKey]['ack'] + strlen($sData);
-		$oTcpIpPkt->setSeqNumber($this->aConnTrack[$sKey]['ack']);
-
+		$this->aConnTrack[$sKey]['sequence_sock']++;
+		$this->aConnTrack[$sKey]['sequence_sock'] = $this->aConnTrack[$sKey]['sequence_sock']+$iLen;
+		$oTcpIpPkt->setSeqNumber($this->aConnTrack[$sKey]['sequence_sock']);
 
 
 		//Set flags
@@ -324,9 +433,6 @@ class NAT
 				$oTcpIpPkt->setFlagReset(true);
 				unset($this->aConnTrack[$sKey]);
 				break;
-			default:
-				//$oTcpIpPkt->setFlagAck(true);
-				break;
 		}
 		//Add the data to the tcp stream 
 		$oTcpIpPkt->setData($sData);
@@ -340,22 +446,28 @@ class NAT
 	
 	public function _socketEnd(string $sKey):void
 	{
-		$this->aConnTrack[$sKey]['state']='closing';
-		$this->_socketDataIn($sKey, "");
+		if(array_key_exists($sKey,$this->aConnTrack)){
+			$this->aConnTrack[$sKey]['state']='closing';
+			$this->_socketDataIn($sKey, "");
+		}
 	}
 
 	public function _socketError(string $sKey, \Exception $oException):void
 	{
 		$this->oLogger->debug("NAT: Error on socket for ".$sKey);
-		$this->aConnTrack[$sKey]['state']='error';
-		$this->_socketDataIn($sKey, "");
+		if(array_key_exists($sKey,$this->aConnTrack)){
+			$this->aConnTrack[$sKey]['state']='error';
+			$this->_socketDataIn($sKey, "");
+		}
 	}
 
 	public function _socketClose(string $sKey):void
 	{
-		$this->oLogger->debug("NAT: Closing socket for ".$sKey);
-		$this->aConnTrack[$sKey]['state']='closing';
-		$this->_socketDataIn($sKey, "");
+		if(array_key_exists($sKey,$this->aConnTrack)){
+			$this->oLogger->debug("NAT: Closing socket for ".$sKey);
+			$this->aConnTrack[$sKey]['state']='closing';
+			$this->_socketDataIn($sKey, "");
+		}
 	}
 
 	private function _builtTcpIPReply(string $sKey):TcpIPReply
@@ -371,7 +483,7 @@ class NAT
 		$oTcpIpPkt->setId($this->aConnTrack[$sKey]['pktid']++);
 
 		$oTcpIpPkt->setAckNumber($this->aConnTrack[$sKey]['sequence']+1);
-		$oTcpIpPkt->setSeqNumber($this->aConnTrack[$sKey]['ack']);
+		$oTcpIpPkt->setSeqNumber(0);
 
 
 		//Set addressing params
@@ -379,7 +491,7 @@ class NAT
 		$oTcpIpPkt->setSrcIP($this->aConnTrack[$sKey]['dstip']);
 		$oTcpIpPkt->setDstPort($this->aConnTrack[$sKey]['srcport']);
 		$oTcpIpPkt->setSrcPort($this->aConnTrack[$sKey]['dstport']);
-		$oTcpIpPkt->setWindow($this->aConnTrack[$sKey]['window_to']);
+		$oTcpIpPkt->setWindow(65536);
 
 		return $oTcpIpPkt;
 

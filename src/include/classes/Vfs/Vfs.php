@@ -179,7 +179,6 @@ class Vfs {
 		
 		//Find directory first 
 		$bMatched = false;
-		var_dump($aDirectoryListing);
 		foreach($aDirectoryListing as $oFile){
 			if($oFile->isDir()){
 				if(stripos($oFile->getEconetName(),$sSearch)===0){

@@ -158,7 +158,7 @@ class FileServer implements ProviderInterface{
 	*/
 	private function addStream(int $iNetwork, int $iStation,StreamIn $oStream): void
 	{
-		if(!is_array($this->aStreamsIn[$iNetwork])){
+		if(!array_key_exists($iNetwork,$this->aStreamsIn) OR !is_array($this->aStreamsIn[$iNetwork])){
 			$this->aStreamsIn[$iNetwork]=[];
 		}
 		$this->aStreamsIn[$iNetwork][$iStation]=$oStream;
@@ -320,6 +320,9 @@ class FileServer implements ProviderInterface{
 				break;
 			case 'EC_FS_FUNC_GET_USER_FREE':
 				$this->getUserDiscFree($oFsRequest);
+				break;
+			case 'EC_FS_FUNC_WHO_AM_I':
+				$this->whoAmI($oFsRequest);
 				break;
 			default:
 				$this->oLogger->debug("Un-handled fs function ".$sFunction);
@@ -969,7 +972,11 @@ class FileServer implements ProviderInterface{
 				$oReply = $oFsRequest->buildReply();
 				$oFd = Vfs::getFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$iHandle);
 				$aStat = $oFd->fsFStat();
-				$iSize = $aStat['size'];
+				if(is_array($aStat) AND array_key_exists('size',$aStat)){
+					$iSize = $aStat['size'];
+				}else{
+					$iSize = 0;
+				}
 				$oReply->DoneOk();
 				$oReply->append24bitIntLittleEndian($iSize);
 				break;
@@ -978,7 +985,11 @@ class FileServer implements ProviderInterface{
 				$oReply = $oFsRequest->buildReply();
 				$oFd = Vfs::getFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$iHandle);
 				$aStat = $oFd->fsFStat();
-				$iSize = $aStat['size'];
+				if(is_array($aStat) AND array_key_exists('size',$aStat)){
+					$iSize = $aStat['size'];
+				}else{
+					$iSize = 0;
+				}
 				$oReply->DoneOk();
 				$oReply->append24bitIntLittleEndian($iSize);
 				break;
@@ -1273,6 +1284,7 @@ class FileServer implements ProviderInterface{
 				$oEconetPacket = new EconetPacket();
 				$oEconetPacket->setDestinationNetwork($oFsRequest->getSourceNetwork());
 				$oEconetPacket->setDestinationStation($oFsRequest->getSourceStation());
+				$oEconetPacket->setFlags(0);
 				$oEconetPacket->setPort($iDataPort);
 				$oEconetPacket->setData($sBlock);
 
@@ -1298,6 +1310,7 @@ class FileServer implements ProviderInterface{
 						$oEconetPacket->setDestinationNetwork($oFsRequest->getSourceNetwork());
 						$oEconetPacket->setDestinationStation($oFsRequest->getSourceStation());
 						$oEconetPacket->setPort($iDataPort);
+						$oEconetPacket->setFlags(0);
 						$oEconetPacket->setData(str_pad("",$iBytesToRead,"0"));
 						$_this->addReplyToBuffer($oEconetPacket);
 						$oReply2->appendByte(0x80);
@@ -1321,6 +1334,7 @@ class FileServer implements ProviderInterface{
 					$oEconetPacket = new EconetPacket();
 					$oEconetPacket->setDestinationNetwork($oFsRequest->getSourceNetwork());
 					$oEconetPacket->setDestinationStation($oFsRequest->getSourceStation());
+					$oEconetPacket->setFlags(0);
 					$oEconetPacket->setPort($iDataPort);
 					$oEconetPacket->setData($sBlock);
 
@@ -1576,6 +1590,7 @@ class FileServer implements ProviderInterface{
 			$oEconetPacket->setDestinationNetwork($oFsRequest->getSourceNetwork());
 			$oEconetPacket->setDestinationStation($oFsRequest->getSourceStation());
 			$oEconetPacket->setPort($iDataPort);
+			$oEconetPacket->setFlags(0);
 			$oEconetPacket->setData($sBlock);
 
 			$_this->addReplyToBuffer($oEconetPacket);
@@ -1592,6 +1607,7 @@ class FileServer implements ProviderInterface{
 					$oEconetPacket->setDestinationNetwork($oFsRequest->getSourceNetwork());
 					$oEconetPacket->setDestinationStation($oFsRequest->getSourceStation());
 					$oEconetPacket->setPort($iDataPort);
+					$oEconetPacket->setFlags(0);
 					$oEconetPacket->setData($sBlock);
 
 					$_this->addReplyToBuffer($oEconetPacket);
@@ -2038,6 +2054,20 @@ class FileServer implements ProviderInterface{
 
 		$this->addReplyToBuffer($oReply->buildEconetpacket());
 
+	}
+
+	public function whoAmI(FsRequest $oFsRequest): void
+	{
+		$oReply = $oFsRequest->buildReply();
+		$oUser = Security::getUser($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation());
+		if(is_object($oUser)){
+			$oReply->DoneOk();
+			$oReply->appendString($oUser->getUsername());
+			$oReply->appendByte(0x0d);
+		}else{
+			$oReply->setError(0xbf,"Who are you?");
+		}
+		$this->addReplyToBuffer($oReply->buildEconetpacket());	
 	}
 
 	public function getJobs(): array

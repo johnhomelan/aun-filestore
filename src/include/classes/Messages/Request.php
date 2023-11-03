@@ -75,7 +75,7 @@ class Request {
 	{
 		$aBytes = unpack('C*',(string) $this->sData);
 		$sRetstr = "";
-		for($i=$iStart;$i<(is_countable($aBytes) ? count($aBytes) : 0);$i++){
+		for($i=$iStart;$i<(is_countable($aBytes) ? count($aBytes)+1 : 0);$i++){
 			if(chr($aBytes[$i])!="\r" AND chr($aBytes[$i])!="\n"){
 				$sRetstr = $sRetstr.chr($aBytes[$i]);
 			}else{

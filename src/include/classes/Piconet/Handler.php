@@ -28,6 +28,10 @@ class Handler {
 
 	private ConnectionInterface $oConnection;
 
+	private array $aQueue = [];
+
+	private array $aAwaitingAck = [];
+
 	public function __construct(private readonly \Psr\Log\LoggerInterface $oLogger,  private readonly ServiceDispatcher $oServices, private readonly PacketDispatcher $oPacketDispatcher) 
 	{
 		$this->oLogger->debug("Starting piconet handler");
@@ -40,26 +44,51 @@ class Handler {
 
 	public function onConnect(){
 		$this->oLogger->debug("Piconet handler: Connected");
-		//$this->oConnection->write("RESTART\r");
-		$this->oConnection->write("STATUS\r");
-		$this->oConnection->write('SET_STATION '.config::getValue('piconet_station')."\r");
-		$this->oConnection->write("SET_MODE LISTEN\r");
-		
+		//stream_set_blocking($this->oConnection->stream,true); 
+		stream_set_write_buffer($this->oConnection->stream, 0); //Turn off the write buffer 
+
+		fwrite($this->oConnection->stream,"STATUS\r\r");
+		fflush($this->oConnection->stream);
+
+		$this->bringupInterface();
 	}
+
+	public function bringupInterface()
+	{
+		$this->oLogger->debug("Piconet handler: Bringing up the interface");
+		$this->oLogger->debug("Piconet handler: Set station to ".config::getValue('piconet_station'));
+		fwrite($this->oConnection->stream,"SET_STATION ".config::getValue('piconet_station')."\r\r");
+		fflush($this->oConnection->stream);
+
+		$this->oLogger->debug("Piconet handler: Set to listen mode");
+		fwrite($this->oConnection->stream,"SET_MODE LISTEN\r\r");
+		fflush($this->oConnection->stream);
+
+		$this->oLogger->debug("Piconet handler: Interface setup and ready");
+	}
+
 
 	public function onClose():void
 	{
 		$this->oLogger->debug("Piconet handler: Closing");
-		$this->oConnection->write("STOP");
+		$this->oConnection->write("SET_MODE STOP\r\r");
 	}
 
 	public function onMessage($sMessage):void
 	{
-		$this->oLogger->debug("Piconet handler: Message ".$sMessage);
-		
-		$aMessageParts = explode($sMessage," ");
-		switch($aMessageParts[0]){
+		$aLines = explode ("\n",$sMessage);
+		foreach($aLines as $sLine){
+			$this->decodeMessage($sLine);
+		}
+	}
+
+
+	public function decodeMessage($sMessage):void
+	{
+		$aMessageParts = explode(" ",$sMessage);
+		switch(trim($aMessageParts[0])){
 			case 'STATUS':
+				$this->oLogger->debug("Piconet Handler: Status is ".$sMessage);
 				break;
 			case 'ERROR':
 				$this->oLogger->error("Piconet Handler: An error occured (".$sMessage.")");
@@ -83,8 +112,21 @@ class Handler {
 				}
 				break;
 			case 'TX_RESULT':
-				switch($aMessageParts[1]){
+				switch(trim($aMessageParts[1])){
 					case 'OK':
+						$this->oLogger->debug("Piconet Handler: TX OK");
+						$this->_unQueue();
+						$oPacket = new PiconetPacket();
+						$aAck = array_shift($this->aAwaitingAck);
+						if(is_array($aAck)){
+							$oPacket->makeAck($aAck['dst_network'],$aAck['dst_station'],$aAck['port'],$aAck['flags']);
+							$this->oServices->inboundPacket($oPacket);
+							$aReplies = $this->oServices->getReplies();
+							foreach($aReplies as $oReply){
+								$this->oPacketDispatcher->sendPacket($oReply);
+							}
+						}
+						break;
 					case 'UNINITIALISED':
 					case 'OVERFLOW':
 					case 'UNDERRUN':
@@ -93,11 +135,14 @@ class Handler {
 					case 'NO_DATA_ACK':
 					case 'TIMEOUT':
 					case 'MISC':
-						$this->oLogger->info("Piconet Handler: TX failed the error ".$aMessageParts[1]);
+						$aAck = array_shift($this->aAwaitingAck);
+						$this->oLogger->info("Piconet Handler: TX failed the error ".trim($aMessageParts[1]));
+						$this->_runQueue();
 						break;
 					case 'UNEXPECTED':
 					default:
-						$this->oLogger->error("Piconet Handler: Encountered an internal error with the interface while transmitting (this should never happen), with the message ".$aMessageParts[1]);
+						$aAck = array_shift($this->aAwaitingAck);
+						$this->oLogger->error("Piconet Handler: Encountered an internal error with the interface while transmitting (this should never happen), with the message ".trim($aMessageParts[1]));
 						break;
 				}
 				break;
@@ -106,9 +151,46 @@ class Handler {
 
 	public function onError(\Exception $oError):void
 	{
+		$this->oLogger->debug("Piconet Handler: An eccor occured with the device ".$oError->getMessage());
 	}
 
-	public function send(EconetPacket $oPacket):void
+	public function send(EconetPacket $oPacket, int $iRetries = 3):void
+	{
+		$this->oLogger->debug("Piconet Handler: Sending packet to queue");
+		$this->aQueue[] = ['packet'=>$oPacket,'retries'=>$iRetries,'attempts'=>0];
+		if (count($this->aQueue)==1){
+			$this->_runQueue();
+		}
+	}
+	private function _runQueue():void
+	{	
+		$this->oLogger->debug("Piconet Handler: Running Queue");
+		var_dump($this->aQueue);
+		if(count($this->aQueue)>0){
+			$aQueueEntry = array_shift($this->aQueue);
+			if($aQueueEntry['retries']>0){
+				//More re-tires left re-queue
+				$aQueueEntry['retries'] = $aQueueEntry['retries']-1;
+				$aQueueEntry['attempts'] = $aQueueEntry['attempts']+1;
+				array_unshift($this->aQueue,$aQueueEntry);
+				$this->oLogger->debug("Piconet Handler: ".$aQueueEntry['retries']." retires left, ".$aQueueEntry['attempts']." attempts made.");
+			}
+			$this->_writeOutPkt($aQueueEntry['packet']);
+		}else{
+			$this->oLogger->debug("Piconet Handler: No packets in Queue");
+		}
+	}
+
+	private function _unQueue():void
+	{
+		$this->oLogger->debug("Piconet Handler: Dequeuing packet due to scout ack");
+		$aQueueEntry = array_shift($this->aQueue);
+		if($aQueueEntry['attempts']==0){
+			array_unshift($this->aQueue,$aQueueEntry);
+		}
+		$this->_runQueue();
+	}
+	private function _writeOutPkt(EconetPacket $oPacket)
 	{
 		$iDstNetwork = $oPacket->getDestinationNetwork();
 		//The local network is 
@@ -117,10 +199,16 @@ class Handler {
 		}
 		switch($oPacket->getDestinationStation()){
 			case 255:
-				$this->oConnection->write("BCAST ".base64_encode($oPacket->getData()));
+				$this->oLogger->debug("Piconet Handler: Sending broadcast packet (".base64_encode($oPacket->getData()).")");
+				fwrite($this->oConnection->stream,"BCAST ".base64_encode($oPacket->getData()."\r\r"));
+				fflush($this->oConnection->stream);
 				break;
 			default:
-				$this->oConnection->write("TX ".$oPacket->getDestinationStation()." ".$iDstNetwork." ".$oPacket->getFlags()." ".$oPacket->getPort()." ".base64_encode($oPacket->getData()));
+				$this->oLogger->debug("Piconet Handler: Sending unicast packet to station ".$oPacket->getDestinationStation()." network ".$iDstNetwork." port ".$oPacket->getPort()." packet ".base64_encode($oPacket->getData()));
+				$this->aAwaitingAck[] = ['dst_station'=>$oPacket->getDestinationStation(),'dst_network'=>$oPacket->getDestinationNetwork(),'port'=>$oPacket->getPort(),'flags'=>$oPacket->getFlags()];
+				fwrite($this->oConnection->stream,"TX ".$oPacket->getDestinationStation()." ".$iDstNetwork." ".$oPacket->getFlags()." ".$oPacket->getPort()." ".base64_encode($oPacket->getData())."\r\r");
+				fflush($this->oConnection->stream);
+				
 				break;
 		}
 	}

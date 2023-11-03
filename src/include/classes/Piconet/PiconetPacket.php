@@ -45,7 +45,7 @@ class PiconetPacket implements EncapsulationInterface {
 	/**
 	 * @var array<string, string>
 	*/ 
-	protected array $aTypeMap = ['RX_BROADCAST'=>'Broadcast', 'RX_TRANSMIT'=>'Unicast', 'RX_IMMEDIATE'=>'Immediate'];
+	protected array $aTypeMap = ['RX_BROADCAST'=>'Broadcast', 'RX_TRANSMIT'=>'Unicast', 'RX_IMMEDIATE'=>'Immediate', 'Ack'=>'Ack'];
 
 
 	/**
@@ -108,8 +108,8 @@ class PiconetPacket implements EncapsulationInterface {
 				$sData = $aPacket[2];
 				break;
 			case 'RX_TRANSMIT':
-				$sScout = $aPacket[2];
-				$sData = $aPacket[3];
+				$sScout = $aPacket[1];
+				$sData = $aPacket[2];
 				break;
 			default:
 				$sData="";
@@ -121,16 +121,27 @@ class PiconetPacket implements EncapsulationInterface {
 
 		//Read the dst/src contolbyte port each is 1 byte unsigned int |DstStn|DstNet|SrcStn|SrcNet|Cb|Port
 		$aScout=unpack('C',(string) $sRawScout);
+		$sRawScout = substr($sRawScout,1);
 		$this->iDstStationNumber = $aScout[1];
+
 		$aScout=unpack('C',(string) $sRawScout);
+		$sRawScout = substr($sRawScout,1);
 		$this->iDstNetworkNumber = $aScout[1];
+
 		$aScout=unpack('C',(string) $sRawScout);
+		$sRawScout = substr($sRawScout,1);
 		$this->iStationNumber = $aScout[1];
+
 		$aScout=unpack('C',(string) $sRawScout);
+		$sRawScout = substr($sRawScout,1);
 		$this->iNetworkNumber = $aScout[1];
+
 		$aScout=unpack('C',(string) $sRawScout);
+		$sRawScout = substr($sRawScout,1);
 		$this->iCb = $aScout[1];
+
 		$aScout=unpack('C',(string) $sRawScout);
+		$sRawScout = substr($sRawScout,1);
 		$this->iPort = $aScout[1];
 
 		//The packets on the local network always have a network number of 0, so update the network number to the correct global number
@@ -147,9 +158,18 @@ class PiconetPacket implements EncapsulationInterface {
 				break;
 			case 'RX_TRANSMIT':
 				$sRawData = "".(string) base64_decode($sData);
-				$this->sData = substr($sRawData,4,strlen($sRawData)-6);
+				$this->sData = substr($sRawData,4,strlen($sRawData)-4);
 				break;
 		}
+	}
+
+	public function makeAck(int $iNetwork, int $iStation, int $iPort, int $iCb):void
+	{
+		$this->iNetworkNumber = $iNetwork;
+		$this->iStationNumber = $iStation;
+		$this->iPort = $iPort;
+		$this->iCb = $iCb;
+		$this->sMessageType = 'Ack';
 	}
 
 	public function buildAck(): ?string

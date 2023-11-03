@@ -44,7 +44,7 @@ final class UnixDeviceConnector implements ConnectorInterface
                 1
             ));
         }
-	stream_set_blocking($resource, false);
+	//stream_set_blocking($resource, false);
         $connection = new Connection($resource, $this->loop);
         //$connection->unix = true;
 

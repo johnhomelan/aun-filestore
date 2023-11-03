@@ -68,7 +68,7 @@ class EconetPacket {
 		$this->sData=$sData;
 	}
 
-	public function getData():string 
+	public function getData():?string 
 	{
 		return $this->sData;
 	}

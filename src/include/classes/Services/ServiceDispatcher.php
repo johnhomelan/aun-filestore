@@ -204,7 +204,6 @@ class ServiceDispatcher {
 	*/
 	private function queueReply(EconetPacket $oPacket): void
 	{
-		usleep(config::getValue('bbc_default_pkg_sleep'));
 		$this->aReplies[]=$oPacket;
 	}
 

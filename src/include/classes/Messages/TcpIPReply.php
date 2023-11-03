@@ -34,7 +34,7 @@ class TcpIPReply extends Reply {
 	private int $iDstPort;
 	private int $iSeq;
 	private int $iAck;
-	private int $iWindow = 117520;
+	private int $iWindow = 65536;
 	private int $iUrgent = 0;
 	private bool $bSyn = false;
 	private bool $bFin = false; 
@@ -62,7 +62,7 @@ class TcpIPReply extends Reply {
 		$this->appendByte($this->iTos);
 
 		//Bytes 3,4 are a 16bit int with the total length of the packet including the header and data 
-		$this->append16bitIntBigEndian($this->getIpHeaderLength()+$this->getTcpHeaderLength()+strlen($this->sData));
+		$this->append16bitIntBigEndian(40+strlen($this->sData));
 
 		//Bytes 5,6 are a 16bit int is the identification number of the packet, this ids the packet if its broken up into smaller chunks 
 		$this->append16bitIntBigEndian($this->iPktId);
@@ -103,9 +103,9 @@ class TcpIPReply extends Reply {
 		$this->append32bitIntBigEndian($this->iAck);
 
 		//Byte 13 - 14 Are the flags and do number 
-		$sDoRsvFlags1 = 0;
+		$sDoRsvFlags1 = $this->getTcpHeaderLength()<<4;
 		$sDoRsvFlags2 = 0;
-		$sDoRsvFlags1 = $this->bNonce  ? 1 : 0;
+		//$sDoRsvFlags1 = $this->bNonce  ? 1 : 0;
 		$sDoRsvFlags2 = $this->bCrw    ? $sDoRsvFlags2 + 128 : $sDoRsvFlags2;
 		$sDoRsvFlags2 = $this->bEcn    ? $sDoRsvFlags2 + 64  : $sDoRsvFlags2;
 		$sDoRsvFlags2 = $this->bUrgent ? $sDoRsvFlags2 + 32  : $sDoRsvFlags2;
@@ -119,8 +119,9 @@ class TcpIPReply extends Reply {
 
 
 		//Bytes 15 - 16 16bit int for the Window
-		$this->append16bitIntBigEndian($this->iWindow);
-		
+		//$this->append16bitIntBigEndian($this->iWindow);
+		$this->appendByte(255);
+		$this->appendByte(255);
 		//Bytes 17 -18 16bit int for the TCP checksum (the intial value is 0, the checksum is calculated once the packet is fully created and needs the initial value to be 0)
 		$iTcpCheckSumPos = strlen($this->sPkt);
 		$this->append16bitIntBigEndian(0);
@@ -159,7 +160,7 @@ class TcpIPReply extends Reply {
 
 	private function getTcpHeaderLength():int
 	{
-		return 20;
+		return (20*8)/32;
 	}
 
 	/**

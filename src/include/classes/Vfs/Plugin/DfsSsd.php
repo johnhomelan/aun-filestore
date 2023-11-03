@@ -168,11 +168,13 @@ class DfsSsd implements PluginInterface {
 			}
 		}
 		if((is_countable($aPathInsideImage) ? count($aPathInsideImage) : 0)==1){
-			if(array_key_exists($aPathInsideImage[0],$aCat['$'])){
-				$bFound = TRUE;
-			}
-			if(array_key_exists($aPathInsideImage[0],$aCat)){
-				$bFound = TRUE;
+			if(is_array($aCat)){
+				if(array_key_exists($aPathInsideImage[0],$aCat['$'])){
+					$bFound = TRUE;
+				}
+				if(array_key_exists($aPathInsideImage[0],$aCat)){
+					$bFound = TRUE;
+				}
 			}
 		}
 		return $bFound;

@@ -18,6 +18,7 @@ use HomeLan\FileStore\Messages\EconetPacket;
 use HomeLan\FileStore\Messages\ArpRequest; 
 use HomeLan\FileStore\Messages\IPv4Request; 
 use HomeLan\FileStore\Messages\ArpIsAt; 
+use HomeLan\FileStore\Messages\ArpWhoHas; 
 use HomeLan\FileStore\Messages\TCPRequest; 
 use HomeLan\FileStore\Services\Provider\IPv4\Arpcache;
 use HomeLan\FileStore\Services\Provider\IPv4\Interfaces;
@@ -170,7 +171,7 @@ class IPv4 implements ProviderInterface {
 
 
 				break;
-			case 0x2A: //ECOTYPE_ARP_REPLY
+			case 0xA2: //ECOTYPE_ARP_REPLY
 
 				$this->oLogger->debug("Arp response packet received");
 				//Arp: We never forward arp packets as they should not leave the layer 2 network they are on, so we only update the arp cache.
@@ -197,6 +198,7 @@ class IPv4 implements ProviderInterface {
 			try{
 				$aEconetDst = $this->oArpTable->getNetworkAndStation($oIPv4->getDstIP());
 				$oEconetPacket = $oIPv4->forward($aEconetDst['network'],$aEconetDst['station'],$aInterface['network'],$aInterface['station']);
+				$this->oLogger->debug("IPv4: Adding packet to output buffer for ".$oIPv4->getDstIP()." ".$aEconetDst['network'].".".$aEconetDst['station']);
 				$this->addReplyToBuffer($oEconetPacket);
 			}catch(ArpEntryNotFound $oNotfound){
 				//The address is not in the arp cache send the arp request, and queue the packet after setting 
@@ -204,6 +206,10 @@ class IPv4 implements ProviderInterface {
 
 				$oPacket->setSourceNetwork($aInterface['network']);
 				$oPacket->setSourceStation($aInterface['station']);
+				
+				$oArpWhoHas = new ArpWhoHas($aInterface['ipaddr'],$oIPv4->getDstIP(),$aInterface['network'],$aInterface['station']);
+				$this->addReplyToBuffer($oArpWhoHas->buildEconetpacket());
+				$this->oLogger->debug("IPv4: Adding packet to queue waiting for ARP ".$oIPv4->getDstIP());
 				$this->queuePacketWaitingOnArp($oIPv4->getDstIP(),$oPacket);
 
 			}
@@ -217,6 +223,7 @@ class IPv4 implements ProviderInterface {
 					try {
 						$aEconetDst = $this->oArpTable->getNetworkAndStation($aRoute['via']);
 						$oEconetPacket = $oIPv4->forward($aEconetDst['network'],$aEconetDst['station'],$aInterface['network'],$aInterface['station']);
+						$this->oLogger->debug("IPv4: Adding packet to output buffer for ".$oIPv4->getDstIP());
 						$this->addReplyToBuffer($oEconetPacket);
 					}catch(ArpEntryNotFound $oNotfound){
 						//The l2 address of the router is not in the apr cache, send the  arp request, and queue the packet after setting
@@ -224,6 +231,7 @@ class IPv4 implements ProviderInterface {
 						//
 						$oPacket->setSourceNetwork($aInterface['network']);
 						$oPacket->setSourceStation($aInterface['station']);
+						$this->oLogger->debug("IPv4: Adding packet to queue waiting for ARP ".$aRoute['via']);
 						$this->queuePacketWaitingOnArp($aRoute['via'],$oPacket);
 					}
 				}catch(InterfaceNotFound $oNotfound){

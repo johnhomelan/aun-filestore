@@ -194,7 +194,6 @@ class FileDescriptor {
 				$sPlugin = $this->sVfsPlugin;
 				return $sPlugin::read($this->oUser,$this->iVfsHandle,$iLength);
 			}catch(VfsException $oVfsException){
-				var_dump($oVfsException);
 				if($oVfsException->isHard()){
 					throw $oVfsException;
 				}
@@ -212,7 +211,6 @@ class FileDescriptor {
 				$sPlugin = $this->sVfsPlugin;
 				return $sPlugin::write($this->oUser,$this->iVfsHandle,$sData);
 			}catch(VfsException $oVfsException){
-				var_dump($oVfsException);
 				if($oVfsException->isHard()){
 					throw $oVfsException;
 				}

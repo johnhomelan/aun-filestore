@@ -31,7 +31,7 @@ safe_define('CONFIG_security_max_session_idle',2400);
 
 safe_define('CONFIG_library_path','$.LIBRARY');
 
-safe_define('CONFIG_vfs_plugins','DfsSsd,AdfsAdl,AdfsHD,LocalFile');
+safe_define('CONFIG_vfs_plugins','AFS,DfsSsd,AdfsAdl,AdfsHD,LocalFile');
 safe_define('CONFIG_vfs_plugin_localfile_root','/var/lib/aun-filestore-root');
 safe_define('CONFIG_vfs_disc_name','VFSROOT');
 safe_define('CONFIG_vfs_home_dir_path','$.home');
@@ -41,15 +41,19 @@ safe_define('CONFIG_vfs_default_disc_size',0x9000);
 safe_define('CONFIG_vfs_plugin_localdfsssd_root','/var/lib/aun-filestore-root');
 safe_define('CONFIG_vfs_plugin_localadfsadl_root','/var/lib/aun-filestore-root');
 safe_define('CONFIG_vfs_plugin_localadfshd_root','/var/lib/aun-filestore-root');
+safe_define('CONFIG_vfs_plugin_afs_root','/var/lib/aun-filestore-root');
 
 safe_define('CONFIG_print_server_spool_dir','/tmp/econetprint');
 
 safe_define('CONFIG_piconet_device','dev/econet');
 safe_define('CONFIG_piconetmap_file','piconetmap.txt');
-safe_define('CONFIG_piconet_station','1');
+safe_define('CONFIG_piconet_station','100');
+safe_define('CONFIG_piconet_local_network',1);
 
 safe_define('CONFIG_nat_default_station',254);
 safe_define('CONFIG_nat_default_network',254);
 safe_define('CONFIG_ipv4_routes_file','routes.txt');
 safe_define('CONFIG_ipv4_interfaces_file','interfaces.txt');
 safe_define('CONFIG_ipv4_nat_file','nat.txt');
+
+safe_define('CONFIG_beeb_term_services_file','beebterm.txt');

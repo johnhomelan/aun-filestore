@@ -619,6 +619,12 @@ class Vfs {
 		if(array_key_exists($iNetwork,Vfs::$aHandles) AND array_key_exists($iStation,Vfs::$aHandles[$iNetwork]) AND array_key_exists($iHandle,Vfs::$aHandles[$iNetwork][$iStation])){
 			return Vfs::$aHandles[$iNetwork][$iStation][$iHandle];
 		}
+		//This is needed for older versions of NFS that sets up 2 directory handles for the CSD and LIBRARY but sends file handle 0 (which does not exist) for all directory listing requests :-0 
+		if(array_key_exists($iNetwork,Vfs::$aHandles) AND array_key_exists($iStation,Vfs::$aHandles[$iNetwork]) AND count(Vfs::$aHandles[$iNetwork][$iStation])>0){
+			//Assume the broken NFS rom means the first handle it set up CSD, not the one is actually asked for (which does not exist).
+			$aIndex = array_keys(Vfs::$aHandles[$iNetwork][$iStation]);
+			return Vfs::$aHandles[$iNetwork][$iStation][$aIndex[0]];
+		}
 		self::$oLogger->debug("vfs: Invalid file handle ".$iHandle." for ".$iNetwork.".".$iStation);
 		throw new Exception("vfs: Invalid file handle ".$iHandle." for ".$iNetwork.".".$iStation);
 	}

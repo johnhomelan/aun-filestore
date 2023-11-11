@@ -31,30 +31,14 @@ class Handler {
 
 
 	/**
-	 * Keeping this class as a singleton, this is static method should be used to get references to this object
-	 *
-	*/
-	public static function create(\Psr\Log\LoggerInterface $oLogger = null, ?Socket $oAunServer = null, private readonly ServiceDispatcher $oServices):Handler
-	{
-		if(!is_object(self::$oSingleton)){
-			self::$oSingleton = new Handler($oLogger);
-		}
-		if(!is_null($oAunServer)){
-			self::$oSingleton->setSocket($oAunServer);
-
-		}
-		return self::$oSingleton;	
-	}
-
-	/**
 	 * Constructor registers the Logger
 	 *  
 	*/
-	public function __construct(private readonly \Psr\Log\LoggerInterface $oLogger)
+	public function __construct(private readonly \Psr\Log\LoggerInterface $oLogger,private readonly ServiceDispatcher $oServices,private readonly PacketDispatcher $oPacketDispatcher)
 	{		
 	}
 
-	public function(Socket $oAunServer)
+	public function setSocket(Socket $oAunServer)
 	{
 		$this->oAunServer = $oAunServer;
 	}
@@ -75,76 +59,107 @@ class Handler {
 		switch($oAunPacket->getPacketType()){
 			case 'Ack':
 				//Got an Ack use 
+				$this->oLogger->debug("Aun Handler: Ack");
+				$this->_unQueue($oAunPacket);
 				break;
 			default:
 				//Send an ack for the AUN packet if needed
 				$sAck = $oAunPacket->buildAck();
 				if(strlen($sAck)>0){
-					$oLogger->debug("filestore: Sending Ack packet");
-					$oAunServer->send($sAck,$sSrcAddress);
-				}
-				//Dispatch packet to all the services so the relivent one can deal with it 
-				$oServices->inboundPacket($oAunPacket);
-				
-				//Send any messages for the services
-				$aReplies = $oServices->getReplies();
-				foreach($aReplies as $oReply){
-					$this->send($oReply);
+					$this->oLogger->debug("Aun Handler: ".$oAunPacket->getPacketType()." Sending Ack packet");
+					$this->oAunServer->send($sAck,$sSrcAddress);
 				}
 				break;
 		}
+		//Dispatch packet to all the services so the relivent one can deal with it 
+		$this->oServices->inboundPacket($oAunPacket);
+		
+		//Send any messages for the services
+		$aReplies = $this->oServices->getReplies();
+		foreach($aReplies as $oReply){
+			//In theroy there can be packets queued for other abstractions (e.g. created via a timer that triggered) 
+			$this->oPacketDispatcher->sendPacket($oReply);
+		}
+	}
+
+	public function timer():void
+	{
+		$this->_runQueue();
 	}
 
 	public function send(EconetPacket $oPacket, int $iRetries = 3):void
 	{
 		$this->oLogger->debug("Aun Handler: Sending packet to queue");
-		$this->aQueue[] = ['packet'=>$oPacket,'retries'=>$iRetries,'attempts'=>0];
-		if (count($this->aQueue)==1){
+	
+		$this->aQueue[] = ['packet'=>$oPacket,'retries'=>$iRetries,'attempts'=>0,'backoff'=>0];
+/*		if (count($this->aQueue)==1){
 			$this->_runQueue();
-		}
+		}*/
 	}
 
 	private function _runQueue():void
 	{	
-		$this->oLogger->debug("Aun Handler: Running Queue");
-		var_dump($this->aQueue);
 		if(count($this->aQueue)>0){
+			var_dump($this->aQueue);
 			$aQueueEntry = array_shift($this->aQueue);
+			if($aQueueEntry['backoff']>1){
+				//Each attempt increase the time between attempts
+				$aQueueEntry['backoff']=$aQueueEntry['backoff']-400;
+				array_unshift($this->aQueue,$aQueueEntry);
+				return;
+			}
 			if($aQueueEntry['retries']>0){
 				//More re-tires left re-queue
 				$aQueueEntry['retries'] = $aQueueEntry['retries']-1;
 				$aQueueEntry['attempts'] = $aQueueEntry['attempts']+1;
+				$aQueueEntry['backoff']=$aQueueEntry['attempts']*400;
 				array_unshift($this->aQueue,$aQueueEntry);
 				$this->oLogger->debug("Aun Handler: ".$aQueueEntry['retries']." retires left, ".$aQueueEntry['attempts']." attempts made.");
 			}
 			$this->_writeOutPkt($aQueueEntry['packet']);
 		}else{
-			$this->oLogger->debug("Aun Handler: No packets in Queue");
+			//$this->oLogger->debug("Aun Handler: No packets in Queue");
 		}
 	}
 
-	private function _unQueue():void
+	private function _unQueue(AunPacket $oAck):void
 	{
 		$this->oLogger->debug("Aun Handler: Dequeuing packet due to scout ack");
-		$aQueueEntry = array_shift($this->aQueue);
-		if($aQueueEntry['attempts']==0){
-			array_unshift($this->aQueue,$aQueueEntry);
+		if(count($this->aQueue)>0){
+			$aQueueEntry = array_shift($this->aQueue);
+			if($oAck->getSequence() == $aQueueEntry['packet']->getSequence()){
+				if($aQueueEntry['attempts']==0){
+					array_unshift($this->aQueue,$aQueueEntry);
+				}
+				$this->_runQueue();
+			}else{
+				array_unshift($this->aQueue,$aQueueEntry);
+			}
 		}
-		$this->_runQueue();
 	}
 
 	private function _writeOutPkt(EconetPacket $oPacket)
 	{
-		$sIP = AunMap::ecoAddrToIpAddr($oPacket->getDestinationNetwork(),$oPacket->getDestinationStation());
+		$this->oLogger->debug("Aun Handler: Transmitting packet");
+		$sHost = $this->_getIpPortFromNetworkStation($oPacket->getDestinationNetwork(),$oPacket->getDestinationStation());
+		$sAunFrame = $oPacket->getAunFrame();
+		if(strlen($sAunFrame)>0){
+			$this->oAunServer->send($sAunFrame,$sHost);
+		}
+	}
+
+	/**
+	 * Get the ip:port combination for a given network and station 
+	*/ 	
+	private function _getIpPortFromNetworkStation(int $iNetwork, int $iStation):string
+	{
+		$sIP = Map::ecoAddrToIpAddr($iNetwork,$iStation);
 		if(!str_contains($sIP,':')){
 			$sHost=$sIP.':'.config::getValue('aun_default_port');
 		}else{
 			$sHost=$sIP;
 		}
-		$sAunFrame = $oPacket->getAunFrame();
-		if(strlen($sAunFrame)>0){
-			$this->oAunServer->send($sAunFrame,$sHost);
-		}
+		return $sHost;
 	}
 
 }

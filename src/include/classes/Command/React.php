@@ -30,6 +30,7 @@ use HomeLan\FileStore\Piconet\Handler as PiconetHandler;
 use HomeLan\FileStore\Piconet\Map as PiconetMap;
 use HomeLan\FileStore\Aun\Map; 
 use HomeLan\FileStore\Aun\AunPacket; 
+use HomeLan\FileStore\Aun\Handler as AunHandler; 
 use HomeLan\FileStore\Authentication\Security; 
 use HomeLan\FileStore\Vfs\Vfs; 
 use HomeLan\FileStore\Admin\Kernel;
@@ -47,6 +48,16 @@ use Exception;
  * data from the main application classes (fileserver, print server), and handles all the initialization tasks.
 */
 class React extends Command {
+	/*
+ 	 * The delay be building a AUN packet, and dispatching it to the network.
+ 	 *
+ 	 * BBC clients can't cope with the server responding with a ack too quickly,
+ 	 * they are simply not ready for it in time, so the packet effectivly gets dropped.
+ 	 *
+ 	 * This delay prevents the server replying too quickly.
+ 	*/ 
+	const AUN_PKT_DELAY  = 0.04;
+
 
 	protected static $defaultDescription = 'Start the file, print and bridge services';
  public function __construct(private readonly \Psr\Log\LoggerInterface $oLogger, private readonly ServiceDispatcher $oServices)
@@ -91,7 +102,6 @@ class React extends Command {
 			pcntl_signal(SIGCHLD,$this->sigHandler(...));
 			pcntl_signal(SIGTERM,$this->sigHandler(...));
 
-			Map::init($this->oLogger);
 
 		}catch(Exception $oException){
 			//Failed to initialize log and exit none 0
@@ -118,11 +128,13 @@ class React extends Command {
 		
 		$this->oLogger->info("core: Using ".$oLoop::class." as the primary event loop handler");
 
-		//Create the AUN packet handler
-		$oAunServer = $this->aunService($oLoop, $oEncapsulationTypeMap);
 
-		//Setup the handler for all the services 
-		$oPacketDispatcher = PacketDispatcher::create($oEncapsulationTypeMap, $oLoop, $oAunServer);
+		//Setup the handler for all the encaptulation types (outbound packets)
+		$oPacketDispatcher = PacketDispatcher::create($oEncapsulationTypeMap, $oLoop);
+
+		//Create the AUN packet handler
+		$oAunHandler = $this->aunService($oLoop, $oPacketDispatcher);
+		Map::init($this->oLogger,$oAunHandler);
 
 		//Setup the Piconet interface handler 
 		$oPiconet = $this->piconetService($oLoop,$oPacketDispatcher);
@@ -139,7 +151,7 @@ class React extends Command {
 		//Send any outstanding replies, normally its one request in one reply out.  However some services (e.g. File) have direct streams that can generate 
 		//mutiple replies to an initial request.
 		$oServices = $this->oServices;
-		$oServices->start($oEncapsulationTypeMap, $oLoop, $oAunServer, $oPiconet);
+		$oServices->start($oEncapsulationTypeMap, $oLoop, $oPiconet);
 		$oLoop->addPeriodicTimer(1, function(\React\EventLoop\Timer\Timer $oTimer) use ($oPacketDispatcher, $oServices ) {
 			//Send any messages for the services
 			$aReplies = $oServices->getReplies();
@@ -155,6 +167,10 @@ class React extends Command {
 			vfs::houseKeeping();
 			$oServices->houseKeeping();
 	
+		});
+
+		$oLoop->addPeriodicTimer(self::AUN_PKT_DELAY,function(\React\EventLoop\Timer\Timer $oTimer) use ($oAunHandler){
+			$oAunHandler->timer();
 		});
 
 		//Enter main loop
@@ -216,52 +232,21 @@ EOF;
 	/**
 	  * Adds all the AUN handling services to the event loop
 	*/
-	private function aunService(LoopInterface $oLoop, EncapsulationTypeMap $oEncapsulationTypeMap)
+	private function aunService(LoopInterface $oLoop, PacketDispatcher $oPacketDispatcher):AunHandler
 	{
 
 		//Add udp handling for AUN 
 		$oDatagramFactory = new DatagramFactory($oLoop);
+		$oAunHandler = new AunHandler($this->oLogger, $this->oServices, $oPacketDispatcher);
 
-		$oServices = $this->oServices;
-		$oLogger = $this->oLogger;
-		$oReturnSocket = null;
-
-		$oAunServer = $oDatagramFactory->createServer(config::getValue('aun_listen_address').':'.config::getValue('aun_listen_port'))
-	  		->then(function (\React\Datagram\Socket $oAunServer) use ($oServices, $oLogger, &$oReturnSocket,$oEncapsulationTypeMap, $oLoop) {
-				$oAunServer->on('message', function($sMessage, $sSrcAddress, $sDstAddress) use ($oServices, $oLogger, $oAunServer, $oEncapsulationTypeMap, $oLoop){
-					$oAunPacket = new AunPacket();
-					
-					//Read the UDP data
-					$oLogger->debug("filestore: Aun packet recvieved from ".$sSrcAddress);	
-					$oAunPacket->setSourceIP($sSrcAddress);
-
-					//Decode the AUN packet
-					$oAunPacket->setDestinationIP(config::getValue('local_ip'));
-					$oAunPacket->decode($sMessage);
-					
-					//Send an ack for the AUN packet if needed
-					$sAck = $oAunPacket->buildAck();
-					if(strlen($sAck)>0){
-						$oLogger->debug("filestore: Sending Ack packet");
-						$oAunServer->send($sAck,$sSrcAddress);
-					}
-
-					//Dispatch packet to all the services so the relivent one can deal with it 
-					$oServices->inboundPacket($oAunPacket);
-					
-					//Send all replies here
-					//@TODO replace this a better abstaction 
-					$oPacketDispatcher = PacketDispatcher::create($oEncapsulationTypeMap, $oLoop, $oAunServer);
-					//Send any messages for the services
-					$aReplies = $oServices->getReplies();
-					foreach($aReplies as $oReply){
-						$oPacketDispatcher->sendPacket($oReply);
-					}
+		$oDatagramFactory->createServer(config::getValue('aun_listen_address').':'.config::getValue('aun_listen_port'))
+	  		->then(function (\React\Datagram\Socket $oAunServer) use ($oAunHandler) {
+				$oAunServer->on('message', function($sMessage, $sSrcAddress, $oSocket) use ($oAunHandler){
+					$oAunHandler->receive($sMessage, $sSrcAddress, $oSocket->getLocalAddress());
 				});
-				$oReturnSocket = $oAunServer;
-				return $oAunServer;
+				$oAunHandler->setSocket($oAunServer);
 			});
-		return $oReturnSocket;
+		return $oAunHandler;
 	}
 
 	/**

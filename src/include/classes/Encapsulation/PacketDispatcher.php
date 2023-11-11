@@ -27,24 +27,14 @@ class PacketDispatcher {
 
 	static private ?\HomeLan\FileStore\Encapsulation\PacketDispatcher $oSingleton = null;
 
-	/*
- 	 * The delay be building a AUN packet, and dispatching it to the network.
- 	 *
- 	 * BBC clients can't cope with the server responding with a ack too quickly,
- 	 * they are simply not ready for it in time, so the packet effectivly gets dropped.
- 	 *
- 	 * This delay prevents the server replying too quickly.
- 	*/ 
-	const AUN_PKT_DELAY  = 0.04;
-
 	/**
 	 * Keeping this class as a singleton, this is static method should be used to get references to this object
 	 *
 	*/
-	public static function create(EncapsulationTypeMap $oEncapsulationTypeMap, \React\EventLoop\LoopInterface $oLoop, Socket $oAunServer):PacketDispatcher
+	public static function create(EncapsulationTypeMap $oEncapsulationTypeMap, \React\EventLoop\LoopInterface $oLoop):PacketDispatcher
 	{
 		if(!is_object(PacketDispatcher::$oSingleton)){
-			PacketDispatcher::$oSingleton = new PacketDispatcher($oEncapsulationTypeMap, $oLoop, $oAunServer);
+			PacketDispatcher::$oSingleton = new PacketDispatcher($oEncapsulationTypeMap, $oLoop);
 		}
 		return PacketDispatcher::$oSingleton;	
 	}
@@ -53,8 +43,9 @@ class PacketDispatcher {
 	 * Constructor registers the Logger and all the services 
 	 *  
 	*/
-	public function __construct(private readonly EncapsulationTypeMap $oEncapsulationTypeMap, private readonly \React\EventLoop\LoopInterface $oLoop, private readonly Socket $oAunServer)
+	public function __construct(private readonly EncapsulationTypeMap $oEncapsulationTypeMap, private readonly \React\EventLoop\LoopInterface $oLoop)
  	{
+		
  	}
 
 	/**
@@ -89,19 +80,11 @@ class PacketDispatcher {
 				break;
 			case 'AUN':
 			default:
-				$sIP = AunMap::ecoAddrToIpAddr($oPacket->getDestinationNetwork(),$oPacket->getDestinationStation());
-				if(!str_contains($sIP,':')){
-					$sHost=$sIP.':'.config::getValue('aun_default_port');
-				}else{
-					$sHost=$sIP;
-				}
 				$sAunFrame = $oPacket->getAunFrame();
 				if(strlen($sAunFrame)>0){
 					//Use a timer to delay the aun packet, this is allows all server I/O to be async, where as usleep would break the model.
-					$oAunServer = $this->oAunServer;
-					$this->oLoop->addTimer(self::AUN_PKT_DELAY,function() use ($oAunServer,$sAunFrame,$sHost) {
-						$oAunServer->send($sAunFrame,$sHost);
-					});
+					$oAunServer = AunMap::getHandler();
+					$oAunServer->send($oPacket);
 				}
 				break;
 		}

@@ -35,14 +35,17 @@ class Map {
 
 	static $oLogger;
 
+	static Handler $oHandler;
+
 	/**
 	  * Loads the aun map from the configured aun map file
 	  *
 	  * @param string $sMap The text for the map file can be supplied as a string, this is intended largley for unit testing this function
 	 */
-	public static function init(\Psr\Log\LoggerInterface $oLogger, string $sMap=NULL): void
+	public static function init(\Psr\Log\LoggerInterface $oLogger, Handler $oHandler, string $sMap=NULL): void
 	{
 		self::$oLogger = $oLogger;
+		self::$oHandler = $oHandler;
 		if(is_null($sMap)){
 			if(!file_exists(config::getValue('aunmap_file'))){
 				self::$oLogger->info("aunmapper: The configure aunmap files does not exist.");
@@ -221,5 +224,10 @@ class Map {
 		}
 		Map::$aIpCounter[$sIP]=Map::$aIpCounter[$sIP]+4;
 		return Map::$aIpCounter[$sIP];
+	}
+
+	public static function getHandler()
+	{
+		return  self::$oHandler;
 	}
 }

@@ -28,8 +28,6 @@ class ServiceDispatcher {
 	static private ?\HomeLan\FileStore\Services\ServiceDispatcher $oSingleton = null;
 	private ?\HomeLan\FileStore\Encapsulation\EncapsulationTypeMap $oEncapsulationTypeMap = null;
 	private ?\React\EventLoop\LoopInterface $oLoop = null;
-	private ?\React\Datagram\Socket $oAunServer = null;
-	private ?PiconetHandler $oPiconetHandler = null;
 	private array $aProviders = [];
 	private array $aPorts = [];
 	private array $aReplies = [];
@@ -69,12 +67,10 @@ class ServiceDispatcher {
 	 *
 	 * It passes the loop in so providers can register events with the loop
 	*/
-	public function start(EncapsulationTypeMap $oEncapsulationTypeMap, \React\EventLoop\LoopInterface $oLoop, \React\Datagram\Socket $oAunServer, PiconetHandler $oPiconetHandler): void
+	public function start(EncapsulationTypeMap $oEncapsulationTypeMap, \React\EventLoop\LoopInterface $oLoop):void
 	{
 		$this->oEncapsulationTypeMap = $oEncapsulationTypeMap;
 		$this->oLoop = $oLoop;
-		$this->oAunServer = $oAunServer;
-		$this->oPiconetHandler = $oPiconetHandler;
 	}
 
 	/**
@@ -225,7 +221,7 @@ class ServiceDispatcher {
 	*/
 	public function sendPackets(ProviderInterface $oService): void
 	{
-		$oPacketDispatcher = PacketDispatcher::create($this->oEncapsulationTypeMap, $this->oLoop, $this->oAunServer);
+		$oPacketDispatcher = PacketDispatcher::create($this->oEncapsulationTypeMap, $this->oLoop);
 		$aReplys = $oService->getReplies();
 		foreach($aReplys as $oPacket){
 			$oPacketDispatcher->sendPacket($oPacket);

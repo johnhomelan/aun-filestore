@@ -161,6 +161,11 @@ class AunPacket implements EncapsulationInterface {
 
 	}
 
+	public function getSequence():int
+	{
+		return $this->iSeq;
+	}
+
 	public function setSourceIP($sHost): void
 	{
 		if(str_contains((string) $sHost,':')){

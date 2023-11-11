@@ -36,6 +36,8 @@ class EconetPacket {
 	//Single byte (unsigned char) Port number
 	protected $iPort = NULL;
 
+	protected ?int $iSequence = null;
+
 	//Binary Data String
 	protected $sData = NULL;
 
@@ -138,6 +140,15 @@ class EconetPacket {
 		return $this->iDstNet;
 	}
 
+	public function getSequence()
+	{
+		if(is_null($this->iSequence)){
+			$sKey = Map::ecoAddrToIpAddr($this->getDestinationNetwork(),$this->getDestinationStation());
+			$this->iSequence = Map::incAunCounter($sKey);
+		}
+		return $this->iSequence;
+	}
+
 
 	private function _getAunRaw($sKey):string
 	{
@@ -155,7 +166,7 @@ class EconetPacket {
 		$sPacket=$sPacket.pack('C',0);
 	
 		//Sequence 4 bytes little-endian
-		$sPacket=$sPacket.pack('V',Map::incAunCounter($sKey));
+		$sPacket=$sPacket.pack('V',$this->getSequence());
 
 		//Add the data
 		$sPacket=$sPacket.$this->sData;

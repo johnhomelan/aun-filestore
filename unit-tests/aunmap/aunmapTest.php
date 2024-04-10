@@ -21,7 +21,7 @@ class aunmapTest extends TestCase {
              		->setMockClassName('Handler')
              		->getMock();
 		//This sucks, mock really needs away to create a mock of a namespaced class
-		class_alias('Handler', 'HomeLan\FileStore\Aun\Map\Handler');
+		class_alias('Handler', 'HomeLan\FileStore\Aun\Map\Handler',false);
 		aunmap::init($oLogger,$oFakeHandler,$sMapFile);
 	}
 

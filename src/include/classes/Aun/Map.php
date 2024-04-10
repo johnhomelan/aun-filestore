@@ -35,7 +35,7 @@ class Map {
 
 	static $oLogger;
 
-	static Handler $oHandler;
+	static HandleInterface $oHandler;
 
 	/**
 	  * Loads the aun map from the configured aun map file
@@ -226,7 +226,7 @@ class Map {
 		return Map::$aIpCounter[$sIP];
 	}
 
-	public static function getHandler()
+	public static function getHandler():HandleInterface
 	{
 		return  self::$oHandler;
 	}

@@ -18,8 +18,10 @@ class aunmapTest extends TestCase {
 		$sMapFile = "192.168.0.0/24 127\n192.168.0.40 127.254\n192.168.2.20 129.29\n192.168.1.0/24 128\n192.168.0.41\n192.168.2.0/24\n192.168.0.40:1000 127.200\n";
 		$oFakeHandler = $this
        			->getMockBuilder('HomeLan\FileStore\Aun\Map\Handler')
-             		->setMockClassName('HomeLan\FileStore\Aun\Map\Handler')
+             		->setMockClassName('Handler')
              		->getMock();
+		//This sucks, mock really needs away to create a mock of a namespaced class
+		class_alias('Handler', 'HomeLan\FileStore\Aun\Map\Handler');
 		aunmap::init($oLogger,$oFakeHandler,$sMapFile);
 	}
 

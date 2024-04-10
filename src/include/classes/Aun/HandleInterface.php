@@ -14,14 +14,14 @@ use React\Datagram\Socket;
 Interface HandleInterface {
 
 
-	public function setSocket(Socket $oAunServer)
+	public function setSocket(Socket $oAunServer);
 
-	public function onClose():void
+	public function onClose():void;
 
-	public function receive(string $sMessage, string $sSrcAddress, string $sDstAddress):void
+	public function receive(string $sMessage, string $sSrcAddress, string $sDstAddress):void;
 
-	public function timer():void
+	public function timer():void;
 
-	public function send(EconetPacket $oPacket, int $iRetries = 3):void
+	public function send(EconetPacket $oPacket, int $iRetries = 3):void;
 
 }

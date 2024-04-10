@@ -42,7 +42,7 @@ class Map {
 	  *
 	  * @param string $sMap The text for the map file can be supplied as a string, this is intended largley for unit testing this function
 	 */
-	public static function init(\Psr\Log\LoggerInterface $oLogger, Handler $oHandler, string $sMap=NULL): void
+	public static function init(\Psr\Log\LoggerInterface $oLogger, HandleInterface $oHandler, string $sMap=NULL): void
 	{
 		self::$oLogger = $oLogger;
 		self::$oHandler = $oHandler;

@@ -22,7 +22,7 @@ use config;
  * This class handles all AUN packets recieved and dispatched by the system
  * @package corenet
 */
-class Handler {
+class Handler Implements HandleInterface {
 
 	static private ?\HomeLan\FileStore\Aun\Handler $oSingleton = null;
 	private array $aQueue = [];

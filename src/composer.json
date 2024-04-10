@@ -10,7 +10,8 @@
     "require-dev": {
         "phpunit/phpunit": "^8.0",
         "phpstan/phpstan": "*",
-        "rector/rector": "*"   
+        "rector/rector": "*",
+        "mockery/mockery": "^1.6"   
     },
     "require": {
         "monolog/monolog": "^1.23",

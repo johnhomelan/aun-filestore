@@ -254,6 +254,13 @@ class ServiceDispatcher {
 		}
 	}
 
+	public function clearAckEvent($iNetwork, $iStation):void
+	{
+		if(array_key_exists($iNetwork,$this->aAckEvents) AND array_key_exists( $iStation,$this->aAckEvents[$iNetwork])){
+			unset($this->aAckEvents[$iNetwork][$iStation]);
+		}
+	}
+
 	/** 
 	 * Disables a service from receiving packets on thier service ports
 	 * 

@@ -8,14 +8,18 @@ variables:
   REPO_IMAGE: registry.home-lan.co.uk/aun-filestore:react
   
 phpunit_phpstan_php81:
-   image: registry.home-lan.co.uk/php-81-testing:latest
+   image: 
+    name: registry.home-lan.co.uk/php-81-testing:latest
+    pull_policy: always
    stage: test
    script:
      - cd src; composer --no-scripts install; cd ..
      - ./src/vendor/bin/phpstan analyse -n --no-ansi --no-progress src/include src/filestored --level 5
 
 phpunit_tests_php83:
-   image: registry.home-lan.co.uk/php-83-testing:latest
+   image: 
+    name: registry.home-lan.co.uk/php-83-testing:latest
+    pull_policy: always
    stage: test
    script:
      - cd src; composer --no-scripts install; cd ..
@@ -27,7 +31,9 @@ phpunit_tests_php83:
       - junit.xml   
 
 phpunit_tests_php82:
-   image: registry.home-lan.co.uk/php-82-testing:latest
+   image: 
+    name: registry.home-lan.co.uk/php-82-testing:latest
+    pull_policy: always
    stage: test
    script:
      - cd src; composer --no-scripts install; cd ..
@@ -39,7 +45,9 @@ phpunit_tests_php82:
       - junit.xml   
 
 phpunit_tests_php81:
-   image: registry.home-lan.co.uk/php-81-testing:latest
+   image: 
+    name: registry.home-lan.co.uk/php-81-testing:latest
+    pull_policy: always
    stage: test
    script:
      - cd src; composer --no-scripts install; cd ..

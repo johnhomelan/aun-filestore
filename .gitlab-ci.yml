@@ -13,6 +13,7 @@ phpunit_phpstan_php81:
    stage: test
    script:
      - php -m
+     - php --ini
      - cd src; composer --no-scripts install; cd ..
      - ./src/vendor/bin/phpstan analyse -n --no-ansi --no-progress src/include src/filestored --level 5
 

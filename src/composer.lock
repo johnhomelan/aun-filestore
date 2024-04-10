@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "7b03f388edaabc4740680a0cdaf8de6c",
+    "content-hash": "9d7889e871864bff613102a1b4ee90cc",
     "packages": [
         {
             "name": "cboden/ratchet",
@@ -583,6 +583,51 @@
                 "source": "https://github.com/johnhomelan/acorn-disk/tree/1.1.0"
             },
             "time": "2023-09-05T08:40:47+00:00"
+        },
+        {
+            "name": "homelan/l3fsreader",
+            "version": "v0.2.1",
+            "source": {
+                "type": "git",
+                "url": "https://github.com/johnhomelan/acorn-l3-fs.git",
+                "reference": "5fdb796f8782b6173b0a1cb28103ea108b1d2315"
+            },
+            "dist": {
+                "type": "zip",
+                "url": "https://api.github.com/repos/johnhomelan/acorn-l3-fs/zipball/5fdb796f8782b6173b0a1cb28103ea108b1d2315",
+                "reference": "5fdb796f8782b6173b0a1cb28103ea108b1d2315",
+                "shasum": ""
+            },
+            "require": {
+                "php": ">=7.1"
+            },
+            "type": "project",
+            "autoload": {
+                "psr-4": {
+                    "HomeLan\\Retro\\Acorn\\Disk\\": "src/"
+                }
+            },
+            "notification-url": "https://packagist.org/downloads/",
+            "license": [
+                "MIT"
+            ],
+            "authors": [
+                {
+                    "name": "John Brown",
+                    "email": "packaging@home-lan.co.uk"
+                }
+            ],
+            "description": "Provides class for reading disk images from the Acorn Econet level 3 fileserver, and the Acorn Econet filestore.",
+            "keywords": [
+                "afs",
+                "econet filestore",
+                "econet level 3"
+            ],
+            "support": {
+                "issues": "https://github.com/johnhomelan/acorn-l3-fs/issues",
+                "source": "https://github.com/johnhomelan/acorn-l3-fs/tree/v0.2.1"
+            },
+            "time": "2021-03-22T23:06:46+00:00"
         },
         {
             "name": "http-interop/http-factory-guzzle",

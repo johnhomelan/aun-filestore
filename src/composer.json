@@ -32,7 +32,8 @@
         "cboden/ratchet": "^0.4.1",
         "http-interop/http-factory-guzzle": "^1.2",
         "react/dns": "*",
-        "react/child-process": "*"
+        "react/child-process": "*",
+        "homelan/l3fsreader": "^0.2.1"
     },
     "minimum-stability": "dev",
     "prefer-stable": true,

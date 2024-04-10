@@ -160,6 +160,7 @@ class DfsSsd implements PluginInterface {
 		$aCat = $oDfs->getCatalogue();
 		$aPathInsideImage = explode('.',(string) $sPathInsideImage);
 		$bFound = FALSE;
+		// @phpstan-ignore-next-line Needed to support php 7, where explode can also return false
 		if((is_countable($aPathInsideImage) ? count($aPathInsideImage) : 0)==2){
 			if(array_key_exists($aPathInsideImage[0],$aCat)){
 				if(array_key_exists($aPathInsideImage[1],$aCat[$aPathInsideImage[0]])){
@@ -167,6 +168,7 @@ class DfsSsd implements PluginInterface {
 				}
 			}
 		}
+		// @phpstan-ignore-next-line Needed to support php 7, where explode can also return false
 		if((is_countable($aPathInsideImage) ? count($aPathInsideImage) : 0)==1){
 			if(is_array($aCat)){
 				if(array_key_exists($aPathInsideImage[0],$aCat['$'])){

@@ -17,7 +17,7 @@ class aunmapTest extends TestCase {
 	{
 		$oLogger = new Logger("filestored-unittests");
 		$sMapFile = "192.168.0.0/24 127\n192.168.0.40 127.254\n192.168.2.20 129.29\n192.168.1.0/24 128\n192.168.0.41\n192.168.2.0/24\n192.168.0.40:1000 127.200\n";
-		$oFakeHandler =  Mockery::mock(Handle::class);
+		$oFakeHandler =  Mockery::mock(Handle::class, 'HomeLan\FileStore\Aun\Handle');
 		aunmap::init($oLogger,$oFakeHandler,$sMapFile);
 	}
 

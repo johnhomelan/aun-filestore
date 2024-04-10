@@ -49,38 +49,6 @@ phpunit_tests_php81:
      paths:
       - coverage
       - junit.xml   
-
-phpunit_tests_php80:
-   image: registry.home-lan.co.uk/php-80-testing:latest
-   stage: test
-   script:
-     - cd src; composer --no-scripts install; cd ..
-     - ./src/vendor/bin/phpunit --log-junit junit.xml
-   artifacts:
-     paths:
-      - junit.xml   
-       
-phpunit_tests_php73:
-   image: registry.home-lan.co.uk/php-73-testing:latest
-   stage: test
-   script:
-     - cd src; composer --no-scripts install; cd ..
-     - ./src/vendor/bin/phpunit --log-junit junit.xml
-   artifacts:
-     paths:
-      - junit.xml   
-      
-phpunit_tests_php72:
-   image: registry.home-lan.co.uk/php-72-testing:latest
-   stage: test
-   script:
-     - cd src; composer --no-scripts install; cd ..
-     - mkdir coverage
-     - ./src/vendor/bin/phpunit --log-junit junit.xml 
-   artifacts:
-     paths:
-      - coverage
-      - junit.xml   
       
 container_build:
   image: 

@@ -33,6 +33,7 @@ class Arpcache
 	public function addEntry(int $iNetwork, int $iStation, string $sIP, int $iTimeOut=self::DEFAULT_ENTRY_TIMEOUT):void
 	{
 		$this->aCache[$sIP] = ['network'=>$iNetwork, 'station'=>$iStation, 'ip'=>$sIP, 'timeout'=>time()+$iTimeOut];
+		$this->oLogger->debug("Arpcache Added entry for ".$iNetwork.":".$iStation." ".$sIP); 
 	}
 
 	/** 

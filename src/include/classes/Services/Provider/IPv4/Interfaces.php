@@ -42,6 +42,7 @@ class Interfaces
 	public function addInterface(int $iNetwork, int $iStation, string $sIP, string $sSubnetMask)
 	{
 		$this->aInterfaces[$sIP] = ['network'=>$iNetwork,'station'=>$iStation,'ipaddr'=>$sIP,'ipint'=>ip2long($sIP),'mask'=>$sSubnetMask,'cidr'=>$this->subnetToCidr($sSubnetMask)];
+		$this->oLogger->debug("Interface Added  ".$iNetwork.":".$iStation." ".$sIP." ".$sSubnetMask); 
 	}
 
 	/**

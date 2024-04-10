@@ -341,7 +341,7 @@ class NAT
 		//Clear out the pending key 
 		foreach($this->aConnTrackPending as $iPendingKey=>$sPending){
 			if($sKey==$sPending){
-				unset($this->aConnTrackPending[$iKey]);
+				unset($this->aConnTrackPending[$iPendingKey]);
 				break;
 			}
 		}
@@ -393,7 +393,7 @@ class NAT
 		$oTcpIpPkt->setFlagAck(true);
 		$oTcpIpPkt->setFlagReset(true);
 
-		$oEconetPacket = $oTcp->buildEconetpacket();
+		$oEconetPacket = $oTcp->getEconetPacket();
 		$oIPv4 = new IPv4Request($oEconetPacket,$this->oLogger);
 		$this->oProvider->processUnicastIPv4Pkt($oIPv4,$oEconetPacket);
 	}

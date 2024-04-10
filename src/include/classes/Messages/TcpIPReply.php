@@ -219,6 +219,11 @@ class TcpIPReply extends Reply {
 		$this->bNonce = $bValue;
 	}
 
+	public function getFlagNonce():bool
+	{
+		return $this->bNonce;
+	}
+
 	public function setFlagCrw(bool $bValue):void
 	{
 		$this->bCrw = $bValue;
@@ -282,6 +287,11 @@ class TcpIPReply extends Reply {
 	public function setWindow(int $iNumber):void
 	{
 		$this->iWindow = $iNumber;
+	}
+
+	public function getWindow():int
+	{
+		return $this->iWindow;
 	}
 
 	public function toString():string

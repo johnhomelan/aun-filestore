@@ -24,11 +24,9 @@ use config;
 */
 class Handler Implements HandleInterface {
 
-	static private ?\HomeLan\FileStore\Aun\Handler $oSingleton = null;
 	private array $aQueue = [];
 	private array $aLastChance = [];
-
-	private array $aAwaitingAck = [];
+	private Socket $oAunServer;
 
 
 	/**

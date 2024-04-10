@@ -54,6 +54,7 @@ class Routes
 	public function addRoute(string $sIPv4NetworkAddr, string $sIPv4NetworkSubnet, string $sIPv4Via, int $iMetric):void
 	{
 		$this->aRoutes[] = ['network'=>$sIPv4NetworkAddr,'networkint'=>ip2long($sIPv4NetworkAddr),'subnet'=>$sIPv4NetworkAddr,'via'=>$sIPv4Via,'cidr'=>$this->subnetToCidr($sIPv4NetworkSubnet),'metric'=>$iMetric];
+		$this->oLogger->debug("Route Added  ".$sIPv4NetworkAddr); 
 	}
 
 	/**

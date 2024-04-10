@@ -151,7 +151,7 @@ class React extends Command {
 		//Send any outstanding replies, normally its one request in one reply out.  However some services (e.g. File) have direct streams that can generate 
 		//mutiple replies to an initial request.
 		$oServices = $this->oServices;
-		$oServices->start($oEncapsulationTypeMap, $oLoop, $oPiconet);
+		$oServices->start($oEncapsulationTypeMap, $oLoop);
 		$oLoop->addPeriodicTimer(1, function(\React\EventLoop\Timer\Timer $oTimer) use ($oPacketDispatcher, $oServices ) {
 			//Send any messages for the services
 			$aReplies = $oServices->getReplies();

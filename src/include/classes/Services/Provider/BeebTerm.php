@@ -219,12 +219,10 @@ class BeebTerm implements ProviderInterface {
 			$oProcess->stdout->on('data',function($sData) use($_this,$sKey){
 				$_this->processDataOut($sKey,$sData);
 			});
-			$oProcess->stdout->on('end',function() use($_this,$sKey){
-				//$_this->closeSession($sKey);
+			$oProcess->stdout->on('end',function(){
 			});
-			$oProcess->stdout->on('error',function(Exception $oException) use($_this,$sKey){
+			$oProcess->stdout->on('error',function(Exception $oException){
 				$this->oLogger->debug("BeebTerm: An error occured (".$oException->getMessage().")");
-				//$_this->closeSession($sKey);
 			});
 			$oProcess->stdout->on('close',function() use($_this,$sKey){
 				$_this->closeSession($sKey);

@@ -47,7 +47,7 @@ safe_define('CONFIG_print_server_spool_dir','/tmp/econetprint');
 
 safe_define('CONFIG_piconet_device','dev/econet');
 safe_define('CONFIG_piconetmap_file','piconetmap.txt');
-safe_define('CONFIG_piconet_station','100');
+safe_define('CONFIG_piconet_station','254');
 safe_define('CONFIG_piconet_local_network',1);
 
 safe_define('CONFIG_nat_default_station',254);

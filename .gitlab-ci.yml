@@ -12,8 +12,6 @@ phpunit_phpstan_php81:
     name: registry.home-lan.co.uk/php-81-testing:8.1.1
    stage: test
    script:
-     - php -m
-     - php --ini
      - cd src; composer --no-scripts install; cd ..
      - ./src/vendor/bin/phpstan analyse -n --no-ansi --no-progress src/include --memory-limit 512M src/filestored --level 5
 
@@ -24,6 +22,7 @@ phpunit_tests_php83:
    script:
      - cd src; composer --no-scripts install; cd ..
      - mkdir coverage
+     - cp test-config/* . 
      - ./src/vendor/bin/phpunit --log-junit junit.xml --coverage-xml coverage --coverage-text --colors=never
    artifacts:
      paths:
@@ -37,6 +36,7 @@ phpunit_tests_php82:
    script:
      - cd src; composer --no-scripts install; cd ..
      - mkdir coverage
+     - cp test-config/* . 
      - ./src/vendor/bin/phpunit --log-junit junit.xml --coverage-xml coverage --coverage-text --colors=never
    artifacts:
      paths:
@@ -50,6 +50,7 @@ phpunit_tests_php81:
    script:
      - cd src; composer --no-scripts install; cd ..
      - mkdir coverage
+     - cp test-config/* . 
      - ./src/vendor/bin/phpunit --log-junit junit.xml --coverage-xml coverage --coverage-text --colors=never
    artifacts:
      paths:

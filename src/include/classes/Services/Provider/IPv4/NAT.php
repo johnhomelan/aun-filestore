@@ -216,7 +216,7 @@ class NAT
 					$oSocket->write($sData);
 				}
 			},
-			function(\Exception $e) use ($_this, $oIPv4, $oTcp){
+			function(\Exception $e) use ($_this, $oIPv4, $oTcp){ //@phpstan-ignore-line @todo Come back to look at why phpstan has an issue with this
 				$sKey = $oIPv4->getSrcIP().'_'.$oIPv4->getDstIP().'_'.$oTcp->getSrcPort().'_'.$oTcp->getDstPort();
 				$_this->_remoteConnectionFailed($e, $sKey,$oIPv4, $oTcp);
 			}

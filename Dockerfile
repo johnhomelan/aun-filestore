@@ -4,7 +4,7 @@ MAINTAINER john@home-lan.co.uk
 
 RUN apk add --no-cache rsync make bash curl openjdk8-jre postgresql-client autoconf automake gcc g++ make libc-dev
 RUN apk add --no-cache postgresql-dev mysql-dev libxml2-dev libpng-dev gpgme-dev libmemcached-dev openldap-dev curl-dev gnu-libiconv openssl-dev gnu-libiconv-dev freetype libpng libjpeg-turbo freetype-dev libpng-dev libjpeg-turbo-dev libmcrypt libmcrypt-dev libzip-dev zlib-dev oniguruma
-RUN docker-php-ext-install pdo_pgsql pdo_mysql soap gd dba pcntl ldap curl zip phar exif bcmath ctype 
+RUN docker-php-ext-install pdo_pgsql pdo_mysql soap gd dba pcntl ldap curl zip phar exif bcmath ctype openssl
 #json
 #openssl 
 #zip phar 

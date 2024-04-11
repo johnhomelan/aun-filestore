@@ -64,7 +64,10 @@ class AunPacket implements EncapsulationInterface {
 	*/ 
 	public function getPacketType(): string
 	{
-		return $this->aTypeMap[$this->iPktType];
+		if(array_key_exists($this->iPktType,$this->aTypeMap)){
+			return $this->aTypeMap[$this->iPktType];
+		}
+		return 'Unknown';
 	}
 
 	/**

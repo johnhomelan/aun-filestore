@@ -4,8 +4,8 @@ MAINTAINER john@home-lan.co.uk
 
 RUN apk add --no-cache rsync make bash curl openjdk8-jre postgresql-client autoconf automake gcc g++ make libc-dev
 RUN apk add --no-cache postgresql-dev mysql-dev libxml2-dev libpng-dev gpgme-dev libmemcached-dev openldap-dev curl-dev gnu-libiconv openssl-dev gnu-libiconv-dev freetype libpng libjpeg-turbo freetype-dev libpng-dev libjpeg-turbo-dev libmcrypt libmcrypt-dev libzip-dev zlib-dev oniguruma
-RUN docker-php-ext-install pdo_pgsql pdo_mysql soap gd dba pcntl ldap curl 
-#openssl zip phar exif bcmath ctype json
+RUN docker-php-ext-install pdo_pgsql pdo_mysql soap gd dba pcntl ldap curl openssl zip phar 
+#exif bcmath ctype json
 
 ##Install composer (the composer pkg for alpine comes with its own php82 pkg which defies the point of build a given version of php into the image)
 RUN php -r "copy('https://getcomposer.org/installer', 'composer-setup.php');"

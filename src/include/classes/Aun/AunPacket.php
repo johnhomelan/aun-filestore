@@ -124,7 +124,7 @@ class AunPacket implements EncapsulationInterface {
 	public function buildAck(): ?string
 	{
 		//No decoded packet to to Ack
-		if(!is_numeric($this->iPktType)){
+		if(!is_numeric($this->iPktType) OR !array_key_exists($this->iPktType,$this->aTypeMap)){
 			return null;
 		}
 		$sPtk = NULL;

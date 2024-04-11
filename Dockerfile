@@ -1,11 +1,17 @@
-FROM php:8.3-cli-alpine
+FROM php:8.1-cli-alpine
 
 MAINTAINER john@home-lan.co.uk
 
-RUN apk add --no-cache rsync make bash composer curl openjdk8-jre postgresql-client autoconf automake gcc g++ make libc-dev
+RUN apk add --no-cache rsync make bash curl openjdk8-jre postgresql-client autoconf automake gcc g++ make libc-dev
 RUN apk add --no-cache postgresql-dev mysql-dev libxml2-dev libpng-dev gpgme-dev libmemcached-dev openldap-dev curl-dev gnu-libiconv openssl-dev gnu-libiconv-dev
 RUN docker-php-ext-install pdo_pgsql pdo_mysql soap gd dba pcntl ldap curl iconv mbstring openssl zip phar
 
+##Install composer (the composer pkg for alpine comes with its own php82 pkg which defies the point of build a given version of php into the image)
+RUN php -r "copy('https://getcomposer.org/installer', 'composer-setup.php');"
+RUN php -r "if (hash_file('sha384', 'composer-setup.php') === 'dac665fdc30fdd8ec78b38b9800061b4150413ff2e3b6f88543c636f7cd84f6db9189d43a81e5503cda447da73c7e5b6') { echo 'Installer verified'; } else { echo 'Installer corrupt'; unlink('composer-setup.php'); } echo PHP_EOL;"
+RUN php composer-setup.php
+RUN php -r "unlink('composer-setup.php');"
+RUN mv composer.phar /usr/local/bin/composer
 
 RUN mkdir -p /etc/aun-filestored-default-config
 RUN mkdir -p /etc/aun-filestored

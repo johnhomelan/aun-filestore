@@ -7,11 +7,7 @@ RUN apk add --no-cache postgresql-dev mysql-dev libxml2-dev libpng-dev gpgme-dev
 RUN docker-php-ext-install pdo_pgsql pdo_mysql soap gd dba pcntl ldap curl zip phar exif bcmath ctype 
 
 ##Install composer (the composer pkg for alpine comes with its own php82 pkg which defies the point of build a given version of php into the image)
-RUN php -r "copy('https://getcomposer.org/installer', 'composer-setup.php');"
-RUN php -r "if (hash_file('sha384', 'composer-setup.php') === 'dac665fdc30fdd8ec78b38b9800061b4150413ff2e3b6f88543c636f7cd84f6db9189d43a81e5503cda447da73c7e5b6') { echo 'Installer verified'; } else { echo 'Installer corrupt'; unlink('composer-setup.php'); } echo PHP_EOL;"
-RUN php composer-setup.php
-RUN php -r "unlink('composer-setup.php');"
-RUN mv composer.phar /usr/local/bin/composer
+RUN php -r "copy('https://getcomposer.org/installer', 'composer-setup.php');"; php -r "if (hash_file('sha384', 'composer-setup.php') === 'dac665fdc30fdd8ec78b38b9800061b4150413ff2e3b6f88543c636f7cd84f6db9189d43a81e5503cda447da73c7e5b6') { echo 'Installer verified'; } else { echo 'Installer corrupt'; unlink('composer-setup.php'); } echo PHP_EOL;"; php composer-setup.php; php -r "unlink('composer-setup.php');"; mv composer.phar /usr/local/bin/composer
 
 RUN mkdir -p /etc/aun-filestored-default-config
 RUN mkdir -p /etc/aun-filestored
@@ -31,8 +27,7 @@ COPY packaging/docker/users.txt /etc/aun-filestored-default-config/users.txt
 COPY packaging/docker/entrypoint.sh /
 
 RUN cd /usr/share/aun-filestored; composer install --no-dev
-RUN chmod u+x /usr/sbin/filestored
-RUN chmod u+x /entrypoint.sh
+RUN chmod u+x /usr/sbin/filestored; chmod u+x /entrypoint.sh
 
 EXPOSE 32768/udp 8080/tcp 8090/tcp
 

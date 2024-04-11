@@ -5,7 +5,8 @@ stages:
   - build
   
 variables:
-  REPO_IMAGE: registry.home-lan.co.uk/aun-filestore:react
+  REPO_IMAGE: registry.home-lan.co.uk/aun-filestore
+  IMAGE_VERSION: react
   
 phpunit_phpstan_php81:
    image: 
@@ -68,7 +69,6 @@ container_build:
      - /kaniko/executor
       --context "${CI_PROJECT_DIR}"
       --dockerfile "${CI_PROJECT_DIR}/Dockerfile"
-      --destination "${REPO_IMAGE}"
-      --destination "${REPO_IMAGE}:latest"
+      --destination "${REPO_IMAGE}:${IMAGE_VERSION}"
       --skip-push-permission-check
 

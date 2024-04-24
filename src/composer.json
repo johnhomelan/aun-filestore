@@ -11,7 +11,8 @@
         "phpunit/phpunit": "^8.0",
         "phpstan/phpstan": "*",
         "rector/rector": "*",
-        "mockery/mockery": "^1.6"   
+        "mockery/mockery": "^1.6",
+        "shipmonk/composer-dependency-analyser": "^1.5"   
     },
     "require": {
         "monolog/monolog": "^1.23",
@@ -19,28 +20,28 @@
         "react/event-loop": "^1.1",
         "react/http": "1.9.*",
         "react/datagram": "^1.4",
-        "php-http/httplug": "^2.0@dev",
-        "php-http/guzzle6-adapter": "^2.0@dev",
-        "php-http/curl-client": "^2.0@dev",
-        "guzzlehttp/psr7": "^1.5@dev",
         "symfony/console": "*",
 	"symfony/dotenv": "*",
-        "symfony/flex": "^1.1",
         "symfony/framework-bundle": "*",
-        "symfony/yaml": "*",
         "smarty/smarty": "*",
         "cboden/ratchet": "^0.4.1",
-        "http-interop/http-factory-guzzle": "^1.2",
-        "react/dns": "*",
         "react/child-process": "*",
-        "homelan/l3fsreader": "^0.2.1"
+        "homelan/l3fsreader": "^0.2.1",
+        "psr/http-message": "^1.1",
+        "psr/log": "^1.1",
+        "react/promise": "^3.1",
+        "react/socket": "^1.15",
+        "symfony/config": "*",
+        "symfony/dependency-injection": "*",
+        "symfony/http-foundation": "*",
+        "symfony/http-kernel": "*",
+        "symfony/routing": "*"
     },
     "minimum-stability": "dev",
     "prefer-stable": true,
     "config": {
         "allow-plugins": {
-            "php-http/discovery": true,
-            "symfony/flex": true
+            "php-http/discovery": true
         }
     }
 }

@@ -16,6 +16,15 @@ phpunit_phpstan_php81:
      - cd src; composer --no-scripts install; cd ..
      - ./src/vendor/bin/phpstan analyse -n --no-ansi --no-progress src/include --memory-limit 512M src/filestored --level 5
 
+composer_dependency_analyser_php81:
+   image: 
+    name: registry.home-lan.co.uk/php-81-testing:8.1.1
+   stage: test
+   script:
+     - cd src; composer --no-scripts install; cd ..
+     - ./src/vendor/bin/composer-dependency-analyser --config  src/dev-tools/composer-dependency-analyser.php  --composer-json src/composer.json
+
+
 phpunit_tests_php83:
    image: 
     name: registry.home-lan.co.uk/php-83-testing:latest

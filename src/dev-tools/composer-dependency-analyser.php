@@ -6,5 +6,5 @@ use ShipMonk\ComposerDependencyAnalyser\Config\ErrorType;
 $config = new Configuration();
 
 return $config
-	->addPathToScan(__DIR__ .'/filestored',isDev: false);
+	->addPathToScan(__DIR__ .'/../filestored',isDev: false);
 	

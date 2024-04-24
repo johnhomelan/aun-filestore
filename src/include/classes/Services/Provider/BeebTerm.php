@@ -207,15 +207,22 @@ class BeebTerm implements ProviderInterface {
 			//close the old session
 			$this->closeSession($sKey);
 		}
-		//Setup session 
+		//Setup session (the logon request is really the session start request)
 		$oReply = $oRequest->buildReply();
-		$this->oLogger->debug("BeebTerm: Logging into server with service ".$oRequest->getService());	
+		$this->oLogger->debug("BeebTerm: Logging into server with service ".$oRequest->getService());
+
 		if(array_key_exists($oRequest->getService(),$this->aServices)){
-			//Create the session 
+			//Create a new  session 
+			//Creates a process, and links to the main loop so it output can be handled 
 			$oProcess = new Process($this->aServices[$oRequest->getService()]);
 			$oProcess->start($this->oServiceDispatcher->getLoop());
+
+			//Store the proces object linked to the service name and the net/station 
 			$this->aClients[$sKey] = ['process'=>$oProcess,'net'=>$oRequest->getSourceNetwork(),'station'=>$oRequest->getSourceStation(),'request'=>$oRequest,'lastactivity'=>time(),'rxseq'=>0,'txseq'=>0];
 			$_this = $this;
+
+
+			//Setup the handling of output from the process 
 			$oProcess->stdout->on('data',function($sData) use($_this,$sKey){
 				$_this->processDataOut($sKey,$sData);
 			});
@@ -225,19 +232,23 @@ class BeebTerm implements ProviderInterface {
 				$this->oLogger->debug("BeebTerm: An error occured (".$oException->getMessage().")");
 			});
 			$oProcess->stdout->on('close',function() use($_this,$sKey){
-				$_this->closeSession($sKey);
+				$_this->closeSession($sKey);  //close the session if the process exists
 			});
 
 			$this->oLogger->debug("BeebTerm: Login OK");
 			//Set the flag to login ok
 			$oReply->appendString($oRequest->getService());
 			$oReply->setFlags(0x82);
+
 		}else{
+			//The requestion session does not exsit
 			//Set the flag to login reject
 			$this->oLogger->debug("BeebTerm: Login Fail");
-			$oReply->setFlags(0x83);
+			$oReply->setFlags(0x83); //0x83 is the flag for logon reject 
 			$oReply->appendString("Invaild Service");
 		}
+
+		//Add the reply to the output buffer 
 		$this->_addReplyToBuffer($oReply->buildEconetpacket());
 	}
 
@@ -249,12 +260,14 @@ class BeebTerm implements ProviderInterface {
 	{
 		$sKey = $oRequest->getSourceNetwork().'-'.$oRequest->getSourceStation();
 		$this->oLogger->debug("BeebTerm: Data from econet client ".$sKey." (".$oRequest->getData().")");
-		var_dump($oRequest);
 		if(array_key_exists($sKey,$this->aClients)){
 			$this->aClients[$sKey]['lastactivity']=time();
 			if($this->aClients[$sKey]['rxseq']<$oRequest->getRxSeq()){
+				//Its new data as the RxSeq is greater than the last value
 				$this->aClients[$sKey]['rxseq']=$oRequest->getRxSeq();	
-				$this->aClients[$sKey]['process']->stdin->write($oRequest->getData());
+				$this->aClients[$sKey]['process']->stdin->write($oRequest->getData()); //Send the data to the process 
+
+				//Craft a reply to ack the data 
 				$oReply = $oRequest->buildReply();
 				$oReply->setFlags(0x0);  //Data
 				$oReply->appendByte($this->aClients[$sKey]['txseq']);

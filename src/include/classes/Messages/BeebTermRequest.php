@@ -7,6 +7,7 @@
 */
 namespace HomeLan\FileStore\Messages; 
 
+use HomeLan\FileStore\Messages\EconetPacket; 
 use Exception; 
 
 /** 
@@ -17,13 +18,12 @@ use Exception;
 class BeebTermRequest extends Request{
 
 
-	protected $sData = NULL;
 	private ?string $sType = null;
 	private ?string $sService = null;
 	private int $iRxSeq = 0;
 	private int $iTxSeq = 0;
 
-	public function __construct($oEconetPacket, \Psr\Log\LoggerInterface $oLogger)
+	public function __construct(EconetPacket $oEconetPacket, \Psr\Log\LoggerInterface $oLogger)
 	{
 		parent::__construct($oEconetPacket, $oLogger);
 		$this->decode($oEconetPacket->getData());

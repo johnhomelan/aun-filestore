@@ -7,6 +7,7 @@
 */
 namespace HomeLan\FileStore\Messages; 
 
+use HomeLan\FileStore\Messages\EconetPacket; 
 use Exception; 
 
 /** 
@@ -20,12 +21,12 @@ class ArpIsAt extends Request {
 	private ?string $sSourceIP = NULL;
 	private ?string $sRespodingToIP = NULL;
 
-	public function __construct($oEconetPacket, \Psr\Log\LoggerInterface $oLogger)
+	public function __construct(EconetPacket  $oEconetPacket, \Psr\Log\LoggerInterface $oLogger)
 	{
 		parent:: __construct($oEconetPacket, $oLogger);
 		$this->decode($oEconetPacket->getData());
-		$this->iSourceStation = $oEconetPacket->setSourceStation();
-		$this->iSourceNetwork = $oEconetPacket->setSourceNetwork();
+		$this->iSourceStation = $oEconetPacket->getSourceStation();
+		$this->iSourceNetwork = $oEconetPacket->getSourceNetwork();
 	}	
 
 	/**

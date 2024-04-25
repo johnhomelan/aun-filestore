@@ -53,7 +53,7 @@ class PacketDispatcher {
 	 *
 	 * @TODO Fileserver needs updating so this is nolonger needed 
 	*/
-	public function getLoop()
+	public function getLoop():\React\EventLoop\LoopInterface
 	{
 		return $this->oLoop;
 	}

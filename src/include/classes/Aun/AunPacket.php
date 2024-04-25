@@ -21,30 +21,33 @@ use config;
 class AunPacket implements EncapsulationInterface {
 
 	//Single byte (unsigned int) Aun Packet Type 1=>BroadCast =
-	protected $iPktType = NULL;
+	protected ?int $iPktType = NULL;
 	
 	//Single byte (unsigned int) Control/flag 
-	protected $iCb = NULL;
+	protected ?int $iCb = NULL;
 
 	//Single byte (unsigned int) Padding
-	protected $iPadding = NULL;
+	protected ?int $iPadding = NULL;
 
 	//Single byte (unsigned int) Port number
-	protected $iPort = NULL;
+	protected ?int $iPort = NULL;
 
 	//32 bit int unsigned  little-endian 
-	protected $iSeq = 0;
+	protected ?int $iSeq = 0;
 
 	//Binary Data String
-	protected $sData = NULL;
+	protected ?string $sData = NULL;
 
-	protected $sSoruceIP = NULL;
+	protected ?string $sSoruceIP = NULL;
 
-	protected $sSourceUdpPort = NULL;
+	protected ?string $sSourceUdpPort = NULL;
 
-	protected $sDestinationIP = NULL;
+	protected ?string $sDestinationIP = NULL;
 
-	protected $aTypeMap = [1=>'Broadcast', 2=>'Unicast', 3=>'Ack', 4=>'Reject', 5=>'Immediate', 6=>'ImmediateReply'];
+	/**
+ 	 * @var array<int, string>
+ 	 */	
+	protected array $aTypeMap = [1=>'Broadcast', 2=>'Unicast', 3=>'Ack', 4=>'Reject', 5=>'Immediate', 6=>'ImmediateReply'];
 
 	/**
 	 * Get the econet port number the aun packet is for
@@ -169,7 +172,7 @@ class AunPacket implements EncapsulationInterface {
 		return $this->iSeq;
 	}
 
-	public function setSourceIP($sHost): void
+	public function setSourceIP(string $sHost): void
 	{
 		if(str_contains((string) $sHost,':')){
 			$aIPParts = explode(':',(string) $sHost);
@@ -180,22 +183,22 @@ class AunPacket implements EncapsulationInterface {
 		}
 	}
 
-	public function getSourceIP()
+	public function getSourceIP():string
 	{
 		return $this->sSoruceIP;
 	}
 
-	public function setSourceUdpPort($iPort): void
+	public function setSourceUdpPort(int $iPort): void
 	{
-		$this->sSourceUdpPort = $iPort;
+		$this->sSourceUdpPort = (string) $iPort;
 	}
 
-	public function getSourceUdpPort()
+	public function getSourceUdpPort():string
 	{
 		return $this->sSourceUdpPort;
 	}
 
-	public function setDestinationIP($sHost): void
+	public function setDestinationIP(string $sHost): void
 	{
 		if(str_contains((string) $sHost,':')){
 			$aIPParts = explode(':',(string) $sHost);
@@ -205,7 +208,7 @@ class AunPacket implements EncapsulationInterface {
 		}
 	}
 
-	public function getDestinationIP()
+	public function getDestinationIP():string
 	{
 		return $this->sDestinationIP;
 	}
@@ -224,8 +227,8 @@ class AunPacket implements EncapsulationInterface {
 		$sNetworkStation = Map::ipAddrToEcoAddr($this->sSoruceIP,$this->sSourceUdpPort);
 		$aEcoAddr = explode('.',$sNetworkStation);
 		if(array_key_exists(0,$aEcoAddr) AND array_key_exists(1,$aEcoAddr)){
-			$oEconetPacket->setSourceNetwork($aEcoAddr[0]);
-			$oEconetPacket->setSourceStation($aEcoAddr[1]);
+			$oEconetPacket->setSourceNetwork((int) $aEcoAddr[0]);
+			$oEconetPacket->setSourceStation((int) $aEcoAddr[1]);
 		}
 		$oEconetPacket->setData($this->sData);
 		return $oEconetPacket;

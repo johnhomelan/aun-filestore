@@ -118,7 +118,7 @@ class React extends Command {
 	 * Creates the primary react php loop, and starts it 
 	 *
 	*/
-	private function MainLoop()
+	private function MainLoop():void
 	{
 
 		//Setup the main react loop
@@ -308,7 +308,7 @@ EOF;
 	  *
 	  * @param LoopInterface $oLoop The loop to add the service to
 	*/
-	public function adminService(LoopInterface $oLoop)
+	public function adminService(LoopInterface $oLoop):void
 	{
 		$oKernel = new Kernel('prod', false);
 		$oLogger = $this->oLogger;

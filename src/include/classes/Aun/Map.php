@@ -24,16 +24,28 @@ use config;
 */
 class Map {
 
-	static $aHostMap = [];
+	/**
+ 	  * @var array<string, string>
+ 	*/  	
+	static array $aHostMap = [];
 
-	static $aSubnetMap = [];
+	/**
+ 	  * @var array<int, string>
+ 	*/  	
+	static array $aSubnetMap = [];
 
-	//Cache of the reverse ip to network.station lookup
-	static $aIPLookupCache = [];
+	/**
+	  * Cache of the reverse ip to network.station lookup
+ 	  * @var array<string, string>
+ 	*/  	
+	static array $aIPLookupCache = [];
 
-	static $aIpCounter = [];
+	/**
+ 	  * @var array<string, int>
+ 	*/  	
+	static array $aIpCounter = [];
 
-	static $oLogger;
+	static \Psr\Log\LoggerInterface $oLogger;
 
 	static HandleInterface $oHandler;
 
@@ -71,10 +83,10 @@ class Map {
 	 * Converts an ip address to a econet address
 	 *
 	 * @param string $sIP The ip address to get the econet addr for (in the form xxx.xxx.xxx.xxx)
-	 * @param int $sPort We can support mapping mulitple econet address to a single host however each econet address is bound to a udp port
+	 * @param string $sPort We can support mapping mulitple econet address to a single host however each econet address is bound to a udp port
 	 * @return string Econet address in the form network.station 
 	*/
-	public static function ipAddrToEcoAddr(string $sIP,int $sPort=NULL):string 
+	public static function ipAddrToEcoAddr(string $sIP,?string $sPort=NULL):string 
 	{
 		//Check if there is a map in the fast cache 
 		if(array_key_exists($sIP.':'.$sPort, Map::$aIPLookupCache)){

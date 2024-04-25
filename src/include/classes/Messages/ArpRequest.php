@@ -7,6 +7,7 @@
 */
 namespace HomeLan\FileStore\Messages; 
 
+use HomeLan\FileStore\Messages\EconetPacket; 
 use Exception; 
 
 /** 
@@ -25,7 +26,7 @@ class ArpRequest extends Request {
 
 	//private array $aArpOps = [1=>'ARPOP_REQUEST',2=>'ARPOP_REPLY',3=>'ARPOP_RREQUEST',4=>'ARPOP_RREPLY',8=>'ARPOP_InREQUEST',9=>'ARPOP_InREPLY',10=>'ARPOP_NAK'];
 	
-	public function __construct($oEconetPacket, \Psr\Log\LoggerInterface $oLogger)
+	public function __construct(EconetPacket  $oEconetPacket, \Psr\Log\LoggerInterface $oLogger)
 	{
 		parent:: __construct($oEconetPacket, $oLogger);
 		$this->decode($oEconetPacket->getData());

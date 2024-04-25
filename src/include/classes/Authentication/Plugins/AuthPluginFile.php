@@ -20,8 +20,11 @@ use Exception;
 
 class AuthPluginFile implements AuthPluginInterface {
 
-	protected static $aUsers = [];
-	protected static $oLogger;
+	/**
+ 	 * @var array<string, array<string, mixed>>
+ 	*/  	
+	protected static array $aUsers = [];
+	protected static \Psr\Log\LoggerInterface $oLogger;
 
 	static protected function _writeOutUserFile(): void
 	{
@@ -129,6 +132,7 @@ class AuthPluginFile implements AuthPluginInterface {
 	/**
 	 * Gets all the user objects know to the plugin
 	 *
+	 * @return array<int, \HomeLan\FileStore\Authentication\User>
 	*/
 	static public function getAllUsers(): array
 	{

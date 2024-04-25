@@ -16,11 +16,6 @@ use Exception;
 */
 class ArpReply extends Reply {
 
-	protected $sPkt = NULL;
-	
-	protected $oRequest = NULL;
-
-	protected $iFlags = NULL;
 
 	protected ?int $iArpResponseNetwork = NULL;
 
@@ -28,13 +23,13 @@ class ArpReply extends Reply {
 
 	protected ?string $iArpResponseIPv4 = NULL;
 
-	public function	setHwAddr(int $iNetwork, int $iStation)
+	public function	setHwAddr(int $iNetwork, int $iStation):void
 	{
 		$this->iArpResponseNetwork = $iNetwork;
 		$this->iArpResponseStation = $iStation;
 	}
 
-	public function setIPv4Addr(string $sIP)
+	public function setIPv4Addr(string $sIP):void
 	{
 		$this->iArpResponseIPv4 = $sIP;
 	}

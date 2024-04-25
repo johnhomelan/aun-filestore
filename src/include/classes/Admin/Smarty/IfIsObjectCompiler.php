@@ -9,9 +9,12 @@ use Smarty\CompilerException;
  */
 class IfIsObjectCompiler extends Base {
 
-        public function compile($params, \Smarty\Compiler\Template $compiler) {
+	/**
+ 	 * @param array<mixed> $params
+ 	*/ 	
+        public function compile(mixed $params, \Smarty\Compiler\Template $compiler) {
 
-                if (count($params) !== 1) {
+                if (is_countable($params) && count($params) !== 1) {
                         throw new CompilerException("Invalid number of arguments for is_object. is_object expects exactly 1 parameter.");
                 }
 

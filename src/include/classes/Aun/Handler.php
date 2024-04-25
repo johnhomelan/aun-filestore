@@ -24,7 +24,14 @@ use config;
 */
 class Handler Implements HandleInterface {
 
+	/**
+ 	 * @var array<string, array<string, mixed>>
+ 	*/  	
 	private array $aQueue = [];
+
+	/**
+ 	 * @var array<string, int>	
+ 	*/ 	
 	private array $aLastChance = [];
 	private Socket $oAunServer;
 
@@ -37,7 +44,7 @@ class Handler Implements HandleInterface {
 	{		
 	}
 
-	public function setSocket(Socket $oAunServer)
+	public function setSocket(Socket $oAunServer):void
 	{
 		$this->oAunServer = $oAunServer;
 	}
@@ -97,7 +104,7 @@ class Handler Implements HandleInterface {
 		$this->aQueue[$sHost][] = ['packet'=>$oPacket,'retries'=>$iRetries,'attempts'=>0,'backoff'=>0];
 	}
 
-	private function _runQueue()
+	private function _runQueue():void
 	{
 		foreach($this->aQueue as $sHost=>$aHostQueue){
 			$this->_runHostQueue($sHost);
@@ -169,7 +176,7 @@ class Handler Implements HandleInterface {
 		}
 	}
 
-	private function _writeOutPkt(EconetPacket $oPacket)
+	private function _writeOutPkt(EconetPacket $oPacket):void
 	{
 		$this->oLogger->debug("Aun Handler: Transmitting packet");
 		$sHost = $this->_getIpPortFromNetworkStation($oPacket->getDestinationNetwork(),$oPacket->getDestinationStation());

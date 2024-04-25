@@ -14,7 +14,7 @@ use React\Datagram\Socket;
 Interface HandleInterface {
 
 
-	public function setSocket(Socket $oAunServer);
+	public function setSocket(Socket $oAunServer):void;
 
 	public function onClose():void;
 

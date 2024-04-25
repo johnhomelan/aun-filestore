@@ -18,9 +18,12 @@ use Exception;
 
 class Security {
 
-	protected static $aSessions = [];
+	/**
+ 	 * @var array<int, array<int, array<mixed>>>
+ 	*/  	
+	protected static array $aSessions = [];
 
-	protected static $oLogger;
+	protected static \Psr\Log\LoggerInterface $oLogger;
 
 	public static function init(\Psr\Log\LoggerInterface $oLogger): void
 	{
@@ -49,7 +52,7 @@ class Security {
 	 * Get a list of all the authplugs we should be using 
 	 *
 	 * It also calls the init method of each one
-	 *
+	 * @return array<int, string>
 	**/
 	protected static function _getAuthPlugins(): array
 	{
@@ -74,7 +77,7 @@ class Security {
 	/**
 	 * Updates the last idle time for a connection
 	*/
-	public static function updateIdleTimer($iNetwork,$iStation): void
+	public static function updateIdleTimer(int $iNetwork,int $iStation): void
 	{
 		if(array_key_exists($iNetwork,Security::$aSessions) AND array_key_exists($iStation,Security::$aSessions[$iNetwork])){
 			Security::$aSessions[$iNetwork][$iStation]['idle']=time();
@@ -85,11 +88,12 @@ class Security {
 	/**
 	 * Gets the last idle time for a connection
 	*/
-	public static function getIdleTimer($iNetwork,$iStation)
+	public static function getIdleTimer(int $iNetwork, int $iStation):int
 	{
 		if(array_key_exists($iNetwork,Security::$aSessions) AND array_key_exists($iStation,Security::$aSessions[$iNetwork])){
 			return Security::$aSessions[$iNetwork][$iStation]['idle'];
 		}
+		return 0;
 	}
 
 	/**
@@ -117,7 +121,7 @@ class Security {
 		return FALSE;
 	}
 
-	public static function logout($iNetwork,$iStation): void
+	public static function logout(int $iNetwork, int $iStation): void
 	{
 		if(Security::isLoggedIn($iNetwork,$iStation)){
 			$oUser = Security::getUser($iNetwork,$iStation);
@@ -172,14 +176,19 @@ class Security {
 	/**
 	 * Get an error of the users logged in
 	 *
-	 * @return array
+	 * @return array<int, array<int, array<mixed>>>
 	*/
 	public static function getUsersOnline(): array
 	{
 		return  Security::$aSessions;
 	}
 
-	public static function getUsersStation($sUsername): array
+	/**
+ 	  * Gets the list of network/stations a using is logged on via
+ 	  *
+ 	  * @return array<string, int>
+ 	*/  	
+	public static function getUsersStation(string $sUsername): array
 	{
 		foreach(Security::$aSessions as $iNetwork=>$aStationUsers){
 			foreach($aStationUsers as $iStation=>$aData){
@@ -192,6 +201,11 @@ class Security {
 		return [];	
 	}
 
+	/**
+ 	  * Gets the list of all the users logged in and the plugin providing that user
+ 	  *
+ 	  * @return array<int, array{'plugin':string, 'user':mixed}>
+ 	*/
 	public static function getAllUsers(): array
 	{
 		$aReturn = [];
@@ -248,7 +262,7 @@ class Security {
 	/**
 	  * Removes a user (assuming the user logged in on the given network/station has admin rights)
 	*/
-	public static function removeUser(int $iNetwork,int $iStation,string $sUsername)
+	public static function removeUser(int $iNetwork,int $iStation,string $sUsername):bool
 	{
 		if(!Security::isLoggedIn($iNetwork,$iStation)){
 			throw new Exception("Security:  Unable to remove the user, no user is logged in on ".$iNetwork.".".$iStation);
@@ -268,6 +282,7 @@ class Security {
 				self::$oLogger->debug("Security: Exception thrown by plugin ".$sPlugin." when attempting to remove user ".$sUsername." (".$oException->getMessage().")");
 			}
 		}
+		return false;
 	
 	}
 

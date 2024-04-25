@@ -27,7 +27,7 @@ class EncapsulationTypeMap {
 	 * Keeping this class as a singleton, this is static method should be used to get references to this object
 	 *
 	*/
-	public static function create()
+	public static function create():\HomeLan\FileStore\Encapsulation\EncapsulationTypeMap
 	{
 		if(!is_object(EncapsulationTypeMap::$oSingleton)){
 			EncapsulationTypeMap::$oSingleton = new EncapsulationTypeMap();

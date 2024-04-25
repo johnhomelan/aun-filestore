@@ -45,6 +45,7 @@ interface AuthPluginInterface {
 	/**
 	 * Gets all the user objects know to the plugin
 	 *
+	 * @return array<int, \HomeLan\FileStore\Authentication\User>
 	*/
 	static public function getAllUsers(): array;
 

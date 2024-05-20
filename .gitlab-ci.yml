@@ -82,3 +82,18 @@ container_build:
       --destination "${REPO_IMAGE}:${IMAGE_VERSION}"
       --skip-push-permission-check
 
+container_build_dockerhub:
+  image: 
+    name: gcr.io/kaniko-project/executor:v1.22.0-debug
+    entrypoint: [""]
+  stage: build
+  only:
+   refs: 
+       - master
+  script:
+     - echo -n "{\"auths\":{\"registry-1.docker.io\":{\"auth\":\"$(echo -n ${DOCKERHUB_USER}:${DOCKERHUB_PW} | base64)\"}}}" > /kaniko/.docker/config.json
+     - /kaniko/executor
+      --context "${CI_PROJECT_DIR}"
+      --dockerfile "${CI_PROJECT_DIR}/Dockerfile"
+      --destination "${REPO_IMAGE}:${IMAGE_VERSION}"
+      --skip-push-permission-check

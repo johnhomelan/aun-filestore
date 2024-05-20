@@ -16,14 +16,10 @@ use Exception;
 */
 class FsReply extends Reply {
 
-	protected $sPkt = NULL;
-	
-	protected $oRequest = NULL;
-
-	protected $iFlags = NULL;
-
-
-	protected $aTypeMap = array('DONE'=>0,'SAVE'=>1,'LOAD'=>2,'CAT'=>3,'INFO'=>4,'LOGIN'=>5,'SDISC'=>6,'DIR'=>7,'UNREC'=>8,'LIB'=>9,'DISCS'=>10);
+	/**
+	 * @var array<string, int>
+	*/  
+	protected array $aTypeMap = ['DONE'=>0, 'SAVE'=>1, 'LOAD'=>2, 'CAT'=>3, 'INFO'=>4, 'LOGIN'=>5, 'SDISC'=>6, 'DIR'=>7, 'UNREC'=>8, 'LIB'=>9, 'DISCS'=>10];
 
 	/**
 	 * Sets the reply to be an error indicator
@@ -45,7 +41,7 @@ class FsReply extends Reply {
 		}
 	}
 
-	public function loginRespone($iUrd,$iCsd,$iLib,$iOpt): void
+	public function loginRespone(int $iUrd, int $iCsd, int $iLib, int $iOpt): void
 	{
 		$this->sPkt = pack('CCCCCC',$this->aTypeMap['LOGIN'],0,$iUrd,$iCsd,$iLib,$iOpt);
 	}

@@ -7,6 +7,7 @@
 */
 namespace HomeLan\FileStore\Messages; 
 
+use HomeLan\FileStore\Messages\EconetPacket; 
 use Exception; 
 
 /** 
@@ -17,34 +18,38 @@ use Exception;
 class BridgeRequest extends Request {
 
 
-	protected $iReplyPort = NULL;
+	protected ?int $iReplyPort = NULL;
 	
-	protected $iFunction = NULL;
+	protected ?int $iFunction = NULL;
 
-	protected $iUrd = NULL;
+	protected ?int $iUrd = NULL;
 
-	protected $iCsd = NULL;
+	protected ?int $iCsd = NULL;
 
-	protected $iLib = NULL;
+	protected ?int $iLib = NULL;
 
-	protected $sData = NULL;
+	/**
+	  * @var array<int, string>
+	*/  
+	protected array $aFunctionMap = [0x80=>'EC_BR_QUERY', 0x81=>'EC_BR_QUERY2', 0x82=>'EC_BR_LOCALNET', 0x83=>'EC_BR_NETKNOWN'];
 
-	protected $aFunctionMap = array(0x80=>'EC_BR_QUERY',0x81=>'EC_BR_QUERY2',0x82=>'EC_BR_LOCALNET',0x83=>'EC_BR_NETKNOWN');
+	protected ?EconetPacket $oEconetPacket = NULL;
 
 
-	public function __construct($oEconetPacket, \Psr\Log\LoggerInterface $oLogger)
+	public function __construct(EconetPacket $oEconetPacket, \Psr\Log\LoggerInterface $oLogger)
 	{
 		parent:: __construct($oEconetPacket,$oLogger);
+		$this->oEconetPacket = $oEconetPacket;
 		$this->decode($oEconetPacket->getData());
 	}	
 
-	public function getReplyPort()
+	public function getReplyPort():?int
 	{
 		return $this->iReplyPort;
 	}
 
 
-	public function getFunction()
+	public function getFunction():string
 	{
 		if(is_numeric($this->iFunction)){
 			if(isset($this->aFunctionMap[$this->iFunction])){
@@ -56,10 +61,9 @@ class BridgeRequest extends Request {
 	}
 
 	/**
-	 * Decodes an AUN packet 
-	 *
-	 * @param string $sBinaryString
-	*/
+	  * Decodes an AUN packet 
+ 	  *
+ 	*/
 	public function decode(string $sBinaryString): void
 	{
 		//Read the function code 1 byte unsigned int
@@ -83,6 +87,14 @@ class BridgeRequest extends Request {
 		//The reset is data
 		$this->sData = $sBinaryString;
 		
+	}
+
+	public function getNetwork():int
+	{
+		//This first byte after the reply port is the network number the bridge is being queried about
+		$aData = unpack('C',(string) $this->sData);
+		return (int) $aData[2];
+
 	}
 
 	public function buildReply(): \HomeLan\FileStore\Messages\FsReply

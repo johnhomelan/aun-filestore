@@ -18,7 +18,7 @@
 				{assign var="aPorts" value=$oService->getServicePorts()}
 				<a href="service?port={$aPorts.0}">{$oService->getName()}</a>
 			</td><td>
-				{', '|implode:$oService->getServicePorts()}
+				{', '|implodemod:$oService->getServicePorts()}
 			</td></tr>
 			{/foreach}
 

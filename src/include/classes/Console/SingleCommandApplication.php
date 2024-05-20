@@ -8,9 +8,9 @@ use Symfony\Component\Console\Input\InputInterface;
 
 class SingleCommandApplication extends Application {
 
-        protected $oCommand;
+        protected command $oCommand;
 
-	protected $sCommandName;
+	protected string $sCommandName;
 
         public function __construct(Command $oCommand)
         {

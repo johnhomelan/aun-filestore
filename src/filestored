@@ -1,12 +1,19 @@
 #!/usr/bin/php
 <?php
-require_once __DIR__."/vendor/autoload.php";
+if(file_exists(__DIR__."/vendor/autoload.php")){
+        require_once __DIR__."/vendor/autoload.php";
+}else{
+        require_once "/usr/share/aun-filestored/vendor/autoload.php";
+}
 
 use HomeLan\FileStore\Console\SingleCommandApplication;
-use HomeLan\FileStore\Command\Filestore;
-use HomeLan\FileStore\Services\FileServer;
-use HomeLan\FileStore\Services\PrintServer;
-use HomeLan\FileStore\Services\Bridge;
+use HomeLan\FileStore\Command\React;
+use HomeLan\FileStore\Services\ServiceDispatcher;
+use HomeLan\FileStore\Services\Provider\FileServer;
+use HomeLan\FileStore\Services\Provider\PrintServer;
+use HomeLan\FileStore\Services\Provider\Bridge;
+use HomeLan\FileStore\Services\Provider\IPv4;
+use HomeLan\FileStore\Services\Provider\BeebTerm;
 
 use Monolog\Logger;
 use Monolog\Handler\SyslogHandler;
@@ -17,11 +24,18 @@ $oLogger->pushHandler(new SyslogHandler("filestored"));
 $oLogger->pushHandler(new StreamHandler('php://stdout', Logger::DEBUG));
 
 $oApplication = new SingleCommandApplication(
-	new Filestore(
-		new FileServer($oLogger),
-		new PrintServer($oLogger),
-		new Bridge($oLogger),
-		$oLogger
+	new React(
+		$oLogger,
+		ServiceDispatcher::create(
+			$oLogger,
+			[
+				new FileServer($oLogger),
+				new PrintServer($oLogger),
+				new Bridge($oLogger),
+				new IPv4($oLogger),
+				new BeebTerm($oLogger)
+			]
+		)
 	)
 );
 

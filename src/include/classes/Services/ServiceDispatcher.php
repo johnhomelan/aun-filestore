@@ -14,7 +14,8 @@ use HomeLan\FileStore\Aun\Map;
 use HomeLan\FileStore\Services\ProviderInterface;
 use HomeLan\FileStore\Encapsulation\PacketDispatcher;
 use HomeLan\FileStore\Encapsulation\EncapsulationTypeMap;
-
+use HomeLan\FileStore\Encapsulation\EncapsulationInterface;
+use HomeLan\FileStore\Piconet\Handler as PiconetHandler;
 use config;
 
 /**
@@ -24,18 +25,18 @@ use config;
 */
 class ServiceDispatcher {
 
-	static private $oSingleton;
-	private $oEncapsulationTypeMap;
-	private $oLoop;
-	private $oAunServer;
-	private $aPorts = [];
-	private $oLogger;
-	private $aReplies = [];
-	private $iStreamPortStart=20;
-	private $aPortTimeLimits = [];
-	private $aHouseKeepingTasks = [];
-	private $aAckEvents = [];
+	static private ?\HomeLan\FileStore\Services\ServiceDispatcher $oSingleton = null;
+	private ?\HomeLan\FileStore\Encapsulation\EncapsulationTypeMap $oEncapsulationTypeMap = null;
+	private ?\React\EventLoop\LoopInterface $oLoop = null;
+	private array $aProviders = [];
+	private array $aPorts = [];
+	private array $aReplies = [];
+	private int $iStreamPortStart=20;
+	private array $aPortTimeLimits = [];
+	private array $aHouseKeepingTasks = [];
+	private array $aAckEvents = [];
 
+	const MAX_STREAMS = 20;
 	/**
 	 * Keeping this class as a singleton, this is static method should be used to get references to this object
 	 *
@@ -43,6 +44,7 @@ class ServiceDispatcher {
 	public static function create(\Psr\Log\LoggerInterface $oLogger = null, array $aServices = null)
 	{
 		if(!is_object(ServiceDispatcher::$oSingleton)){
+			$oLogger->debug("Creating the singleton of ServiceDispatcher");
 			ServiceDispatcher::$oSingleton = new ServiceDispatcher($oLogger, $aServices);
 		}
 		return ServiceDispatcher::$oSingleton;	
@@ -52,10 +54,8 @@ class ServiceDispatcher {
 	 * Constructor registers the Logger and all the services 
 	 *  
 	*/
-	public function __construct(\Psr\Log\LoggerInterface $oLogger, array $aServices)
+	public function __construct(private readonly \Psr\Log\LoggerInterface $oLogger, array $aServices)
 	{		
-		$this->oLogger = $oLogger;	
-
 		//Takes and array of serivce providers and adds them the the ServiceDispatcher so they get packets 
 		foreach($aServices as $oService){
 			$this->addService($oService);
@@ -63,15 +63,14 @@ class ServiceDispatcher {
 	}
 
 	/**
-	 * Called when the application is jusp about to start the main loop
+	 * Called when the application is just about to start the main loop
 	 *
 	 * It passes the loop in so providers can register events with the loop
 	*/
-	public function start(EncapsulationTypeMap $oEncapsulationTypeMap, \React\EventLoop\LoopInterface $oLoop, \React\Datagram\Socket $oAunServer): void
+	public function start(EncapsulationTypeMap $oEncapsulationTypeMap, \React\EventLoop\LoopInterface $oLoop):void
 	{
 		$this->oEncapsulationTypeMap = $oEncapsulationTypeMap;
 		$this->oLoop = $oLoop;
-		$this->oAunServer = $oAunServer;
 	}
 
 	/**
@@ -85,14 +84,20 @@ class ServiceDispatcher {
 	}
 
 	/**
-	 * Adds a single service to the service dispatcher
-	 *
-	 * @param object ServicesInterface $oService
-	*/
+	  * Adds a single service to the service dispatcher
+	 */
 	public function addService(ProviderInterface $oService): void
 	{
+		if(in_array($oService, $this->aProviders)){
+			throw new Exception("Service has already been added.");
+		}
+
+		$this->aProviders[] = $oService;
+
+		//Start dealing with the ports needed for a service
 		$aPorts = $oService->getServicePorts();
 
+		//Check the service is not regisitered
 		//Check if any of the ports the service uses are in use
 		foreach($aPorts as $iPort){
 			if(array_key_exists($iPort,$this->aPorts)){
@@ -102,9 +107,7 @@ class ServiceDispatcher {
 
 		//Add the service for all the ports it provides service via
 		$oService->registerService($this);
-		foreach($aPorts as $iPort){
-			$this->aPorts[$iPort]=$oService;
-		}
+		$this->enableService($oService);
 	}
 
 	/**
@@ -113,13 +116,7 @@ class ServiceDispatcher {
 	*/
 	public function getServices(): array
 	{
-		$aReturn=[];
-		foreach($this->aPorts as $oService){
-			if(!in_array($oService,$aReturn)){
-				$aReturn[] = $oService;
-			}
-		}
-		return $aReturn;
+		return $this->aProviders;
 	}
 
 	public function getServiceByPort(int $iPort): ?ProviderInterface
@@ -142,15 +139,14 @@ class ServiceDispatcher {
 	}
 
 	/**
-	 * Allows a service to claim port temp bais for directly streaming data with a client
-	 *
-	 * @param object ServicesInterface $oService 
-	 * @param int $iTimeOut If no packets are recived after this timeout the port is free'd 
-	 * @return int The port allocated for streaming by the service handler 
+	  * Allows a service to claim port temp bais for directly streaming data with a client
+	  *
+	  * @param int $iTimeOut If no packets are recived after this timeout the port is free'd 
+	  * @return int The port allocated for streaming by the service handler 
 	*/
 	public function claimStreamPort(ProviderInterface $oService, int $iTimeOut=60): int
 	{
-		for($i=$this->iStreamPortStart;$i<($this->iStreamPortStart+20);$i++){
+		for($i=$this->iStreamPortStart;$i<($this->iStreamPortStart+self::MAX_STREAMS);$i++){
 			if(!array_key_exists($i,$this->aPorts)){
 				$this->aPorts[$i] = $oService;
 				$this->aPortTimeLimits[$i] = time ()+$iTimeOut;
@@ -163,27 +159,34 @@ class ServiceDispatcher {
 	/**
 	 * Handles an inbound packet $oService
 	*/
-	public function inboundPacket(AunPacket $oPacket): void
+	public function inboundPacket(EncapsulationInterface $oPacket): void
 	{
-		if(array_key_exists($oPacket->getPort(),$this->aPorts)){
-			switch($oPacket->getPacketType()){
-				case 'Immediate':
-				case 'Unicast':
+		$this->oLogger->debug("Packet type ".$oPacket->getPacketType());
+		switch($oPacket->getPacketType()){
+			case 'Immediate':
+			case 'Unicast':
+				if(array_key_exists($oPacket->getPort(),$this->aPorts)){
 					$this->oLogger->debug("Unicast Packet in:  ".$oPacket->toString());
 					$this->aPorts[$oPacket->getPort()]->unicastPacketIn($oPacket->buildEconetPacket());
-					break;
-				case 'Ack':
-					$this->ackEvents($oPacket);
-					break;
-				case 'Broadcast':
+					$aReplies = $this->aPorts[$oPacket->getPort()]->getReplies();
+					foreach($aReplies as $oReply){
+						$this->queueReply($oReply);	
+					}	
+				}
+				break;
+			case 'Ack':
+				$this->ackEvents($oPacket);
+				break;
+			case 'Broadcast':
+				if(array_key_exists($oPacket->getPort(),$this->aPorts)){
 					$this->oLogger->debug("Broadcast Packet in:  ".$oPacket->toString());
 					$this->aPorts[$oPacket->getPort()]->broadcastPacketIn($oPacket->buildEconetPacket());
-					break;
-			}
-			$aReplies = $this->aPorts[$oPacket->getPort()]->getReplies();
-			foreach($aReplies as $oReply){
-				$this->queueReply($oReply);	
-			}
+					$aReplies = $this->aPorts[$oPacket->getPort()]->getReplies();
+					foreach($aReplies as $oReply){
+						$this->queueReply($oReply);	
+					}
+				}
+				break;
 		}
 
 	}
@@ -197,7 +200,6 @@ class ServiceDispatcher {
 	*/
 	private function queueReply(EconetPacket $oPacket): void
 	{
-		usleep(config::getValue('bbc_default_pkg_sleep'));
 		$this->aReplies[]=$oPacket;
 	}
 
@@ -219,7 +221,7 @@ class ServiceDispatcher {
 	*/
 	public function sendPackets(ProviderInterface $oService): void
 	{
-		$oPacketDispatcher = PacketDispatcher::create($this->oEncapsulationTypeMap, $this->oLoop, $this->oAunServer);
+		$oPacketDispatcher = PacketDispatcher::create($this->oEncapsulationTypeMap, $this->oLoop);
 		$aReplys = $oService->getReplies();
 		foreach($aReplys as $oPacket){
 			$oPacketDispatcher->sendPacket($oPacket);
@@ -232,17 +234,17 @@ class ServiceDispatcher {
 	*/
 	public function addAckEvent($iNetwork, $iStation, $fCallable): void
 	{
-		if(!is_array($this->aAckEvents[$iStation])){
-			$this->aAckEvents[$iStation]=[];
+		if(!array_key_exists($iNetwork,$this->aAckEvents)){
+			$this->aAckEvents[$iNetwork]=[];
 		}
-		$this->aAckEvents[$iStation][$iStation] = $fCallable;
+		$this->aAckEvents[$iNetwork][$iStation] = $fCallable;
 	}
 
 	/**
 	 * Checks to see if an Ack should tirgger an event, and if so tirgger it
 	 *
 	*/ 
-	public function ackEvents(AunPacket $oPacket): void
+	public function ackEvents(EncapsulationInterface $oPacket): void
 	{
 		$oEconetPacket = $oPacket->buildEconetPacket();
 		if(array_key_exists($oEconetPacket->getSourceNetwork(),$this->aAckEvents) AND array_key_exists($oEconetPacket->getSourceStation(),$this->aAckEvents[$oEconetPacket->getSourceNetwork()])){
@@ -252,13 +254,69 @@ class ServiceDispatcher {
 		}
 	}
 
+	public function clearAckEvent($iNetwork, $iStation):void
+	{
+		if(array_key_exists($iNetwork,$this->aAckEvents) AND array_key_exists( $iStation,$this->aAckEvents[$iNetwork])){
+			unset($this->aAckEvents[$iNetwork][$iStation]);
+		}
+	}
+
+	/** 
+	 * Disables a service from receiving packets on thier service ports
+	 * 
+	*/ 	
+	public function disableService(ProviderInterface $oService):void
+	{
+		$aPorts = $oService->getServicePorts();
+
+		foreach($aPorts as $iPort){
+			unset($this->aPorts[$iPort]);
+		}
+
+	}
+
+	/** 
+	 * Enables a service letting it receive packets on thier service ports
+	 * 
+	*/ 	
+	public function enableService(ProviderInterface $oService):void
+	{
+		if(!in_array($oService, $this->aProviders)){
+			return;
+		}
+
+		$aPorts = $oService->getServicePorts();
+
+		foreach($aPorts as $iPort){
+			$this->aPorts[$iPort]=$oService;
+		}
+
+	}
+
 	/**
 	 * Run the housekeeping tasks for all services
 	*/ 
 	public function houseKeeping(): void
 	{
+		//Run registred house keeping tasks
 		foreach($this->aHouseKeepingTasks as $fTask){
 			($fTask)();
 		}
+
+		//Free up timed out streaming ports by building a new list without timed out ports
+		$aPortTimeLimits = [];
+		for($i=$this->iStreamPortStart;$i<($this->iStreamPortStart+self::MAX_STREAMS);$i++){
+			if(array_key_exists($i,$this->aPorts)){
+				if($this->aPortTimeLimits[$i]<time()){
+					//The stream port has NOT timed out
+					$aPortTimeLimits[$i]=$this->$aPortTimeLimits[$i];
+				}else{
+					//Timed out clear the port
+					unset($this->aPorts[$i]);
+				}
+			}
+		}
+		$this->aPortTimeLimits = $aPortTimeLimits;
+	
 	}
 } 

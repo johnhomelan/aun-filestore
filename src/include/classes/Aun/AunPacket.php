@@ -21,30 +21,33 @@ use config;
 class AunPacket implements EncapsulationInterface {
 
 	//Single byte (unsigned int) Aun Packet Type 1=>BroadCast =
-	protected $iPktType = NULL;
+	protected ?int $iPktType = NULL;
 	
 	//Single byte (unsigned int) Control/flag 
-	protected $iCb = NULL;
+	protected ?int $iCb = NULL;
 
 	//Single byte (unsigned int) Padding
-	protected $iPadding = NULL;
+	protected ?int $iPadding = NULL;
 
 	//Single byte (unsigned int) Port number
-	protected $iPort = NULL;
+	protected ?int $iPort = NULL;
 
 	//32 bit int unsigned  little-endian 
-	protected $iSeq = 0;
+	protected ?int $iSeq = 0;
 
 	//Binary Data String
-	protected $sData = NULL;
+	protected ?string $sData = NULL;
 
-	protected $sSoruceIP = NULL;
+	protected ?string $sSoruceIP = NULL;
 
-	protected $sSourceUdpPort = NULL;
+	protected ?string $sSourceUdpPort = NULL;
 
-	protected $sDestinationIP = NULL;
+	protected ?string $sDestinationIP = NULL;
 
-	protected $aTypeMap = array(1=>'Broadcast',2=>'Unicast',3=>'Ack',4=>'Reject',5=>'Immediate',6=>'ImmediateReply');
+	/**
+ 	 * @var array<int, string>
+ 	 */	
+	protected array $aTypeMap = [1=>'Broadcast', 2=>'Unicast', 3=>'Ack', 4=>'Reject', 5=>'Immediate', 6=>'ImmediateReply'];
 
 	/**
 	 * Get the econet port number the aun packet is for
@@ -64,7 +67,10 @@ class AunPacket implements EncapsulationInterface {
 	*/ 
 	public function getPacketType(): string
 	{
-		return $this->aTypeMap[$this->iPktType];
+		if(array_key_exists($this->iPktType,$this->aTypeMap)){
+			return $this->aTypeMap[$this->iPktType];
+		}
+		return 'Unknown';
 	}
 
 	/**
@@ -121,7 +127,7 @@ class AunPacket implements EncapsulationInterface {
 	public function buildAck(): ?string
 	{
 		//No decoded packet to to Ack
-		if(!is_numeric($this->iPktType)){
+		if(!is_numeric($this->iPktType) OR !array_key_exists($this->iPktType,$this->aTypeMap)){
 			return null;
 		}
 		$sPtk = NULL;
@@ -161,10 +167,15 @@ class AunPacket implements EncapsulationInterface {
 
 	}
 
-	public function setSourceIP($sHost): void
+	public function getSequence():int
 	{
-		if(strpos($sHost,':')!==FALSE){
-			$aIPParts = explode(':',$sHost);
+		return $this->iSeq;
+	}
+
+	public function setSourceIP(string $sHost): void
+	{
+		if(str_contains((string) $sHost,':')){
+			$aIPParts = explode(':',(string) $sHost);
 			$this->sSoruceIP=$aIPParts[0];
 			$this->sSourceUdpPort=$aIPParts[1];
 		}else{
@@ -172,32 +183,32 @@ class AunPacket implements EncapsulationInterface {
 		}
 	}
 
-	public function getSourceIP()
+	public function getSourceIP():string
 	{
 		return $this->sSoruceIP;
 	}
 
-	public function setSourceUdpPort($iPort): void
+	public function setSourceUdpPort(int $iPort): void
 	{
-		$this->sSourceUdpPort = $iPort;
+		$this->sSourceUdpPort = (string) $iPort;
 	}
 
-	public function getSourceUdpPort()
+	public function getSourceUdpPort():string
 	{
 		return $this->sSourceUdpPort;
 	}
 
-	public function setDestinationIP($sHost): void
+	public function setDestinationIP(string $sHost): void
 	{
-		if(strpos($sHost,':')!==FALSE){
-			$aIPParts = explode(':',$sHost);
+		if(str_contains((string) $sHost,':')){
+			$aIPParts = explode(':',(string) $sHost);
 			$this->sDestinationIP = $aIPParts[0];
 		}else{
 			$this->sDestinationIP=$sHost;
 		}
 	}
 
-	public function getDestinationIP()
+	public function getDestinationIP():string
 	{
 		return $this->sDestinationIP;
 	}
@@ -207,7 +218,6 @@ class AunPacket implements EncapsulationInterface {
 	 *
 	 * All the sub applications FileServer, PrintServer uses the econetpacket object so
 	 * that we can support more than 1 type of econet emulation/encapsulation
-	 * @return object econetpacket
 	*/
 	public function buildEconetPacket(): \HomeLan\FileStore\Messages\EconetPacket
 	{
@@ -217,8 +227,8 @@ class AunPacket implements EncapsulationInterface {
 		$sNetworkStation = Map::ipAddrToEcoAddr($this->sSoruceIP,$this->sSourceUdpPort);
 		$aEcoAddr = explode('.',$sNetworkStation);
 		if(array_key_exists(0,$aEcoAddr) AND array_key_exists(1,$aEcoAddr)){
-			$oEconetPacket->setSourceNetwork($aEcoAddr[0]);
-			$oEconetPacket->setSourceStation($aEcoAddr[1]);
+			$oEconetPacket->setSourceNetwork((int) $aEcoAddr[0]);
+			$oEconetPacket->setSourceStation((int) $aEcoAddr[1]);
 		}
 		$oEconetPacket->setData($this->sData);
 		return $oEconetPacket;
@@ -236,13 +246,4 @@ class AunPacket implements EncapsulationInterface {
 		return $sReturn;	
 	}
 
-	/**
-	  * At the moment just a sub function to be compatible with the EncapsulationInterface 
-	  *
-	  * @TODO Implment this method as part of the move to the Encapsulation Abstraction so websocket clients, and server to server encapuslations will work
-	 */ 	  
-	public function getReplies(): array
-	{
-
-	}
 }

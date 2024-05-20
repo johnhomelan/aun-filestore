@@ -1,0 +1,4 @@
+EMAIL "/usr/bin/telnet smtp.home-lan.co.uk 25"
+BASH "/usr/bin/bash"
+LS "/usr/bin/bash -c 'ls'"
+

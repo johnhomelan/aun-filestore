@@ -48,33 +48,33 @@ interface PluginInterface {
 	/**
 	 * Creates a directory
 	 *
-	 * @param object user $oUser The user who is performing the create dir operation
-	 * @param object FilePath
+	 * @param $oUser The user who is performing the create dir operation
+	 * @param FilePath $oPath
 	*/
 	public static function createDirectory($oUser,FilePath $oPath);
 
 	/**
 	 * Deletes a file
 	 *
-	 * @param object user $oUser The user who is deleting the file
-	 * @param object FilePath $oEconetPath The path of the file to delete 
+	 * @param $oUser The user who is deleting the file
+	 * @param FilePath $oEconetPath The path of the file to delete 
 	*/
 	public static function deleteFile($oUser,FilePath $oEconetPath);
 
 	/**
 	 * Moves a file from one location to another
 	 *
-	 * @param object user $oUser The user who is moving the file
-	 * @param object FilePath $oEconetPathFrom The file to move 
-	 * @param object FilePath $oEconetPathTo The path to move the file to
+	 * @param $oUser The user who is moving the file
+	 * @param FilePath $oEconetPathFrom The file to move 
+	 * @param FilePath $oEconetPathTo The path to move the file to
 	*/
 	public static function moveFile($oUser,FilePath $oEconetPathFrom,FilePath $oEconetPathTo);
 
 	/**
 	 * Saves a file 
 	 *
-	 * @param object user $oUser The user who is saving the file
-	 * @param object FilePath $oEconetPath The file path to save the file to 
+	 * @param $oUser The user who is saving the file
+	 * @param FilePath $oEconetPath The file path to save the file to 
 	 * @param string $sData The data to save in the file (binary string)
 	 * @param int $iLoadAddr The load address for the file
 	 * @param int $iExecAddr The execute address for the file
@@ -84,8 +84,8 @@ interface PluginInterface {
 	/**
 	 * Creates and empty file
 	 *
-	 * @param object user $oUser The user who is saving the file
-	 * @param object FilePath $sEconetPath The path of the file to be created
+	 * @param $oUser The user who is saving the file
+	 * @param FilePath $oEconetPath The path of the file to be created
 	 * @param int $iSize The size of the file in bytes
 	 * @param int $iLoadAddr The load address for the file
 	 * @param int $iExecAddr The execute address for the file
@@ -95,8 +95,8 @@ interface PluginInterface {
 	/**
 	 * Gets the data from a file
 	 *
-	 * @param object user $oUser The user who is saving the file
-	 * @param object FilePath $oEconetPath The file path to read 
+	 * @param $oUser The user who is saving the file
+	 * @param FilePath $oEconetPath The file path to read 
 	 * @return string Binary string containing the data stored in the file
 	*/
 	public static function getFile($oUser,FilePath $oEconetPath): string;
@@ -105,11 +105,11 @@ interface PluginInterface {
 	 * Set the metadata for a given file
 	 *
 	 * @param string $sEconetPath The path to the file that is having its metadata set
-	 * @param int $iLoadAddr The load address for the file
-	 * @param int $iExecAddr The execute address for the file
+	 * @param int $iLoad The load address for the file
+	 * @param int $iExec  The execute address for the file
 	 * @param int $iAccess The access mode
 	*/
-	public static function setMeta(string $sEconetPath,$iLoad,$iExec,int $iAccess);
+	public static function setMeta(string $sEconetPath,int $iLoad,int $iExec,int $iAccess);
 
 	public static function fsFtell($oUser,$fLocalHandle);
 

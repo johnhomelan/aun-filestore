@@ -24,7 +24,7 @@ class Reply {
 
 	public function __construct($oRequest)
 	{
-		if(is_object($oRequest) AND (get_class($oRequest)=='fsrequest' or get_class($oRequest)=='printserverenquiry' OR get_class($oRequest)=='printserverdata')){
+		if(is_object($oRequest) AND ($oRequest::class=='HomeLan\FileStore\Messages\FsRequest' or $oRequest::class=='HomeLan\FileStore\Messages\PrintServerEnquiry' OR $oRequest::class=='HomeLan\FileStore\Messages\PrintServerData' OR $oRequest::class=='HomeLan\FileStore\Messages\ArpRequest' OR $oRequest::class=='HomeLan\FileStore\Messages\BeebTermRequest')){
 			$this->oRequest = $oRequest;
 			$this->iFlags = $oRequest->getFlags();
 		}else{
@@ -39,7 +39,7 @@ class Reply {
 
 	public function appendString($sString): void
 	{
-		$aChars = str_split($sString);
+		$aChars = str_split((string) $sString);
 		foreach($aChars as $sChar)
 		{
 			$this->sPkt = $this->sPkt.pack('C',ord($sChar));
@@ -60,6 +60,22 @@ class Reply {
 	{
 		$this->sPkt = $this->sPkt.pack('V',$iInt);
 	}
+
+	public function append16bitIntBigEndian($iInt): void
+	{
+		$this->sPkt = $this->sPkt.pack('n',$iInt);
+	}
+
+	public function append24bitIntBigEndian($iInt): void
+	{
+		$this->sPkt = $this->sPkt.pack('C',0).pack('n',$iInt);
+	}
+
+	public function append32bitIntBigEndian($iInt): void
+	{
+		$this->sPkt = $this->sPkt.pack('N',$iInt);
+	}
+
 
 	public function appendRaw($sRawBytes): void
 	{

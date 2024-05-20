@@ -9,6 +9,9 @@
 namespace HomeLan\FileStore\Encapsulation; 
 
 use HomeLan\FileStore\Messages\EconetPacket; 
+use HomeLan\FileStore\WebSocket\Map as WebSocketMap; 
+use HomeLan\FileStore\Piconet\Map as PiconetMap; 
+use HomeLan\FileStore\Aun\Map as AunMap; 
 use config;
 
 /**
@@ -18,13 +21,13 @@ use config;
 */
 class EncapsulationTypeMap {
 
-	static private $oSingleton;
+	static private ?\HomeLan\FileStore\Encapsulation\EncapsulationTypeMap $oSingleton = null;
 
 	/**
 	 * Keeping this class as a singleton, this is static method should be used to get references to this object
 	 *
 	*/
-	public static function create()
+	public static function create():\HomeLan\FileStore\Encapsulation\EncapsulationTypeMap
 	{
 		if(!is_object(EncapsulationTypeMap::$oSingleton)){
 			EncapsulationTypeMap::$oSingleton = new EncapsulationTypeMap();
@@ -41,6 +44,14 @@ class EncapsulationTypeMap {
 
 	public function getType(EconetPacket $oPacket) :string
 	{
+		$iDstStation = $oPacket->getDestinationStation();
+		$iDstNetwork = $oPacket->getDestinationNetwork();
+		if(is_object(WebSocketMap::ecoAddrToSocket($iDstNetwork, $iDstStation))){
+			return 'WebSocket';
+		}
+		if(PiconetMap::networkKnown($iDstNetwork)){
+			return 'Piconet';
+		}
 		return 'AUN';
 	}
 

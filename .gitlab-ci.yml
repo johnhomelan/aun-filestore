@@ -3,65 +3,82 @@
 stages:
   - test
   - build
-  - scan
   
 variables:
-  REPO_IMAGE: registry.home-lan.co.uk/aun-filestore:react
+  REPO_IMAGE: registry.home-lan.co.uk/aun-filestore
+  IMAGE_VERSION: react
   
-phpunit_phpstan_php73:
-   image: registry.home-lan.co.uk/php-73-testing:latest
+phpunit_phpstan_php81:
+   image: 
+    name: registry.home-lan.co.uk/php-81-testing:8.1.1
    stage: test
-   services:
-    - docker:stable-dind
    script:
      - cat src/composer.json
      - cd src; composer --no-scripts install; cd ..
-     - ./src/vendor/bin/phpstan analyse -n --no-ansi --no-progress src/include src/react-test
+     - ./src/vendor/bin/phpstan analyse -n --no-ansi --no-progress src/include --memory-limit 512M src/filestored --level 5
 
-      
-phpunit_tests_php73:
-   image: registry.home-lan.co.uk/php-73-testing:latest
+composer_dependency_analyser_php81:
+   image: 
+    name: registry.home-lan.co.uk/php-81-testing:8.1.1
    stage: test
-   services:
-    - docker:stable-dind
    script:
      - cd src; composer --no-scripts install; cd ..
-     - ./src/vendor/bin/phpunit --log-junit junit.xml
+     - ./src/vendor/bin/composer-dependency-analyser --config  src/dev-tools/composer-dependency-analyser.php  --composer-json src/composer.json
+
+
+phpunit_tests_php83:
+   image: 
+    name: registry.home-lan.co.uk/php-83-testing:latest
+   stage: test
+   script:
+     - cd src; composer --no-scripts install; cd ..
+     - mkdir coverage
+     - cp test-config/* . 
+     - ./src/vendor/bin/phpunit --log-junit junit.xml --coverage-xml coverage --coverage-text --colors=never
    artifacts:
      paths:
+      - coverage
+      - junit.xml   
+
+phpunit_tests_php82:
+   image: 
+    name: registry.home-lan.co.uk/php-82-testing:latest
+   stage: test
+   script:
+     - cd src; composer --no-scripts install; cd ..
+     - mkdir coverage
+     - cp test-config/* . 
+     - ./src/vendor/bin/phpunit --log-junit junit.xml --coverage-xml coverage --coverage-text --colors=never
+   artifacts:
+     paths:
+      - coverage
+      - junit.xml   
+
+phpunit_tests_php81:
+   image: 
+    name: registry.home-lan.co.uk/php-81-testing:latest
+   stage: test
+   script:
+     - cd src; composer --no-scripts install; cd ..
+     - mkdir coverage
+     - cp test-config/* . 
+     - ./src/vendor/bin/phpunit --log-junit junit.xml --coverage-xml coverage --coverage-text --colors=never
+   artifacts:
+     paths:
+      - coverage
       - junit.xml   
       
-
 container_build:
-   image: docker:dind
-   stage: build
-   script:
-     - export
-     - docker login -u $DOCKER_REGISTRY_USER -p $DOCKER_REGISTRY_PW registry.home-lan.co.uk
-     - docker build -t $REPO_IMAGE .
-     - docker push  $REPO_IMAGE
-
-container_scanning:
-  image: docker:stable
-  stage: scan
-  allow_failure: true
-  services:
-    - docker:stable-dind
+  image: 
+    name: gcr.io/kaniko-project/executor:v1.22.0-debug
+    entrypoint: [""]
+  stage: build
+   
   script:
-    - docker run -d --name db arminc/clair-db:latest
-    - docker run -p 6060:6060 --link db:postgres -d --name clair --restart on-failure arminc/clair-local-scan:v2.0.1
-    - apk add -U wget ca-certificates
-    - docker login -u $DOCKER_REGISTRY_USER -p $DOCKER_REGISTRY_PW registry.home-lan.co.uk
-    - docker pull $REPO_IMAGE
-    - wget https://github.com/arminc/clair-scanner/releases/download/v8/clair-scanner_linux_amd64
-    - mv clair-scanner_linux_amd64 clair-scanner
-    - chmod +x clair-scanner
-    - touch clair-whitelist.yml
-    - while( ! wget -q -O /dev/null http://docker:6060/v1/namespaces ) ; do sleep 1 ; done
-    - retries=0
-    - echo "Waiting for clair daemon to start"
-    - while( ! wget -T 10 -q -O /dev/null http://docker:6060/v1/namespaces ) ; do sleep 1 ; echo -n "." ; if [ $retries -eq 10 ] ; then echo " Timeout, aborting." ; exit 1 ; fi ; retries=$(($retries+1)) ; done
-    - ./clair-scanner -c http://docker:6060 --ip $(hostname -i) -r gl-container-scanning-report.json -l clair.log -w clair-whitelist.yml $REPO_IMAGE || true
-  artifacts:
-    paths:
-      - gl-container-scanning-report.json
+     - echo -n "{\"auths\":{\"https://registry.home-lan.co.uk\":{\"auth\":\"$(echo -n ${DOCKER_REGISTRY_USER}:${DOCKER_REGISTRY_PW} | base64)\"}}}" > /kaniko/.docker/config.json
+     - /kaniko/executor
+      --context "${CI_PROJECT_DIR}"
+      --dockerfile "${CI_PROJECT_DIR}/Dockerfile"
+      --destination "${REPO_IMAGE}:${IMAGE_VERSION}"
+      --skip-push-permission-check
+

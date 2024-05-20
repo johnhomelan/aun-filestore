@@ -22,18 +22,15 @@ use Exception as BaseException;
 */
 class Exception extends BaseException {
 
-	protected $bHard = FALSE;
-
 	/**
-	 * Creates a new vfsexcption 
-	 *
-	 * @param string $sMessage Human readable description of the exception 
-	 * @param boolean $bHardError This indicates if the exception is a hard error or not.  Hard errors should stop the vfs operation, while soft errors should just cause the vfs to move on the next plugin
-	*/
-	public function __construct($sMessage,$bHardError=FALSE)
+  * Creates a new vfsexcption 
+  *
+  * @param string $sMessage Human readable description of the exception
+  * @param boolean $bHard This indicates if the exception is a hard error or not.  Hard errors should stop the vfs operation, while soft errors should just cause the vfs to move on the next plugin
+  */
+ public function __construct($sMessage,protected $bHard=FALSE)
 	{
 		parent::__construct($sMessage);
-		$this->bHard=$bHardError;
 	}
 
 	/**

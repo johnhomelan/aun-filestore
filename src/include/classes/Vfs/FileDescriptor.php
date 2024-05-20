@@ -38,7 +38,7 @@ class FileDescriptor {
 
 	protected $oLogger;
 
-	public function __construct(\Psr\Log\LoggerInterface $oLogger,string $sVfsPlugin, User $oUser, string $sUnixFilePath, string $sEconetFilePath, int $iVfsHandle, int $iEconetHandle, bool $bFile=FALSE, bool $bDir=FALSE)
+	public function __construct(\Psr\Log\LoggerInterface $oLogger,string $sVfsPlugin, User $oUser, string $sUnixFilePath, string $sEconetFilePath, $iVfsHandle, int $iEconetHandle, bool $bFile=FALSE, bool $bDir=FALSE)
 	{
 		$this->oLogger = $oLogger;
 		$this->sVfsPlugin = $sVfsPlugin;
@@ -58,10 +58,10 @@ class FileDescriptor {
 
 	public function getEconetDirName(): ?string
 	{
-		if(strpos($this->sEconetFilePath,'.')!==FALSE){
-			$aParts = explode('.',$this->sEconetFilePath);
+		if(str_contains((string) $this->sEconetFilePath,'.')){
+			$aParts = explode('.',(string) $this->sEconetFilePath);
 			return array_pop($aParts);
-		}elseif(strlen($this->sEconetFilePath)>0){
+		}elseif(strlen((string) $this->sEconetFilePath)>0){
 			return $this->sEconetFilePath;
 		}else{
 			return '$';
@@ -71,7 +71,7 @@ class FileDescriptor {
 	public function getEconetParentPath(): string
 	{
 		//Build the path with out the last dir
-		$aPathParts = explode('.',$this->sEconetFilePath);
+		$aPathParts = explode('.',(string) $this->sEconetFilePath);
 		$sParentPath = "";
 		for($i=0;$i<(count($aPathParts)-1);$i++){
 			$sParentPath = $sParentPath.$aPathParts[$i].".";
@@ -99,7 +99,7 @@ class FileDescriptor {
 			$this->sVfsPlugin = $sPlugin;
 			$sUnixPath = $sPlugin::_getUnixPathFromEconetPath($this->sEconetFilePath);
 				
-			if(strlen($sUnixPath)<1){
+			if(strlen((string) $sUnixPath)<1){
 				//This vfs module can't process the econetpath try the next
 				$this->changeVfs();
 			}
@@ -194,7 +194,6 @@ class FileDescriptor {
 				$sPlugin = $this->sVfsPlugin;
 				return $sPlugin::read($this->oUser,$this->iVfsHandle,$iLength);
 			}catch(VfsException $oVfsException){
-				var_dump($oVfsException);
 				if($oVfsException->isHard()){
 					throw $oVfsException;
 				}
@@ -212,7 +211,6 @@ class FileDescriptor {
 				$sPlugin = $this->sVfsPlugin;
 				return $sPlugin::write($this->oUser,$this->iVfsHandle,$sData);
 			}catch(VfsException $oVfsException){
-				var_dump($oVfsException);
 				if($oVfsException->isHard()){
 					throw $oVfsException;
 				}

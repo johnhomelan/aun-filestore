@@ -3,27 +3,34 @@
 namespace HomeLan\FileStore\Services;
 
 use HomeLan\FileStore\Messages\EconetPacket; 
-
+/**
+ * Some services make use of another port for streaming data from the client.  Each client stream will get its own unique port when its in use, the port is then cleared down once the 
+ * data has been streamed.
+ *
+ * For example the fileserver uses it to stream binary data from the client to write into a file handle
+ *
+ * This class deals with streaming in data from a port, that any service can make use of.
+*/
 class StreamIn {
 
-	private $iPort;
-	private $iBytes;
 	private $fRecivedPacket;
 	private $fSucessCallback;
 	private $fFailCallback;
-	private $iTimeout;
-	private $iNoPktTimeout;
-	private $sData;
+	private int $iTimeout;
+	private readonly int $iNoPktTimeout;
+	private readonly string $sPath;
+	private readonly string $sUser;
+	private ?string $sData = null;
 
-	public function __construct(int $iPort, int $iBytes,callable $fRecivedPacket, callable $fSucessCallback, callable $fFailCallback,int $iTimeout=60)
+	public function __construct(private readonly int $iBytes,callable $fRecivedPacket, callable $fSucessCallback, callable $fFailCallback,int $iTimeout, string $sPath, string $sUser)
 	{
-		$this->iPort = $iPort;
-		$this->iBytes = $iBytes;
 		$this->fRecivedPacket = $fRecivedPacket;
 		$this->fSucessCallback = $fSucessCallback;
 		$this->fFailCallback = $fFailCallback;
 		$this->iTimeout = time() + $iTimeout;
 		$this->iNoPktTimeout = $iTimeout;
+		$this->sPath = $sPath;
+		$this->sUser = $sUser;
 	}
 
 	/** 
@@ -42,7 +49,7 @@ class StreamIn {
 				($this->fFailCallback)("timeout");
 			}else{
 				//Pkt recevied reset the timeout
-				$$this->iTimeout = time() + $this->iNoPktTimeout;
+				$this->iTimeout = time() + $this->iNoPktTimeout;
 				($this->fRecivedPacket)($this,$oPacket);
 			}
 		}else{
@@ -62,5 +69,15 @@ class StreamIn {
 			//Timed out 
 			($this->fFailCallback)("timeout");
 		}
+	}
+
+	public function getPath():string
+	{
+		return $this->sPath;
+	}
+	
+	public function getUser():string
+	{
+		return $this->sUser;
 	}
 }

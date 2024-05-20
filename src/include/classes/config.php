@@ -12,9 +12,16 @@
 
 class config {
 
-	static protected $aFileSettings=NULL;
-	static protected $_aConfigCache=array();
-	static protected $_aVarSpec=NULL;
+	/**
+ 	 * @var array<string, string>
+ 	*/ 	
+	static protected ?array $aFileSettings=NULL;
+
+	/**
+ 	 * @var array<string, string>
+ 	*/
+ 	static protected array $_aConfigCache=[];
+
 	
 
 	/**
@@ -48,7 +55,7 @@ class config {
 		return $mReturn;
 	}
 
-	static public function overrideValue(string $sKey,$sValue): void
+	static public function overrideValue(string $sKey,string|int $sValue): void
 	{
 		config::$_aConfigCache[$sKey] = $sValue;
 	}
@@ -109,12 +116,12 @@ class config {
 			$aFiles=preg_grep($sPat,$aFiles);
 			$aFiles=array_values($aFiles);
 
-			if(count($aFiles)==0){
+			if((is_countable($aFiles) ? count($aFiles) : 0)==0){
 				return NULL;
 			}
 
 			//Parse Each conf file
-			$aSettings=array();
+			$aSettings=[];
 			foreach($aFiles as $sFile){
 				$sFile=CONFIG_CONF_FILE_PATH.DIRECTORY_SEPARATOR.$sFile;
 				$aSettings = array_merge($aSettings,parse_ini_file($sFile, true));

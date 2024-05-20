@@ -17,7 +17,7 @@
 
 			<dt class="col-sm-3">Status</dt><dd class="col-sm-9">{$oAdmin->getStatus()}</dd>
 
-			<dt class="col-sm-3">Service Ports</dt><dd class="col-sm-9">{', '|implode:$oService->getServicePorts()}</dd>
+			<dt class="col-sm-3">Service Ports</dt><dd class="col-sm-9">{', '|implodemod:$oService->getServicePorts()}</dd>
 		</dl>
 
 
@@ -42,7 +42,7 @@
 						</tr>
 					</thead>
 					<tbody>
-						{foreach from=$aEntities item=$oEntity}
+						{foreach $aEntities as $oEntity}
 						<tr>
 							{foreach from=$aEntityFields key=sField item=sFieldType}
 								{if $sFieldType=='datetime'}

@@ -17,72 +17,68 @@ use config;
 */
 class User {
 
-	protected $sUsername = NULL;
+	protected ?string $sUsername = NULL;
 	
-	protected $iUnixUid = NULL;
+	protected ?int $iUnixUid = NULL;
 
-	protected $sHomedir = NULL;
+	protected ?string $sHomedir = NULL;
 
-	protected $sRoot = "$";
+	protected string $sRoot = "$";
 
-	protected $iOpt = 0;
+	protected int $iOpt = 0;
 
-	protected $bIsAdmin = FALSE;
+	protected bool $bIsAdmin = FALSE;
 
-	protected $sCsd = NULL;
+	protected ?string $sCsd = NULL;
 
-	protected $sLib = NULL;
+	protected ?string $sLib = NULL;
 
-	public function setUsername($sUsername): void
+	public function setUsername(string $sUsername): void
 	{
-		$this->sUsername=strtoupper($sUsername);
+		$this->sUsername=strtoupper((string) $sUsername);
 	}
 
-	public function getUsername()
+	public function getUsername():?string
 	{
 		return $this->sUsername;
 	}
 
-	public function setUnixUid($iUid): void
+	public function setUnixUid(int $iUid): void
 	{
 		$this->iUnixUid = $iUid;
 	}
 
-	public function getUnixUid()
+	public function getUnixUid():?int
 	{
 		return $this->iUnixUid;
 	}
 
-	public function setHomedir($sDir): void
+	public function setHomedir(string $sDir): void
 	{
 		$this->sHomedir = $sDir;
 	}
 
-	public function getHomedir()
+	public function getHomedir():?string
 	{
 		return $this->sHomedir;
 	}
 
-	public function setBootOpt($iOpt): void
+	public function setBootOpt(int $iOpt): void
 	{
 		$this->iOpt = $iOpt;
 	}
 
-	public function getBootOpt()
+	public function getBootOpt():int
 	{
 		return $this->iOpt;
 	}
 
-	public function setPriv($sPriv): void
+	public function setPriv(string $sPriv): void
 	{
-		switch(strtoupper($sPriv)){
-			case 'S':
-				$this->bIsAdmin = TRUE;
-				break;
-			default:
-				$this->bIsAdmin = FALSE;
-				break;
-		}
+		$this->bIsAdmin = match (strtoupper((string) $sPriv)) {
+      'S' => TRUE,
+      default => FALSE,
+  };
 	}
 
 	public function getPriv(): string
@@ -103,12 +99,12 @@ class User {
 		return $this->bIsAdmin;
 	}
 
-	public function setCsd($sCsd): void
+	public function setCsd(string $sCsd): void
 	{
 		$this->sCsd = $sCsd;
 	}
 
-	public function getCsd()
+	public function getCsd():?string
 	{
 		if(is_null($this->sCsd)){
 			$this->sCsd = $this->getHomedir();
@@ -116,12 +112,12 @@ class User {
 		return $this->sCsd;
 	}
 
-	public function setLib($sLib): void
+	public function setLib(string $sLib): void
 	{
 		$this->sLib = $sLib;
 	}
 
-	public function getLib()
+	public function getLib():?string
 	{
 		if(is_null($this->sLib)){
 			$this->sLib = config::getValue('library_path');
@@ -129,12 +125,12 @@ class User {
 		return $this->sLib;
 	}
 
-	public function getRoot()
+	public function getRoot():string
 	{
 		return $this->sRoot;
 	}
 
-	public function setRoot($sRoot): void
+	public function setRoot(string $sRoot): void
 	{
 		$this->sRoot = $sRoot;
 	}

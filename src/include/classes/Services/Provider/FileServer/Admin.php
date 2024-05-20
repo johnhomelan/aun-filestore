@@ -12,15 +12,23 @@ namespace HomeLan\FileStore\Services\Provider\FileServer;
 use HomeLan\FileStore\Services\Provider\AdminInterface;
 use HomeLan\FileStore\Services\Provider\AdminEntity;
 use HomeLan\FileStore\Services\ProviderInterface;
+use HomeLan\FileStore\Services\Provider\FileServer;
 use HomeLan\FileStore\Authentication\Security; 
+use HomeLan\FileStore\Services\ServiceDispatcher;
 
 class Admin implements AdminInterface 
 {
-	private $oProvider;
 
-	public function __construct(ProviderInterface $oProvider)
+	private bool $bEnabled = true;
+
+	public function __construct(private readonly FileServer $oProvider)
 	{
-		$this->oProvider = $oProvider;
+	}
+
+
+	public function getProvider(): ProviderInterface
+	{
+		return $this->oProvider;
 	}
 
 	/**
@@ -47,7 +55,7 @@ class Admin implements AdminInterface
 	 */  
 	public function isDisabled(): bool
 	{
-		return false;
+		return !$this->bEnabled;
 	}
 
 	/**
@@ -56,6 +64,9 @@ class Admin implements AdminInterface
 	*/ 
 	public function setDisabled(): void
 	{
+		$oServices = ServiceDispatcher::create();
+		$oServices->disableService($this->oProvider);
+		$this->bEnabled = false;
 	}
 
 	/**
@@ -64,6 +75,9 @@ class Admin implements AdminInterface
 	*/
 	public function setEnabled(): void
 	{
+		$oServices = ServiceDispatcher::create();
+		$oServices->enableService($this->oProvider);
+		$this->bEnabled = true;
 	}
 
 	/**
@@ -72,7 +86,11 @@ class Admin implements AdminInterface
 	*/ 
 	public function getStatus(): string
 	{
-		return "On-line";
+		if($this->bEnabled){
+			return "On-line";
+		}else{
+			return "Disabled";
+		}
 	}
 
 	/**
@@ -93,15 +111,12 @@ class Admin implements AdminInterface
 		switch($sType){
 			case 'session':
 				return ['network'=>'int', 'station'=>'int', 'user'=>'string'];	
-				break;
 			case 'stream':
-				return [];
 				return ['network'=>'int', 'station'=>'int', 'user'=>'string', 'path'=>'string'];
-				break;
 			case 'user':
 				return ['plugin'=>'string', 'username'=>'string', 'priv'=>'string' , 'homedir'=>'string', 'bootopt'=>'int'];
-				break;
 		}
+		return [];
 	}
 
 	/**
@@ -115,13 +130,12 @@ class Admin implements AdminInterface
 				$aUsers = Security::getUsersOnline();
 				$aUserData=[];
 				foreach($aUsers as $iNetwork=>$aStationData){
-					foreach($aData as $iStation=>$aData){
+					foreach($aStationData as $iStation=>$aData){
 						$aUserData[] = ['network'=>$iNetwork, 'station'=>$iStation, 'user'=>$aData['user']->getUsername()];
 					}
 				}
 				$aReturn = AdminEntity::createCollection($sType,$this->getEntityFields($sType),$aUserData,null,'user');
 				return $aReturn;
-				break;
 			case 'user':
 				$aUsers = Security::getAllUsers();
 				$aUserData = [];
@@ -130,10 +144,16 @@ class Admin implements AdminInterface
 				}
 				$aReturn = AdminEntity::createCollection($sType,$this->getEntityFields($sType),$aUserData,null,'username');
 				return $aReturn;
-				break;
 			case 'stream':
-				return [];
+				$aStreams=$this->oProvider->getStreams();
+				$aSteamData = [];
+				foreach($aStreams as $aStream){
+					$aSteamData[] = ['network'=>$aStream['network'], 'station'=>$aStream['station'], 'user'=>$aStream['stream']->getUser(), 'path'=>$aStream['stream']->getPath()];
+				}
+				$aReturn = AdminEntity::createCollection($sType,$this->getEntityFields($sType),$aSteamData,null,'path');
+				return $aReturn;
 		}
+		return [];
 	}
 
 	/**
@@ -141,7 +161,7 @@ class Admin implements AdminInterface
 	*/
 	public function getCommands(): array
 	{
-			
+		return [];		
 	}
 
 }

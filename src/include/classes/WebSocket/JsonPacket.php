@@ -8,7 +8,11 @@
 namespace HomeLan\FileStore\WebSocket; 
 
 use HomeLan\FileStore\Messages\EconetPacket; 
-use HomeLan\FileStore\Aun\Map; 
+use HomeLan\FileStore\WebSocket\Map; 
+use HomeLan\FileStore\Aun\Map as AunMap; 
+use HomeLan\FileStore\Encapsulation\EncapsulationInterface;
+
+use Ratchet\ConnectionInterface;
 use config;
 use Exception; 
 
@@ -18,34 +22,57 @@ use Exception;
  * @package corenet
 */
 
-class JsonPacket {
+class JsonPacket implements EncapsulationInterface {
+
+	protected ConnectionInterface $oSocket;
 
 	//Single byte (unsigned int) Aun Packet Type 1=>BroadCast =
-	protected $iPktType = NULL;
+	protected ?int $iAunPktType = NULL;
 	
 	//Single byte (unsigned int) Control/flag 
-	protected $iCb = NULL;
+	protected ?int $iCb = NULL;
 
 	//Single byte (unsigned int) Padding
-	protected $iPadding = NULL;
+	protected ?int $iPadding = NULL;
 
 	//Single byte (unsigned int) Port number
-	protected $iPort = NULL;
+	protected ?int $iPort = NULL;
 
 	//32 bit int unsigned  little-endian 
-	protected $iSeq = 0;
+	protected int $iSeq = 0;
+
+	protected string $sJsonMsgType = '';
+
+	protected string $sCtrlRequest = '';
+
+	/**
+ 	 *  @var array<mixed[]>
+ 	*/		
+	protected array $aCtrlRequestArgs = [];
 
 	//Binary Data String
-	protected $sData = NULL;
+	protected ?string $sData = NULL;
 
-	protected $iNetworkNumber = NULL;
+	protected ?int $iNetworkNumber = NULL;
 
-	protected $iStationNumber = NULL;
+	protected ?int $iStationNumber = NULL;
 
-	protected $aTypeMap = array(1=>'Broadcast',2=>'Unicast',3=>'Ack',4=>'Reject',5=>'Immediate',6=>'ImmediateReply');
+	protected ?int $iDstNetworkNumber = NULL;
 
-	protected $sSoruceIP = NULL;
+	protected ?int $iDstStationNumber = NULL;
 
+	/**
+	 * @var array<int, string>
+	*/ 
+	protected array $aAunTypeMap = [1=>'Broadcast', 2=>'Unicast', 3=>'Ack', 4=>'Reject', 5=>'Immediate', 6=>'ImmediateReply'];
+
+	protected ?string $sSoruceIP = NULL;
+
+
+	public function __construct(ConnectionInterface $oSocket)
+	{
+		$this->oSocket = $oSocket;
+	}
 	/**
 	 * Get the econet port number the aun packet is for
 	 *
@@ -56,6 +83,10 @@ class JsonPacket {
 		return $this->iPort;
 	}
 
+	public function getType():string
+	{
+		return $this->sJsonMsgType;
+	}
 	/**
 	 * Get the type of aun packet
 	 *
@@ -64,7 +95,17 @@ class JsonPacket {
 	*/ 
 	public function getPacketType(): string
 	{
-		return $this->aTypeMap[$this->iPktType];
+		return $this->aAunTypeMap[$this->iAunPktType];
+	}
+
+	public function getDstStation(): ?int
+	{
+		return $this->iDstStationNumber;
+	}
+
+	public function getDstNetwork(): ?int
+	{
+		return $this->iDstNetworkNumber;
 	}
 
 	/**
@@ -80,100 +121,129 @@ class JsonPacket {
 	/**
 	 * Decodes an AUN packet 
 	 *
-	 * @param string $sBinaryString
+	 * @param string $sJsonString
 	*/
 	public function decode($sJsonString): void
 	{
-		$aPacket = json_decode($sJsonString,true, null, JSON_THROW_ON_ERROR);
+		$aPacket = json_decode((string) $sJsonString,true, 255, JSON_THROW_ON_ERROR);
 		if(is_null($aPacket)){
 			throw new Exception("Invalid json encoded econet packet");
 		}
+		$this->sJsonMsgType = $aPacket['type'];
+		switch($this->sJsonMsgType){
+			case 'pkt':
+				$this->iStationNumber = $aPacket['src']['station'];
+				$this->iNetworkNumber = $aPacket['src']['network'];
+				$this->iDstStationNumber = $aPacket['dst']['station'];
+				$this->iDstNetworkNumber = $aPacket['dst']['network'];
 
-		$this->iStationNumber = $aPacket['station'];
-		$this->iNetworkNumber = $aPacket['network'];
+				//Read the aun packet type 1 byte unsigned int
+				$aHeader=unpack('C',(string) $aPacket['payload']);
+				$this->iAunPktType = $aHeader[1];
+				$sBinaryString = substr((string) $aPacket['payload'],1);
+				
+				//Read the dst port 1 byte unsigned int
+				$aHeader=unpack('C',$sBinaryString);
+				$this->iPort = $aHeader[1];
+				$sBinaryString = substr($sBinaryString,1);
+				
+				//Read the flag 1 byte unsigned int
+				$aHeader=unpack('C',$sBinaryString);
+				$this->iCb = $aHeader[1];
+				$sBinaryString = substr($sBinaryString,1);
+				
+				//Retrans 1 byte unsigned int
+				$aHeader=unpack('C',$sBinaryString);
+				$this->iPadding = $aHeader[1];
+				$sBinaryString = substr($sBinaryString,1);
+				
+				//Sequence 4 bytes little-endian
+				$aHeader=unpack('V',$sBinaryString);
+				$this->iSeq = $aHeader[1];
+				$sBinaryString = substr($sBinaryString,4);
 
-		//Read the header
+				//The reset is data
+				$this->sData = $sBinaryString;
+				AunMap::setAunCounter('ws_'.$this->iNetworkNumber.'_'.$this->iStationNumber,$this->iSeq);
 
-		//Read the aun packet type 1 byte unsigned int
-		$aHeader=unpack('C',$aPacket['payload']);
-		$this->iPktType = $aHeader[1];
-		$sBinaryString = substr($aPacket['payload'],1);
-		
-		//Read the dst port 1 byte unsigned int
-		$aHeader=unpack('C',$sBinaryString);
-		$this->iPort = $aHeader[1];
-		$sBinaryString = substr($sBinaryString,1);
-		
-		//Read the flag 1 byte unsigned int
-		$aHeader=unpack('C',$sBinaryString);
-		$this->iCb = $aHeader[1];
-		$sBinaryString = substr($sBinaryString,1);
-		
-		//Retrans 1 byte unsigned int
-		$aHeader=unpack('C',$sBinaryString);
-		$this->iPadding = $aHeader[1];
-		$sBinaryString = substr($sBinaryString,1);
-		
-		//Sequence 4 bytes little-endian
-		$aHeader=unpack('V',$sBinaryString);
-		$this->iSeq = $aHeader[1];
-		$sBinaryString = substr($sBinaryString,4);
-
-		//The reset is data
-		$this->sData = $sBinaryString;
-
-		//Set the aun counter 		
-		Map::setAunCounter($this->sSoruceIP,$this->iSeq);
+				break;
+			case 'ctrl':
+				$this->sCtrlRequest = $aPacket['request'];
+				$this->aCtrlRequestArgs = $aPacket['args'];
+				break;
+			default:
+				throw new Exception("Invalid type supplied for json encoded econet packet");
+				
+		}
 	}
 
 	public function buildAck(): ?string
 	{
-		//No decoded packet to to Ack
-		if(!is_numeric($this->iPktType)){
-			return null;
-		}
-		$sPtk = NULL;
-		if($this->aTypeMap[$this->iPktType]=='Unicast'){
-			//Set the type as Ack
-			$sPtk = pack('C',3);
-			//Port 0
-			$sPtk = $sPtk.pack('C',0);
-			//Flag 0
-			$sPtk = $sPtk.pack('C',0);
-			//Retrans 0
-			$sPtk = $sPtk.pack('C',0);
-			//Sequence
-			$sPtk = $sPtk.pack('V',$this->iSeq);
-		}
-		if($this->aTypeMap[$this->iPktType]=='Immediate' AND $this->iCb==8){
-			//Echo request equiv
+		
+		switch($this->sJsonMsgType){
+			case 'pkt':
+				//No decoded packet to to Ack
+				if(!is_numeric($this->iAunPktType)){
+					return null;
+				}
+				$sPtk = NULL;
+				if($this->aAunTypeMap[$this->iAunPktType]=='Unicast'){
+					//Set the type as Ack
+					$sPtk = pack('C',3);
+					//Port 0
+					$sPtk = $sPtk.pack('C',0);
+					//Flag 0
+					$sPtk = $sPtk.pack('C',0);
+					//Retrans 0
+					$sPtk = $sPtk.pack('C',0);
+					//Sequence
+					$sPtk = $sPtk.pack('V',$this->iSeq);
+				}
+				if($this->aAunTypeMap[$this->iAunPktType]=='Immediate' AND $this->iCb==8){
+					//Echo request equiv
 
-			//Set the type as Immediate reply
-			$sPtk = pack('C',6);
-			//Port 0
-			$sPtk = $sPtk.pack('C',0);
-			//Flag 0
-			$sPtk = $sPtk.pack('C',0);
-			//Retrans 0
-			$sPtk = $sPtk.pack('C',0);
-			//Sequence
-			$sPtk = $sPtk.pack('V',0);
-			//Peek Lo
-			$sPtk = $sPtk.pack('C',0x40);
-			//Peek Hi
-			$sPtk = $sPtk.pack('C',0x66);
-			$sPtk = $sPtk.pack('C',config::getValue('version_minor'));
-			$sPtk = $sPtk.pack('C',config::getValue('version_majour'));
+					//Set the type as Immediate reply
+					$sPtk = pack('C',6);
+					//Port 0
+					$sPtk = $sPtk.pack('C',0);
+					//Flag 0
+					$sPtk = $sPtk.pack('C',0);
+					//Retrans 0
+					$sPtk = $sPtk.pack('C',0);
+					//Sequence
+					$sPtk = $sPtk.pack('V',0);
+					//Peek Lo
+					$sPtk = $sPtk.pack('C',0x40);
+					//Peek Hi
+					$sPtk = $sPtk.pack('C',0x66);
+					$sPtk = $sPtk.pack('C',config::getValue('version_minor'));
+					$sPtk = $sPtk.pack('C',config::getValue('version_majour'));
+				}
+				return json_encode(
+					[
+						'type'=>'pkt',
+						'dst'=>[
+							'station'=>$this->iStationNumber,
+							'network'=>$this->iNetworkNumber
+						],
+						'src'=>[
+							'station'=>config::getValue('websocket_station_address'),
+							'network'=>config::getValue('websocket_network_address')
+						],
+						'payload'=>$sPtk
+					], JSON_THROW_ON_ERROR);
+			case 'ctrl':
+				switch($this->sCtrlRequest){
+					case 'dynamic_alloction_request':
+						$sAllocation = Map::allocateAddress($this->oSocket);
+						return json_encode(
+							[
+								'type'=>'ctrl',
+								'response'=>$sAllocation
+							]);
+				}
 		}
-		return json_encode(
-			[
-				'to'=>[
-					'station'=>$this->iStationNumber,
-					'network'=>$this->iNetworkNumber
-				],
-				'payload'=>$sPtk
-			], JSON_THROW_ON_ERROR);
-
+		return null;
 	}
 
 	/**
@@ -181,7 +251,7 @@ class JsonPacket {
 	 *
 	 * All the sub applications FileServer, PrintServer uses the econetpacket object so
 	 * that we can support more than 1 type of econet emulation/encapsulation
-	 * @return object econetpacket
+	 * @return econetpacket
 	*/
 	public function buildEconetPacket(): \HomeLan\FileStore\Messages\EconetPacket
 	{
@@ -205,4 +275,5 @@ class JsonPacket {
 		$sReturn = "Header | Type : ".$this->getPacketType()." Port : ".$this->getPort()." Control : ".$this->iCb." Pad : ".$this->iPadding." Seq : ".$this->iSeq." | Body |".implode(":",$aPkt)." |";
 		return $sReturn;	
 	}
+
 }

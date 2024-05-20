@@ -17,21 +17,28 @@ use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 use React\EventLoop\LoopInterface;
 use React\EventLoop\Factory as ReactFactory;
 use React\Datagram\Factory as DatagramFactory;
+use React\Socket\UnixConnector;
+use React\Socket\ConnectionInterface;
 
 use Ratchet\Server\IoServer;
 use Ratchet\Http\HttpServer;
 use Ratchet\WebSocket\WsServer;
 
 use HomeLan\FileStore\Services\ServiceDispatcher;
-use HomeLan\FileStore\Services\WebSocketHandler;
+use HomeLan\FileStore\WebSocket\Handler as WebSocketHandler;
+use HomeLan\FileStore\Piconet\Handler as PiconetHandler;
+use HomeLan\FileStore\Piconet\Map as PiconetMap;
 use HomeLan\FileStore\Aun\Map; 
 use HomeLan\FileStore\Aun\AunPacket; 
+use HomeLan\FileStore\Aun\Handler as AunHandler; 
 use HomeLan\FileStore\Authentication\Security; 
 use HomeLan\FileStore\Vfs\Vfs; 
 use HomeLan\FileStore\Admin\Kernel;
 
 use HomeLan\FileStore\Encapsulation\PacketDispatcher;
 use HomeLan\FileStore\Encapsulation\EncapsulationTypeMap;
+
+use HomeLan\FileStore\React\UnixDeviceConnector;
  
 use config;
 use Exception;
@@ -41,14 +48,20 @@ use Exception;
  * data from the main application classes (fileserver, print server), and handles all the initialization tasks.
 */
 class React extends Command {
+	/*
+ 	 * The delay be building a AUN packet, and dispatching it to the network.
+ 	 *
+ 	 * BBC clients can't cope with the server responding with a ack too quickly,
+ 	 * they are simply not ready for it in time, so the packet effectivly gets dropped.
+ 	 *
+ 	 * This delay prevents the server replying too quickly.
+ 	*/ 
+	const AUN_PKT_DELAY  = 0.04;
 
-	private $oLogger; 
-	private $oServices;
 
-	public function __construct(\Psr\Log\LoggerInterface $oLogger, ServiceDispatcher $oServices)
+	protected static $defaultDescription = 'Start the file, print and bridge services';
+ public function __construct(private readonly \Psr\Log\LoggerInterface $oLogger, private readonly ServiceDispatcher $oServices)
 	{
-		$this->oServices = $oServices;
-		$this->oLogger = $oLogger;
 		parent::__construct();
 	}
 
@@ -58,7 +71,7 @@ class React extends Command {
 	 * This does not contain the main loop, it just initializes the system
 	 * then jumps to the main loop.
 	*/
-	protected function execute(InputInterface $oInput, OutputInterface $oOutput): void
+	protected function execute(InputInterface $oInput, OutputInterface $oOutput): int
 	{
 		$bDaemonize = FALSE;
 		$sPidFile = "";
@@ -86,10 +99,9 @@ class React extends Command {
 		//Initialize the system
 		try {
 			//Setup signle handler
-			pcntl_signal(SIGCHLD,array($this,'sigHandler'));
-			pcntl_signal(SIGTERM,array($this,'sigHandler'));
+			pcntl_signal(SIGCHLD,$this->sigHandler(...));
+			pcntl_signal(SIGTERM,$this->sigHandler(...));
 
-			Map::init($this->oLogger);
 
 		}catch(Exception $oException){
 			//Failed to initialize log and exit none 0
@@ -99,33 +111,48 @@ class React extends Command {
 		}
 
 		$this->MainLoop();
+  		return \Symfony\Component\Console\Command\Command::SUCCESS;
 	}
 
 	/**
 	 * Creates the primary react php loop, and starts it 
 	 *
 	*/
-	private function MainLoop(): \React\Datagram\Socket
+	private function MainLoop():void
 	{
 
 		//Setup the main react loop
 		$oLoop = ReactFactory::create();
 		$oLogger = $this->oLogger;
+		$oEncapsulationTypeMap = EncapsulationTypeMap::create();
 		
-		$this->oLogger->info("core: Using ".get_class($oLoop)." as the primary event loop handler");
+		$this->oLogger->info("core: Using ".$oLoop::class." as the primary event loop handler");
 
-		$oAunServer = $this->aunService($oLoop);
+
+		//Setup the handler for all the encaptulation types (outbound packets)
+		$oPacketDispatcher = PacketDispatcher::create($oEncapsulationTypeMap, $oLoop);
+
+		//Create the AUN packet handler
+		$oAunHandler = $this->aunService($oLoop, $oPacketDispatcher);
+		Map::init($this->oLogger,$oAunHandler);
+
+		//Setup the Piconet interface handler 
+		$oPiconet = $this->piconetService($oLoop,$oPacketDispatcher);
+		PiconetMap::init($oLogger, $oPiconet);
+
+
+		//Setup the websocket handler 
+		$this->websocketService($oLoop,$oPacketDispatcher);
+
+		//Setup the Web admin handler
 		$this->adminService($oLoop);
 
-		$oEncapsulationTypeMap = EncapsulationTypeMap::create();
 		
 		//Send any outstanding replies, normally its one request in one reply out.  However some services (e.g. File) have direct streams that can generate 
 		//mutiple replies to an initial request.
 		$oServices = $this->oServices;
-		$oServices->start($oEncapsulationTypeMap, $oLoop, $oAunServer);
-		$oLoop->addPeriodicTimer(1, function(\React\EventLoop\Timer\Timer $oTimer) use ($oServices, $oEncapsulationTypeMap, $oLoop, $oAunServer) {
-			//Get packet dispatcher
-		        $oPacketDispatcher = PacketDispatcher::create($oEncapsulationTypeMap, $oLoop, $oAunServer);
+		$oServices->start($oEncapsulationTypeMap, $oLoop);
+		$oLoop->addPeriodicTimer(1, function(\React\EventLoop\Timer\Timer $oTimer) use ($oPacketDispatcher, $oServices ) {
 			//Send any messages for the services
 			$aReplies = $oServices->getReplies();
 			foreach($aReplies as $oReply){
@@ -140,6 +167,10 @@ class React extends Command {
 			vfs::houseKeeping();
 			$oServices->houseKeeping();
 	
+		});
+
+		$oLoop->addPeriodicTimer(self::AUN_PKT_DELAY,function(\React\EventLoop\Timer\Timer $oTimer) use ($oAunHandler){
+			$oAunHandler->timer();
 		});
 
 		//Enter main loop
@@ -159,7 +190,6 @@ EOF;
 
 		parent::configure();
 		$this->setName('filestore')
-			->setDescription('Start the file, print and bridge services')
 			->addOption(
 				'config',
 				'c',
@@ -201,70 +231,36 @@ EOF;
 
 	/**
 	  * Adds all the AUN handling services to the event loop
-	  *
-	  * @param object LoopInterface $oLoop
 	*/
-	public function aunService(LoopInterface $oLoop)
+	private function aunService(LoopInterface $oLoop, PacketDispatcher $oPacketDispatcher):AunHandler
 	{
 
 		//Add udp handling for AUN 
 		$oDatagramFactory = new DatagramFactory($oLoop);
+		$oAunHandler = new AunHandler($this->oLogger, $this->oServices, $oPacketDispatcher);
 
-		$oServices = $this->oServices;
-		$oLogger = $this->oLogger;
-		$oReturnSocket = null;
-
-		$oAunServer = $oDatagramFactory->createServer(config::getValue('aun_listen_address').':'.config::getValue('aun_listen_port'))
-	  		->then(function (\React\Datagram\Socket $oAunServer) use ($oServices, $oLogger, &$oReturnSocket) {
-				$oAunServer->on('message', function($sMessage, $sSrcAddress, $sDstAddress) use ($oServices, $oLogger, $oAunServer){
-					$oAunPacket = new AunPacket();
-					
-					//Read the UDP data
-					$oLogger->debug("filestore: Aun packet recvieved from ".$sSrcAddress);	
-					$oAunPacket->setSourceIP($sSrcAddress);
-
-					//Decode the AUN packet
-					$oAunPacket->setDestinationIP(config::getValue('local_ip'));
-					$oAunPacket->decode($sMessage);
-					
-					//Send an ack for the AUN packet if needed
-					$sAck = $oAunPacket->buildAck();
-					if(strlen($sAck)>0){
-						$oLogger->debug("filestore: Sending Ack packet");
-						$oAunServer->send($sAck,$sSrcAddress);
-					}
-
-					//Dispatch packet to all the services so the relivent one can deal with it 
-					$oServices->inboundPacket($oAunPacket);
-					
-					//Send all replies here
-					//@TODO replace this a better abstaction 
-					$aReplies = $oServices->getReplies();
-					foreach($aReplies as $sTarget=>$sReply){
-						$oAunServer->send($sReply,$sTarget);
-					}
+		$oDatagramFactory->createServer(config::getValue('aun_listen_address').':'.config::getValue('aun_listen_port'))
+	  		->then(function (\React\Datagram\Socket $oAunServer) use ($oAunHandler) {
+				$oAunServer->on('message', function($sMessage, $sSrcAddress, $oSocket) use ($oAunHandler){
+					$oAunHandler->receive($sMessage, $sSrcAddress, $oSocket->getLocalAddress());
 				});
-				$oReturnSocket = $oAunServer;
-				return $oAunServer;
+				$oAunHandler->setSocket($oAunServer);
 			});
-		return $oReturnSocket;
+		return $oAunHandler;
 	}
 
 	/**
-	  * Adds all the websocket handling services to the event loop
-	  *
-	  * @param object LoopInterface $oLoop
+	 * Adds all the websocket handling services to the event loop
 	*/
-	public function websocketService(LoopInterface $oLoop)
+	public function websocketService(LoopInterface $oLoop,PacketDispatcher $oPacketDispatcher):void
 	{
 
 		//Add udp handling for AUN 
-		$oWebSocketTransport = new \React\Socket\Server(8080,$oLoop);
-		$oWebSocketTransport->listen('8890', '0.0.0.0');
+		$oWebSocketTransport = new \React\Socket\SocketServer(config::getValue('websocket_listen_address').':'.config::getValue('websocket_listen_port'));
 
 		$oServices = $this->oServices;
 		$oLogger = $this->oLogger;
-		$oWebSocketHandler = new WebSocketHandler($this->oLogger, $oServices);
+		$oWebSocketHandler = new WebSocketHandler($this->oLogger, $oServices, $oPacketDispatcher);
 
 		$oWebsocketServer = new IoServer(
 			new HttpServer(
@@ -275,15 +271,44 @@ EOF;
 			$oWebSocketTransport,
 			$oLoop
 		);
-		return $oWebSocketHandler;
 	}
+
+	/**
+	 * Adds all the piconet handling services to the event loop
+	*/
+	public function piconetService(LoopInterface $oLoop, PacketDispatcher $oPacketDispatcher):PiconetHandler
+	{
+
+		$oPiconet = new UnixDeviceConnector($oLoop);
+		$oPiconetHandler = new PiconetHandler($this->oLogger, $this->oServices, $oPacketDispatcher);
+		$oPiconet->connect('file:///'.config::getValue('piconet_device'))->then(function (ConnectionInterface $oConnection) use ($oPiconetHandler){
+
+			$oPiconetHandler->onOpen($oConnection);
+			$oPiconetHandler->onConnect();
+			
+
+			$oConnection->on('data',function ($sMessage) use ($oPiconetHandler) {
+				$oPiconetHandler->onMessage($sMessage);
+			});
+			$oConnection->on('close',function () use ($oPiconetHandler) {
+				$oPiconetHandler->onClose();
+			});
+			$oConnection->on('error', function(\Exception $e) use ($oPiconetHandler){
+				$oPiconetHandler->onError($e);
+			});
+		});
+
+		return $oPiconetHandler;
+
+	}
+
 
 	/** 
 	  * Seetup the Admin web interface service
 	  *
-	  * @param object LoopInterface $oLoop The loop to add the service to
+	  * @param LoopInterface $oLoop The loop to add the service to
 	*/
-	public function adminService(LoopInterface $oLoop)
+	public function adminService(LoopInterface $oLoop):void
 	{
 		$oKernel = new Kernel('prod', false);
 		$oLogger = $this->oLogger;
@@ -293,19 +318,19 @@ EOF;
 			$sContent = $oRequest->getBody();
 			$oLogger->info("Admin page request ".$oRequest->getUri()->getPath());
 
-			$aPost = array();
-			if (in_array(strtoupper($sMethod), array('POST', 'PUT', 'DELETE', 'PATCH')) &&
-				isset($aHeaders['Content-Type']) && (0 === strpos($aHeaders['Content-Type'], 'application/x-www-form-urlencoded'))
+			$aPost = [];
+			if (in_array(strtoupper($sMethod), ['POST', 'PUT', 'DELETE', 'PATCH']) &&
+				isset($aHeaders['Content-Type']) && (str_starts_with($aHeaders['Content-Type'], 'application/x-www-form-urlencoded')) //@phpstan-ignore-line
 			) {
 				parse_str($sContent, $result);
 			}
 			$sfRequest = new \Symfony\Component\HttpFoundation\Request(
 				$oRequest->getQueryParams(),
 				$aPost,
-				array(),
+				[],
 				$oRequest->getCookieParams(), // To get the cookies, we'll need to parse the aHeaders
 				$oRequest->getUploadedFiles(),
-				array(), // Server is partially filled a few lines below
+				[], // Server is partially filled a few lines below
 				$sContent
 			);
 			$sfRequest->setMethod($sMethod);
@@ -317,9 +342,9 @@ EOF;
 			
 			try {
 				$sfResponse = $oKernel->handle($sfRequest);
-			}catch(NotFoundHttpException $oException){
+			}catch(NotFoundHttpException){
 				$oLogger->info("Admin page not found (".$oRequest->getUri()->getPath().")");
-				return  new  \React\Http\Response(
+				return  new  \React\Http\Message\Response(
 						404,
 						[],
 						"Page \"".$oRequest->getUri()->getPath()."\" not found.");
@@ -327,7 +352,7 @@ EOF;
 				$oLogger->info("Error: ".$oException->getMessage());
 				throw $oException;
 			}
-			$oResponse = new \React\Http\Response(
+			$oResponse = new \React\Http\Message\Response(
 						200,
 						$sfResponse->headers->all(),
 						$sfResponse->getContent());
@@ -335,8 +360,8 @@ EOF;
 			return $oResponse;
 		};
 
-		$oHttpSocket = new \React\Socket\Server('0.0.0.0:8080',$oLoop);
-		$oHttpServer = new \React\Http\Server($callback);
+		$oHttpSocket = new \React\Socket\Server(config::getValue('webadmin_listen_address').':'.config::getValue('webadmin_listen_port'),$oLoop);
+		$oHttpServer = new \React\Http\HttpServer($callback);
 		$oHttpServer->listen($oHttpSocket);
 	}
 

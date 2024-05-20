@@ -12,15 +12,17 @@ namespace HomeLan\FileStore\Services\Provider\PrintServer;
 use HomeLan\FileStore\Services\Provider\AdminInterface;
 use HomeLan\FileStore\Services\Provider\AdminEntity;
 use HomeLan\FileStore\Services\ProviderInterface;
+use HomeLan\FileStore\Services\ServiceDispatcher;
+use HomeLan\FileStore\Services\Provider\PrintServer;
 
 class Admin implements AdminInterface 
 {
-	private $oProvider;
 
-	public function __construct(ProviderInterface $oProvider)
-	{
-		$this->oProvider = $oProvider;
-	}
+	private bool $bEnabled = true;
+
+	public function __construct(private readonly PrintServer $oProvider)
+ 	{
+	 }
 
 	/**
 	 * Gets the human readable name of the service provider
@@ -46,7 +48,7 @@ class Admin implements AdminInterface
 	 */  
 	public function isDisabled(): bool
 	{
-		return false;
+		return !$this->bEnabled;
 	}
 
 	/**
@@ -55,6 +57,9 @@ class Admin implements AdminInterface
 	*/ 
 	public function setDisabled(): void
 	{
+		$oServices = ServiceDispatcher::create();
+		$oServices->disableService($this->oProvider);
+		$this->bEnabled = false;
 	}
 
 	/**
@@ -63,6 +68,9 @@ class Admin implements AdminInterface
 	*/
 	public function setEnabled(): void
 	{
+		$oServices = ServiceDispatcher::create();
+		$oServices->enableService($this->oProvider);
+		$this->bEnabled = true;
 	}
 
 	/**
@@ -71,7 +79,11 @@ class Admin implements AdminInterface
 	*/ 
 	public function getStatus(): string
 	{
-		return "On-line";
+		if($this->bEnabled){
+			return "On-line";
+		}else{
+			return "Disabled";
+		}
 	}
 
 	/**
@@ -88,13 +100,12 @@ class Admin implements AdminInterface
 	 *
 	*/ 
 	public function getEntityFields(string $sType): array
-	{
-		switch($sType){
-			case 'jobs':
-				return ['network'=>'int', 'station'=>'int', 'began'=>'datatime', 'size'=>'int'];	
-				break;
-		}
-	}
+ {
+     return match ($sType) {
+         'jobs' => ['network'=>'int', 'station'=>'int', 'began'=>'datatime', 'size'=>'int'],
+         default => [],
+     };
+ }
 
 	/**
 	 * Gets the entity instances of a given type for this service 
@@ -105,12 +116,10 @@ class Admin implements AdminInterface
 		switch($sType){
 			case 'jobs':
 				$aJobs = $this->oProvider->getJobs();
-				$aReturn = AdminEntity::createCollection($sType,$this->getEntityFields($sType),$aJobs,function($aRow){
-									return $aRow['network'].'_'.$aRow['station'];
-					});
+				$aReturn = AdminEntity::createCollection($sType,$this->getEntityFields($sType),$aJobs,fn($aRow) => $aRow['network'].'_'.$aRow['station']);
 				return $aReturn;
-				break;
 		}
+		return [];
 	}
 
 	/**
@@ -118,7 +127,7 @@ class Admin implements AdminInterface
 	*/
 	public function getCommands(): array
 	{
-			
+		return [];
 	}
 
 

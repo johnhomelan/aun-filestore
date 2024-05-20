@@ -18,9 +18,12 @@ use Exception;
 
 class Security {
 
-	protected static $aSessions = array();
+	/**
+ 	 * @var array<int, array<int, array<mixed>>>
+ 	*/  	
+	protected static array $aSessions = [];
 
-	protected static $oLogger;
+	protected static \Psr\Log\LoggerInterface $oLogger;
 
 	public static function init(\Psr\Log\LoggerInterface $oLogger): void
 	{
@@ -49,19 +52,19 @@ class Security {
 	 * Get a list of all the authplugs we should be using 
 	 *
 	 * It also calls the init method of each one
-	 *
+	 * @return array<int, string>
 	**/
 	protected static function _getAuthPlugins(): array
 	{
-		$aReturn = array();
-		$aAuthPlugis = explode(',',config::getValue('security_auth_plugins'));
+		$aReturn = [];
+		$aAuthPlugis = explode(',',(string) config::getValue('security_auth_plugins'));
 		foreach($aAuthPlugis as $sPlugin){
 			$sClassname = "\HomeLan\FileStore\Authentication\Plugins\AuthPlugin".ucfirst($sPlugin);
 			if(!class_exists($sClassname,FALSE)){
 				try{
 					$sClassname::init(self::$oLogger);
 					$aReturn[]=$sClassname;
-				}catch(Exception $oException){
+				}catch(Exception){
 					self::$oLogger->info("Security: Unable to load authplugin ".$sClassname);
 				}
 			}else{
@@ -74,7 +77,7 @@ class Security {
 	/**
 	 * Updates the last idle time for a connection
 	*/
-	public static function updateIdleTimer($iNetwork,$iStation): void
+	public static function updateIdleTimer(int $iNetwork,int $iStation): void
 	{
 		if(array_key_exists($iNetwork,Security::$aSessions) AND array_key_exists($iStation,Security::$aSessions[$iNetwork])){
 			Security::$aSessions[$iNetwork][$iStation]['idle']=time();
@@ -85,20 +88,16 @@ class Security {
 	/**
 	 * Gets the last idle time for a connection
 	*/
-	public static function getIdleTimer($iNetwork,$iStation)
+	public static function getIdleTimer(int $iNetwork, int $iStation):int
 	{
 		if(array_key_exists($iNetwork,Security::$aSessions) AND array_key_exists($iStation,Security::$aSessions[$iNetwork])){
 			return Security::$aSessions[$iNetwork][$iStation]['idle'];
 		}
+		return 0;
 	}
 
 	/**
-	 * Performs the login operation for a give user on a network and station
-	 *
-	 * @param int $iNetwork
-	 * @param int $iStation
-	 * @param string $sUser
-	 * @param string $sPass
+	  * Performs the login operation for a give user on a network and station
 	*/
 	public static function login(int $iNetwork,int $iStation,string $sUser,string $sPass): bool
 	{
@@ -108,9 +107,9 @@ class Security {
 				if($sPlugin::login($sUser,$sPass,$iNetwork,$iStation)){
 					self::$oLogger->info("Security: Login for ".$sUser." using authplugin ".$sPlugin);
 					if(!array_key_exists($iNetwork,Security::$aSessions)){
-						Security::$aSessions[$iNetwork]=array();
+						Security::$aSessions[$iNetwork]=[];
 					}
-					Security::$aSessions[$iNetwork][$iStation]=array('idle'=>time(),'datetime'=>time(),'provider'=>$sPlugin,'user'=>$sPlugin::buildUserObject($sUser));
+					Security::$aSessions[$iNetwork][$iStation]=['idle'=>time(), 'datetime'=>time(), 'provider'=>$sPlugin, 'user'=>$sPlugin::buildUserObject($sUser)];
 					return TRUE;
 				}else{
 					self::$oLogger->info("Security: Login failed for ".$sUser." using authplugin ".$sPlugin);
@@ -122,7 +121,7 @@ class Security {
 		return FALSE;
 	}
 
-	public static function logout($iNetwork,$iStation): void
+	public static function logout(int $iNetwork, int $iStation): void
 	{
 		if(Security::isLoggedIn($iNetwork,$iStation)){
 			$oUser = Security::getUser($iNetwork,$iStation);
@@ -136,13 +135,11 @@ class Security {
 	}
 
 	/**
-	 * Get the user object for the user logged in at the given network/station
-	 *
-	 * @param int $iNetwork
-	 * @param int $iStation
-	 * @return object user
+	  * Get the user object for the user logged in at the given network/station
+	  *
+	  * @return null|\HomeLan\FileStore\Authentication\User
 	*/
-	public static function getUser(int $iNetwork,int $iStation): ?User
+	public static function getUser(int $iNetwork,int $iStation): ?\HomeLan\FileStore\Authentication\User
 	{
 		if(array_key_exists($iNetwork,Security::$aSessions) AND array_key_exists($iStation,Security::$aSessions[$iNetwork])){
 			return Security::$aSessions[$iNetwork][$iStation]['user'];
@@ -151,11 +148,9 @@ class Security {
 	}
 
 	/**
-	 * Tests if auser is logged in on a give network/station
-	 * 
-	 * @param int $iNetwork
-	 * @param int $iStation
-	 * @return boolean
+	  * Tests if auser is logged in on a give network/station
+	  *
+	  * @return boolean
 	*/
 	public static function isLoggedIn(int $iNetwork,int $iStation): bool
 	{
@@ -166,14 +161,10 @@ class Security {
 	}
 
 	/**
-	 * Set the password for the user logged in using  network/station 
-	 *
-	 * @param int $iNetwork
-	 * @param int $iStation
-	 * @param string $sOldPassword
-	 * @param string $sPassword
-	*/	 
-	public static function setConnectedUsersPassword(int $iNetwork,int $iStation,string $sOldPassword,string $sPassword): void
+	  * Set the password for the user logged in using  network/station 
+	  *
+	*/
+	public static function setConnectedUsersPassword(int $iNetwork,int $iStation,?string $sOldPassword,?string $sPassword): void
 	{
 		if(array_key_exists($iNetwork,Security::$aSessions) AND array_key_exists($iStation,Security::$aSessions[$iNetwork])){
 			self::$oLogger->info("Security: Changing password for ".Security::$aSessions[$iNetwork][$iStation]['user']->getUsername()." using authplugin ".Security::$aSessions[$iNetwork][$iStation]['provider']);
@@ -185,26 +176,36 @@ class Security {
 	/**
 	 * Get an error of the users logged in
 	 *
-	 * @return array
+	 * @return array<int, array<int, array<mixed>>>
 	*/
 	public static function getUsersOnline(): array
 	{
 		return  Security::$aSessions;
 	}
 
-	public static function getUsersStation($sUsername): array
+	/**
+ 	  * Gets the list of network/stations a using is logged on via
+ 	  *
+ 	  * @return array<string, int>
+ 	*/  	
+	public static function getUsersStation(string $sUsername): array
 	{
 		foreach(Security::$aSessions as $iNetwork=>$aStationUsers){
 			foreach($aStationUsers as $iStation=>$aData){
 				$oUser = $aData['user'];
-				if(strtoupper($oUser->getUsername())==trim(strtoupper($sUsername))){
-					return array('station'=>$iStation,'network'=>$iNetwork);	
+				if(strtoupper((string) $oUser->getUsername())==trim(strtoupper((string) $sUsername))){
+					return ['station'=>$iStation, 'network'=>$iNetwork];	
 				}
 			}
 		}
-		return array();	
+		return [];	
 	}
 
+	/**
+ 	  * Gets the list of all the users logged in and the plugin providing that user
+ 	  *
+ 	  * @return array<int, array{'plugin':string, 'user':mixed}>
+ 	*/
 	public static function getAllUsers(): array
 	{
 		$aReturn = [];
@@ -212,22 +213,20 @@ class Security {
 		foreach($aPlugins as $sPlugin){
 			$aUsers = $sPlugin::getAllUsers();
 			foreach($aUsers as $oUser){
-				$aReturn[] = ['plugin'=>substr($sPlugin, strrpos($sPlugin, '\\') + 1), 'user'=>$oUser];
+				$aReturn[] = ['plugin'=>substr((string) $sPlugin, strrpos((string) $sPlugin, '\\') + 1), 'user'=>$oUser];
 			}
 		}
 		return $aReturn;
 	}
 
 	/**
-	 * Creates a new user (assuming the user logged in on the given network/station has admin rights)
-	 *
-	 * @param int $iNetwork
-	 * @param int $iStation
-	 * @param object user $oUser
+	  * Creates a new user (assuming the user logged in on the given network/station has admin rights)
+	  *
+	  * @param null|\HomeLan\FileStore\Authentication\User $oUser
 	*/
 	public static function createUser(int $iNetwork,int $iStation,$oUser): void
 	{
-		if(!is_object($oUser) OR get_class($oUser)!='HomeLan\FileStore\Authentication\User'){
+		if(!is_object($oUser) OR $oUser::class!=\HomeLan\FileStore\Authentication\User::class){
 			throw new Exception("Security: Invaild user supplied to createUser.\n");
 		}
 
@@ -261,13 +260,9 @@ class Security {
 	}
 
 	/**
-	 * Removes a user (assuming the user logged in on the given network/station has admin rights)
-	 *
-	 * @param int $iNetwork
-	 * @param int $iStation
-	 * @param string $sUsername
+	  * Removes a user (assuming the user logged in on the given network/station has admin rights)
 	*/
-	public static function removeUser(int $iNetwork,int $iStation,string $sUsername)
+	public static function removeUser(int $iNetwork,int $iStation,string $sUsername):bool
 	{
 		if(!Security::isLoggedIn($iNetwork,$iStation)){
 			throw new Exception("Security:  Unable to remove the user, no user is logged in on ".$iNetwork.".".$iStation);
@@ -283,21 +278,18 @@ class Security {
 		foreach($aPlugins as $sPlugin){
 			try {
 				return $sPlugin::removeUser($sUsername);
-				break;
 			}catch(Exception $oException){
 				self::$oLogger->debug("Security: Exception thrown by plugin ".$sPlugin." when attempting to remove user ".$sUsername." (".$oException->getMessage().")");
 			}
 		}
+		return false;
 	
 	}
 
 	/**
-	 * Creates a new user (assuming the user logged in on the given network/station has admin rights)
-	 *
-	 * @param int $iNetwork
-	 * @param int $iStation
-	 * @param string $sUsername
-	 * @param string $sPriv (S|U)
+	  * Sets the privilage flag for a user (assuming the user logged in on the given network/station has admin rights)
+	  *
+	  * @param string $sPriv (S|U)
 	*/
 	public static function setPriv(int $iNetwork,int $iStation,string $sUsername,string $sPriv): void
 	{
@@ -321,7 +313,34 @@ class Security {
 				$sPlugin::setPriv($sUsername,$sPriv);
 				break;
 			}catch(Exception $oException){
-				self::$oLogger->debug("Security: Exception thrown by plugin ".$sPlugin." when attempting to create user ".$oLoggedInUser->getUsername()." (".$oException->getMessage().")");
+				self::$oLogger->debug("Security: Exception thrown by plugin ".$sPlugin." when attempting to set priv for ".$sUsername." by  ".$oLoggedInUser->getUsername()." to ".$sPriv." (".$oException->getMessage().")");
+			}
+		}
+	
+	}
+
+	/**
+	  * Sets the boot option for a user 
+	  *
+	  * @param string $sOpt
+	*/
+	public static function setOpt(int $iNetwork,int $iStation,string $sOpt): void
+	{
+		if(!Security::isLoggedIn($iNetwork,$iStation)){
+			throw new Exception("Security:  Unable to setPriv, no user is logged in on ".$iNetwork.".".$iStation);
+		}
+
+		$oLoggedInUser = Security::getUser($iNetwork,$iStation);
+
+
+		$aPlugins = Security::_getAuthPlugins();
+		self::$oLogger->info("Security: Setting opt for ".$oLoggedInUser->getUsername()." to ".$sOpt);
+		foreach($aPlugins as $sPlugin){
+			try {
+				$sPlugin::setOpt($oLoggedInUser->getUsername(),$sOpt);
+				break;
+			}catch(Exception $oException){
+				self::$oLogger->debug("Security: Exception thrown by plugin ".$sPlugin." when attempting to set opt for ".$oLoggedInUser->getUsername()." to ".$sOpt." (".$oException->getMessage().")");
 			}
 		}
 	

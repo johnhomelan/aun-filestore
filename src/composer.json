@@ -9,29 +9,44 @@
      },
     "require-dev": {
         "phpunit/phpunit": "^8.0",
-        "phpstan/phpstan": "0.11.5",
-        "rector/rector": "^0.4.11"   
+        "phpstan/phpstan": "*",
+        "rector/rector": "*",
+        "mockery/mockery": "^1.6",
+        "shipmonk/composer-dependency-analyser": "^1.5"   
     },
     "require": {
         "monolog/monolog": "^1.23",
+<<<<<<< HEAD
         "homelan/acorn-disk": "v1.0.2",
         "homelan/l3fsreader": "^0.2.0",
+=======
+        "homelan/acorn-disk": "1.1.*",
+>>>>>>> react-php
         "react/event-loop": "^1.1",
-        "react/http": "^0.8.4",
+        "react/http": "1.9.*",
         "react/datagram": "^1.4",
-        "sentry/sentry": "^2.0@dev",
-        "php-http/httplug": "^2.0@dev",
-        "php-http/guzzle6-adapter": "^2.0@dev",
-        "php-http/curl-client": "^2.0@dev",
-        "guzzlehttp/psr7": "^1.5@dev",
-        "symfony/console": "4.2.*",
-        "symfony/dotenv": "4.2.*",
-        "symfony/flex": "^1.1",
-        "symfony/framework-bundle": "4.2.*",
-        "symfony/yaml": "4.2.*",
-        "smarty/smarty": "^3.1@dev",
-        "cboden/ratchet": "^0.4.1"
+        "symfony/console": "*",
+	"symfony/dotenv": "*",
+        "symfony/framework-bundle": "*",
+        "smarty/smarty": "*",
+        "cboden/ratchet": "^0.4.1",
+        "react/child-process": "*",
+        "homelan/l3fsreader": "^0.2.1",
+        "psr/http-message": "^1.1",
+        "psr/log": "^1.1",
+        "react/promise": "^3.1",
+        "react/socket": "^1.15",
+        "symfony/config": "*",
+        "symfony/dependency-injection": "*",
+        "symfony/http-foundation": "*",
+        "symfony/http-kernel": "*",
+        "symfony/routing": "*"
     },
     "minimum-stability": "dev",
-    "prefer-stable": true
+    "prefer-stable": true,
+    "config": {
+        "allow-plugins": {
+            "php-http/discovery": true
+        }
+    }
 }

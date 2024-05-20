@@ -66,11 +66,10 @@ class PrintServerData {
 	}
 
 	/**
-	 * Decodes an AUN packet 
-	 *
-	 * @param string $sBinaryString
-	*/
-	public function decode(string $sBinaryString): void
+  * Decodes an AUN packet 
+  *
+  */
+ public function decode(string $sBinaryString): void
 	{
 	
 		//The reset is data
@@ -80,7 +79,7 @@ class PrintServerData {
 
 	public function getByte($iIndex)
 	{
-		$aBytes = unpack('C*',$this->sData);
+		$aBytes = unpack('C*',(string) $this->sData);
 		if(array_key_exists($iIndex,$aBytes)){
 			return $aBytes[$iIndex];
 		}
@@ -89,9 +88,9 @@ class PrintServerData {
 
 	public function getString($iStart,$iLen=NULL): string
 	{
-		$aBytes = unpack('C*',$this->sData);
+		$aBytes = unpack('C*',(string) $this->sData);
 		if(is_null($iLen)){
-			$iLen = count($aBytes);
+			$iLen = is_countable($aBytes) ? count($aBytes) : 0;
 		}
 		$sRetstr = "";
 		for($i=$iStart;$i<$iLen;$i++){
@@ -106,21 +105,21 @@ class PrintServerData {
 
 	public function get32bitIntLittleEndian($iStart)
 	{
-		$sStr = substr($this->sData,$iStart-1,4);
+		$sStr = substr((string) $this->sData,$iStart-1,4);
 		$aInt = unpack('V',$sStr);
 		return $aInt[1];
 	}
 
 	public function get24bitIntLittleEndian($iStart): int
 	{
-		$aBytes = unpack('C*',$this->sData);
+		$aBytes = unpack('C*',(string) $this->sData);
 		$iInt= bindec(str_pad(decbin($aBytes[$iStart+2]),8,"0",STR_PAD_LEFT).str_pad(decbin($aBytes[$iStart+1]),8,"0",STR_PAD_LEFT).str_pad(decbin($aBytes[$iStart]),8,"0",STR_PAD_LEFT));
 		return $iInt;
 	}
 
 	public function get16bitIntLittleEndian($iStart): void
 	{
-		$sStr = substr($this->sData,$iStart-1,2);
+		$sStr = substr((string) $this->sData,$iStart-1,2);
 		$aInt = unpack('v',$sStr);
 	}
 
@@ -131,6 +130,6 @@ class PrintServerData {
 
 	public function getLen(): int
 	{
-		return strlen($this->sData);
+		return strlen((string) $this->sData);
 	}
 }

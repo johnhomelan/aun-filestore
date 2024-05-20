@@ -53,7 +53,7 @@ class LocalFile implements PluginInterface {
 	protected static function _econetToUnix($sEconetPath): string
 	{
 		//Trim leading $.
-		$sEconetPath = substr($sEconetPath,2);
+		$sEconetPath = substr((string) $sEconetPath,2);
 		$aFileParts = explode('.',$sEconetPath);
 		$sUnixPath = "";
 		foreach($aFileParts as $sPart){
@@ -70,7 +70,7 @@ class LocalFile implements PluginInterface {
 			if(is_dir($sDir)){
 				$aFiles = scandir($sDir);
 				foreach($aFiles as $sFile){
-					if(strtolower($sFile)==$sTestFileName){
+					if(strtolower((string) $sFile)==$sTestFileName){
 						self::$oLogger->debug("LocalFile: Converted econet path ".$sEconetPath. " to ".$sDir.DIRECTORY_SEPARATOR.$sFile);
 						return $sDir.DIRECTORY_SEPARATOR.$sFile;
 					}
@@ -88,7 +88,7 @@ class LocalFile implements PluginInterface {
 					}else{
 						$aFiles = scandir($sNewDirPath);
 						foreach($aFiles as $sFile){
-							if(strtolower($sFile)==strtolower($sDirPart)){
+							if(strtolower((string) $sFile)==strtolower($sDirPart)){
 								$iMatches++;
 								$sNewDirPath .= DIRECTORY_SEPARATOR.$sFile;
 								continue;
@@ -125,8 +125,9 @@ class LocalFile implements PluginInterface {
 				$iVfsHandle = NULL;
 			}
 			$iEconetHandle = vfs::getFreeFileHandleID($oUser);
-			return new FileDescriptor(self::$oLogger,'LocalFile',$oUser,$sUnixPath,$oEconetPath->getFilePath(),$iVfsHandle,$iEconetHandle,is_file($sUnixPath),is_dir($sUnixPath));
+			return new FileDescriptor(self::$oLogger,'HomeLan\FileStore\Vfs\Plugin\LocalFile',$oUser,$sUnixPath,$oEconetPath->getFilePath(),$iVfsHandle,$iEconetHandle,is_file($sUnixPath),is_dir($sUnixPath));
 		}
+		throw new VfsException("No such file");
 	}
 
 	public static function _getAccessMode($iGid,$iUid,$iMode): string
@@ -154,18 +155,18 @@ class LocalFile implements PluginInterface {
 		foreach($aFiles as $sFile){
 			if($sFile=='..' or $sFile=='.'){
 				//Skip 
-			}elseif(stripos($sFile,'.inf')!==FALSE){
+			}elseif(stripos((string) $sFile,'.inf')!==FALSE){
 				//Files ending in .inf skip
 			}else{
 				if(!array_key_exists($sFile,$aDirectoryListing)){
 					$aStat = stat($sUnixPath.DIRECTORY_SEPARATOR.$sFile);
-					$aDirectoryListing[$sFile]=new DirectoryEntry(str_replace('.','/',$sFile),$sFile,'LocalFile',NULL,NULL,$aStat['size'],is_dir($sUnixPath.DIRECTORY_SEPARATOR.$sFile),$sEconetPath.'.'.str_replace('.','/',$sFile),$aStat['ctime'],self::_getAccessMode($aStat['uid'],$aStat['gid'],$aStat['mode']));
+					$aDirectoryListing[$sFile]=new DirectoryEntry(str_replace('.','/',(string) $sFile),$sFile,'HomeLan\FileStore\Vfs\Plugin\LocalFile',NULL,NULL,$aStat['size'],$sEconetPath.'.'.str_replace('.','/',(string) $sFile),$aStat['ctime'],self::_getAccessMode($aStat['uid'],$aStat['gid'],$aStat['mode']), is_dir($sUnixPath.DIRECTORY_SEPARATOR.$sFile));
 				}
 				if(is_null($aDirectoryListing[$sFile]) OR is_null($aDirectoryListing[$sFile]->getExecAddr())){
 					//If there is a .inf file use it toget the load exec addr
 					if(file_exists($sUnixPath.DIRECTORY_SEPARATOR.$sFile.".inf")){
 						$sInf = file_get_contents($sUnixPath.DIRECTORY_SEPARATOR.$sFile.".inf");
-						$aMatches = array();
+						$aMatches = [];
 						if(preg_match('/^TAPE file ([0-9a-fA-F]+) ([0-9a-fA-F]+)/',$sInf,$aMatches)>0){
 							//Update load / exec addr
 							$aDirectoryListing[$sFile]->setLoadAddr(hexdec($aMatches[1]));
@@ -177,7 +178,7 @@ class LocalFile implements PluginInterface {
 			}
 		}
 		//Rip out and .inf files from the list
-		$aReturn = array();
+		$aReturn = [];
 		foreach($aDirectoryListing as $sFile => $oFile){
 			if(stripos($sFile,"\/inf")===FALSE){
 				$aReturn[$sFile]=$oFile;
@@ -202,10 +203,12 @@ class LocalFile implements PluginInterface {
 			if(file_exists(rtrim($sUnixDirPath,DIRECTORY_SEPARATOR).DIRECTORY_SEPARATOR.$oEconetPath->sFile)){
 				$bReturn =  unlink(rtrim($sUnixDirPath,DIRECTORY_SEPARATOR).DIRECTORY_SEPARATOR.$oEconetPath->sFile);
 
-				if($bReturn AND file_exists(rtrim($sUnixDirPath,DIRECTORY_SEPARATOR).DIRECTORY_SEPARATOR.$oEconetPath->sFile).'.inf'){
+				if($bReturn AND file_exists(rtrim($sUnixDirPath,DIRECTORY_SEPARATOR).DIRECTORY_SEPARATOR.$oEconetPath->sFile.'.inf')){
 					unlink(rtrim($sUnixDirPath,DIRECTORY_SEPARATOR).DIRECTORY_SEPARATOR.$oEconetPath->sFile.'.inf');
 				}
+				return $bReturn;
 			}
+			
 		}
 		return FALSE;
 	}
@@ -232,7 +235,7 @@ class LocalFile implements PluginInterface {
 		$sUnixDirPath = LocalFile::_econetToUnix($oEconetPath->sDir);
 		if(is_dir($sUnixDirPath)){
 			file_put_contents($sUnixDirPath.DIRECTORY_SEPARATOR.$oEconetPath->sFile,$sData);
-			file_put_contents($sUnixDirPath.DIRECTORY_SEPARATOR.$oEconetPath->sFile.'.inf',"TAPE file ".str_pad(dechex($iLoadAddr),8,0,STR_PAD_LEFT)." ".str_pad(dechex($iExecAddr),8,0,STR_PAD_LEFT));
+			file_put_contents($sUnixDirPath.DIRECTORY_SEPARATOR.$oEconetPath->sFile.'.inf',"TAPE file ".str_pad(dechex($iLoadAddr),8,"0",STR_PAD_LEFT)." ".str_pad(dechex($iExecAddr),8,"0",STR_PAD_LEFT));
 			return TRUE;
 		}
 		return FALSE;
@@ -246,7 +249,7 @@ class LocalFile implements PluginInterface {
 			$hFile = fopen($sUnixDirPath.DIRECTORY_SEPARATOR.$oEconetPath->sFile,'r+');
 			ftruncate($hFile,$iSize);
 			fclose($hFile);
-			file_put_contents($sUnixDirPath.DIRECTORY_SEPARATOR.$oEconetPath->sFile.'.inf',"TAPE file ".str_pad(dechex($iLoadAddr),8,0,STR_PAD_LEFT)." ".str_pad(dechex($iExecAddr),8,0,STR_PAD_LEFT));
+			file_put_contents($sUnixDirPath.DIRECTORY_SEPARATOR.$oEconetPath->sFile.'.inf',"TAPE file ".str_pad(dechex($iLoadAddr),8,"0",STR_PAD_LEFT)." ".str_pad(dechex($iExecAddr),8,"0",STR_PAD_LEFT));
 			return TRUE;
 		}
 		return FALSE;
@@ -266,20 +269,20 @@ class LocalFile implements PluginInterface {
 		throw new VfsException("No such file");
 	}
 
-	public static function setMeta(string $sEconetPath,$iLoad,$iExec,int $iAccess): void
+	public static function setMeta(string $sEconetPath,?int $iLoad,?int $iExec,int $iAccess): void
 	{
 		$sUnixPath = LocalFile::_econetToUnix($sEconetPath);
 		if(file_exists($sUnixPath) AND file_exists($sUnixPath.'.inf')){
 			$sInf = file_get_contents($sUnixPath.".inf");				
-			$aMatches = array();
+			$aMatches = [];
 			if(preg_match('/^TAPE file ([0-9a-fA-F]+) ([0-9a-fA-F]+)/',$sInf,$aMatches)>0){
 				//Update load / exec addr
-				$aMata=array('load'=>$aMatches[1],'exec'=>$aMatches[2]);
+				$aMata=['load'=>$aMatches[1], 'exec'=>$aMatches[2]];
 			}else{
-				$aMata=array('load'=>'ffff0000','exec'=>'ffff0000');
+				$aMata=['load'=>'ffff0000', 'exec'=>'ffff0000'];
 			}
 		}else{
-			$aMata=array('load'=>'ffff0000','exec'=>'ffff0000');
+			$aMata=['load'=>'ffff0000', 'exec'=>'ffff0000'];
 		}
 		if(file_exists($sUnixPath)){
 			if(!is_null($iLoad)){
@@ -338,7 +341,7 @@ class LocalFile implements PluginInterface {
 	{
 		self::$oLogger->debug("LocalFile: Write bytes to file handle ".$fLocalHandle);
 		LocalFile::_setUid($oUser);
-		$mReturn =  fwrite($fLocalHandle,$sData);
+		$mReturn =  fwrite($fLocalHandle,(string) $sData);
 		LocalFile::_returnUid();
 		return $mReturn;
 	}

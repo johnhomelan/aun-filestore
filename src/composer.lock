@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "097e36ffae61219a37fa95f3630d99fe",
+    "content-hash": "bbe1ea708934b92d0735a646926ba816",
     "packages": [
         {
             "name": "cboden/ratchet",
@@ -290,16 +290,16 @@
         },
         {
             "name": "homelan/acorn-disk",
-            "version": "v1.0.2",
+            "version": "1.1.0",
             "source": {
                 "type": "git",
                 "url": "https://github.com/johnhomelan/acorn-disk.git",
-                "reference": "75d47ffbdafda7cdca3421b7e60e621273c3f5ec"
+                "reference": "7106553664a68dee188a19d45a350ac7ad6cfedf"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/johnhomelan/acorn-disk/zipball/75d47ffbdafda7cdca3421b7e60e621273c3f5ec",
-                "reference": "75d47ffbdafda7cdca3421b7e60e621273c3f5ec",
+                "url": "https://api.github.com/repos/johnhomelan/acorn-disk/zipball/7106553664a68dee188a19d45a350ac7ad6cfedf",
+                "reference": "7106553664a68dee188a19d45a350ac7ad6cfedf",
                 "shasum": ""
             },
             "require": {
@@ -331,9 +331,9 @@
             ],
             "support": {
                 "issues": "https://github.com/johnhomelan/acorn-disk/issues",
-                "source": "https://github.com/johnhomelan/acorn-disk/tree/master"
+                "source": "https://github.com/johnhomelan/acorn-disk/tree/1.1.0"
             },
-            "time": "2019-02-14T16:25:13+00:00"
+            "time": "2023-09-05T08:40:47+00:00"
         },
         {
             "name": "homelan/l3fsreader",

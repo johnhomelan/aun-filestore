@@ -16,14 +16,14 @@ use HomeLan\Retro\Acorn\Disk\AdfsReaderHD;
 use config; 
 
 /**
- * The AdfsHD class acts as a vfs plugin to provide access to files stored in a adfs filing system stored in a hardisk image file (e.g. scsi0.dat).
+ * The AdfsReaderHD class acts as a vfs plugin to provide access to files stored in a adfs filing system stored in a hardisk image file (e.g. scsi0.dat).
  * 
  * It will cliam any files matching the pattern scsi([0-9])+.dat
  *
  * @package corevfs
  * @authour John Brown <john@home-lan.co.uk>
 */
-class AdfsHD implements PluginInterface {
+class AdfsReaderHD implements PluginInterface {
 
 	protected static $aImageReaders = [];
 
@@ -61,10 +61,10 @@ class AdfsHD implements PluginInterface {
 
 	protected static function _getImageReader($sImageFile)
 	{
-		if(!array_key_exists($sImageFile,AdfsHD::$aImageReaders)){
-			AdfsHD::$aImageReaders[$sImageFile] = new AdfsReaderHD($sImageFile);
+		if(!array_key_exists($sImageFile,AdfsReaderHD::$aImageReaders)){
+			AdfsReaderHD::$aImageReaders[$sImageFile] = new AdfsReaderHD($sImageFile);
 		}
-		return AdfsHD::$aImageReaders[$sImageFile];
+		return AdfsReaderHD::$aImageReaders[$sImageFile];
 	}
 
 	protected static function _econetToUnix($sEconetPath): string
@@ -156,7 +156,7 @@ class AdfsHD implements PluginInterface {
 
 	protected static function _checkImageFileExists($sImageFile,$sPathInsideImage): bool
 	{
-		$oAdfs = AdfsHD::_getImageReader($sImageFile);
+		$oAdfs = AdfsReaderHD::_getImageReader($sImageFile);
 		$aCat = $oAdfs->getCatalogue();
 		$aPathInsideImage = explode('.',(string) $sPathInsideImage);
 		$bFound = FALSE;
@@ -181,26 +181,26 @@ class AdfsHD implements PluginInterface {
 
 	public static function _buildFiledescriptorFromEconetPath($oUser,FilePath $oEconetPath,$bMustExist,$bReadOnly): \HomeLan\FileStore\Vfs\FileDescriptor
 	{
-		$sImageFile = AdfsHD::_getImageFile($oEconetPath->getFilePath());
+		$sImageFile = AdfsReaderHD::_getImageFile($oEconetPath->getFilePath());
 		if(strlen($sImageFile)>0){
-			$sPathInsideImage = AdfsHD::_getPathInsideImage($oEconetPath->getFilePath(),$sImageFile);
-			if(AdfsHD::_checkImageFileExists($sImageFile,$sPathInsideImage)){
+			$sPathInsideImage = AdfsReaderHD::_getPathInsideImage($oEconetPath->getFilePath(),$sImageFile);
+			if(AdfsReaderHD::_checkImageFileExists($sImageFile,$sPathInsideImage)){
 				$iEconetHandle = Vfs::getFreeFileHandleID($oUser);
-				$iVfsHandle = AdfsHD::$iFileHandle++;
-				AdfsHD::$aFileHandles[$iVfsHandle]=['image-file'=>$sImageFile, 'path-inside-image'=>$sPathInsideImage, 'pos'=>0];
-				$oAdfs =  AdfsHD::_getImageReader($sImageFile);
-				return new FileDescriptor(self::$oLogger,'HomeLan\FileStore\Vfs\Plugin\AdfsHD',$oUser,$sImageFile,$oEconetPath->getFilePath(),$iVfsHandle,$iEconetHandle,$oAdfs->isFile($sPathInsideImage),$oAdfs->isDir($sPathInsideImage));
+				$iVfsHandle = AdfsReaderHD::$iFileHandle++;
+				AdfsReaderHD::$aFileHandles[$iVfsHandle]=['image-file'=>$sImageFile, 'path-inside-image'=>$sPathInsideImage, 'pos'=>0];
+				$oAdfs =  AdfsReaderHD::_getImageReader($sImageFile);
+				return new FileDescriptor(self::$oLogger,'HomeLan\FileStore\Vfs\Plugin\AdfsReaderHD',$oUser,$sImageFile,$oEconetPath->getFilePath(),$iVfsHandle,$iEconetHandle,$oAdfs->isFile($sPathInsideImage),$oAdfs->isDir($sPathInsideImage));
 			}
 		}
 
 		//Scan the unix dir, see of there is a diskimage in that directory to see if it need changing to a directory
-		$sUnixPath = AdfsHD::_econetToUnix($oEconetPath->getFilePath());
+		$sUnixPath = AdfsReaderHD::_econetToUnix($oEconetPath->getFilePath());
 		if(file_exists($sUnixPath.'.dat')){
 			//Disk Image found
 			$iEconetHandle = Vfs::getFreeFileHandleID($oUser);
-			$iVfsHandle = AdfsHD::$iFileHandle++;
-			AdfsHD::$aFileHandles[$iVfsHandle]=['image-file'=>$sUnixPath.'.dat', 'path-inside-image'=>'', 'pos'=>0];
-			return new FileDescriptor(self::$oLogger,'HomeLan\FileStore\Vfs\Plugin\AdfsHD',$oUser,$sUnixPath.'.dat',$oEconetPath->getFilePath(),$iVfsHandle,$iEconetHandle,FALSE,TRUE);
+			$iVfsHandle = AdfsReaderHD::$iFileHandle++;
+			AdfsReaderHD::$aFileHandles[$iVfsHandle]=['image-file'=>$sUnixPath.'.dat', 'path-inside-image'=>'', 'pos'=>0];
+			return new FileDescriptor(self::$oLogger,'HomeLan\FileStore\Vfs\Plugin\AdfsReaderHD',$oUser,$sUnixPath.'.dat',$oEconetPath->getFilePath(),$iVfsHandle,$iEconetHandle,FALSE,TRUE);
 		}
 		throw new VfsException("No such file");
 			
@@ -209,12 +209,12 @@ class AdfsHD implements PluginInterface {
 
 	public static function getDirectoryListing(string $sEconetPath,array $aDirectoryListing): array
 	{
-		$sImageFile = AdfsHD::_getImageFile($sEconetPath);
+		$sImageFile = AdfsReaderHD::_getImageFile($sEconetPath);
 	
 		//Produce a directory listing for file inside the image if the selected path is inside the image
 		if(strlen($sImageFile)>0){
-			$sPathInsideImage = AdfsHD::_getPathInsideImage($sEconetPath,$sImageFile);
-			$oAdfs = AdfsHD::_getImageReader($sImageFile);
+			$sPathInsideImage = AdfsReaderHD::_getPathInsideImage($sEconetPath,$sImageFile);
+			$oAdfs = AdfsReaderHD::_getImageReader($sImageFile);
 			$aImageStat = stat($sImageFile);
 			$aCat = $oAdfs->getCatalogue();
 
@@ -230,12 +230,12 @@ class AdfsHD implements PluginInterface {
 			}
 
 			foreach($aCat as $sFile=>$aMeta){
-				$aDirectoryListing[$sFile] = new DirectoryEntry($sFile,$sImageFile,'HomeLan\FileStore\Vfs\Plugin\AdfsHD',$aMeta['load'],$aMeta['exec'],$aMeta['size'] ,$sEconetPath.'.'.$sFile,$aImageStat['ctime'],'-r/-r', $aMeta['type']=='dir' ? TRUE : FALSE);
+				$aDirectoryListing[$sFile] = new DirectoryEntry($sFile,$sImageFile,'HomeLan\FileStore\Vfs\Plugin\AdfsReaderHD',$aMeta['load'],$aMeta['exec'],$aMeta['size'] ,$sEconetPath.'.'.$sFile,$aImageStat['ctime'],'-r/-r', $aMeta['type']=='dir' ? TRUE : FALSE);
 			}
 		}
 		
 		//Scan the unix dir, see of there is a diskimage in that directory to see if it need changing to a directory
-		$sUnixPath = AdfsHD::_econetToUnix($sEconetPath);
+		$sUnixPath = AdfsReaderHD::_econetToUnix($sEconetPath);
 		if(is_dir($sUnixPath)){
 			$aFiles = scandir($sUnixPath);
 			foreach($aFiles as $sFile){
@@ -243,7 +243,7 @@ class AdfsHD implements PluginInterface {
 					//Disk Image found
 					if(!array_key_exists(substr((string) $sFile,0,strlen((string) $sFile)-4),$aDirectoryListing)){
 						$aStat = stat($sUnixPath.DIRECTORY_SEPARATOR.$sFile);
-						$aDirectoryListing[$sFile]=new DirectoryEntry(substr((string) $sFile,0,strlen((string) $sFile)-4),$sFile,'HomeLan\FileStore\Vfs\Plugin\AdfsHD',NULL,NULL,0,$sEconetPath.'.'.substr((string) $sFile,0,strlen((string) $sFile)-4),$aStat['ctime'],'-r/-r', TRUE);
+						$aDirectoryListing[$sFile]=new DirectoryEntry(substr((string) $sFile,0,strlen((string) $sFile)-4),$sFile,'HomeLan\FileStore\Vfs\Plugin\AdfsReaderHD',NULL,NULL,0,$sEconetPath.'.'.substr((string) $sFile,0,strlen((string) $sFile)-4),$aStat['ctime'],'-r/-r', TRUE);
 					}
 				}
 			}
@@ -291,11 +291,11 @@ class AdfsHD implements PluginInterface {
 	*/
 	public static function getFile($oUser,FilePath $oEconetPath): string
 	{
-		$sImageFile = AdfsHD::_getImageFile($oEconetPath->getFilePath());
+		$sImageFile = AdfsReaderHD::_getImageFile($oEconetPath->getFilePath());
 		if(strlen($sImageFile)>0){
-			$sPathInsideImage = AdfsHD::_getPathInsideImage($oEconetPath->getFilePath(),$sImageFile);
-			if(AdfsHD::_checkImageFileExists($sImageFile,$sPathInsideImage)){
-				$oAdfs = AdfsHD::_getImageReader($sImageFile);
+			$sPathInsideImage = AdfsReaderHD::_getPathInsideImage($oEconetPath->getFilePath(),$sImageFile);
+			if(AdfsReaderHD::_checkImageFileExists($sImageFile,$sPathInsideImage)){
+				$oAdfs = AdfsReaderHD::_getImageReader($sImageFile);
 				return $oAdfs->getFile($sPathInsideImage);
 			}
 		}
@@ -308,17 +308,17 @@ class AdfsHD implements PluginInterface {
 
 	public static function fsFtell($oUser,$fLocalHandle)
 	{
-		if(array_key_exists($fLocalHandle,AdfsHD::$aFileHandles)){
-			return AdfsHD::$aFileHandles[$fLocalHandle]['pos'];
+		if(array_key_exists($fLocalHandle,AdfsReaderHD::$aFileHandles)){
+			return AdfsReaderHD::$aFileHandles[$fLocalHandle]['pos'];
 		}
 		throw new VfsException("Invalid handle");
 	}
 
 	public static function fsFStat($oUser,$fLocalHandle): array
 	{
-		if(array_key_exists($fLocalHandle,AdfsHD::$aFileHandles)){
-			$oAdfs = AdfsHD::_getImageReader(AdfsHD::$aFileHandles[$fLocalHandle]['image-file']);
-			$aStat = $oAdfs->getStat(AdfsHD::$aFileHandles[$fLocalHandle]['path-inside-image']);
+		if(array_key_exists($fLocalHandle,AdfsReaderHD::$aFileHandles)){
+			$oAdfs = AdfsReaderHD::_getImageReader(AdfsReaderHD::$aFileHandles[$fLocalHandle]['image-file']);
+			$aStat = $oAdfs->getStat(AdfsReaderHD::$aFileHandles[$fLocalHandle]['path-inside-image']);
 			return ['dev'=>null, 'ino'=>$aStat['sector'], 'size'=>$aStat['size'], 'nlink'=>1];
 		}
 		throw new VfsException("Invalid handle");
@@ -326,10 +326,10 @@ class AdfsHD implements PluginInterface {
 
 	public static function isEof($oUser,$fLocalHandle): bool
 	{
-		if(array_key_exists($fLocalHandle,AdfsHD::$aFileHandles)){
-			$oAdfs = AdfsHD::_getImageReader(AdfsHD::$aFileHandles[$fLocalHandle]['image-file']);
-			$aStat = $oAdfs->getStat(AdfsHD::$aFileHandles[$fLocalHandle]['path-inside-image']);
-			if(AdfsHD::$aFileHandles[$fLocalHandle]['pos']>=$aStat['size']){
+		if(array_key_exists($fLocalHandle,AdfsReaderHD::$aFileHandles)){
+			$oAdfs = AdfsReaderHD::_getImageReader(AdfsReaderHD::$aFileHandles[$fLocalHandle]['image-file']);
+			$aStat = $oAdfs->getStat(AdfsReaderHD::$aFileHandles[$fLocalHandle]['path-inside-image']);
+			if(AdfsReaderHD::$aFileHandles[$fLocalHandle]['pos']>=$aStat['size']){
 				return TRUE;
 			}
 			return FALSE;
@@ -339,8 +339,8 @@ class AdfsHD implements PluginInterface {
 
 	public static function setPos($oUser,$fLocalHandle,$iPos): bool
 	{
-		if(array_key_exists($fLocalHandle,AdfsHD::$aFileHandles)){
-			AdfsHD::$aFileHandles[$fLocalHandle]['pos']=$iPos;
+		if(array_key_exists($fLocalHandle,AdfsReaderHD::$aFileHandles)){
+			AdfsReaderHD::$aFileHandles[$fLocalHandle]['pos']=$iPos;
 			return TRUE;
 		}
 		throw new VfsException("Invalid handle");
@@ -348,24 +348,24 @@ class AdfsHD implements PluginInterface {
 	
 	public static function read($oUser,$fLocalHandle,$iLength): string
 	{
-		if(array_key_exists($fLocalHandle,AdfsHD::$aFileHandles)){
-			$oAdfs = AdfsHD::_getImageReader(AdfsHD::$aFileHandles[$fLocalHandle]['image-file']);
-			$sFileData = $oAdfs->getFile(AdfsHD::$aFileHandles[$fLocalHandle]['path-inside-image']);
-			return substr((string) $sFileData,AdfsHD::$aFileHandles[$fLocalHandle]['pos'],$iLength);
+		if(array_key_exists($fLocalHandle,AdfsReaderHD::$aFileHandles)){
+			$oAdfs = AdfsReaderHD::_getImageReader(AdfsReaderHD::$aFileHandles[$fLocalHandle]['image-file']);
+			$sFileData = $oAdfs->getFile(AdfsReaderHD::$aFileHandles[$fLocalHandle]['path-inside-image']);
+			return substr((string) $sFileData,AdfsReaderHD::$aFileHandles[$fLocalHandle]['pos'],$iLength);
 		}
 		throw new VfsException("Invalid handle");
 	}
 
 	public static function write($oUser,$fLocalHandle,$sData): never
 	{
-		self::$oLogger->debug("AdfsHD: Write bytes to file handle ".$fLocalHandle);
+		self::$oLogger->debug("AdfsReaderHD: Write bytes to file handle ".$fLocalHandle);
 		throw new VfsException("Read Only FS");
 	}
 
 	public static function fsClose($oUser,$fLocalHandle): void
 	{
-		if(array_key_exists($fLocalHandle,AdfsHD::$aFileHandles)){
-			unset(AdfsHD::$aFileHandles[$fLocalHandle]);
+		if(array_key_exists($fLocalHandle,AdfsReaderHD::$aFileHandles)){
+			unset(AdfsReaderHD::$aFileHandles[$fLocalHandle]);
 		}
 	}
 

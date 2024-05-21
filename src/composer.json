@@ -16,7 +16,7 @@
     },
     "require": {
         "monolog/monolog": "^1.23",
-        "homelan/acorn-disk": "v1.0.2",
+        "homelan/acorn-disk": "v1.1.0",
         "react/event-loop": "^1.1",
         "react/http": "1.9.*",
         "react/datagram": "^1.4",

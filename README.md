@@ -2,7 +2,7 @@
 [![coverage report](https://gitlab.home-lan.co.uk:8443/docker/aun-filestore/badges/master/coverage.svg)](https://gitlab.home-lan.co.uk:8443/docker/aun-filestore/commits/master)
 
 # Aims #
-The main aim of this project is to create an Econet fileserver implementation, which communicates using Acorn's AUN protocol (Econet over IP/UDP).
+The main aim of this project is to create an Econet fileserver implementation, which communicates using Acorn's AUN protocol (Econet over IP/UDP) and physical Econet using the EconetUSB interface.
 
 Our target platform is Linux and Unix like environments, with Windows as a target for later development (trying not to build things in away that will never work with windows).
 
@@ -18,21 +18,36 @@ Our target platform is Linux and Unix like environments, with Windows as a targe
     * Disk image files (ssd,adl) can be stored in a directory on unix and used as a directory on the acorn side
     * Directories mounted from http servers (for public shared directories between servers)
 
-## Print support ##
-* Print to modern printers (using cups)
-* Print jobs converted to a pdf
-    * PDF e-mailed to the enduser
-    * PDF stored in a per user directory 
+## Services Model ##
+Impliments a number of network services, that sit ontop of the econet encapsulation methods 
+
+* File Server
+    * User/Password Login with a priv model which works the same way, as the Acorn filestore
+    * Boot flags are modeled 
+    * Implements all the Acorn filestore calls, and some of the MDFS extra features 
+* Print Service
+    * Print to modern printers (using cups)
+        * Print jobs converted to a pdf
+        * PDF e-mailed to the enduser
+        * PDF stored in a per user directory 
+* IPv4
+    * Basic IPv4 over econet routing, and work has started on NAT to IPv4 Address not on one of the encapsulated econet interfaces
+
+* BBCTerm
+    * Support for Andrew Gordons, BBC Term. Which allows BBC clients on Econet, to connect a terminal application to one of the configured commands that the service allows to run on the Linux box
+
 
 ## It would be nice if ##
-* The other feature it would be nice to have is to operate as a bridge and allow econet frames to be passed over the public internet to other bridges securely (tcp socket, using ssl).
+* Work has started on a WebSocket Interface for  
+    * Javascript BBC Emulators 
+    * Operating as a bridge and allow econet frames to be passed over the public internet to other bridges securely (tcp socket, using ssl).
 
 # Todo #
 While all the auth and file serving features are complete, there are some outstanding areas that need implementing.
 
 The print server is still very basic all print jobs are just dumped to a directory. I've yet to figure out how to convert the BBC's printout put to postscript. 
 
-The soap interface and control client has yet to be implemented. 
+The rest interface and control client has yet to be implemented, however there is now a basic webfront end 
 
 # Install #
 ## Docker Install ##
@@ -88,6 +103,3 @@ cd aun-filestore
 ant rpm
 ~~~
 
-## Other package formats ##
-
-Work has started on supporting deb packaging, and the synology package format.  However this work is not complete.  

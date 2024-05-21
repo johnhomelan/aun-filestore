@@ -32,7 +32,7 @@ final class UnixDeviceConnector implements ConnectorInterface
         } elseif (\substr($path, 0, 7) !== 'file://') {
             return Promise\reject(new \InvalidArgumentException(
                 'Given URI "' . $path . '" is invalid (EINVAL)',
-                \defined('SOCKET_EINVAL') ? \SOCKET_EINVAL : (\defined('PCNTL_EINVAL') ? \PCNTL_EINVAL : 22)
+                 22
             ));
         }
 

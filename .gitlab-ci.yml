@@ -6,7 +6,7 @@ stages:
   
 variables:
   REPO_IMAGE: registry.home-lan.co.uk/aun-filestore
-  IMAGE_VERSION: react
+  IMAGE_VERSION: 2.0.2
   
 phpunit_phpstan_php81:
    image: 
@@ -90,7 +90,9 @@ container_build_dockerhub:
   only:
    refs: 
        - master
-  script:
+  variables:
+    REPO_IMAGE: crowly/aun-filestore
+   script:
      - echo -n "{\"auths\":{\"registry-1.docker.io\":{\"auth\":\"$(echo -n ${DOCKERHUB_USER}:${DOCKERHUB_PW} | base64)\"}}}" > /kaniko/.docker/config.json
      - /kaniko/executor
       --context "${CI_PROJECT_DIR}"

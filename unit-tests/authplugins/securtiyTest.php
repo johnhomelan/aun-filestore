@@ -213,7 +213,7 @@ class SecurityTest extends TestCase {
 
 		//Try with a station that is not logged in (should produce no error and fail silent)
 		Security::updateIdleTimer(123,12);
-		$this->assertNull(Security::getIdleTimer(123,12));
+		$this->assertEquals(0,Security::getIdleTimer(123,12));
 
 	}
 

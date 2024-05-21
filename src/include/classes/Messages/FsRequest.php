@@ -44,17 +44,17 @@ class FsRequest extends Request {
 		return $this->iReplyPort;
 	}
 
-	public function getUrd():int
+	public function getUrd():?int
 	{
 		return $this->iUrd;
 	}
 
-	public function getCsd():int
+	public function getCsd():?int
 	{
 		return $this->iCsd;
 	}
 
-	public function getLib():int
+	public function getLib():?int
 	{
 		return $this->iLib;
 	}

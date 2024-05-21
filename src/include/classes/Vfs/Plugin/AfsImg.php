@@ -165,7 +165,7 @@ class AfsImg implements PluginInterface {
 			foreach($aKeys as $sKey){
 				if(strtoupper($sKey)==strtoupper($sPathPart)){
 					$iCount++;
-					if($aCat[$sKey]['type']='dir'){
+					if($aCat[$sKey]['type']=='dir'){
 						$aCat=$aCat[$sKey]['dir'];
 					}
 					break;
@@ -201,6 +201,7 @@ class AfsImg implements PluginInterface {
 			AfsImg::$aFileHandles[$iVfsHandle]=array('image-file'=>$sUnixPath.'.adl','path-inside-image'=>'','pos'=>0);
 			return new FileDescriptor(self::$oLogger,'AfsImg',$oUser,$sUnixPath.'.adl',$oEconetPath->getFilePath(),$iVfsHandle,$iEconetHandle,FALSE,TRUE);
 		}
+		throw new VfsException("No such file");
 	
 	}
 

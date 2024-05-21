@@ -88,13 +88,13 @@ container_build_dockerhub:
     entrypoint: [""]
   stage: build
   only:
-   refs: 
-       - master
+    refs: 
+      - master
   variables:
     REPO_IMAGE: crowly/aun-filestore
-   script:
-     - echo -n "{\"auths\":{\"registry-1.docker.io\":{\"auth\":\"$(echo -n ${DOCKERHUB_USER}:${DOCKERHUB_PW} | base64)\"}}}" > /kaniko/.docker/config.json
-     - /kaniko/executor
+  script:
+    - echo -n "{\"auths\":{\"registry-1.docker.io\":{\"auth\":\"$(echo -n ${DOCKERHUB_USER}:${DOCKERHUB_PW} | base64)\"}}}" > /kaniko/.docker/config.json
+    - /kaniko/executor
       --context "${CI_PROJECT_DIR}"
       --dockerfile "${CI_PROJECT_DIR}/Dockerfile"
       --destination "${REPO_IMAGE}:${IMAGE_VERSION}"

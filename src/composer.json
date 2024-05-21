@@ -16,17 +16,12 @@
     },
     "require": {
         "monolog/monolog": "^1.23",
-<<<<<<< HEAD
         "homelan/acorn-disk": "v1.0.2",
-        "homelan/l3fsreader": "^0.2.0",
-=======
-        "homelan/acorn-disk": "1.1.*",
->>>>>>> react-php
         "react/event-loop": "^1.1",
         "react/http": "1.9.*",
         "react/datagram": "^1.4",
         "symfony/console": "*",
-	"symfony/dotenv": "*",
+	    "symfony/dotenv": "*",
         "symfony/framework-bundle": "*",
         "smarty/smarty": "*",
         "cboden/ratchet": "^0.4.1",

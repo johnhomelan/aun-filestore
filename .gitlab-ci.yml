@@ -91,9 +91,10 @@ container_build_dockerhub:
     refs: 
       - master
   variables:
-    REPO_IMAGE: crowly/aun-filestore
+    REPO_IMAGE: registry-1.docker.io/crowly/aun-filestore
   script:
     - echo -n "{\"auths\":{\"registry-1.docker.io\":{\"auth\":\"$(echo -n ${DOCKERHUB_USER}:${DOCKERHUB_PW} | base64)\"}}}" > /kaniko/.docker/config.json
+    - cat /kaniko/.docker/config.json
     - /kaniko/executor
       --context "${CI_PROJECT_DIR}"
       --dockerfile "${CI_PROJECT_DIR}/Dockerfile"

@@ -109,4 +109,4 @@ scan_container:
     entrypoint: [""]
   stage: scan
   script:
-    - clair-scanner --ip clair-clair.clair ${REPO_IMAGE}:${IMAGE_VERSION}
+    - clair-scanner --clair="http://clair-clair.clair:6060 ${REPO_IMAGE}:${IMAGE_VERSION}

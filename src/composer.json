@@ -35,7 +35,8 @@
         "symfony/dependency-injection": "*",
         "symfony/http-foundation": "*",
         "symfony/http-kernel": "*",
-        "symfony/routing": "*"
+        "symfony/routing": "*",
+        "symfony/yaml": "^7.2"
     },
     "minimum-stability": "dev",
     "prefer-stable": true,

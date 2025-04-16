@@ -17,4 +17,9 @@ class IndexController extends AbstractController
 		$oSmarty->assign('aServices',$oServices->getServices());
 		return new Response($oSmarty->fetch('index.tpl'));
 	}
+
+	public function favicon():  \Symfony\Component\HttpFoundation\Response
+	{
+		return new Response(file_get_contents(__DIR__."/../static/favicon.ico"));
+	}
 }

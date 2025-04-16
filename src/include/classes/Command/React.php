@@ -136,9 +136,6 @@ class React extends Command {
 		$oAunHandler = $this->aunService($oLoop, $oPacketDispatcher);
 		Map::init($this->oLogger,$oAunHandler);
 
-		//Setup the Piconet interface handler 
-		$oPiconet = $this->piconetService($oLoop,$oPacketDispatcher);
-		PiconetMap::init($oLogger, $oPiconet);
 
 
 		//Setup the websocket handler 
@@ -147,6 +144,9 @@ class React extends Command {
 		//Setup the Web admin handler
 		$this->adminService($oLoop);
 
+		//Setup the Piconet interface handler 
+		$oPiconet = $this->piconetService($oLoop,$oPacketDispatcher);
+		PiconetMap::init($oLogger, $oPiconet);
 		
 		//Send any outstanding replies, normally its one request in one reply out.  However some services (e.g. File) have direct streams that can generate 
 		//mutiple replies to an initial request.
@@ -362,6 +362,7 @@ EOF;
 
 		$oHttpSocket = new \React\Socket\Server(config::getValue('webadmin_listen_address').':'.config::getValue('webadmin_listen_port'),$oLoop);
 		$oHttpServer = new \React\Http\HttpServer($callback);
+		$oLogger->info("Admin service is running on ".config::getValue('webadmin_listen_address').':'.config::getValue('webadmin_listen_port'));
 		$oHttpServer->listen($oHttpSocket);
 	}
 

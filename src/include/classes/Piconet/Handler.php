@@ -100,7 +100,7 @@ class Handler {
 			case 'RX_TRANSMIT':
 				$oPacket = new PiconetPacket();
 				$oPacket->decode($sMessage);
-
+				$this->oLogger->debug("Piconet Handler: RX Packet ".$oPacket->toString());
 				//Dispatch it to be processed
 				//Dispatch packet to all the services so the relivent one can deal with it 
 				$this->oServices->inboundPacket($oPacket);

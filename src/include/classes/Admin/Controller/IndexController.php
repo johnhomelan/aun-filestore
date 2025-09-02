@@ -18,6 +18,15 @@ class IndexController extends AbstractController
 		return new Response($oSmarty->fetch('index.tpl'));
 	}
 
+	public function kube(): \Symfony\Component\HttpFoundation\Response
+	{
+		return new Response(
+			    '',
+			    Response::HTTP_OK,
+			    ['content-type' => 'text/html']
+		);
+	}
+
 	public function favicon():  \Symfony\Component\HttpFoundation\Response
 	{
 		return new Response(file_get_contents(__DIR__."/../static/favicon.ico"));

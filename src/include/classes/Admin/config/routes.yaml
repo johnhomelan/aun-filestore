@@ -7,4 +7,9 @@ service_page:
 favicon:
     path: /favicon.ico
     defaults: { _controller: 'HomeLan\FileStore\Admin\Controller\IndexController::favicon' }
-
+live: 
+    path: /kube/live
+    defaults: { _controller: 'HomeLan\FileStore\Admin\Controller\IndexController::kube' }
+ready:
+    path: /kube/ready
+    defaults: { _controller: 'HomeLan\FileStore\Admin\Controller\IndexController::kube' }

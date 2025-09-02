@@ -122,27 +122,27 @@ class PiconetPacket implements EncapsulationInterface {
 		//Read the dst/src contolbyte port each is 1 byte unsigned int |DstStn|DstNet|SrcStn|SrcNet|Cb|Port
 		$aScout=unpack('C',(string) $sRawScout);
 		$sRawScout = substr($sRawScout,1);
-		$this->iDstStationNumber = $aScout[1];
+		$this->iDstStationNumber = (int) $aScout[1];
 
 		$aScout=unpack('C',(string) $sRawScout);
 		$sRawScout = substr($sRawScout,1);
-		$this->iDstNetworkNumber = $aScout[1];
+		$this->iDstNetworkNumber = (int) $aScout[1];
 
 		$aScout=unpack('C',(string) $sRawScout);
 		$sRawScout = substr($sRawScout,1);
-		$this->iStationNumber = $aScout[1];
+		$this->iStationNumber = (int) $aScout[1];
 
 		$aScout=unpack('C',(string) $sRawScout);
 		$sRawScout = substr($sRawScout,1);
-		$this->iNetworkNumber = $aScout[1];
+		$this->iNetworkNumber = (int) $aScout[1];
 
 		$aScout=unpack('C',(string) $sRawScout);
 		$sRawScout = substr($sRawScout,1);
-		$this->iCb = $aScout[1];
+		$this->iCb = (int) $aScout[1];
 
 		$aScout=unpack('C',(string) $sRawScout);
 		$sRawScout = substr($sRawScout,1);
-		$this->iPort = $aScout[1];
+		$this->iPort = (int) $aScout[1];
 
 		//The packets on the local network always have a network number of 0, so update the network number to the correct global number
 		if($this->iNetworkNumber==0){

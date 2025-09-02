@@ -4,3 +4,12 @@ index:
 service_page:
     path: service
     defaults: { _controller: 'HomeLan\FileStore\Admin\Controller\ServiceController::index' }
+favicon:
+    path: /favicon.ico
+    defaults: { _controller: 'HomeLan\FileStore\Admin\Controller\IndexController::favicon' }
+live: 
+    path: /kube/live
+    defaults: { _controller: 'HomeLan\FileStore\Admin\Controller\IndexController::kube' }
+ready:
+    path: /kube/ready
+    defaults: { _controller: 'HomeLan\FileStore\Admin\Controller\IndexController::kube' }

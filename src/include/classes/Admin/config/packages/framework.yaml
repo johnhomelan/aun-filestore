@@ -1,0 +1,8 @@
+framework:
+    session:
+        cookie_secure: auto
+        cookie_samesite: lax
+        use_cookies: true
+        storage_factory_id: HomeLan\FileStore\Admin\Session\ReactSessionStorageFactory
+        handler_id: null
+        save_path: '%kernel.project_dir%/var/sessions/%kernel.environment%'

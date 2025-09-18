@@ -1,7 +1,8 @@
-FROM php:8.3-cli-alpine
+FROM php:8.3-cli-alpine3.22
 
 MAINTAINER john@home-lan.co.uk
 
+RUN apk update
 RUN apk add --no-cache rsync make bash curl openjdk8-jre postgresql-client autoconf automake gcc g++ make libc-dev
 RUN apk add --no-cache postgresql-dev mysql-dev libxml2-dev libpng-dev gpgme-dev libmemcached-dev openldap-dev curl-dev gnu-libiconv openssl-dev gnu-libiconv-dev freetype libpng libjpeg-turbo freetype-dev libpng-dev libjpeg-turbo-dev libmcrypt libmcrypt-dev libzip-dev zlib-dev oniguruma
 RUN docker-php-ext-install pdo_pgsql pdo_mysql soap gd dba pcntl ldap curl zip phar exif bcmath ctype 
@@ -10,10 +11,11 @@ RUN docker-php-ext-install pdo_pgsql pdo_mysql soap gd dba pcntl ldap curl zip p
 RUN php -r "copy('https://getcomposer.org/installer', 'composer-setup.php');"; php -r "if (hash_file('sha384', 'composer-setup.php') === 'dac665fdc30fdd8ec78b38b9800061b4150413ff2e3b6f88543c636f7cd84f6db9189d43a81e5503cda447da73c7e5b6') { echo 'Installer verified'; } else { echo 'Installer corrupt'; unlink('composer-setup.php'); } echo PHP_EOL;"; php composer-setup.php; php -r "unlink('composer-setup.php');"; mv composer.phar /usr/local/bin/composer
 
 RUN mkdir -p /etc/aun-filestored-default-config
-RUN mkdir -p /etc/aun-filestored
+RUN mkdir -p /etc/aun-filestored ; chmod 777 -R /etc/aun-filestored
 RUN mkdir -p /var/lib/aun-filestore-root
 RUN mkdir -p /var/spool/aun-filestore-print
 RUN mkdir -p /usr/share/aun-filestored/include
+RUN mkdir -p /usr/share/aun-filestored/var/cache ; chmod 777 -R /usr/share/aun-filestored/var
 
 ADD src/include /usr/share/aun-filestored/include
 ADD src/composer.json /usr/share/aun-filestored
@@ -25,6 +27,8 @@ COPY packaging/docker/default.conf /etc/aun-filestored-default-config/default.co
 COPY packaging/docker/aunmap.txt /etc/aun-filestored-default-config/aunmap.txt
 COPY packaging/docker/users.txt /etc/aun-filestored-default-config/users.txt
 COPY packaging/docker/entrypoint.sh /
+
+RUN adduser -G audio  -u 1000 -S aund
 
 RUN cd /usr/share/aun-filestored; composer install --no-dev
 RUN chmod u+x /usr/sbin/filestored; chmod u+x /entrypoint.sh; cd /usr/bin/; ln -s /usr/local/bin/php

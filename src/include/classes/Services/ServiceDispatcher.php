@@ -307,9 +307,9 @@ class ServiceDispatcher {
 		$aPortTimeLimits = [];
 		for($i=$this->iStreamPortStart;$i<($this->iStreamPortStart+self::MAX_STREAMS);$i++){
 			if(array_key_exists($i,$this->aPorts)){
-				if($this->aPortTimeLimits[$i]<time()){
+				if($this->aPortTimeLimits[$i]>=time()){
 					//The stream port has NOT timed out
-					$aPortTimeLimits[$i]=$this->$aPortTimeLimits[$i];
+					$aPortTimeLimits[$i]=$this->aPortTimeLimits[$i];
 				}else{
 					//Timed out clear the port
 					unset($this->aPorts[$i]);

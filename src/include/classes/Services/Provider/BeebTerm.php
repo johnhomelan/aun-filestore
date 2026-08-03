@@ -189,8 +189,9 @@ class BeebTerm implements ProviderInterface {
 				break;
 			case 'LOGIN_OK':
 			case 'LOGIN_REJECT':
+				break;
 			default:
-				throw new Exception("Un-handled term message type");
+				$this->oLogger->warning("BeebTerm: Unrecognised message type ".var_export($sType,true).", ignoring");
 		}
 	}
 
@@ -262,7 +263,7 @@ class BeebTerm implements ProviderInterface {
 		$this->oLogger->debug("BeebTerm: Data from econet client ".$sKey." (".$oRequest->getData().")");
 		if(array_key_exists($sKey,$this->aClients)){
 			$this->aClients[$sKey]['lastactivity']=time();
-			if($this->aClients[$sKey]['rxseq']<$oRequest->getRxSeq()){
+			if((($oRequest->getRxSeq() - $this->aClients[$sKey]['rxseq']) & 0xFF) > 0){
 				//Its new data as the RxSeq is greater than the last value
 				$this->aClients[$sKey]['rxseq']=$oRequest->getRxSeq();	
 				$this->aClients[$sKey]['process']->stdin->write($oRequest->getData()); //Send the data to the process 

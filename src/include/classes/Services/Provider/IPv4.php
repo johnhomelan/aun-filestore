@@ -103,8 +103,8 @@ class IPv4 implements ProviderInterface {
 	*/
 	public function broadcastPacketIn(EconetPacket $oPacket): void
 	{
-		//Deal with arp requests
-		if($oPacket->getFlags()==33){ //In EconetA IPv4, the flag is used to indicate the type of packet 0xA1 is arp request
+		//Deal with arp requests (0x21 = DCI-2/AUN, 0xA1 = DCI-4 native Econet)
+		if($oPacket->getFlags()==0x21 || $oPacket->getFlags()==0xA1){
 			$oArpReqeust = new ArpRequest($oPacket,$this->oLogger);
 			$this->oArpTable->addEntry($oArpReqeust->getSourceNetwork(),$oArpReqeust->getSourceStation(),$oArpReqeust->getSourceIP());  //Store the requestion stations ip details in the arp cache.
 			$this->oLogger->debug("Arp reqeuest recevived via broadcast for ".$oArpReqeust->getRequestedIP());
@@ -137,7 +137,8 @@ class IPv4 implements ProviderInterface {
 	public function unicastPacketIn(EconetPacket $oPacket): void
 	{
 		switch($oPacket->getFlags()){
-			case 0x1:
+			case 0x01:
+			case 0x81: //Also accept native Econet DCI-4 flag value
 				//Regular IPv4 Frame
 				$this->oLogger->debug("IPv4 packet received.");
 
@@ -160,6 +161,7 @@ class IPv4 implements ProviderInterface {
 				try {
 					if($this->oNat->isNatTarget($oIPv4->getDstIP())){
 						$this->oNat->processNatPacket($oIPv4, new TCPRequest($oPacket, $this->getLogger()));
+						break; // NAT handled it; do not also forward via the normal IP path
 					}
 
 				}catch(\Exception $oException){
@@ -171,7 +173,8 @@ class IPv4 implements ProviderInterface {
 
 
 				break;
-			case 0xA2: //ECOTYPE_ARP_REPLY
+			case 0x22: //ECOTYPE_ARP_REPLY (DCI-2/AUN value)
+			case 0xA2: //ECOTYPE_ARP_REPLY (DCI-4 native Econet value)
 
 				$this->oLogger->debug("Arp response packet received");
 				//Arp: We never forward arp packets as they should not leave the layer 2 network they are on, so we only update the arp cache.
@@ -231,6 +234,8 @@ class IPv4 implements ProviderInterface {
 						//
 						$oPacket->setSourceNetwork($aInterface['network']);
 						$oPacket->setSourceStation($aInterface['station']);
+						$oArpWhoHas = new ArpWhoHas($aInterface['ipaddr'],$aRoute['via'],$aInterface['network'],$aInterface['station']);
+						$this->addReplyToBuffer($oArpWhoHas->buildEconetpacket());
 						$this->oLogger->debug("IPv4: Adding packet to queue waiting for ARP ".$aRoute['via']);
 						$this->queuePacketWaitingOnArp($aRoute['via'],$oPacket);
 					}
@@ -281,8 +286,8 @@ class IPv4 implements ProviderInterface {
 		if(array_key_exists($sIP,$this->aPacketQueue)){
 			$aAddress = $this->oArpTable->getNetworkAndStation($sIP);
 			foreach($this->aPacketQueue[$sIP]['packets'] as $oPacket){
-				$oPacket->setStation($aAddress['station']);
-				$oPacket->setNetwork($aAddress['network']);
+				$oPacket->setDestinationStation($aAddress['station']);
+				$oPacket->setDestinationNetwork($aAddress['network']);
 				$this->addReplyToBuffer($oPacket);
 			}
 			unset($this->aPacketQueue[$sIP]);
@@ -308,7 +313,9 @@ class IPv4 implements ProviderInterface {
 	*/
 	public function getReplies(): array
 	{
-		return $this->aReplyBuffer;
+		$aReplies = $this->aReplyBuffer;
+		$this->aReplyBuffer = [];
+		return $aReplies;
 	}
 
 	public function getJobs():array

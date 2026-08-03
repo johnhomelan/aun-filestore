@@ -98,7 +98,7 @@ class Map {
 
 		//Search the map see if there is a host:port mapping
 		if(in_array($sIP.':'.$sPort,Map::$aHostMap)){
-			$sIndex = array_search($sIP,Map::$aHostMap,true);
+			$sIndex = array_search($sIP.':'.$sPort,Map::$aHostMap,true);
 			Map::$aIPLookupCache[$sIP.':'.$sPort]=$sIndex;
 			return $sIndex;
 		}

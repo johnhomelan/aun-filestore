@@ -90,6 +90,10 @@ class AunPacket implements EncapsulationInterface {
 	*/
 	public function decode(string $sBinaryString): void
 	{
+		if(strlen($sBinaryString) < 8){
+			throw new Exception("AUN packet too short (".strlen($sBinaryString)." bytes); minimum is 8");
+		}
+
 		//Read the header
 
 		//Read the aun packet type 1 byte unsigned int

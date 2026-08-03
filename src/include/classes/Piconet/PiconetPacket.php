@@ -66,7 +66,7 @@ class PiconetPacket implements EncapsulationInterface {
 	*/ 
 	public function getPacketType(): string
 	{
-		return $this->aTypeMap[$this->sMessageType];
+		return $this->aTypeMap[$this->sMessageType] ?? 'Unknown';
 	}
 
 	public function getDstStation(): ?int

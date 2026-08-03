@@ -71,7 +71,7 @@ class Handler Implements HandleInterface {
 			default:
 				//Send an ack for the AUN packet if needed
 				$sAck = $oAunPacket->buildAck();
-				if(strlen($sAck)>0){
+				if(!is_null($sAck) && strlen($sAck)>0){
 					$this->oLogger->debug("Aun Handler: ".$oAunPacket->getPacketType()." Sending Ack packet");
 					$this->oAunServer->send($sAck,$sSrcAddress);
 				}
@@ -114,7 +114,6 @@ class Handler Implements HandleInterface {
 	private function _runHostQueue(string $sHost):void
 	{	
 		if(is_array($this->aQueue[$sHost]) AND count($this->aQueue[$sHost])>0){
-			var_dump($this->aQueue);
 			$aQueueEntry = array_shift($this->aQueue[$sHost]);
 			if($aQueueEntry['backoff']>1){
 				//Each attempt increase the time between attempts

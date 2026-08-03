@@ -163,9 +163,8 @@ class Handler {
 		}
 	}
 	private function _runQueue():void
-	{	
+	{
 		$this->oLogger->debug("Piconet Handler: Running Queue");
-		var_dump($this->aQueue);
 		if(count($this->aQueue)>0){
 			$aQueueEntry = array_shift($this->aQueue);
 			if($aQueueEntry['retries']>0){
@@ -185,6 +184,10 @@ class Handler {
 	{
 		$this->oLogger->debug("Piconet Handler: Dequeuing packet due to scout ack");
 		$aQueueEntry = array_shift($this->aQueue);
+		if(is_null($aQueueEntry)){
+			$this->_runQueue();
+			return;
+		}
 		if($aQueueEntry['attempts']==0){
 			array_unshift($this->aQueue,$aQueueEntry);
 		}
@@ -200,7 +203,7 @@ class Handler {
 		switch($oPacket->getDestinationStation()){
 			case 255:
 				$this->oLogger->debug("Piconet Handler: Sending broadcast packet (".base64_encode($oPacket->getData()).")");
-				fwrite($this->oConnection->stream,"BCAST ".base64_encode($oPacket->getData()."\r\r")); //@phpstan-ignore-line
+				fwrite($this->oConnection->stream,"BCAST ".base64_encode($oPacket->getData())."\r\r"); //@phpstan-ignore-line
 				fflush($this->oConnection->stream); //@phpstan-ignore-line
 				break;
 			default:

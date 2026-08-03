@@ -132,8 +132,8 @@ class TcpIPReply extends Reply {
 		//The data for the TCP stream 	
 		$this->appendString($this->sData);
 
-		//Calclate the TCP checksum (its must be offset from where the tcp header begins)
-		$sTcpCheckSum = $this->calculateCheckSum($iTcpPos);
+		//Calculate the TCP checksum including the required RFC 793 pseudo-header
+		$sTcpCheckSum = $this->calculateTcpCheckSum($iTcpPos);
 
 		//Update the TCP/Checksum field in the packet 
 		$this->sPkt = substr_replace($this->sPkt,$sTcpCheckSum,$iTcpCheckSumPos,strlen($sTcpCheckSum));
@@ -173,15 +173,34 @@ class TcpIPReply extends Reply {
  	*/    	
 	private function calculateCheckSum(int $iStart, ?int $iLength = null):string
 	{
-
 		$sBuffer = substr($this->sPkt,$iStart,$iLength)."\x0";
 		$aPairs = unpack('n*', $sBuffer);
-		
+
 		$iSum = array_sum($aPairs);
 		while ($iSum >> 16){
 			$iSum = ($iSum >> 16) + ($iSum & 0xffff);
 		}
 		return pack('n', ~$iSum);
+	}
+
+	private function calculateTcpCheckSum(int $iTcpStart):string
+	{
+		$sTcpSegment = substr($this->sPkt, $iTcpStart);
+		// Pseudo-header: src IP (4) + dst IP (4) + zero (1) + protocol TCP=6 (1) + TCP segment length (2)
+		$sPseudo = inet_pton($this->sSrcIP)
+		         . inet_pton($this->sDstIP)
+		         . "\x00\x06"
+		         . pack('n', strlen($sTcpSegment));
+		$sBuffer = $sPseudo . $sTcpSegment;
+		if (strlen($sBuffer) % 2 !== 0) {
+			$sBuffer .= "\x00";
+		}
+		$aPairs = unpack('n*', $sBuffer);
+		$iSum = array_sum($aPairs);
+		while ($iSum >> 16) {
+			$iSum = ($iSum >> 16) + ($iSum & 0xffff);
+		}
+		return pack('n', ~$iSum & 0xffff);
 	}
 
 	public function setSrcNetwork(int $iNetwork):void

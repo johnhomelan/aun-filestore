@@ -183,6 +183,24 @@ class IPv4Request extends Request {
 	
 	public function forward(int $iDstNetwork, int $iDstStation, int $iSrcNetwork, int $iSrcStation):EconetPacket
 	{
+		// Decrement TTL (byte 8, 0-indexed) and recompute the IP header checksum
+		$sPacket = $this->sFullPacket;
+		$iTtl = max(0, ord($sPacket[8]) - 1);
+		$sPacket[8] = chr($iTtl);
+
+		// Zero checksum field (bytes 10-11, 0-indexed), then recalculate
+		$sPacket[10] = "\x00";
+		$sPacket[11] = "\x00";
+		$sHeader = substr($sPacket, 0, $this->iIpHeaderLength);
+		$aPairs = unpack('n*', $sHeader);
+		$iSum = array_sum($aPairs);
+		while ($iSum >> 16) {
+			$iSum = ($iSum >> 16) + ($iSum & 0xffff);
+		}
+		$sChecksum = pack('n', ~$iSum & 0xffff);
+		$sPacket[10] = $sChecksum[0];
+		$sPacket[11] = $sChecksum[1];
+
 		$oEconetPacket = new EconetPacket();
 		$oEconetPacket->setPort($this->getReplyPort());
 		$oEconetPacket->setFlags(0x01); //Regular IP packet
@@ -190,8 +208,7 @@ class IPv4Request extends Request {
 		$oEconetPacket->setDestinationNetwork($iDstNetwork);
 		$oEconetPacket->setSourceStation($iSrcStation);
 		$oEconetPacket->setSourceNetwork($iSrcNetwork);
-		$oEconetPacket->setData($this->sFullPacket);
+		$oEconetPacket->setData($sPacket);
 		return $oEconetPacket;
-
 	}
 }

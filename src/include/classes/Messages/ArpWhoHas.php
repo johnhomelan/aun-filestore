@@ -51,10 +51,8 @@ class ArpWhoHas extends Reply {
 
 	public function buildEconetpacket(): \HomeLan\FileStore\Messages\EconetPacket
 	{
-		//Arp how as request on EconetA 
+		//Arp who-has request on EconetA: exactly 8 bytes per spec — sender IP (4) + target IP (4)
 		$this->sPkt=inet_pton($this->sSourceIP).inet_pton($this->sIPv4Addr);
-		$this->appendByte($this->iNetwork);
-		$this->appendByte($this->iSourceStation);
 		$oEconetPacket = new EconetPacket();
 		$oEconetPacket->setPort(0xd2);
 		$oEconetPacket->setFlags(33);

@@ -138,11 +138,20 @@ class Handler {
 						$aAck = array_shift($this->aAwaitingAck);
 						$this->oLogger->info("Piconet Handler: TX failed the error ".trim($aMessageParts[1]));
 						$this->_runQueue();
+						// If _runQueue did not push a new TX, all retries are exhausted — clear any
+						// service-level ack event so the service does not wait indefinitely.
+						if(is_array($aAck) && count($this->aAwaitingAck)==0){
+							$this->oServices->clearAckEvent($aAck['dst_network'],$aAck['dst_station']);
+						}
 						break;
 					case 'UNEXPECTED':
 					default:
 						$aAck = array_shift($this->aAwaitingAck);
 						$this->oLogger->error("Piconet Handler: Encountered an internal error with the interface while transmitting (this should never happen), with the message ".trim($aMessageParts[1]));
+						// Clear ack event immediately on internal error — no further TX will happen.
+						if(is_array($aAck)){
+							$this->oServices->clearAckEvent($aAck['dst_network'],$aAck['dst_station']);
+						}
 						break;
 				}
 				break;

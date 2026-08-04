@@ -124,8 +124,10 @@ class AunPacket implements EncapsulationInterface {
 		//The reset is data
 		$this->sData = $sBinaryString;
 
-		//Set the aun counter 		
-		Map::setAunCounter($this->sSoruceIP,$this->iSeq);
+		//Set the aun counter (only if setSourceIP has already been called)
+		if(!is_null($this->sSoruceIP)){
+			Map::setAunCounter($this->sSoruceIP,$this->iSeq);
+		}
 	}
 
 	public function buildAck(): ?string
@@ -158,8 +160,8 @@ class AunPacket implements EncapsulationInterface {
 			$sPtk = $sPtk.pack('C',0);
 			//Retrans 0
 			$sPtk = $sPtk.pack('C',0);
-			//Sequence
-			$sPtk = $sPtk.pack('V',0);
+			//Sequence — echo back the received sequence number
+			$sPtk = $sPtk.pack('V',$this->iSeq);
 			//Peek Lo
 			$sPtk = $sPtk.pack('C',0x40);
 			//Peek Hi

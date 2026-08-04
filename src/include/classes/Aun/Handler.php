@@ -116,7 +116,7 @@ class Handler Implements HandleInterface {
 		if(is_array($this->aQueue[$sHost]) AND count($this->aQueue[$sHost])>0){
 			$aQueueEntry = array_shift($this->aQueue[$sHost]);
 			if($aQueueEntry['backoff']>1){
-				//Each attempt increase the time between attempts
+				//Linear backoff: wait (attempts × 400) timer ticks before the next retry
 				$aQueueEntry['backoff']=$aQueueEntry['backoff']-400;
 				array_unshift($this->aQueue[$sHost],$aQueueEntry);
 				return;
@@ -147,7 +147,7 @@ class Handler Implements HandleInterface {
 	private function _unHostQueue(string $sHost, AunPacket $oAck):void
 	{
 		$this->oLogger->debug("Aun Handler: Dequeuing packet due to scout ack");
-		if(is_array($this->aQueue[$sHost]) AND count($this->aQueue[$sHost])>0){
+		if(array_key_exists($sHost,$this->aQueue) AND is_array($this->aQueue[$sHost]) AND count($this->aQueue[$sHost])>0){
 			$aQueueEntry = array_shift($this->aQueue[$sHost]);
 			if($oAck->getSequence() == $aQueueEntry['packet']->getSequence()){
 				//If the packet is nolonger in the queue (because the packet at the head of the queue has had no
@@ -182,6 +182,8 @@ class Handler Implements HandleInterface {
 		$sAunFrame = $oPacket->getAunFrame();
 		if(strlen($sAunFrame)>0){
 			$this->oAunServer->send($sAunFrame,$sHost);
+		}else{
+			$this->oLogger->warning("Aun Handler: Dropping packet to ".$oPacket->getDestinationNetwork().".".$oPacket->getDestinationStation()." — no IP mapping found");
 		}
 	}
 

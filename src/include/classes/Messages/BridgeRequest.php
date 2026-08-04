@@ -71,10 +71,10 @@ class BridgeRequest extends Request {
 		$this->iFunction = $aHeader[1];
 		$sBinaryString = substr($sBinaryString,1);
 
-		//All bridge requests contain the string "Bridge"
-		$aHeader=unpack('CCCCCC',$sBinaryString);
-		$sBinaryString = substr($sBinaryString,5);
-		if(implode('',$aHeader)!=='Bridge'){
+		//All bridge requests contain the 6-byte ASCII string "Bridge"
+		$sMagic = substr($sBinaryString, 0, 6);
+		$sBinaryString = substr($sBinaryString, 6);
+		if($sMagic !== 'Bridge'){
 			$this->oLogger->debug("An invalid bridge request was received (it did not begin with the string Bridge)");
 			throw new Exception("Invalid bridge request");
 		}
@@ -93,12 +93,19 @@ class BridgeRequest extends Request {
 	{
 		//This first byte after the reply port is the network number the bridge is being queried about
 		$aData = unpack('C',(string) $this->sData);
-		return (int) $aData[2];
-
+		return (int) $aData[1];
 	}
 
-	public function buildReply(): \HomeLan\FileStore\Messages\FsReply
+	public function getNetworkList(): array
 	{
-		return new FsReply($this);
+		if(empty($this->sData)){
+			return [];
+		}
+		return array_values(unpack('C*', (string) $this->sData));
+	}
+
+	public function buildReply(): \HomeLan\FileStore\Messages\Reply
+	{
+		return new Reply($this);
 	}
 }

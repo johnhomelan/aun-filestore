@@ -61,13 +61,15 @@ class Bridge implements ProviderInterface {
 	}
 
 	/**
-	 * Gets the ports this service uses 
-	 * 
+	 * Gets the ports this service uses
+	 *
 	 * @return array of int
 	*/
 	public function getServicePorts(): array
 	{
-		return [0x9D];
+		// 0x9C: bridge-to-bridge (EC_BR_QUERY / EC_BR_QUERY2)
+		// 0x9D: station-to-bridge (EC_BR_LOCALNET / EC_BR_NETKNOWN)
+		return [0x9C, 0x9D];
 	}
 
 	/** 
@@ -121,8 +123,8 @@ class Bridge implements ProviderInterface {
 		switch($oBridgeRequest->getFunction()){
 			//Bridge to bridge protocol
 			case 'EC_BR_QUERY':
-				break;
 			case 'EC_BR_QUERY2':
+				$this->queryBridge($oBridgeRequest);
 				break;
 			//Station to bridge protocol
 			case 'EC_BR_LOCALNET':
@@ -132,15 +134,36 @@ class Bridge implements ProviderInterface {
 				$this->queryNetKnown($oBridgeRequest);
 				break;
 			default:
-				throw new Exception("Un-handled bridge request function");
+				$this->oLogger->warning("Bridge: unrecognised function code, ignoring");
 		}
 	}
 
 
 	/**
+	 * Handle a bridge-to-bridge query (EC_BR_QUERY / EC_BR_QUERY2)
+	 *
+	 * Records the networks advertised by the peer bridge, then replies with
+	 * our own local network number so the peer can update its routing table.
+	 *
+	 * @param BridgeRequest $oBridgeRequest
+	*/
+	protected function queryBridge(BridgeRequest $oBridgeRequest): void
+	{
+		$sPeerKey = $oBridgeRequest->getSourceNetwork().'.'.$oBridgeRequest->getSourceStation();
+		foreach($oBridgeRequest->getNetworkList() as $iNet){
+			$this->aRemoteNetworks[$iNet] = $sPeerKey;
+			$this->oLogger->debug("Bridge: learned network ".$iNet." via peer ".$sPeerKey);
+		}
+
+		$oReply = $oBridgeRequest->buildReply();
+		$oReply->appendByte(config::getValue('bridge_local_network_number'));
+		$this->_addReplyToBuffer($oReply);
+	}
+
+	/**
 	 * Handle the request to identify the local network
 	 *
-	 * @param bridgerequest $oBridgeRequest
+	 * @param BridgeRequest $oBridgeRequest
 	*/
 	protected function queryLocalNet(BridgeRequest $oBridgeRequest): void
 	{
@@ -153,26 +176,17 @@ class Bridge implements ProviderInterface {
 	}
 
 	/**
-	 * Handle the request to determine if the birdge knows about a given network
+	 * Handle the request to determine if the bridge knows about a given network
 	 *
-	 * @param bridgerequest $oBridgeRequest
-	*/ 
+	 * @param BridgeRequest $oBridgeRequest
+	*/
 	protected function queryNetKnown(BridgeRequest $oBridgeRequest): void
 	{
-		//This first byte after the reply port is the network number the bridge is being queried about
-		$iNetworNumber = $oBridgeRequest->getNetwork();
-		$oReply = $oBridgeRequest->buildReply();
+		$iNetworkNumber = $oBridgeRequest->getNetwork();
 
-		//Check if the AUN Map knows about the network (as aun is currently our only econet emulation)
-		if(Map::networkKnown($iNetworNumber)){
-			//Network exists (we only reply if we know about a network)
-			$this->_addReplyToBuffer($oReply);
-		}
-
-		//Check the list of networks other bridges can reach
-		if(array_key_exists($iNetworNumber,$this->aRemoteNetworks)){
-			//Network exists (we only reply if we know about a network)
-			$this->_addReplyToBuffer($oReply);
+		if(Map::networkKnown($iNetworkNumber) || array_key_exists($iNetworkNumber, $this->aRemoteNetworks)){
+			//Network known — reply once (the reply itself signals "yes I know this network")
+			$this->_addReplyToBuffer($oBridgeRequest->buildReply());
 		}
 	}
 

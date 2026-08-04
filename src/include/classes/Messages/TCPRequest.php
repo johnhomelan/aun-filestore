@@ -82,7 +82,7 @@ class TCPRequest extends Request {
 		$this->bSyn    = ($sDoRsvFlags2 & 2)   > 0 ? true : false;
 		$this->bFin    = ($sDoRsvFlags2 & 1)   > 0 ? true : false;
 
-		$iOptionsLen = $this->iHeaderLen - 20;
+		$iOptionsLen = ($this->iHeaderLen * 4) - 20;
 		if($iOptionsLen>0){
 			//We have options read them
 			while($iOptionsLen>0){
@@ -96,7 +96,7 @@ class TCPRequest extends Request {
 					case 2:
 						$iOptValue = $this->get16bitIntBigEndian(0);
 						break;
-					case 3: 
+					case 3:
 						$iOptValue = $this->get24bitIntBigEndian(0);
 						break;
 					case 4:
@@ -108,6 +108,9 @@ class TCPRequest extends Request {
 			}
 		}
 		//@TODO deal with options
+
+		// Strip the TCP header so that getData() returns only the application payload
+		$this->sData = substr((string) $this->sData, $this->iHeaderLen * 4);
 		
 	}
 

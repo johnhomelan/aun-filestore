@@ -242,7 +242,6 @@ class NAT
 			return;
 		}
 
-		$this->aConnTrack[$sKey]['socket']->write($oTcp->getData());
 		$this->aConnTrack[$sKey]['last_activity']=time();
 		$this->aConnTrack[$sKey]['pktid'] = $oIPv4->getId();
 		$this->aConnTrack[$sKey]['sequence'] = $oTcp->getSequence();
@@ -372,30 +371,33 @@ class NAT
 	private function _remoteConnectionFailed(\Exception $oException, string $sKey, IPv4Request $oIPv4, TCPRequest $oTcp)
 	{
 		$this->oLogger->debug("NAT: Could not connect to remote host (".$oException->getMessage().").");
+
+		// Clear the pending conntrack entry
+		foreach($this->aConnTrackPending as $iPendingKey => $sPending){
+			if($sKey == $sPending){
+				unset($this->aConnTrackPending[$iPendingKey]);
+				break;
+			}
+		}
+
+		// Build and send an RST back to the Econet client
 		$oTcpIpPkt = new TcpIPReply();
-
 		$oTcpIpPkt->setId($oIPv4->getId());
-		$oTcpIpPkt->setAckNumber($oTcp->getSequence());
+		$oTcpIpPkt->setAckNumber($oTcp->getSequence() + 1);
 		$oTcpIpPkt->setSeqNumber(0);
-
-		//Set the econet src station
 		$oTcpIpPkt->setSrcStation(config::getValue('nat_default_station'));
 		$oTcpIpPkt->setSrcNetwork(config::getValue('nat_default_network'));
-
-		//Set addressing params
 		$oTcpIpPkt->setDstIP($oIPv4->getSrcIP());
 		$oTcpIpPkt->setSrcIP($oIPv4->getDstIP());
-		$oTcpIpPkt->setDstPort($oTcp->getDstPort());
-		$oTcpIpPkt->setSrcPort($oTcp->getSrcPort());
-		$oTcpIpPkt->setWindow(65536);
-
-		//Set the flags to show the connection has failed 
+		$oTcpIpPkt->setDstPort($oTcp->getSrcPort()); // reply to client's source port
+		$oTcpIpPkt->setSrcPort($oTcp->getDstPort()); // from the server port
+		$oTcpIpPkt->setWindow(0);
 		$oTcpIpPkt->setFlagAck(true);
 		$oTcpIpPkt->setFlagReset(true);
 
-		$oEconetPacket = $oTcp->getEconetPacket();
-		$oIPv4 = new IPv4Request($oEconetPacket,$this->oLogger);
-		$this->oProvider->processUnicastIPv4Pkt($oIPv4,$oEconetPacket);
+		$oEconetPacket = $oTcpIpPkt->buildEconetpacket();
+		$oIPv4Reply = new IPv4Request($oEconetPacket, $this->oProvider->getLogger());
+		$this->oProvider->processUnicastIPv4Pkt($oIPv4Reply, $oEconetPacket);
 	}
 
 	/**
@@ -415,9 +417,8 @@ class NAT
 		//Create a TCP/IP packet with the basic addr/port fields filled in 
 		$oTcpIpPkt = $this->_builtTcpIPReply($sKey);
 
-		//Sort out seq/ack  numbers 
-		$this->aConnTrack[$sKey]['sequence_sock']++;
-		$this->aConnTrack[$sKey]['sequence_sock'] = $this->aConnTrack[$sKey]['sequence_sock']+$iLen;
+		//Sort out seq/ack  numbers
+		$this->aConnTrack[$sKey]['sequence_sock'] = $this->aConnTrack[$sKey]['sequence_sock'] + $iLen;
 		$oTcpIpPkt->setSeqNumber($this->aConnTrack[$sKey]['sequence_sock']);
 
 

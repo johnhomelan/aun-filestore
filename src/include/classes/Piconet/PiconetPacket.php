@@ -66,7 +66,7 @@ class PiconetPacket implements EncapsulationInterface {
 	*/ 
 	public function getPacketType(): string
 	{
-		return $this->aTypeMap[$this->sMessageType];
+		return $this->aTypeMap[$this->sMessageType] ?? 'Unknown';
 	}
 
 	public function getDstStation(): ?int
@@ -116,7 +116,10 @@ class PiconetPacket implements EncapsulationInterface {
 				$sScout="";
 				break;
 		}
-		$sRawScout = (string) base64_decode($sScout);
+		$sRawScout = base64_decode($sScout);
+		if($sRawScout === false){
+			throw new Exception("Failed to base64 decode piconet scout frame");
+		}
 
 
 		//Read the dst/src contolbyte port each is 1 byte unsigned int |DstStn|DstNet|SrcStn|SrcNet|Cb|Port
@@ -157,7 +160,10 @@ class PiconetPacket implements EncapsulationInterface {
 				$this->sData = substr($sRawScout,0,4);	
 				break;
 			case 'RX_TRANSMIT':
-				$sRawData = "".(string) base64_decode($sData);
+				$sRawData = base64_decode($sData);
+				if($sRawData === false){
+					throw new Exception("Failed to base64 decode piconet data frame");
+				}
 				$this->sData = substr($sRawData,4,strlen($sRawData)-4);
 				break;
 		}

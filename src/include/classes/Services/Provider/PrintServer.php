@@ -176,19 +176,20 @@ class PrintServer implements ProviderInterface {
 			if($oPrintData->getByte($oPrintData->getLen())==3){
 				//Print job has ended
 				$this->oLogger->info("Station ".$oPrintData->getSourceNetwork().":".$oPrintData->getSourceStation()." print job completed");
-				if(is_dir(config::getValue('print_server_spool_dir'))){
-					$oUser = Security::getUser($oPrintData->getSourceNetwork(),$oPrintData->getSourceStation());
+				$sSpoolBase = $this->getSpoolDir();
+				if($this->isDir($sSpoolBase)){
+					$oUser = $this->getUser($oPrintData->getSourceNetwork(),$oPrintData->getSourceStation());
 					if(is_object($oUser)){
-						$sSpoolPath = config::getValue('print_server_spool_dir').DIRECTORY_SEPARATOR.$oUser->getUsername();
+						$sSpoolPath = $sSpoolBase.DIRECTORY_SEPARATOR.$oUser->getUsername();
 					}else{
-						$sSpoolPath = config::getValue('print_server_spool_dir').DIRECTORY_SEPARATOR.'anon-'.$oPrintData->getSourceNetwork().'-'.$oPrintData->getSourceStation();
+						$sSpoolPath = $sSpoolBase.DIRECTORY_SEPARATOR.'anon-'.$oPrintData->getSourceNetwork().'-'.$oPrintData->getSourceStation();
 					}
-					if(!is_dir($sSpoolPath)){
-						mkdir($sSpoolPath);
+					if(!$this->isDir($sSpoolPath)){
+						$this->makeDir($sSpoolPath);
 					}
-					file_put_contents($sSpoolPath.DIRECTORY_SEPARATOR.date('H-i-s-d-n-Y').'.raw',$this->aPrintBuffer[$oPrintData->getSourceNetwork()][$oPrintData->getSourceStation()]['data']);
+					$this->putFile($sSpoolPath.DIRECTORY_SEPARATOR.date('H-i-s-d-n-Y').'.raw',$this->aPrintBuffer[$oPrintData->getSourceNetwork()][$oPrintData->getSourceStation()]['data']);
 				}else{
-					$this->oLogger->info("Un-able to save print out as the spool directory does not exist (".config::getValue('print_server_spool_dir').")");
+					$this->oLogger->info("Un-able to save print out as the spool directory does not exist (".$sSpoolBase.")");
 				}
 				unset($this->aPrintBuffer[$oPrintData->getSourceNetwork()][$oPrintData->getSourceStation()]);
 			}
@@ -198,6 +199,31 @@ class PrintServer implements ProviderInterface {
 		}
 		
 		
+	}
+
+	protected function getSpoolDir(): string
+	{
+		return config::getValue('print_server_spool_dir');
+	}
+
+	protected function isDir(string $sPath): bool
+	{
+		return is_dir($sPath);
+	}
+
+	protected function getUser(int $iNet, int $iStn)
+	{
+		return Security::getUser($iNet, $iStn);
+	}
+
+	protected function makeDir(string $sPath): void
+	{
+		mkdir($sPath);
+	}
+
+	protected function putFile(string $sPath, string $sData): void
+	{
+		file_put_contents($sPath, $sData);
 	}
 
 	public function getJobs(): array

@@ -32,6 +32,8 @@ RUN adduser -G audio  -u 1000 -S aund
 
 RUN cd /usr/share/aun-filestored; composer install --no-dev
 RUN chmod u+x /usr/sbin/filestored; chmod u+x /entrypoint.sh; cd /usr/bin/; ln -s /usr/local/bin/php
+RUN adduser -G audio  -u 1000 -S aund
+
 
 EXPOSE 32768/udp 8080/tcp 8090/tcp
 

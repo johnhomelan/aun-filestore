@@ -98,7 +98,7 @@ class Map {
 
 		//Search the map see if there is a host:port mapping
 		if(in_array($sIP.':'.$sPort,Map::$aHostMap)){
-			$sIndex = array_search($sIP,Map::$aHostMap,true);
+			$sIndex = array_search($sIP.':'.$sPort,Map::$aHostMap,true);
 			Map::$aIPLookupCache[$sIP.':'.$sPort]=$sIndex;
 			return $sIndex;
 		}
@@ -193,7 +193,7 @@ class Map {
 	*/
 	public static function addHostMapping(string $sIP,int $iNetworkNumber,int $iStationNumber, ?int $iPort=null ): void
 	{
-		if(preg_match('/[0-9]*\.[0-9]*\.[0-9]*\.[0-9]*/',$sIP)){
+		if(preg_match('/^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$/',$sIP)){
 			if(is_null($iPort)){
 				Map::$aHostMap[$iNetworkNumber.'.'.$iStationNumber]=$sIP;
 				Map::$aIPLookupCache[$sIP]=$iNetworkNumber.'.'.$iStationNumber;
@@ -214,7 +214,7 @@ class Map {
 	*/
 	public static function addSubnetMapping(string $sSubnet,int $iNetworkNumber): void
 	{
-		if(preg_match('/[0-9]*\.[0-9]*\.[0-9]*\.[0-9]*\/[0-9]*/',$sSubnet)>0){
+		if(preg_match('/^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+\/[0-9]+$/',$sSubnet)>0){
 			//Blank the reverse mapping cache 
 			Map::$aIPLookupCache=[];
 			Map::$aSubnetMap[$iNetworkNumber]=$sSubnet;

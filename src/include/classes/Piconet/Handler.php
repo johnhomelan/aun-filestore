@@ -138,11 +138,20 @@ class Handler {
 						$aAck = array_shift($this->aAwaitingAck);
 						$this->oLogger->info("Piconet Handler: TX failed the error ".trim($aMessageParts[1]));
 						$this->_runQueue();
+						// If _runQueue did not push a new TX, all retries are exhausted — clear any
+						// service-level ack event so the service does not wait indefinitely.
+						if(is_array($aAck) && count($this->aAwaitingAck)==0){
+							$this->oServices->clearAckEvent($aAck['dst_network'],$aAck['dst_station']);
+						}
 						break;
 					case 'UNEXPECTED':
 					default:
 						$aAck = array_shift($this->aAwaitingAck);
 						$this->oLogger->error("Piconet Handler: Encountered an internal error with the interface while transmitting (this should never happen), with the message ".trim($aMessageParts[1]));
+						// Clear ack event immediately on internal error — no further TX will happen.
+						if(is_array($aAck)){
+							$this->oServices->clearAckEvent($aAck['dst_network'],$aAck['dst_station']);
+						}
 						break;
 				}
 				break;
@@ -163,9 +172,8 @@ class Handler {
 		}
 	}
 	private function _runQueue():void
-	{	
+	{
 		$this->oLogger->debug("Piconet Handler: Running Queue");
-		var_dump($this->aQueue);
 		if(count($this->aQueue)>0){
 			$aQueueEntry = array_shift($this->aQueue);
 			if($aQueueEntry['retries']>0){
@@ -185,6 +193,10 @@ class Handler {
 	{
 		$this->oLogger->debug("Piconet Handler: Dequeuing packet due to scout ack");
 		$aQueueEntry = array_shift($this->aQueue);
+		if(is_null($aQueueEntry)){
+			$this->_runQueue();
+			return;
+		}
 		if($aQueueEntry['attempts']==0){
 			array_unshift($this->aQueue,$aQueueEntry);
 		}
@@ -200,7 +212,7 @@ class Handler {
 		switch($oPacket->getDestinationStation()){
 			case 255:
 				$this->oLogger->debug("Piconet Handler: Sending broadcast packet (".base64_encode($oPacket->getData()).")");
-				fwrite($this->oConnection->stream,"BCAST ".base64_encode($oPacket->getData()."\r\r")); //@phpstan-ignore-line
+				fwrite($this->oConnection->stream,"BCAST ".base64_encode($oPacket->getData())."\r\r"); //@phpstan-ignore-line
 				fflush($this->oConnection->stream); //@phpstan-ignore-line
 				break;
 			default:

@@ -38,7 +38,7 @@ use HomeLan\FileStore\Admin\Kernel;
 use HomeLan\FileStore\Encapsulation\PacketDispatcher;
 use HomeLan\FileStore\Encapsulation\EncapsulationTypeMap;
 
-use HomeLan\FileStore\React\UnixDeviceConnector;
+use HomeLan\FileStore\React\UnixSerialDeviceConnector;
  
 use config;
 use Exception;
@@ -279,7 +279,7 @@ EOF;
 	public function piconetService(LoopInterface $oLoop, PacketDispatcher $oPacketDispatcher):PiconetHandler
 	{
 
-		$oPiconet = new UnixDeviceConnector($oLoop);
+		$oPiconet = new UnixSerialDeviceConnector($oLoop);
 		$oPiconetHandler = new PiconetHandler($this->oLogger, $this->oServices, $oPacketDispatcher);
 		$oPiconet->connect('file:///'.config::getValue('piconet_device'))->then(function (ConnectionInterface $oConnection) use ($oPiconetHandler){
 

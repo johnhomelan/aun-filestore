@@ -55,7 +55,7 @@ class BeebTermRequest extends Request{
 			case 0x81:
 				//Login
 				$this->sType = 'LOGIN';
-				$this->sService = $this->getString(9);
+				$this->sService = $this->getString(1);
 				break;
 			case 0x2:
 			case 0x82:
@@ -76,12 +76,12 @@ class BeebTermRequest extends Request{
 		
 	}
 
-	public function getType():string
+	public function getType():?string
 	{
 		return $this->sType;
 	}
 
-	public function getService():string 
+	public function getService():?string
 	{
 		return $this->sService;
 	}

@@ -36,6 +36,27 @@ Impliments a number of network services, that sit ontop of the econet encapsulat
 * BBCTerm
     * Support for Andrew Gordons, BBC Term. Which allows BBC clients on Econet, to connect a terminal application to one of the configured commands that the service allows to run on the Linux box
 
+* TorchNet
+    * File services for Torch Communicator workstations running CP/M, over the TorchNet protocol on Econet ports 0x90 and 0x91.
+    * Translates between CP/M 8+3 filenames and the Acorn filesystem naming conventions via the built-in CP/M compatibility layer (CpmVfs).
+    * Supported operations:
+        * Open file (read-only, write-only, or shared read/write)
+        * Create file
+        * Close file
+        * Read block — random-access 128-byte CP/M sector reads
+        * Write block — random-access 128-byte CP/M sector writes
+        * Delete file
+        * Rename file
+        * Search First / Search Next — directory listing with CP/M 8+3 wildcard patterns (`?`)
+    * Drive letters map to directories on the Acorn filesystem.  The default mapping for drive `E` is `$.TorchDrives.E`.  Each drive can be overridden in the config file with a key of the form `torchnet_drive_e` (lowercase drive letter):
+
+    ~~~
+    torchnet_drive_e = $.TorchDrives.E
+    torchnet_drive_f = $.TorchDrives.F
+    ~~~
+
+    * Files are stored on the Acorn filesystem with `\` as the CP/M extension separator in the filename (e.g. the CP/M file `MYPROG.COM` is stored with the Acorn name `MYPROG\COM` inside the drive directory). The CP/M compatibility layer translates this transparently so Torch clients see standard `8.3` names.
+
 
 ## It would be nice if ##
 * Work has started on a WebSocket Interface for  

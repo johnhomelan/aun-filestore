@@ -28,9 +28,9 @@ class BeebTerm implements ProviderInterface {
 
 	protected $oLogger;
 	
-	private array $aServices = [];
+	protected array $aServices = [];
 
-	private array $aClients = [];
+	protected array $aClients = [];
 
 	private ServiceDispatcher $oServiceDispatcher;
 
@@ -189,8 +189,9 @@ class BeebTerm implements ProviderInterface {
 				break;
 			case 'LOGIN_OK':
 			case 'LOGIN_REJECT':
+				break;
 			default:
-				throw new Exception("Un-handled term message type");
+				$this->oLogger->warning("BeebTerm: Unrecognised message type ".var_export($sType,true).", ignoring");
 		}
 	}
 
@@ -214,7 +215,7 @@ class BeebTerm implements ProviderInterface {
 		if(array_key_exists($oRequest->getService(),$this->aServices)){
 			//Create a new  session 
 			//Creates a process, and links to the main loop so it output can be handled 
-			$oProcess = new Process($this->aServices[$oRequest->getService()]);
+			$oProcess = $this->createProcess($this->aServices[$oRequest->getService()]);
 			$oProcess->start($this->oServiceDispatcher->getLoop());
 
 			//Store the proces object linked to the service name and the net/station 
@@ -262,7 +263,7 @@ class BeebTerm implements ProviderInterface {
 		$this->oLogger->debug("BeebTerm: Data from econet client ".$sKey." (".$oRequest->getData().")");
 		if(array_key_exists($sKey,$this->aClients)){
 			$this->aClients[$sKey]['lastactivity']=time();
-			if($this->aClients[$sKey]['rxseq']<$oRequest->getRxSeq()){
+			if((($oRequest->getRxSeq() - $this->aClients[$sKey]['rxseq']) & 0xFF) > 0){
 				//Its new data as the RxSeq is greater than the last value
 				$this->aClients[$sKey]['rxseq']=$oRequest->getRxSeq();	
 				$this->aClients[$sKey]['process']->stdin->write($oRequest->getData()); //Send the data to the process 
@@ -325,6 +326,11 @@ class BeebTerm implements ProviderInterface {
 	public function getJobs():array
 	{
 		return [];
+	}
+
+	protected function createProcess(string $sCommand): object
+	{
+		return new Process($sCommand);
 	}
 
 

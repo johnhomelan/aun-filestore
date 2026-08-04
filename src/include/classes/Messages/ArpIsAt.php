@@ -37,7 +37,8 @@ class ArpIsAt extends Request {
 	{
 
 		switch($this->getFlags()){
-			case 0xA2: //Arp reponse type
+			case 0x22: //ARP Is-At: DCI-2/AUN wire value
+			case 0xA2: //ARP Is-At: DCI-4 native Econet wire value
 				//The first 4 bytes is the ipv4 addr the IsAt message is about 
 				$this->sSourceIP = inet_ntop($sBinaryString[0].$sBinaryString[1].$sBinaryString[2].$sBinaryString[3]);
 				//The second 4 bytes is the ipv4 address the host rquesting the arp response

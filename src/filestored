@@ -14,6 +14,7 @@ use HomeLan\FileStore\Services\Provider\PrintServer;
 use HomeLan\FileStore\Services\Provider\Bridge;
 use HomeLan\FileStore\Services\Provider\IPv4;
 use HomeLan\FileStore\Services\Provider\BeebTerm;
+use HomeLan\FileStore\Services\Provider\Torchnet;
 
 use Monolog\Logger;
 use Monolog\Handler\SyslogHandler;
@@ -33,7 +34,8 @@ $oApplication = new SingleCommandApplication(
 				new PrintServer($oLogger),
 				new Bridge($oLogger),
 				new IPv4($oLogger),
-				new BeebTerm($oLogger)
+				new BeebTerm($oLogger),
+				new Torchnet($oLogger)
 			]
 		)
 	)

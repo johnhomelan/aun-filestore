@@ -38,7 +38,7 @@ class ArpReply extends Reply {
 
 	public function buildEconetpacket(): \HomeLan\FileStore\Messages\EconetPacket
 	{
-		$this->iFlags = 0xa2; //Arp reply type
+		$this->iFlags = 0x22; //ARP Is-At: use DCI-2/AUN wire value (0x22)
 		$this->sPkt .= inet_pton($this->oRequest->getRequestedIP());
 		$this->sPkt .= inet_pton($this->oRequest->getSourceIP());
 	

@@ -45,8 +45,7 @@ class FileServer implements ProviderInterface{
 	public function __construct(\Psr\Log\LoggerInterface $oLogger)
 	{
 		$this->oLogger = $oLogger;
-		Vfs::init($this->oLogger, config::getValue('vfs_plugins'), config::getValue('security_mode')=='multiuser');
-	
+		$this->vfsInit();
 	}
 
 	public function getName(): string
@@ -208,8 +207,7 @@ class FileServer implements ProviderInterface{
 		$this->oLogger->debug("FS function ".$sFunction);
 
 		//Update the idle timer for this station
-		Security::updateIdleTimer($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation());
-
+		$this->secUpdateIdleTimer($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation());
 
 		//Function where you dont always need to be logged in
 		switch($sFunction){
@@ -220,7 +218,7 @@ class FileServer implements ProviderInterface{
 		}
 
 		//Function where the user must be logged in
-		if(!Security::isLoggedIn($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation())){
+		if(!$this->secIsLoggedIn($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation())){
 			$oReply = $oFsRequest->buildReply();
 			$oReply->setError(0xbf,"Who are you?");
 			$this->addReplyToBuffer($oReply->buildEconetpacket());
@@ -244,6 +242,9 @@ class FileServer implements ProviderInterface{
 				break;
 			case 'EC_FS_FUNC_CAT_HEADER':
 				$this->oLogger->info("Call to obsolete unimplemented function EC_FS_FUNC_CAT_HEADER");
+				$oReply = $oFsRequest->buildReply();
+				$oReply->setError(0x8f, "Unsupported");
+				$this->addReplyToBuffer($oReply->buildEconetpacket());
 				break;
 			case 'EC_FS_FUNC_LOAD_COMMAND':
 				$this->loadCommand($oFsRequest);
@@ -270,6 +271,7 @@ class FileServer implements ProviderInterface{
 				$this->getArgs($oFsRequest);
 				break;
 			case 'EC_FS_FUNC_SET_ARGS':
+				$this->setArgs($oFsRequest);
 				break;
 			case 'EC_FS_FUNC_GET_EOF':
 				$this->eof($oFsRequest);
@@ -324,10 +326,20 @@ class FileServer implements ProviderInterface{
 			case 'EC_FS_FUNC_WHO_AM_I':
 				$this->whoAmI($oFsRequest);
 				break;
+			case 'EC_FS_FUNC_USERS_EXT':
+			case 'EC_FS_FUNC_USER_INFO_EXT':
+			case 'EC_FS_FUNC_COPY_DATA':
+				$oReply = $oFsRequest->buildReply();
+				$oReply->setError(0x8f, "Not implemented");
+				$this->addReplyToBuffer($oReply->buildEconetpacket());
+				break;
 			default:
 				$this->oLogger->debug("Un-handled fs function ".$sFunction);
+				$oReply = $oFsRequest->buildReply();
+				$oReply->setError(0x8f, "Not implemented");
+				$this->addReplyToBuffer($oReply->buildEconetpacket());
 				break;
-				
+
 		}
 	}
 
@@ -336,29 +348,32 @@ class FileServer implements ProviderInterface{
 	*/
 	public function updateCsdLib(FsRequest $oFsRequest): void
 	{
-		$oUser = Security::getUser($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation());
+		$oUser = $this->secGetUser($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation());
+		if(!is_object($oUser)){
+			return;
+		}
 		try {
 			if(!is_null($oFsRequest->getCsd())){
-				$oCsd = Vfs::getFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oFsRequest->getCsd());
+				$oCsd = $this->vfsGetFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oFsRequest->getCsd());
 				if(is_object($oCsd)){
 					$oUser->setCsd($oCsd->getEconetPath());
 				}
-			}	
+			}
 		}catch(Exception $oException){
 			$this->oLogger->debug("fileserver: Unable to set users csd to handle ".$oFsRequest->getCsd()." (".$oException->getMessage().")");
 		}
 
 		try {
 			if(!is_null($oFsRequest->getLib())){
-				$oLib = Vfs::getFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oFsRequest->getLib());
+				$oLib = $this->vfsGetFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oFsRequest->getLib());
 				if(is_object($oLib)){
 					$oUser->setLib($oLib->getEconetPath());
 				}
-			}	
+			}
 		}catch(Exception $oException){
 			$this->oLogger->debug("fileserver: Unable to set users lib to handle ".$oFsRequest->getLib()." (".$oException->getMessage().")");
 		}
-	
+
 	}
 
 	/**
@@ -392,7 +407,7 @@ class FileServer implements ProviderInterface{
 		}
 		$oReply = $oFsRequest->buildReply();
 		$oReply->UnrecognisedOk();
-		$oReply->appendString($sCommand);
+		$oReply->appendString($sDataAsString);
 		$this->addReplyToBuffer($oReply->buildEconetpacket());
 	}
 
@@ -418,6 +433,10 @@ class FileServer implements ProviderInterface{
 				$this->setPassword($oFsRequest,$sOptions);
 				break;
 			case 'CAT':
+				$oReply = $oFsRequest->buildReply();
+				$oReply->UnrecognisedOk();
+				$oReply->appendString('CAT');
+				$this->addReplyToBuffer($oReply->buildEconetpacket());
 				break;
 			case 'CDIR':
 				$this->createDirectory($oFsRequest,$sOptions);
@@ -429,6 +448,9 @@ class FileServer implements ProviderInterface{
 				$this->changeDirectory($oFsRequest,$sOptions);
 				break;
 			case 'FSOPT':
+				$oReply = $oFsRequest->buildReply();
+				$oReply->DoneOk();
+				$this->addReplyToBuffer($oReply->buildEconetpacket());
 				break;
 			case 'INFO':
 			case 'I.':
@@ -515,24 +537,24 @@ class FileServer implements ProviderInterface{
 		}
 
 		//Do login
-		if(Security::login($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sUser,$sPass)){
-			//Login success 
+		if($this->secLogin($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sUser,$sPass)){
+			//Login success
 
 			//Create the handles for the csd urd and lib
-			$oUser = Security::getUser($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation());
+			$oUser = $this->secGetUser($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation());
 			try {
-				$oUrd = Vfs::createFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oUser->getHomedir());
-				$oCsd = Vfs::createFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oUser->getHomedir());	
+				$oUrd = $this->vfsCreateFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oUser->getHomedir());
+				$oCsd = $this->vfsCreateFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oUser->getHomedir());
 			}catch(Exception){
 				$this->oLogger->info("fileserver: Login unable to open homedirectory for user ".$oUser->getUsername());
-				$oUrd = Vfs::createFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),'$');
-				$oCsd = Vfs::createFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),'$');
+				$oUrd = $this->vfsCreateFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),'$');
+				$oCsd = $this->vfsCreateFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),'$');
 			}
 			try {
-				$oLib = Vfs::createFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oUser->getLib());
+				$oLib = $this->vfsCreateFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oUser->getLib());
 			}catch(Exception){
 				$this->oLogger->info("fileserver: Login unable to open library dir setting library to $ for user ".$oUser->getUsername());
-				$oLib = Vfs::createFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),'');
+				$oLib = $this->vfsCreateFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),'');
 			}
 			//Handles are now build send the reply 
 			$oReply = $oFsRequest->buildReply();
@@ -560,7 +582,7 @@ class FileServer implements ProviderInterface{
 	public function logout(FsRequest $oFsRequest): void
 	{
 		try{
-			Security::logout($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation());
+			$this->secLogout($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation());
 			$oReply = $oFsRequest->buildReply();	
 			$oReply->DoneOk();
 		}catch(Exception){
@@ -571,16 +593,16 @@ class FileServer implements ProviderInterface{
 	}
 
 	/**
-  * Handles the *info command
-  *
-  * @param fsrequest $oFsRequest
-  */
- public function cmdInfo(FsRequest $oFsRequest,string $sFile): void
+	  * Handles the *info command
+	  *
+	  * @param fsrequest $oFsRequest
+	*/
+	public function cmdInfo(FsRequest $oFsRequest,string $sFile): void
 	{
 		$this->oLogger->debug("cmdInfo for path ".$sFile."");
 		$oReply = $oFsRequest->buildReply();
 		try {
-			$oMeta = Vfs::getMeta($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sFile);
+			$oMeta = $this->vfsGetMeta($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sFile);
 			$sReplyData =  sprintf("%-10.10s %08X %08X   %06X   %-6.6s  %02d:%02d:%02d %06x\r\x80",$sFile,$oMeta->getLoadAddr(),$oMeta->getExecAddr(),$oMeta->getSize(),"RW/RW",$oMeta->getDay(),$oMeta->getMonth(),$oMeta->getYear(),$oMeta->getSin());
 			$this->oLogger->debug("INFO ".$sFile." Load: ".$oMeta->getLoadAddr()." Exec: ".$oMeta->getExecAddr()." Size:".$oMeta->getSize());
 			$oReply->InfoOk();
@@ -603,11 +625,45 @@ class FileServer implements ProviderInterface{
 		$sDir = $oFsRequest->getString(2);
 		$this->oLogger->debug("getInfo for path ".$sDir." (".$oFsRequest->getByte(1).")");
 		switch($oFsRequest->getByte(1)){
+			case 1:
+				//EC_FS_GET_INFO_LOAD
+				$oReply = $oFsRequest->buildReply();
+				try {
+					$oMeta = $this->vfsGetMeta($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sDir);
+					$oReply->DoneOk();
+					if($oMeta->isDir()){
+						$oReply->appendByte(0x02);
+					}else{
+						$oReply->appendByte(0x01);
+					}
+					$oReply->append32bitIntLittleEndian($oMeta->getLoadAddr());
+				}catch(Exception){
+					$oReply->setError(0xd6,"Not found");
+				}
+				$this->addReplyToBuffer($oReply->buildEconetpacket());
+				return;
+			case 2:
+				//EC_FS_GET_INFO_EXEC
+				$oReply = $oFsRequest->buildReply();
+				try {
+					$oMeta = $this->vfsGetMeta($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sDir);
+					$oReply->DoneOk();
+					if($oMeta->isDir()){
+						$oReply->appendByte(0x02);
+					}else{
+						$oReply->appendByte(0x01);
+					}
+					$oReply->append32bitIntLittleEndian($oMeta->getExecAddr());
+				}catch(Exception){
+					$oReply->setError(0xd6,"Not found");
+				}
+				$this->addReplyToBuffer($oReply->buildEconetpacket());
+				return;
 			case 4:
 				//EC_FS_GET_INFO_ACCESS
 				$oReply = $oFsRequest->buildReply();
 				try {
-					$oMeta = Vfs::getMeta($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sDir);
+					$oMeta = $this->vfsGetMeta($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sDir);
 					$oReply->DoneOk();
 					//Append Type
 					if($oMeta->isDir()){
@@ -628,7 +684,7 @@ class FileServer implements ProviderInterface{
 				//EC_FS_GET_INFO_ALL
 				$oReply = $oFsRequest->buildReply();
 				try {
-					$oMeta = Vfs::getMeta($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sDir);
+					$oMeta = $this->vfsGetMeta($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sDir);
 					$oReply->DoneOk();
 					//Append Type
 					if($oMeta->isDir()){
@@ -658,7 +714,7 @@ class FileServer implements ProviderInterface{
 				//EC_FS_GET_INFO_CTIME
 				$oReply = $oFsRequest->buildReply();
 				try {
-					$oMeta = Vfs::getMeta($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sDir);
+					$oMeta = $this->vfsGetMeta($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sDir);
 					$oReply->DoneOk();
 					//Append Type
 					if($oMeta->isDir()){
@@ -679,7 +735,7 @@ class FileServer implements ProviderInterface{
 				//EC_FS_GET_INFO_META
 				$oReply = $oFsRequest->buildReply();
 				try {
-					$oMeta = Vfs::getMeta($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sDir);
+					$oMeta = $this->vfsGetMeta($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sDir);
 					$oReply->DoneOk();
 					//Append Type
 					if($oMeta->isDir()){
@@ -703,7 +759,7 @@ class FileServer implements ProviderInterface{
 				//EC_FS_GET_INFO_SIZE
 				$oReply = $oFsRequest->buildReply();
 				try {
-					$oMeta = Vfs::getMeta($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sDir);
+					$oMeta = $this->vfsGetMeta($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sDir);
 					$oReply->DoneOk();
 					//Append Type
 					if($oMeta->isDir()){
@@ -735,7 +791,7 @@ class FileServer implements ProviderInterface{
 					//dir name fixed to 10 bytes right padded with spaces
 					if($sDir==""){
 						//No dir requested so use csd
-						$oFd = Vfs::getFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oFsRequest->getCsd());
+						$oFd = $this->vfsGetFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oFsRequest->getCsd());
 						$oReply->appendString(str_pad(substr((string) $oFd->getEconetDirName(),0,10),10,' '));
 					}else{
 						$oReply->appendString(str_pad(substr((string) $sDir,0,10),10,' '));
@@ -757,7 +813,21 @@ class FileServer implements ProviderInterface{
 				return;
 			case 7:
 				//EC_FS_GET_INFO_UID
-				break;
+				$oReply = $oFsRequest->buildReply();
+				try {
+					$oMeta = $this->vfsGetMeta($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sDir);
+					$oReply->DoneOk();
+					if($oMeta->isDir()){
+						$oReply->appendByte(0x02);
+					}else{
+						$oReply->appendByte(0x01);
+					}
+					$oReply->append24bitIntLittleEndian($oMeta->getSin());
+				}catch(Exception){
+					$oReply->setError(0xd6,"Not found");
+				}
+				$this->addReplyToBuffer($oReply->buildEconetpacket());
+				return;
 			default:
 				//Don't do any thing fall to the bad info reply below
 				break;
@@ -776,27 +846,27 @@ class FileServer implements ProviderInterface{
 				//EC_FS_SET_INFO_ALL
 				$iLoad = $oFsRequest->get32bitIntLittleEndian(2);
 				$iExec = $oFsRequest->get32bitIntLittleEndian(6);
-				$iAccess =$oFsRequest->getByte(7);
-				$sPath = $oFsRequest->getString(8);
-				Vfs::setMeta($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sPath,$iLoad,$iExec,$iAccess);
+				$iAccess = $oFsRequest->getByte(10);
+				$sPath = $oFsRequest->getString(11);
+				$this->vfsSetMeta($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sPath,$iLoad,$iExec,$iAccess);
 				break;
 			case 2:
 				//EC_FS_SET_INFO_LOAD
 				$iLoad = $oFsRequest->get32bitIntLittleEndian(2);
 				$sPath = $oFsRequest->getString(6);
-				Vfs::setMeta($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sPath,$iLoad,NULL,NULL);
+				$this->vfsSetMeta($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sPath,$iLoad,NULL,NULL);
 				break;
 			case 3:
 				//EC_FS_SET_INFO_EXEC
 				$iExec = $oFsRequest->get32bitIntLittleEndian(2);
 				$sPath = $oFsRequest->getString(6);
-				Vfs::setMeta($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sPath,NULL,$iExec,NULL);
+				$this->vfsSetMeta($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sPath,NULL,$iExec,NULL);
 				break;
 			case 4:
 				//EC_FS_SET_INFO_ACCESS
-				$iAccess =$oFsRequest->getByte(1);
-				$sPath = $oFsRequest->getString(2);
-				Vfs::setMeta($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sPath,NULL,NULL,$iAccess);
+				$iAccess =$oFsRequest->getByte(2);
+				$sPath = $oFsRequest->getString(3);
+				$this->vfsSetMeta($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sPath,NULL,NULL,$iAccess);
 				break;
 		}
 		$oReply->DoneOk();
@@ -812,7 +882,7 @@ class FileServer implements ProviderInterface{
 		$oReply->DoneOk();
 	
 		//Get the file handle
-		$oFsHandle = Vfs::getFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$iHandle);	
+		$oFsHandle = $this->vfsGetFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$iHandle);	
 		if($oFsHandle->isEof()){
 			$oReply->appendByte(0xFF);
 		}else{
@@ -840,8 +910,8 @@ class FileServer implements ProviderInterface{
 				$oReply->DoneOk();
 
 				//Get the directory listing
-				$oFd = Vfs::getFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oFsRequest->getCsd());
-				$aDirEntries=Vfs::getDirectoryListing($oFd);
+				$oFd = $this->vfsGetFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oFsRequest->getCsd());
+				$aDirEntries=$this->vfsGetDirectoryListing($oFd);
 				$this->oLogger->debug("There are ".count($aDirEntries)." entries in dir ".$oFd->getEconetPath());
 
 				//Return only the entries the client requested (works like sql limit and offset)
@@ -870,8 +940,8 @@ class FileServer implements ProviderInterface{
 				$oReply->DoneOk();
 
 				//Get the directory listing
-				$oFd = Vfs::getFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oFsRequest->getCsd());
-				$aDirEntries=Vfs::getDirectoryListing($oFd);
+				$oFd = $this->vfsGetFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oFsRequest->getCsd());
+				$aDirEntries=$this->vfsGetDirectoryListing($oFd);
 				$this->oLogger->debug("There are ".count($aDirEntries)." entries in dir ".$oFd->getEconetPath());
 
 				//Return only the entries the client requested (works like sql limit and offset)
@@ -897,8 +967,8 @@ class FileServer implements ProviderInterface{
 				//EXAMINE_NAME
 				$oReply->DoneOk();
 				//Get the directory listing
-				$oFd = Vfs::getFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oFsRequest->getCsd());
-				$aDirEntries=Vfs::getDirectoryListing($oFd);
+				$oFd = $this->vfsGetFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oFsRequest->getCsd());
+				$aDirEntries=$this->vfsGetDirectoryListing($oFd);
 				$this->oLogger->debug("There are ".count($aDirEntries)." entries in dir ".$oFd->getEconetPath());
 
 				//Return only the entries the client requested (works like sql limit and offset)
@@ -914,8 +984,8 @@ class FileServer implements ProviderInterface{
 					//Append the file name (limit 10 chars)
 					$oReply->appendString(str_pad(substr((string) $oFile->getEconetName(),0,11),11,' '));
 				}
-	
-
+				//Close the set with 0x80
+				$oReply->appendByte(0x80);
 				break;
 			case 3:
 				//EXAMINE_SHORTTXT
@@ -923,8 +993,8 @@ class FileServer implements ProviderInterface{
 				$oReply->DoneOk();
 
 				//Get the directory listing
-				$oFd = Vfs::getFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oFsRequest->getCsd());
-				$aDirEntries=Vfs::getDirectoryListing($oFd);
+				$oFd = $this->vfsGetFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oFsRequest->getCsd());
+				$aDirEntries=$this->vfsGetDirectoryListing($oFd);
 				$this->oLogger->debug("There are ".count($aDirEntries)." entries in dir ".$oFd->getEconetPath());
 
 				//Return only the entries the client requested (works like sql limit and offset)
@@ -962,7 +1032,7 @@ class FileServer implements ProviderInterface{
 			case 0:
 				//EC_FS_ARG_PTR
 				$oReply = $oFsRequest->buildReply();
-				$oFd = Vfs::getFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$iHandle);
+				$oFd = $this->vfsGetFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$iHandle);
 				$iPos = $oFd->fsFTell();
 				$oReply->DoneOk();
 				$oReply->append24bitIntLittleEndian($iPos);
@@ -970,7 +1040,7 @@ class FileServer implements ProviderInterface{
 			case 1:
 				//EC_FS_ARG_EXT
 				$oReply = $oFsRequest->buildReply();
-				$oFd = Vfs::getFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$iHandle);
+				$oFd = $this->vfsGetFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$iHandle);
 				$aStat = $oFd->fsFStat();
 				if(is_array($aStat) AND array_key_exists('size',$aStat)){
 					$iSize = $aStat['size'];
@@ -983,7 +1053,7 @@ class FileServer implements ProviderInterface{
 			case 2:
 				//EC_FS_ARG_SIZE
 				$oReply = $oFsRequest->buildReply();
-				$oFd = Vfs::getFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$iHandle);
+				$oFd = $this->vfsGetFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$iHandle);
 				$aStat = $oFd->fsFStat();
 				if(is_array($aStat) AND array_key_exists('size',$aStat)){
 					$iSize = $aStat['size'];
@@ -995,8 +1065,35 @@ class FileServer implements ProviderInterface{
 				break;
 			default:
 				$oReply = $oFsRequest->buildReply();
-				$oReply->setError(0x8f,"Bad RDARGS argumen");
+				$oReply->setError(0x8f,"Bad RDARGS argument");
+				break;
+		}
+		$this->addReplyToBuffer($oReply->buildEconetpacket());
+	}
+
+	public function setArgs(FsRequest $oFsRequest): void
+	{
+		$iHandle = $oFsRequest->getByte(1);
+		$iArg    = $oFsRequest->getByte(2);
+		$oReply  = $oFsRequest->buildReply();
+
+		switch($iArg){
+			case 0:
+				//EC_FS_ARG_PTR — set file pointer
+				$oFd = $this->vfsGetFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$iHandle);
+				$iPos = $oFsRequest->get24bitIntLittleEndian(3);
+				$oFd->setPos($iPos);
 				$oReply->DoneOk();
+				break;
+			case 1:
+				//EC_FS_ARG_EXT — set file extent (truncate/extend)
+				$oFd = $this->vfsGetFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$iHandle);
+				$iExt = $oFsRequest->get24bitIntLittleEndian(3);
+				$oFd->setExt($iExt);
+				$oReply->DoneOk();
+				break;
+			default:
+				$oReply->setError(0x8f,"Bad SETARGS argument");
 				break;
 		}
 		$this->addReplyToBuffer($oReply->buildEconetpacket());
@@ -1019,11 +1116,11 @@ class FileServer implements ProviderInterface{
 		$oReply->appendString(str_pad(substr((string) config::getValue('vfs_disc_name'),0,16),16,' '));
 		try {	
 			//csd Leaf name String 10 bytes
-			$oCsd = Vfs::getFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oFsRequest->getCsd());	
+			$oCsd = $this->vfsGetFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oFsRequest->getCsd());	
 			$oReply->appendString(str_pad(substr((string) $oCsd->getEconetDirName(),0,10),10,' '));
 
 			//lib leaf name String 10 bytes
-			$oLib = Vfs::getFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oFsRequest->getLib());	
+			$oLib = $this->vfsGetFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oFsRequest->getLib());	
 			$oReply->appendString(str_pad(substr((string) $oLib->getEconetDirName(),0,10),10,' '));
 		}catch(Exception $oException){
 			$oReply = $oFsRequest->buildReply();
@@ -1041,7 +1138,7 @@ class FileServer implements ProviderInterface{
 	public function changeDirectory(FsRequest $oFsRequest,$sOptions): void
 	{
 		$oReply = $oFsRequest->buildReply();
-		$oUser = Security::getUser($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation());
+		$oUser = $this->secGetUser($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation());
 
 		//Chech the user is logged in
 		if(!is_object($oUser)){
@@ -1054,11 +1151,11 @@ class FileServer implements ProviderInterface{
 			try {
 				if($sOptions=="^"){
 					//Change to parent dir
-					$oCsd = Vfs::getFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oFsRequest->getCsd());
+					$oCsd = $this->vfsGetFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oFsRequest->getCsd());
 					$sParentPath = $oCsd->getEconetParentPath();
-					$oNewCsd = Vfs::createFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sParentPath);
+					$oNewCsd = $this->vfsCreateFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sParentPath);
 				}else{
-					$oNewCsd = Vfs::createFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sOptions);	
+					$oNewCsd = $this->vfsCreateFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sOptions);	
 					if(!$oNewCsd->isDir()){
 						$this->oLogger->debug("User tryed to change to directory ".$oNewCsd->getEconetDirName()." however its not a directory.");
 						$oReply->setError(0xbe,"Not a directory");
@@ -1066,7 +1163,7 @@ class FileServer implements ProviderInterface{
 						return;
 					}
 				}
-				Vfs::closeFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oFsRequest->getCsd());
+				$this->vfsCloseFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oFsRequest->getCsd());
 				$oReply->DirOk();
 				//Send new csd handle
 				$oReply->appendByte($oNewCsd->getID());
@@ -1079,8 +1176,8 @@ class FileServer implements ProviderInterface{
 		}else{
 			//No directory selected, change to the users home dir
 			try {
-				$oNewCsd = Vfs::createFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oUser->getHomedir());
-				Vfs::closeFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oFsRequest->getCsd());
+				$oNewCsd = $this->vfsCreateFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oUser->getHomedir());
+				$this->vfsCloseFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oFsRequest->getCsd());
 				$oReply->DirOk();
 				$oReply->appendByte($oNewCsd->getID());
 				$oUser->setCsd($oNewCsd->getEconetPath());
@@ -1104,14 +1201,14 @@ class FileServer implements ProviderInterface{
 		
 		if(strlen((string) $sOptions)>0){
 			try {
-				$oNewLib = Vfs::createFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sOptions);	
+				$oNewLib = $this->vfsCreateFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sOptions);	
 				if(!$oNewLib->isDir()){
 					$this->oLogger->debug("User tryed to change the library to ".$oNewLib->getEconetDirName()." however its not a directory.");
 					$oReply->setError(0xbe,"Not a directory");
 					$this->addReplyToBuffer($oReply->buildEconetpacket());
 					return;
 				}
-				Vfs::closeFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oFsRequest->getLib());
+				$this->vfsCloseFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oFsRequest->getLib());
 				$oReply->LibOk();
 				//Send new csd handle
 				$oReply->appendByte($oNewLib->getID());
@@ -1147,7 +1244,7 @@ class FileServer implements ProviderInterface{
 		}
 
 		try {
-			Vfs::createDirectory($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sOptions);
+			$this->vfsCreateDirectory($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sOptions);
 			$oReply->DoneOk();
 		}catch(Exception){
 			$oReply->setError(0xff,"Unable to create directory");
@@ -1167,7 +1264,7 @@ class FileServer implements ProviderInterface{
 			$oReply->setError(0xff,"Syntax");
 		}else{
 			try{
-				Vfs::deleteFile($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sOptions);
+				$this->vfsDeleteFile($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sOptions);
 				$oReply->DoneOk();
 			}catch(Exception){
 				$oReply->setError(0xff,"Unable to delete");
@@ -1189,7 +1286,7 @@ class FileServer implements ProviderInterface{
 		}else{
 			try{
 				[$sFrom, $sTo] = explode(' ',(string) $sOptions);
-				Vfs::moveFile($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sFrom,$sTo);
+				$this->vfsMoveFile($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sFrom,$sTo);
 				$oReply->DoneOk();
 			}catch(Exception){
 				$oReply->setError(0xff,"No such file");
@@ -1220,7 +1317,7 @@ class FileServer implements ProviderInterface{
 			$bReadOnly = TRUE;
 		}
 		try {
-			$oFsHandle = Vfs::createFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sPath,$bMustExist,$bReadOnly);
+			$oFsHandle = $this->vfsCreateFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sPath,$bMustExist,$bReadOnly);
 			$oReply->DoneOk();
 			$oReply->appendByte($oFsHandle->getID());
 		}catch(Exception){
@@ -1236,7 +1333,7 @@ class FileServer implements ProviderInterface{
 	public function closeFile(FsRequest $oFsRequest): void
 	{
 		$iHandle = $oFsRequest->getByte(1);
-		Vfs::closeFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$iHandle);
+		$this->vfsCloseFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$iHandle);
 		$oReply = $oFsRequest->buildReply();
 		$oReply->DoneOk();
 		$this->addReplyToBuffer($oReply->buildEconetpacket());
@@ -1259,7 +1356,7 @@ class FileServer implements ProviderInterface{
 	
 		$this->oLogger->debug("Getbytes handle ".$iHandle." size ".$iBytes." prt ".$iUserPtr." offset ".$iOffset.".");
 
-		$oFsHandle = Vfs::getFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$iHandle);	
+		$oFsHandle = $this->vfsGetFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$iHandle);	
 		
 		//Send reply directly
 		$oReply = $oFsRequest->buildReply();
@@ -1269,8 +1366,10 @@ class FileServer implements ProviderInterface{
 		$_this = $this;
 		$oServiceDispatcher = $this->oServiceDispatcher;
 	
-		$this->oServiceDispatcher->addAckEvent($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),function() use ($_this, $oFsHandle, $oFsRequest, $iBytes, $iOffset, $iDataPort, $oServiceDispatcher){
-			$oFsHandle->setPos($iOffset);
+		$this->oServiceDispatcher->addAckEvent($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),function() use ($_this, $oFsHandle, $oFsRequest, $iBytes, $iOffset, $iUserPtr, $iDataPort, $oServiceDispatcher){
+			if($iUserPtr != 0){
+				$oFsHandle->setPos($iOffset);
+			}
 			$iBytesToRead = $iBytes;
 			if($iBytesToRead>256){
 				$sBlock = $oFsHandle->read(256);
@@ -1368,7 +1467,7 @@ class FileServer implements ProviderInterface{
 		$iOffset = $oFsRequest->get24bitIntLittleEndian(6);
 		$this->oLogger->debug("Putbytes handle ".$iHandle." size ".$iBytes." prt ".$iUserPtr." offset ".$iOffset.".");
 
-		$oFsHandle = Vfs::getFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$iHandle);	
+		$oFsHandle = $this->vfsGetFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$iHandle);	
 
 		if($iUserPtr!=0){
 			$this->oLogger->debug("Moving point ".$iOffset." bytes along the file ");
@@ -1416,7 +1515,7 @@ class FileServer implements ProviderInterface{
 				},
 				60,
 				$oFsHandle->getEconetPath(),
-				Security::getUser($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation())->getUsername()
+				$this->secGetUser($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation())->getUsername()
 
 			)
 		);
@@ -1431,12 +1530,12 @@ class FileServer implements ProviderInterface{
 
 		$this->oLogger->debug("Getbyte handle ".$iHandle." ");
 		//Reads a byte from the file handle
-		$oFsHandle = Vfs::getFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$iHandle);	
+		$oFsHandle = $this->vfsGetFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$iHandle);	
 		if($oFsHandle->isEof()){
 			$oReply->appendByte(0);
 			$oReply->appendByte(0x80);
 		}else{
-			$oReply->appendByte($oFsHandle->read(1));
+			$oReply->appendByte(ord((string) $oFsHandle->read(1)));
 			$oReply->appendByte(0);
 		}
 
@@ -1452,8 +1551,8 @@ class FileServer implements ProviderInterface{
 
 		$this->oLogger->debug("Putbyte handle ".$iHandle." ");
 		//Writes a byte to the file handle
-		$oFsHandle = Vfs::getFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$iHandle);	
-		$oFsHandle->write($iByte);
+		$oFsHandle = $this->vfsGetFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$iHandle);
+		$oFsHandle->write(chr($iByte));
 
 		$oReply->DoneOk();
 		$this->addReplyToBuffer($oReply->buildEconetpacket());
@@ -1509,21 +1608,21 @@ class FileServer implements ProviderInterface{
 					$_this->oLogger->debug("Replay sent for block of ".strlen((string) $oPacket->getData()));
 				},
 				function($oStream,$sData) use ($oFsRequest, $sPath, $iLoad, $iExec, $_this){
-					Vfs::saveFile($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sPath,$sData,$iLoad,$iExec);
+					$this->vfsSaveFile($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sPath,$sData,$iLoad,$iExec);
 				
 					//File is saved 	
 					$oReply2 = $oFsRequest->buildReply();
 					$oReply2->DoneOk();
 					$oReply2->appendByte(15);
 
-					//Add current date	
+					//Add current date
 					$iDay = date('j',time());
 					$oReply2->appendByte($iDay);
 
 					//The last byte is month and year, first 4 bits year, last 4 bits month
-					$iYear= date('y',time());
-					$iYear << 4;
-					$iYear = $iYear+date('n',time());
+					$iYear= (int) date('y',time());
+					$iYear <<= 4;
+					$iYear = $iYear + (int) date('n',time());
 					$oReply2->appendByte($iYear);
 					$_this->addReplyToBuffer($oReply2->buildEconetpacket());
 					$_this->freeStream($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oStream);
@@ -1537,7 +1636,7 @@ class FileServer implements ProviderInterface{
 				},
 				60,
 				$sPath,
-				Security::getUser($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation())->getUsername()
+				$this->secGetUser($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation())->getUsername()
 				
 			)
 		);
@@ -1558,8 +1657,8 @@ class FileServer implements ProviderInterface{
 		$oReply = $oFsRequest->buildReply();
 		
 		try {
-			$sFileData = Vfs::getFile($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sPath);
-			$oMeta = Vfs::getMeta($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sPath);
+			$sFileData = $this->vfsGetFile($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sPath);
+			$oMeta = $this->vfsGetMeta($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sPath);
 		}catch(Exception){
 			$oReply->setError(0x99,"No such file");
 			$this->addReplyToBuffer($oReply->buildEconetpacket());
@@ -1669,7 +1768,7 @@ class FileServer implements ProviderInterface{
 
 			try {
 				//Change the password
-				Security::setConnectedUsersPassword($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sOldPassword,$sPassword);
+				$this->secSetPassword($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sOldPassword,$sPassword);
 				$oReply->DoneOk();
 			}catch(Exception $oException){
 				$oReply->setError(0xff,$oException->getMessage());
@@ -1695,7 +1794,7 @@ class FileServer implements ProviderInterface{
 				if(!is_null(config::getValue('vfs_home_dir_path'))){
 					$oUser->setHomedir(config::getValue('vfs_home_dir_path').'.'.$aOptions[0]);
 					try {
-						Vfs::createDirectory($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),config::getValue('vfs_home_dir_path').'.'.$aOptions[0]);
+						$this->vfsCreateDirectory($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),config::getValue('vfs_home_dir_path').'.'.$aOptions[0]);
 					}catch(Exception $oException){
 					}
 				}else{
@@ -1704,7 +1803,7 @@ class FileServer implements ProviderInterface{
 				$oUser->setUnixUid(config::getValue('Security_default_unix_uid'));
 				$oUser->setPriv('U');
 				try{
-					Security::createUser($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oUser);
+					$this->secCreateUser($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oUser);
 					$oReply->DoneOk();
 				}catch(Exception $oException){
 					$oReply->setError(0xff,$oException->getMessage());
@@ -1728,7 +1827,7 @@ class FileServer implements ProviderInterface{
 			$oReply->setError(0xff,"Syntax");
 		}else{
 			try {
-				if(Security::removeUser($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sOptions)){
+				if($this->secRemoveUser($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sOptions)){
 					$oReply->DoneOk();
 				}else{
 					$oReply->setError(0xff,"No such user");
@@ -1751,12 +1850,12 @@ class FileServer implements ProviderInterface{
 		if(count($aOptions)!=2){
 			$oReply->setError(0xff,"Syntax");
 		}else{
-			$oMyUser = Security::getUser($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation());
+			$oMyUser = $this->secGetUser($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation());
 			if($oMyUser->isAdmin()){
 				if($aOptions[1]!='S' AND $aOptions[1]!='U'){
 					$oReply->setError(0xff,"The only valid priv is S or U");
 				}else{
-					Security::setPriv($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$aOptions[0],$aOptions[1]);
+					$this->secSetPriv($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$aOptions[0],$aOptions[1]);
 					$oReply->DoneOk();
 				}
 			}else{
@@ -1785,15 +1884,15 @@ class FileServer implements ProviderInterface{
 	public function chroot(FsRequest $oFsRequest,string $sOptions): void
 	{
 		$oReply = $oFsRequest->buildReply();
-		$oUser = security::getUser($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation());
+		$oUser = $this->secGetUser($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation());
 		try {
 			if($sOptions=="^"){
 				//Change to parent dir
-				$oCsd = Vfs::getFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oFsRequest->getCsd());
+				$oCsd = $this->vfsGetFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oFsRequest->getCsd());
 				$sParentPath = $oCsd->getEconetParentPath();
-				$oNewRootDir = Vfs::createFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sParentPath);
+				$oNewRootDir = $this->vfsCreateFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sParentPath);
 			}else{
-				$oNewRootDir = Vfs::createFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sOptions);	
+				$oNewRootDir = $this->vfsCreateFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sOptions);	
 					
 			}
 
@@ -1813,11 +1912,11 @@ class FileServer implements ProviderInterface{
 		$this->oLogger->debug("User ".$oUser->getUsername()." chroot to ".$oNewRootDir->getEconetPath());
 		$oUser->setRoot($oNewRootDir->getEconetPath());
 		
-		//Vfs::closeFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oFsRequest->getCsd());
-		Vfs::closeFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oNewRootDir->getId());
-		$oNewCsd = Vfs::createFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),'$');
+		//$this->vfsCloseFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oFsRequest->getCsd());
+		$this->vfsCloseFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oNewRootDir->getId());
+		$oNewCsd = $this->vfsCreateFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),'$');
 		$oUser->setCsd('$');
-		Vfs::replaceFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oFsRequest->getCsd(),$oNewCsd->getId());
+		$this->vfsReplaceFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oFsRequest->getCsd(),$oNewCsd->getId());
 		$oReply->DirOk();
 		$oReply->appendByte($oNewCsd->getID());
 		$oUser->setCsd($oNewCsd->getEconetPath());
@@ -1832,12 +1931,12 @@ class FileServer implements ProviderInterface{
 	public function chrootoff(FsRequest $oFsRequest,$sOptions): void
 	{
 		$oReply = $oFsRequest->buildReply();
-		$oUser = security::getUser($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation());
-		$oCsd = Vfs::getFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oFsRequest->getCsd());
+		$oUser = $this->secGetUser($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation());
+		$oCsd = $this->vfsGetFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oFsRequest->getCsd());
 		$sNewPath = str_replace('$',$oUser->getRoot(),(string) $oCsd->getEconetDirName());
 		$oUser->setRoot('$');
-		Vfs::closeFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oFsRequest->getCsd());
-		$oNewCsd = Vfs::createFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sNewPath);
+		$this->vfsCloseFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oFsRequest->getCsd());
+		$oNewCsd = $this->vfsCreateFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sNewPath);
 		$oReply->DirOk();
 		$oReply->appendByte($oNewCsd->getID());
 		$oUser->setCsd($oNewCsd->getEconetPath());
@@ -1854,7 +1953,7 @@ class FileServer implements ProviderInterface{
 		$iCount	= $oFsRequest->getByte(2);
 		$oReply = $oFsRequest->buildReply();
 		$oReply->DoneOK();
-		$aUsers = Security::getUsersOnline();
+		$aUsers = $this->secGetUsersOnline();
 		$this->oLogger->debug("usersOnline: There are ".count($aUsers)." on-line, the clients request details of (".$iStart."/".$iCount.")");
 		$iUsersRemaining = count($aUsers)-$iStart;
 		if($iUsersRemaining>0){
@@ -1870,7 +1969,7 @@ class FileServer implements ProviderInterface{
 					$oUser = $aData['user'];
 					$oReply->appendByte($iNetwork);
 					$oReply->appendByte($iStation);
-					$oReply->appendString(substr((string) $oUser->getUsername(),0,10));
+					$oReply->appendString(str_pad(substr((string) $oUser->getUsername(),0,10),10,' '));
 					$oReply->appendByte(0x0d);
 					if($oUser->isAdmin()){
 						$oReply->appendByte(1);
@@ -1896,16 +1995,17 @@ class FileServer implements ProviderInterface{
 		$sUser = $oFsRequest->getString(1);
 		$oReply = $oFsRequest->buildReply();
 
-		$aStation = Security::getUsersStation($sUser);
+		$aStation = $this->secGetUsersStation($sUser);
 		if(array_key_exists('network',$aStation) AND array_key_exists('station',$aStation)){
-			$oUser = Security::getUser($aStation['network'],$aStation['station']);
+			$oReply->DoneOk();
+			$oUser = $this->secGetUser($aStation['network'],$aStation['station']);
 			if(is_object($oUser) AND $oUser->isAdmin()){
 				$oReply->appendByte(1);
 			}else{
 				$oReply->appendByte(0);
 			}
 			$oReply->appendByte($aStation['network']);
-			$oReply->appendByte($aStation['station']);	
+			$oReply->appendByte($aStation['station']);
 		}else{
 			$oReply->DoneNoton();
 		}
@@ -1948,8 +2048,8 @@ class FileServer implements ProviderInterface{
 		$oReply = $oFsRequest->buildReply();
 
 		$oReply->DoneOk();
-		$oReply->append32bitIntLittleEndian(config::getValue('vfs_default_disc_free'));
-		$oReply->append32bitIntLittleEndian(config::getValue('vfs_default_disc_size'));
+		$oReply->append24bitIntLittleEndian(config::getValue('vfs_default_disc_free'));
+		$oReply->append24bitIntLittleEndian(config::getValue('vfs_default_disc_size'));
 		$this->addReplyToBuffer($oReply->buildEconetpacket());
 	}
 
@@ -2007,22 +2107,67 @@ class FileServer implements ProviderInterface{
 		$sPath = $oFsRequest->getString(12);
 
 		//Create the file
-		Vfs::createFile($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sPath,$iSize,$iLoad,$iExec);
+		$this->vfsCreateFile($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sPath,$iSize,$iLoad,$iExec);
 
-		$oReply = $oFsRequest->buildReply();
-		$oReply->DoneOk();
-		$oReply->appendByte(15);
-		
-		//Add current date
-		$iDay = date('j',time());
-		$oReply->appendByte($iDay);
-		//The last byte is month and year, first 4 bits year, last 4 bits month
-		$iYear= date('y',time());
-		$iYear << 4;
-		$iYear = $iYear+date('n',time());
-		$oReply->appendByte($iYear);
-		
-		$this->addReplyToBuffer($oReply->buildEconetpacket());
+		if($iSize > 0){
+			//Tell client to stream data to the data port
+			$oReply = $oFsRequest->buildReply();
+			$oReply->DoneOk();
+			$oReply->appendByte(config::getValue('econet_data_stream_port'));
+			$oReply->append16bitIntLittleEndian(968);
+			$this->addReplyToBuffer($oReply->buildEconetpacket());
+
+			$_this = $this;
+			$this->addStream($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),
+				new StreamIn(
+					$iSize,
+					function($oStream,$oPacket) use ($oFsRequest, $iAckPort, $_this) {
+						$oAck = $oFsRequest->buildReply();
+						$oAck->DoneOk();
+						$oAckPacket = $oAck->buildEconetpacket();
+						$oAckPacket->setPort($iAckPort);
+						$_this->addReplyToBuffer($oAckPacket);
+					},
+					function($oStream,$sData) use ($oFsRequest, $sPath, $iLoad, $iExec, $_this){
+						$this->vfsSaveFile($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sPath,$sData,$iLoad,$iExec);
+
+						$oReply2 = $oFsRequest->buildReply();
+						$oReply2->DoneOk();
+						$oReply2->appendByte(15);
+						$iDay = date('j',time());
+						$oReply2->appendByte($iDay);
+						$iYear = (int) date('y',time());
+						$iYear <<= 4;
+						$iYear = $iYear + (int) date('n',time());
+						$oReply2->appendByte($iYear);
+						$_this->addReplyToBuffer($oReply2->buildEconetpacket());
+						$_this->freeStream($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oStream);
+					},
+					function($oStream, $sError) use($oFsRequest, $_this) {
+						$_this->oLogger->debug("Createfile stream failed (".$sError.")");
+						$_this->freeStream($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oStream);
+						$oFailReply=$oFsRequest->buildReply();
+						$oFailReply->setError(0xff,"Timeout");
+						$_this->addReplyToBuffer($oFailReply->buildEconetpacket());
+					},
+					60,
+					$sPath,
+					$this->secGetUser($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation())->getUsername()
+				)
+			);
+		}else{
+			//Zero-length file: just confirm creation
+			$oReply = $oFsRequest->buildReply();
+			$oReply->DoneOk();
+			$oReply->appendByte(15);
+			$iDay = date('j',time());
+			$oReply->appendByte($iDay);
+			$iYear = (int) date('y',time());
+			$iYear <<= 4;
+			$iYear = $iYear + (int) date('n',time());
+			$oReply->appendByte($iYear);
+			$this->addReplyToBuffer($oReply->buildEconetpacket());
+		}
 	}
 
 	/**
@@ -2046,12 +2191,10 @@ class FileServer implements ProviderInterface{
 	public function setOpt(FsRequest $oFsRequest): void
 	{
 		//Opt
-		Security::setOpt($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),(string) $oFsRequest->getByte(1));
+		$this->secSetOpt($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),(string) $oFsRequest->getByte(1));
 
 		$oReply = $oFsRequest->buildReply();
 		$oReply->DoneOk();
-		$oReply->append24bitIntLittleEndian(config::getValue('vfs_default_disc_free'));
-
 		$this->addReplyToBuffer($oReply->buildEconetpacket());
 
 	}
@@ -2059,7 +2202,7 @@ class FileServer implements ProviderInterface{
 	public function whoAmI(FsRequest $oFsRequest): void
 	{
 		$oReply = $oFsRequest->buildReply();
-		$oUser = Security::getUser($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation());
+		$oUser = $this->secGetUser($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation());
 		if(is_object($oUser)){
 			$oReply->DoneOk();
 			$oReply->appendString($oUser->getUsername());
@@ -2074,4 +2217,88 @@ class FileServer implements ProviderInterface{
 	{
 		return [];
 	}
+
+	// -------------------------------------------------------------------------
+	// Protected wrappers — override in tests to avoid real Vfs/Security/config
+	// -------------------------------------------------------------------------
+
+	protected function vfsInit(): void
+	{
+		Vfs::init($this->oLogger, config::getValue('vfs_plugins'), config::getValue('security_mode')=='multiuser');
+	}
+
+	protected function vfsGetMeta(int $iNet, int $iStn, string $sPath)
+	{ return Vfs::getMeta($iNet, $iStn, $sPath); }
+
+	protected function vfsSetMeta(int $iNet, int $iStn, string $sPath, $iLoad, $iExec, $iAccess): void
+	{ Vfs::setMeta($iNet, $iStn, $sPath, $iLoad, $iExec, $iAccess); }
+
+	protected function vfsGetFsHandle(int $iNet, int $iStn, $iHandle)
+	{ return Vfs::getFsHandle($iNet, $iStn, $iHandle); }
+
+	protected function vfsCreateFsHandle(int $iNet, int $iStn, string $sPath, bool $bMustExist=false, bool $bReadOnly=false)
+	{ return Vfs::createFsHandle($iNet, $iStn, $sPath, $bMustExist, $bReadOnly); }
+
+	protected function vfsCloseFsHandle(int $iNet, int $iStn, $iHandle): void
+	{ Vfs::closeFsHandle($iNet, $iStn, $iHandle); }
+
+	protected function vfsSaveFile(int $iNet, int $iStn, string $sPath, string $sData, $iLoad, $iExec): void
+	{ Vfs::saveFile($iNet, $iStn, $sPath, $sData, $iLoad, $iExec); }
+
+	protected function vfsGetFile(int $iNet, int $iStn, string $sPath): string
+	{ return (string) Vfs::getFile($iNet, $iStn, $sPath); }
+
+	protected function vfsGetDirectoryListing($oFd): array
+	{ return Vfs::getDirectoryListing($oFd); }
+
+	protected function vfsCreateDirectory(int $iNet, int $iStn, string $sPath): void
+	{ Vfs::createDirectory($iNet, $iStn, $sPath); }
+
+	protected function vfsDeleteFile(int $iNet, int $iStn, string $sPath): void
+	{ Vfs::deleteFile($iNet, $iStn, $sPath); }
+
+	protected function vfsMoveFile(int $iNet, int $iStn, string $sFrom, string $sTo): void
+	{ Vfs::moveFile($iNet, $iStn, $sFrom, $sTo); }
+
+	protected function vfsCreateFile(int $iNet, int $iStn, string $sPath, int $iSize, $iLoad, $iExec): void
+	{ Vfs::createFile($iNet, $iStn, $sPath, $iSize, $iLoad, $iExec); }
+
+	protected function vfsReplaceFsHandle(int $iNet, int $iStn, $iOldId, $iNewId): void
+	{ Vfs::replaceFsHandle($iNet, $iStn, $iOldId, $iNewId); }
+
+	protected function secIsLoggedIn(int $iNet, int $iStn): bool
+	{ return Security::isLoggedIn($iNet, $iStn); }
+
+	protected function secUpdateIdleTimer(int $iNet, int $iStn): void
+	{ Security::updateIdleTimer($iNet, $iStn); }
+
+	protected function secGetUser(int $iNet, int $iStn)
+	{ return Security::getUser($iNet, $iStn); }
+
+	protected function secLogin(int $iNet, int $iStn, string $sUser, string $sPass): bool
+	{ return Security::login($iNet, $iStn, $sUser, $sPass); }
+
+	protected function secLogout(int $iNet, int $iStn): void
+	{ Security::logout($iNet, $iStn); }
+
+	protected function secGetUsersStation(string $sUser): array
+	{ return Security::getUsersStation($sUser); }
+
+	protected function secGetUsersOnline(): array
+	{ return Security::getUsersOnline(); }
+
+	protected function secSetPassword(int $iNet, int $iStn, ?string $sOld, ?string $sNew): void
+	{ Security::setConnectedUsersPassword($iNet, $iStn, $sOld, $sNew); }
+
+	protected function secCreateUser(int $iNet, int $iStn, User $oUser): void
+	{ Security::createUser($iNet, $iStn, $oUser); }
+
+	protected function secRemoveUser(int $iNet, int $iStn, string $sUser): bool
+	{ return (bool) Security::removeUser($iNet, $iStn, $sUser); }
+
+	protected function secSetPriv(int $iNet, int $iStn, string $sUser, string $sPriv): void
+	{ Security::setPriv($iNet, $iStn, $sUser, $sPriv); }
+
+	protected function secSetOpt(int $iNet, int $iStn, string $sOpt): void
+	{ Security::setOpt($iNet, $iStn, $sOpt); }
 }

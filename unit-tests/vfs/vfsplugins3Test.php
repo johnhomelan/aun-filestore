@@ -28,6 +28,7 @@ use HomeLan\FileStore\Vfs\Exception as VfsException;
  */
 class StubS3Client {
     private array $aObjects = [];
+    private int $iGetObjectCalls = 0;
 
     public function seed(string $sKey, string $sBody): void
     {
@@ -39,6 +40,16 @@ class StubS3Client {
         return $this->aObjects;
     }
 
+    public function getGetObjectCallCount(): int
+    {
+        return $this->iGetObjectCalls;
+    }
+
+    public function resetCallCounts(): void
+    {
+        $this->iGetObjectCalls = 0;
+    }
+
     public function doesObjectExist(string $sBucket, string $sKey): bool
     {
         return isset($this->aObjects[$sKey]);
@@ -46,6 +57,7 @@ class StubS3Client {
 
     public function getObject(array $aArgs): array
     {
+        $this->iGetObjectCalls++;
         $sKey = $aArgs['Key'];
         if (!isset($this->aObjects[$sKey])) {
             throw new \Aws\S3\Exception\S3Exception(
@@ -118,15 +130,22 @@ class StubS3Client {
     }
 }
 
-class vfsplugins3Test extends TestCase {
+// ---------------------------------------------------------------------------
+// Shared base — setUp/tearDown, helpers (not a test class itself)
+// ---------------------------------------------------------------------------
 
-    private User $oUser;
-    private StubS3Client $oS3;
-    private array $aMapping;
-    private string $sEconetBase = '$.s3files';
+abstract class vfsplugins3BaseTest extends TestCase {
+
+    protected User $oUser;
+    protected StubS3Client $oS3;
+    protected array $aMapping;
+    protected string $sEconetBase = '$.s3files';
+    protected string $sCacheDir;
 
     protected function setUp(): void
     {
+        $this->sCacheDir = sys_get_temp_dir() . '/s3vfstest_' . uniqid() . '/';
+
         $aMapping = [
             'econet_path'  => $this->sEconetBase,
             'bucket'       => 'testbucket',
@@ -141,6 +160,7 @@ class vfsplugins3Test extends TestCase {
 
         S3Plugin::reset();
         config::overrideValue('vfs_plugin_s3_mappings', json_encode([$aMapping]));
+        config::overrideValue('vfs_plugin_s3_cache_dir', $this->sCacheDir);
         S3Plugin::init($oLogger);
 
         $this->oS3 = new StubS3Client();
@@ -158,7 +178,54 @@ class vfsplugins3Test extends TestCase {
     {
         S3Plugin::reset();
         config::resetValue('vfs_plugin_s3_mappings');
+        config::resetValue('vfs_plugin_s3_cache_dir');
+        $this->_deleteDir($this->sCacheDir);
     }
+
+    protected function _deleteDir(string $sDir): void
+    {
+        if (!is_dir($sDir)) {
+            return;
+        }
+        $oIterator = new \RecursiveIteratorIterator(
+            new \RecursiveDirectoryIterator($sDir, \FilesystemIterator::SKIP_DOTS),
+            \RecursiveIteratorIterator::CHILD_FIRST
+        );
+        foreach ($oIterator as $oFileInfo) {
+            $oFileInfo->isDir() ? rmdir($oFileInfo->getRealPath()) : unlink($oFileInfo->getRealPath());
+        }
+        rmdir($sDir);
+    }
+
+    protected function reinitReadonly(): void
+    {
+        $aMapping = [
+            'econet_path' => $this->sEconetBase,
+            'bucket'      => 'testbucket',
+            'prefix'      => 'econet',
+            'region'      => 'eu-west-1',
+            // write_enabled absent — defaults to read-only
+        ];
+        S3Plugin::reset();
+        $oLogger = new Logger('s3test');
+        $oLogger->pushHandler(new NullHandler());
+        config::overrideValue('vfs_plugin_s3_mappings', json_encode([$aMapping]));
+        config::overrideValue('vfs_plugin_s3_cache_dir', $this->sCacheDir);
+        S3Plugin::init($oLogger);
+        S3Plugin::setS3Client($this->sEconetBase, $this->oS3);
+    }
+
+    protected function cachePathFor(string $sKey): string
+    {
+        return $this->sCacheDir . 'testbucket/' . $sKey;
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Core S3 plugin tests
+// ---------------------------------------------------------------------------
+
+class vfsplugins3Test extends vfsplugins3BaseTest {
 
     // -------------------------------------------------------------------------
     // Path conversion helpers (tested indirectly via saveFile / getFile)
@@ -476,23 +543,6 @@ class vfsplugins3Test extends TestCase {
     // Readonly mapping enforcement
     // -------------------------------------------------------------------------
 
-    private function reinitReadonly(): void
-    {
-        $aMapping = [
-            'econet_path' => $this->sEconetBase,
-            'bucket'      => 'testbucket',
-            'prefix'      => 'econet',
-            'region'      => 'eu-west-1',
-            // write_enabled absent — defaults to read-only
-        ];
-        S3Plugin::reset();
-        $oLogger = new Logger('s3test');
-        $oLogger->pushHandler(new NullHandler());
-        config::overrideValue('vfs_plugin_s3_mappings', json_encode([$aMapping]));
-        S3Plugin::init($oLogger);
-        S3Plugin::setS3Client($this->sEconetBase, $this->oS3);
-    }
-
     public function testReadonlyDefaultBlocksSaveFile(): void
     {
         $this->reinitReadonly();
@@ -568,6 +618,7 @@ class vfsplugins3Test extends TestCase {
         $oLogger = new Logger('s3test');
         $oLogger->pushHandler(new NullHandler());
         config::overrideValue('vfs_plugin_s3_mappings', json_encode([$aMapping]));
+        config::overrideValue('vfs_plugin_s3_cache_dir', $this->sCacheDir);
         S3Plugin::init($oLogger);
         S3Plugin::setS3Client($this->sEconetBase, $this->oS3);
 
@@ -614,6 +665,7 @@ class vfsplugins3Test extends TestCase {
 
         S3Plugin::reset();
         config::overrideValue('vfs_plugin_s3_mappings', json_encode([$this->aMapping, $aMapping2]));
+        config::overrideValue('vfs_plugin_s3_cache_dir', $this->sCacheDir);
         S3Plugin::init($oLogger);
 
         $oS3a = new StubS3Client();

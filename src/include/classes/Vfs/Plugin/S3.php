@@ -16,10 +16,14 @@ use config;
  * Multiple bucket/prefix mappings are supported.  Each mapping covers a
  * subtree of the Econet VFS.  Configuration is via the config:: system:
  *
- *   vfs_plugin_s3_mappings = JSON array of mapping objects (see README)
+ *   vfs_plugin_s3_mappings     = JSON array of mapping objects (see README)
+ *   vfs_plugin_s3_cache_dir    = local cache directory (default /var/lib/cache/aun/s3/)
  *
- * File data is held in a per-handle in-memory buffer.  The buffer is
- * uploaded to S3 on fsClose() if the handle is dirty.
+ * Read file handles are served from a local disk cache when possible.
+ * The cache is keyed as {cache_dir}/{bucket}/{s3_key}.
+ * Opening a write handle or calling a write method invalidates the cached copy.
+ * While a write handle is open for a key, read handles bypass the cache and
+ * fetch the current content directly from S3.
  *
  * @package corevfs
  * @author John Brown <john@home-lan.co.uk>
@@ -31,6 +35,10 @@ class S3 implements PluginInterface {
     protected static array $aMappings = [];
     protected static array $aFileHandles = [];
     protected static int $iNextHandle = 1;
+    protected static string $sCacheDir = '/var/lib/cache/aun/s3/';
+
+    // Keys with open write handles: "{bucket}:{s3key}" => open-handle count
+    protected static array $aOpenWriteKeys = [];
 
     // Injected S3 clients for testing (keyed by mapping econet_path)
     protected static array $aOverrideClients = [];
@@ -43,6 +51,8 @@ class S3 implements PluginInterface {
         if (!empty($sMappings)) {
             self::$aMappings = json_decode($sMappings, true) ?? [];
         }
+        $sCacheDir = config::getValue('vfs_plugin_s3_cache_dir');
+        self::$sCacheDir = !empty($sCacheDir) ? rtrim($sCacheDir, '/') . '/' : '/var/lib/cache/aun/s3/';
     }
 
     public static function houseKeeping(): void {}
@@ -64,6 +74,8 @@ class S3 implements PluginInterface {
         self::$aMappings = [];
         self::$aFileHandles = [];
         self::$iNextHandle = 1;
+        self::$aOpenWriteKeys = [];
+        self::$sCacheDir = '/var/lib/cache/aun/s3/';
     }
 
     // -------------------------------------------------------------------------
@@ -146,6 +158,85 @@ class S3 implements PluginInterface {
     }
 
     // -------------------------------------------------------------------------
+    // Local disk cache helpers
+    // -------------------------------------------------------------------------
+
+    protected static function _getCacheFilePath(string $sBucket, string $sKey): string
+    {
+        return self::$sCacheDir . $sBucket . '/' . $sKey;
+    }
+
+    /**
+     * Load a file from the local cache.  Returns null on cache miss.
+     */
+    protected static function _loadFromCache(string $sBucket, string $sKey): ?string
+    {
+        $sPath = self::_getCacheFilePath($sBucket, $sKey);
+        if (!is_file($sPath)) {
+            return null;
+        }
+        self::$oLogger->debug("S3 cache: hit " . $sPath);
+        $sData = file_get_contents($sPath);
+        return ($sData !== false) ? $sData : null;
+    }
+
+    /**
+     * Write a file to the local cache.  Silently skips on I/O failure.
+     */
+    protected static function _saveToCache(string $sBucket, string $sKey, string $sData): void
+    {
+        $sPath = self::_getCacheFilePath($sBucket, $sKey);
+        $sDir  = dirname($sPath);
+        if (!is_dir($sDir) && !@mkdir($sDir, 0755, true)) {
+            self::$oLogger->debug("S3 cache: unable to create cache dir " . $sDir);
+            return;
+        }
+        if (@file_put_contents($sPath, $sData) === false) {
+            self::$oLogger->debug("S3 cache: unable to write cache file " . $sPath);
+            return;
+        }
+        self::$oLogger->debug("S3 cache: stored " . $sPath);
+    }
+
+    /**
+     * Remove a file from the local cache.  No-op if not cached.
+     */
+    protected static function _invalidateCache(string $sBucket, string $sKey): void
+    {
+        $sPath = self::_getCacheFilePath($sBucket, $sKey);
+        if (is_file($sPath)) {
+            @unlink($sPath);
+            self::$oLogger->debug("S3 cache: invalidated " . $sPath);
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Write-handle tracking — prevents caching while a write handle is live
+    // -------------------------------------------------------------------------
+
+    protected static function _hasOpenWriteHandle(string $sBucket, string $sKey): bool
+    {
+        return isset(self::$aOpenWriteKeys[$sBucket . ':' . $sKey]);
+    }
+
+    protected static function _addWriteHandle(string $sBucket, string $sKey): void
+    {
+        $sLock = $sBucket . ':' . $sKey;
+        self::$aOpenWriteKeys[$sLock] = (self::$aOpenWriteKeys[$sLock] ?? 0) + 1;
+    }
+
+    protected static function _removeWriteHandle(string $sBucket, string $sKey): void
+    {
+        $sLock = $sBucket . ':' . $sKey;
+        if (isset(self::$aOpenWriteKeys[$sLock])) {
+            self::$aOpenWriteKeys[$sLock]--;
+            if (self::$aOpenWriteKeys[$sLock] <= 0) {
+                unset(self::$aOpenWriteKeys[$sLock]);
+            }
+        }
+    }
+
+    // -------------------------------------------------------------------------
     // PluginInterface implementation
     // -------------------------------------------------------------------------
 
@@ -174,8 +265,28 @@ class S3 implements PluginInterface {
 
         $sData = '';
         if ($bExists) {
-            $oResult = $oClient->getObject(['Bucket' => $sBucket, 'Key' => $sKey]);
-            $sData = (string) $oResult['Body'];
+            if ($bReadOnly && !self::_hasOpenWriteHandle($sBucket, $sKey)) {
+                // Read handle with no active write handle — use local cache.
+                $sCached = self::_loadFromCache($sBucket, $sKey);
+                if ($sCached !== null) {
+                    $sData = $sCached;
+                } else {
+                    $oResult = $oClient->getObject(['Bucket' => $sBucket, 'Key' => $sKey]);
+                    $sData   = (string) $oResult['Body'];
+                    self::_saveToCache($sBucket, $sKey, $sData);
+                }
+            } else {
+                // Write handle, or a read handle while a write handle is live:
+                // bypass cache and fetch directly from S3.
+                $oResult = $oClient->getObject(['Bucket' => $sBucket, 'Key' => $sKey]);
+                $sData   = (string) $oResult['Body'];
+            }
+        }
+
+        if (!$bReadOnly) {
+            // Invalidate any stale cached copy and register this write handle.
+            self::_invalidateCache($sBucket, $sKey);
+            self::_addWriteHandle($sBucket, $sKey);
         }
 
         $iHandle = self::$iNextHandle++;
@@ -321,6 +432,7 @@ class S3 implements PluginInterface {
                 return false;
             }
             $oClient->deleteObject(['Bucket' => $sBucket, 'Key' => $sKey]);
+            self::_invalidateCache($sBucket, $sKey);
             if ($oClient->doesObjectExist($sBucket, $sKey . '.inf')) {
                 $oClient->deleteObject(['Bucket' => $sBucket, 'Key' => $sKey . '.inf']);
             }
@@ -354,6 +466,8 @@ class S3 implements PluginInterface {
                 'CopySource' => $sBucketFrom . '/' . $sFromKey,
             ]);
             $oClient->deleteObject(['Bucket' => $sBucketFrom, 'Key' => $sFromKey]);
+            self::_invalidateCache($sBucketFrom, $sFromKey);
+            self::_invalidateCache($sBucketTo, $sToKey);
             if ($oClient->doesObjectExist($sBucketFrom, $sFromKey . '.inf')) {
                 $oClient->copyObject([
                     'Bucket'     => $sBucketTo,
@@ -382,6 +496,7 @@ class S3 implements PluginInterface {
         $oClient = self::_getS3Client($aMapping);
         try {
             $oClient->putObject(['Bucket' => $sBucket, 'Key' => $sKey, 'Body' => $sData]);
+            self::_invalidateCache($sBucket, $sKey);
             $sInf = "TAPE file " . str_pad(dechex($iLoadAddr), 8, "0", STR_PAD_LEFT) . " " . str_pad(dechex($iExecAddr), 8, "0", STR_PAD_LEFT);
             $oClient->putObject(['Bucket' => $sBucket, 'Key' => $sKey . '.inf', 'Body' => $sInf]);
             return true;
@@ -404,6 +519,7 @@ class S3 implements PluginInterface {
         $oClient = self::_getS3Client($aMapping);
         try {
             $oClient->putObject(['Bucket' => $sBucket, 'Key' => $sKey, 'Body' => str_repeat("\x00", $iSize)]);
+            self::_invalidateCache($sBucket, $sKey);
             $sInf = "TAPE file " . str_pad(dechex($iLoadAddr), 8, "0", STR_PAD_LEFT) . " " . str_pad(dechex($iExecAddr), 8, "0", STR_PAD_LEFT);
             $oClient->putObject(['Bucket' => $sBucket, 'Key' => $sKey . '.inf', 'Body' => $sInf]);
             return true;
@@ -423,9 +539,21 @@ class S3 implements PluginInterface {
         $sKey    = self::_econetToS3Key($sFullPath, $aMapping);
         $sBucket = $aMapping['bucket'];
         $oClient = self::_getS3Client($aMapping);
+
+        if (!self::_hasOpenWriteHandle($sBucket, $sKey)) {
+            $sCached = self::_loadFromCache($sBucket, $sKey);
+            if ($sCached !== null) {
+                return $sCached;
+            }
+        }
+
         try {
             $oResult = $oClient->getObject(['Bucket' => $sBucket, 'Key' => $sKey]);
-            return (string) $oResult['Body'];
+            $sData   = (string) $oResult['Body'];
+            if (!self::_hasOpenWriteHandle($sBucket, $sKey)) {
+                self::_saveToCache($sBucket, $sKey, $sData);
+            }
+            return $sData;
         } catch (S3Exception $e) {
             throw new VfsException("No such file: " . $sFullPath);
         }
@@ -561,9 +689,14 @@ class S3 implements PluginInterface {
                     'Key'    => $oHandle['key'],
                     'Body'   => $oHandle['data'],
                 ]);
+                // Ensure no stale cache remains after a write-back.
+                self::_invalidateCache($oHandle['bucket'], $oHandle['key']);
             } catch (S3Exception $e) {
                 self::$oLogger->debug("S3: fsClose write-back failed: " . $e->getMessage());
             }
+        }
+        if (!$oHandle['readonly']) {
+            self::_removeWriteHandle($oHandle['bucket'], $oHandle['key']);
         }
         unset(self::$aFileHandles[$fLocalHandle]);
         return true;

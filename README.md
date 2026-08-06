@@ -235,9 +235,12 @@ The disk image plugins (`DfsSsd`, `AdfsAdl`, `AdfsHD`, `AFS`) do not use .inf si
 
 The S3 plugin stores Econet files as S3 objects.  Each file has a data object and a sidecar `.inf` object at the same key with `.inf` appended.  Multiple bucket/prefix mappings can be configured, each covering a different subtree of the Econet VFS.
 
+Files fetched from S3 are cached to local disk.  Subsequent reads are served from the cache, avoiding repeated S3 network round-trips.  Write operations invalidate the relevant cache entry.
+
 | Config key | Default | Description |
 |---|---|---|
 | `vfs_plugin_s3_mappings` | *(none)* | JSON array of mapping objects (see below) |
+| `vfs_plugin_s3_cache_dir` | `/var/lib/cache/aun/s3/` | Local directory used to cache files fetched from S3.  Must be writable by the server process.  Set to an empty string to disable the cache (reads always go to S3). |
 
 Each mapping object has the following fields:
 
@@ -271,6 +274,18 @@ The `region` value is not checked by MinIO but must be present to satisfy the SD
 Econet path dots are converted to S3 key slashes.  For example, the Econet file `$.s3files.docs.readme` is stored as the S3 object `econet/docs/readme` (with its metadata in `econet/docs/readme.inf`).
 
 Subdirectories are represented by zero-byte S3 objects with a trailing `/`.
+
+#### Local disk cache ####
+
+Files fetched from S3 are stored in `{vfs_plugin_s3_cache_dir}/{bucket}/{s3_key}`, mirroring the S3 namespace under the local directory.  The cache directory is created automatically if it does not exist.
+
+**Invalidation rules:**
+
+* Opening a file handle for writing, calling `saveFile`, `createFile`, `deleteFile`, or `moveFile` immediately removes the cached copy for the affected key.
+* While a write handle is open for a file, any concurrent read handles for the same file bypass the cache and fetch the current content directly from S3.  No new cache entry is written until the write handle is closed.
+* After the write handle is closed the cache fence is lifted and subsequent reads cache normally.
+
+If the cache directory is not writable the plugin logs a debug message and continues without caching; S3 reads work normally.
 
 #### Uploading files to S3 ####
 

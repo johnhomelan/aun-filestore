@@ -1,0 +1,186 @@
+   10 REM ===================================================
+   20 REM PSTEST - Econet Print Server Test
+   30 REM Tests HomeLan aun-filestore print service
+   40 REM ===================================================
+   50 REM Setup before running:
+   60 REM   *NET         - switch to network filing system
+   70 REM   *FS <n>      - set file server station
+   80 REM   CHAIN"PSTEST" (or LOAD"PSTEST":RUN)
+   90 :
+  100 REM --- Configuration ---
+  110 iFStn%=254
+  120 iPStn%=254
+  130 sUser$="SYST"
+  140 sLog$="PSLOG"
+  150 :
+  160 REM --- State ---
+  170 iPass%=0:iFail%=0:iLog%=0:iF%=0
+  180 bPrinting%=FALSE
+  190 :
+  200 REM --- Display setup ---
+  210 MODE 0
+  220 PRINT "ECONET PRINT SERVER TEST"
+  230 PRINT STRING$(24,"=")
+  240 PRINT
+  250 :
+  260 REM === Switch to NET and set file server station ===
+  270 ON ERROR GOTO 9000
+  280 OSCLI "NET"
+  290 OSCLI "FS "+STR$(iFStn%)
+  300 PRINT "File server station : ";iFStn%
+  310 PRINT "Print server station: ";iPStn%
+  320 PRINT
+  330 :
+  340 REM =====================================================
+  350 REM TEST 1: LOGIN
+  360 REM =====================================================
+  370 PRINT "TEST 1: Login..."
+  380 bE%=FALSE
+  390 ON ERROR GOTO 420
+  400 OSCLI "I AM "+sUser$
+  410 ON ERROR GOTO 9000:PRINT "  PASS: Login OK":iPass%=iPass%+1:GOTO 440
+  420 ON ERROR GOTO 9000:bE%=TRUE
+  430 :
+  440 IF bE% THEN PRINT "  FAIL: Login failed":iFail%=iFail%+1
+  450 PRINT
+  460 :
+  470 REM === Open log file on the server ===
+  480 PRINT "Opening log file on server..."
+  490 iLog%=OPENOUT sLog$
+  500 IF iLog%=0 THEN PRINT "FATAL: Cannot create log - is server running?":END
+  510 PROCwl("ECONET PRINT SERVER TEST LOG")
+  520 PROCwl(STRING$(28,"="))
+  530 PROCwl("User: "+sUser$+"  FS: "+STR$(iFStn%)+"  PS: "+STR$(iPStn%))
+  540 PROCwl("")
+  550 PRINT "   Log file: ";sLog$
+  560 PRINT
+  570 :
+  580 REM =====================================================
+  590 REM TEST 2: SELECT PRINT SERVER (*PS)
+  600 REM =====================================================
+  610 PROCwl("TEST 2: Select print server (*PS "+STR$(iPStn%)+")")
+  620 PRINT "TEST 2: Select print server station "+STR$(iPStn%)+"..."
+  630 bE%=FALSE
+  640 ON ERROR GOTO 670
+  650 OSCLI "PS "+STR$(iPStn%)
+  660 ON ERROR GOTO 9000:PRINT "  PASS: Print server selected":iPass%=iPass%+1:PROCwl("  PASS: PS "+STR$(iPStn%)+" selected"):GOTO 680
+  670 ON ERROR GOTO 9000:bE%=TRUE
+  680 IF bE% THEN PRINT "  FAIL: *PS command failed":iFail%=iFail%+1:PROCwl("  FAIL: *PS command failed")
+  690 PRINT
+  700 :
+  710 REM =====================================================
+  720 REM TEST 3: SEND TEST PRINT JOB (VDU 2 / VDU 3)
+  730 REM =====================================================
+  740 REM Error handler at line 950 is outside the VDU 2 zone.
+  750 REM Happy path goes: VDU2 -> PRINTs -> VDU3 -> restore -> PROCpass -> GOTO 990.
+  760 REM Error path goes: error -> GOTO 950 -> restore + close job -> bE%=TRUE -> 990.
+  770 PROCwl("TEST 3: Send print job (VDU 2 ... VDU 3)")
+  780 PRINT "TEST 3: Sending test print job..."
+  790 bE%=FALSE:bPrinting%=FALSE
+  800 ON ERROR GOTO 950
+  810 VDU 2:bPrinting%=TRUE
+  820 PRINT "================================================"
+  830 PRINT "ECONET PRINT SERVER TEST JOB"
+  840 PRINT "================================================"
+  850 PRINT ""
+  860 PRINT "HomeLan aun-filestore print service test"
+  870 PRINT "If you can read this the print server works!"
+  880 PRINT ""
+  890 PRINT "================================================"
+  900 VDU 3:bPrinting%=FALSE
+  910 ON ERROR GOTO 9000
+  920 REM Happy path: report pass and jump past the error handler
+  930 PRINT "  PASS: Print job sent OK":iPass%=iPass%+1:PROCwl("  PASS: VDU 2/3 OK, job submitted")
+  940 GOTO 990
+  950 REM Error handler: restore global handler, close job if open, mark failure
+  960 ON ERROR GOTO 9000
+  970 IF bPrinting% THEN VDU 3:bPrinting%=FALSE
+  980 bE%=TRUE
+  990 IF bE% THEN PRINT "  FAIL: Error during print job":iFail%=iFail%+1:PROCwl("  FAIL: Error during print job")
+ 1000 PRINT
+ 1010 :
+ 1020 REM =====================================================
+ 1030 REM TEST 4: PRINTER STATUS (*PSTAT) -- optional
+ 1040 REM =====================================================
+ 1050 PROCwl("TEST 4: Printer status (*PSTAT) [optional]")
+ 1060 PRINT "TEST 4: Printer status (*PSTAT, optional)..."
+ 1070 bE%=FALSE
+ 1080 ON ERROR GOTO 1110
+ 1090 OSCLI "PSTAT"
+ 1100 ON ERROR GOTO 9000:PRINT "  PASS: *PSTAT OK":iPass%=iPass%+1:PROCwl("  PASS: *PSTAT OK"):GOTO 1120
+ 1110 ON ERROR GOTO 9000:bE%=TRUE
+ 1120 IF bE% THEN PRINT "  INFO: *PSTAT not supported (optional)":PROCwl("  INFO: *PSTAT not supported by this NFS ROM")
+ 1130 PRINT
+ 1140 :
+ 1150 REM =====================================================
+ 1160 REM TEST 5: VERIFY LOG FILE READABLE (CLOSE + REOPEN)
+ 1170 REM =====================================================
+ 1180 PROCwl("TEST 5: Verify log file readable after close")
+ 1190 PRINT "TEST 5: Verify log file readable after close..."
+ 1200 :
+ 1210 REM Write intermediate count, close, then verify by reading back
+ 1220 PROCwl("")
+ 1230 PROCwl("Intermediate: "+STR$(iPass%)+" passed, "+STR$(iFail%)+" failed")
+ 1240 PROCwl("Closing log to test read-back...")
+ 1250 CLOSE#iLog%:iLog%=0
+ 1260 :
+ 1270 bE%=FALSE:iSz%=0
+ 1280 ON ERROR GOTO 1320
+ 1290 iF%=OPENIN sLog$
+ 1300 IF iF%=0 THEN ON ERROR GOTO 9000:bE%=TRUE:GOTO 1360
+ 1310 iSz%=EXT#iF%
+ 1320 IF iF%<>0 THEN ON ERROR GOTO 9000:CLOSE#iF%:iF%=0 ELSE ON ERROR GOTO 9000
+ 1330 GOTO 1360
+ 1340 :
+ 1360 IF iF%<>0 THEN CLOSE#iF%:iF%=0
+ 1370 IF bE% THEN PRINT "  FAIL: Log file unreadable after close":iFail%=iFail%+1:GOTO 1400
+ 1380 PRINT "  PASS: Log readable, ";iSz%;" bytes":iPass%=iPass%+1
+ 1390 :
+ 1400 REM Reopen log at end to append final summary
+ 1410 iLog%=OPENUP sLog$
+ 1420 IF iLog%<>0 THEN PTR#iLog%=EXT#iLog%
+ 1430 IF iLog%=0 THEN PRINT "WARNING: Could not reopen log for summary":GOTO 1470
+ 1440 IF bE% THEN PROCwl("  FAIL: Log unreadable") ELSE PROCwl("  PASS: Log readable, "+STR$(iSz%)+" bytes")
+ 1450 :
+ 1460 REM =====================================================
+ 1470 REM FINAL SUMMARY
+ 1480 REM =====================================================
+ 1490 PRINT
+ 1500 PRINT STRING$(24,"=")
+ 1510 PRINT "RESULTS: ";iPass%;" PASS, ";iFail%;" FAIL"
+ 1520 PRINT STRING$(24,"=")
+ 1530 :
+ 1540 IF iLog%<>0 THEN PROCwl(""):PROCwl(STRING$(24,"="))
+ 1550 IF iLog%<>0 THEN PROCwl("RESULTS: "+STR$(iPass%)+" passed, "+STR$(iFail%)+" failed")
+ 1560 IF iLog%<>0 THEN PROCwl(STRING$(24,"=")):CLOSE#iLog%:iLog%=0
+ 1570 :
+ 1580 PRINT "Log written to: ";sLog$
+ 1590 PRINT
+ 1600 PRINT "Logging out..."
+ 1610 ON ERROR GOTO 1630
+ 1620 OSCLI "BYE"
+ 1630 ON ERROR GOTO 9000
+ 1640 PRINT "Done."
+ 1650 END
+ 1660 :
+ 1670 REM =====================================================
+ 1680 REM FATAL ERROR HANDLER
+ 1690 REM =====================================================
+ 1700 9000 PRINT "":PRINT "FATAL ERROR ";ERR;" at line ";ERL
+ 1710 9010 IF bPrinting% THEN VDU 3:bPrinting%=FALSE
+ 1720 9020 IF iF%<>0 THEN CLOSE#iF%:iF%=0
+ 1730 9030 ON ERROR GOTO 9050
+ 1740 9040 IF iLog%<>0 THEN CLOSE#iLog%:iLog%=0
+ 1750 9050 END
+ 1760 :
+ 1770 REM =====================================================
+ 1780 REM PROCEDURES
+ 1790 REM =====================================================
+ 1800 REM PROCwl: writes a text line + CR + LF to the log file
+ 1810 DEF PROCwl(s$)
+ 1820   LOCAL iI%
+ 1830   FOR iI%=1 TO LEN(s$)
+ 1840     BPUT#iLog%,ASC(MID$(s$,iI%,1))
+ 1850   NEXT iI%
+ 1860   BPUT#iLog%,13:BPUT#iLog%,10
+ 1870 ENDPROC

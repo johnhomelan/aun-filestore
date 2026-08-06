@@ -1,0 +1,357 @@
+   10 REM ===================================================
+   20 REM FSTEST - Econet File Server Test Suite
+   30 REM Tests HomeLan aun-filestore server implementation
+   40 REM ===================================================
+   50 REM Setup before running:
+   60 REM   *NET         - switch to network filing system
+   70 REM   *FS <n>      - set file server station number
+   80 REM   CHAIN"FSTEST" (or LOAD"FSTEST":RUN)
+   90 :
+  100 REM --- Configuration ---
+  110 iFStn%=254
+  120 sUser$="SYST"
+  130 sTF$="TSTDAT"
+  140 sTD$="TSTDIR"
+  150 sLog$="TSTLOG"
+  160 :
+  170 REM --- State ---
+  180 iPass%=0:iFail%=0:iLog%=0:iF%=0
+  190 sWrt$="BBC Micro Econet test data 12345"
+  200 :
+  210 MODE 0
+  220 PRINT "ECONET FILE SERVER TEST SUITE"
+  230 PRINT STRING$(29,"=")
+  240 PRINT
+  250 :
+  260 REM === Switch to NET and set file server station ===
+  270 ON ERROR GOTO 9000
+  280 OSCLI "NET"
+  290 OSCLI "FS "+STR$(iFStn%)
+  300 PRINT "File server station: ";iFStn%
+  310 PRINT
+  320 :
+  330 REM =====================================================
+  340 REM LOGIN
+  350 REM =====================================================
+  360 PRINT "Logging in as ";sUser$;"..."
+  370 bE%=FALSE
+  380 ON ERROR GOTO 410
+  390 OSCLI "I AM "+sUser$
+  400 ON ERROR GOTO 9000:PRINT "   Login OK":GOTO 430
+  410 ON ERROR GOTO 9000:bE%=TRUE
+  420 :
+  430 IF bE% THEN PRINT "   Login FAILED (check server/credentials)"
+  440 PRINT
+  450 :
+  460 REM === Open log file on server ===
+  470 PRINT "Opening log file on server..."
+  480 iLog%=OPENOUT sLog$
+  490 IF iLog%=0 THEN PRINT "FATAL: Cannot create log - is server running?":END
+  500 PROCwl("ECONET FILE SERVER TEST LOG")
+  510 PROCwl(STRING$(28,"="))
+  520 PROCwl("User: "+sUser$+"  FS station: "+STR$(iFStn%))
+  530 PROCwl("")
+  540 PRINT "   Log: ";sLog$
+  550 PRINT
+  560 :
+  570 REM File test error handling pattern used in tests 1-8:
+  580 REM   ON ERROR GOTO [errH]     <- [errH] is AFTER [happy] line
+  590 REM   ... code (open, use, then) ...
+  600 REM   [happy]: CLOSE:iF%=0:ON ERROR GOTO 9000:GOTO [after]
+  610 REM   [errH]:  ON ERROR GOTO 9000:bE%=TRUE
+  620 REM   [after]: IF iF%<>0 THEN CLOSE:iF%=0
+  630 REM            IF bE% THEN PROCfail ELSE check-result
+  640 :
+  650 REM =====================================================
+  660 REM TEST 1: WRITE FILE (OPENOUT + BPUT)
+  670 REM =====================================================
+  680 PROCsec("TEST 1: Write file (OPENOUT+BPUT)")
+  690 bE%=FALSE
+  700 ON ERROR GOTO 770
+  710 iF%=OPENOUT sTF$
+  720 IF iF%=0 THEN ON ERROR GOTO 9000:bE%=TRUE:GOTO 800
+  730 FOR iI%=1 TO LEN(sWrt$)
+  740   BPUT#iF%,ASC(MID$(sWrt$,iI%,1))
+  750 NEXT iI%
+  760 CLOSE#iF%:iF%=0:ON ERROR GOTO 9000:GOTO 800
+  770 ON ERROR GOTO 9000:bE%=TRUE
+  780 :
+  800 IF iF%<>0 THEN CLOSE#iF%:iF%=0
+  810 IF bE% THEN PROCfail("OPENOUT or BPUT failed") ELSE PROCpass("Wrote "+STR$(LEN(sWrt$))+" bytes to "+sTF$)
+  820 :
+  830 REM =====================================================
+  840 REM TEST 2: READ FILE BACK (OPENIN + BGET)
+  850 REM =====================================================
+  860 PROCsec("TEST 2: Read file back (OPENIN+BGET)")
+  870 bE%=FALSE:sRd$=""
+  880 ON ERROR GOTO 950
+  890 iF%=OPENIN sTF$
+  900 IF iF%=0 THEN ON ERROR GOTO 9000:bE%=TRUE:GOTO 980
+  910 FOR iN%=1 TO LEN(sWrt$)
+  920   sRd$=sRd$+CHR$(BGET#iF%)
+  930 NEXT iN%
+  940 CLOSE#iF%:iF%=0:ON ERROR GOTO 9000:GOTO 980
+  950 ON ERROR GOTO 9000:bE%=TRUE
+  960 :
+  980 IF iF%<>0 THEN CLOSE#iF%:iF%=0
+  990 IF bE% THEN PROCfail("OPENIN or BGET failed"):GOTO 1010
+ 1000 IF sRd$=sWrt$ THEN PROCpass("Read "+STR$(LEN(sRd$))+" bytes, data verified") ELSE PROCfail("Data mismatch: ["+sRd$+"]")
+ 1010 :
+ 1020 REM =====================================================
+ 1030 REM TEST 3: FILE EXTENT (EXT#)
+ 1040 REM =====================================================
+ 1050 PROCsec("TEST 3: File extent (EXT#)")
+ 1060 bE%=FALSE:iSz%=-1
+ 1070 ON ERROR GOTO 1110
+ 1080 iF%=OPENIN sTF$
+ 1090 IF iF%=0 THEN ON ERROR GOTO 9000:bE%=TRUE:GOTO 1140
+ 1100 iSz%=EXT#iF%:CLOSE#iF%:iF%=0:ON ERROR GOTO 9000:GOTO 1140
+ 1110 ON ERROR GOTO 9000:bE%=TRUE
+ 1120 :
+ 1140 IF iF%<>0 THEN CLOSE#iF%:iF%=0
+ 1150 IF bE% THEN PROCfail("OPENIN or EXT# failed"):GOTO 1170
+ 1160 IF iSz%=LEN(sWrt$) THEN PROCpass("EXT#="+STR$(iSz%)+" (correct)") ELSE PROCfail("EXT#="+STR$(iSz%)+" expected "+STR$(LEN(sWrt$)))
+ 1170 :
+ 1180 REM =====================================================
+ 1190 REM TEST 4: SEEK AND READ (PTR#)
+ 1200 REM =====================================================
+ 1210 PROCsec("TEST 4: Seek and read (PTR#)")
+ 1220 bE%=FALSE:iB%=0
+ 1230 ON ERROR GOTO 1280
+ 1240 iF%=OPENIN sTF$
+ 1250 IF iF%=0 THEN ON ERROR GOTO 9000:bE%=TRUE:GOTO 1310
+ 1260 PTR#iF%=7
+ 1270 iB%=BGET#iF%:CLOSE#iF%:iF%=0:ON ERROR GOTO 9000:GOTO 1310
+ 1280 ON ERROR GOTO 9000:bE%=TRUE
+ 1290 :
+ 1310 IF iF%<>0 THEN CLOSE#iF%:iF%=0
+ 1320 IF bE% THEN PROCfail("OPENIN, PTR# or BGET failed"):GOTO 1350
+ 1330 sExpect$=MID$(sWrt$,8,1)
+ 1340 IF iB%=ASC(sExpect$) THEN PROCpass("Seek to 7, read '"+CHR$(iB%)+"' OK") ELSE PROCfail("Seek: expected '"+sExpect$+"' got '"+CHR$(iB%)+"'")
+ 1350 :
+ 1360 REM =====================================================
+ 1370 REM TEST 5: EOF DETECTION (EOF#)
+ 1380 REM =====================================================
+ 1390 PROCsec("TEST 5: EOF detection (EOF#)")
+ 1400 bE%=FALSE:bEof%=FALSE
+ 1410 ON ERROR GOTO 1460
+ 1420 iF%=OPENIN sTF$
+ 1430 IF iF%=0 THEN ON ERROR GOTO 9000:bE%=TRUE:GOTO 1490
+ 1440 PTR#iF%=EXT#iF%
+ 1450 bEof%=EOF#iF%:CLOSE#iF%:iF%=0:ON ERROR GOTO 9000:GOTO 1490
+ 1460 ON ERROR GOTO 9000:bE%=TRUE
+ 1470 :
+ 1490 IF iF%<>0 THEN CLOSE#iF%:iF%=0
+ 1500 IF bE% THEN PROCfail("OPENIN, PTR# or EOF# failed"):GOTO 1520
+ 1510 IF bEof% THEN PROCpass("EOF# TRUE at end of file") ELSE PROCfail("EOF# should be TRUE at end of file")
+ 1520 :
+ 1530 REM =====================================================
+ 1540 REM TEST 6: UPDATE FILE (OPENUP + PTR# + BPUT)
+ 1550 REM =====================================================
+ 1560 PROCsec("TEST 6: Update file (OPENUP+PTR#+BPUT)")
+ 1570 bE%=FALSE
+ 1580 ON ERROR GOTO 1640
+ 1590 iF%=OPENUP sTF$
+ 1600 IF iF%=0 THEN ON ERROR GOTO 9000:bE%=TRUE:GOTO 1670
+ 1610 PTR#iF%=0
+ 1620 BPUT#iF%,ASC("X")
+ 1630 CLOSE#iF%:iF%=0:ON ERROR GOTO 9000:GOTO 1670
+ 1640 ON ERROR GOTO 9000:bE%=TRUE
+ 1650 :
+ 1670 IF iF%<>0 THEN CLOSE#iF%:iF%=0
+ 1680 IF bE% THEN PROCfail("OPENUP, PTR# or BPUT failed") ELSE PROCpass("Wrote update byte via OPENUP+PTR#")
+ 1690 :
+ 1700 REM Verify the update byte was stored
+ 1710 bE%=FALSE:iB%=0
+ 1720 ON ERROR GOTO 1770
+ 1730 iF%=OPENIN sTF$
+ 1740 IF iF%=0 THEN ON ERROR GOTO 9000:bE%=TRUE:GOTO 1800
+ 1750 iB%=BGET#iF%
+ 1760 CLOSE#iF%:iF%=0:ON ERROR GOTO 9000:GOTO 1800
+ 1770 ON ERROR GOTO 9000:bE%=TRUE
+ 1780 :
+ 1800 IF iF%<>0 THEN CLOSE#iF%:iF%=0
+ 1810 IF bE% THEN PROCfail("Verify: OPENIN or BGET failed"):GOTO 1830
+ 1820 IF iB%=ASC("X") THEN PROCpass("Update verified: first byte is 'X'") ELSE PROCfail("Update: expected 'X' got '"+CHR$(iB%)+"'")
+ 1830 :
+ 1840 REM =====================================================
+ 1850 REM TEST 7: CREATE DIRECTORY (CDIR)
+ 1860 REM =====================================================
+ 1870 PROCsec("TEST 7: Create directory (CDIR)")
+ 1880 bE%=FALSE
+ 1890 ON ERROR GOTO 1920
+ 1900 OSCLI "CDIR "+sTD$
+ 1910 ON ERROR GOTO 9000:PROCpass("CDIR "+sTD$+" OK"):GOTO 1930
+ 1920 ON ERROR GOTO 9000:bE%=TRUE
+ 1930 IF bE% THEN PROCfail("CDIR "+sTD$+" failed")
+ 1940 :
+ 1950 REM =====================================================
+ 1960 REM TEST 8: WRITE FILE IN SUBDIRECTORY
+ 1970 REM =====================================================
+ 1980 PROCsec("TEST 8: Write file in subdirectory")
+ 1990 bE%=FALSE
+ 2000 ON ERROR GOTO 2060
+ 2010 iF%=OPENOUT sTD$+".SUB"
+ 2020 IF iF%=0 THEN ON ERROR GOTO 9000:bE%=TRUE:GOTO 2090
+ 2030 FOR iI%=0 TO 9:BPUT#iF%,iI%:NEXT iI%
+ 2040 CLOSE#iF%:iF%=0:ON ERROR GOTO 9000:GOTO 2090
+ 2060 ON ERROR GOTO 9000:bE%=TRUE
+ 2070 :
+ 2090 IF iF%<>0 THEN CLOSE#iF%:iF%=0
+ 2100 IF bE% THEN PROCfail("Write to "+sTD$+".SUB failed") ELSE PROCpass("Wrote 10 bytes to "+sTD$+".SUB")
+ 2110 :
+ 2120 REM =====================================================
+ 2130 REM TEST 9: DISC FREE SPACE (*FREE)
+ 2140 REM =====================================================
+ 2150 PROCsec("TEST 9: Disc free space (*FREE)")
+ 2160 bE%=FALSE
+ 2170 ON ERROR GOTO 2200
+ 2180 OSCLI "FREE"
+ 2190 ON ERROR GOTO 9000:PROCpass("*FREE OK"):GOTO 2210
+ 2200 ON ERROR GOTO 9000:bE%=TRUE
+ 2210 IF bE% THEN PROCfail("*FREE failed")
+ 2220 :
+ 2230 REM =====================================================
+ 2240 REM TEST 10: USERS ONLINE (*USERS)
+ 2250 REM =====================================================
+ 2260 PROCsec("TEST 10: Users online (*USERS)")
+ 2270 bE%=FALSE
+ 2280 ON ERROR GOTO 2310
+ 2290 OSCLI "USERS"
+ 2300 ON ERROR GOTO 9000:PROCpass("*USERS OK"):GOTO 2320
+ 2310 ON ERROR GOTO 9000:bE%=TRUE
+ 2320 IF bE% THEN PROCfail("*USERS failed")
+ 2330 :
+ 2340 REM =====================================================
+ 2350 REM TEST 11: WHO AM I (*WHOAMI)
+ 2360 REM =====================================================
+ 2370 PROCsec("TEST 11: Who am I (*WHOAMI)")
+ 2380 bE%=FALSE
+ 2390 ON ERROR GOTO 2420
+ 2400 OSCLI "WHOAMI"
+ 2410 ON ERROR GOTO 9000:PROCpass("*WHOAMI OK"):GOTO 2430
+ 2420 ON ERROR GOTO 9000:bE%=TRUE
+ 2430 IF bE% THEN PROCfail("*WHOAMI failed")
+ 2440 :
+ 2450 REM =====================================================
+ 2460 REM TEST 12: FILE INFO (*INFO)
+ 2470 REM =====================================================
+ 2480 PROCsec("TEST 12: File info (*INFO)")
+ 2490 bE%=FALSE
+ 2500 ON ERROR GOTO 2530
+ 2510 OSCLI "INFO "+sTF$
+ 2520 ON ERROR GOTO 9000:PROCpass("*INFO "+sTF$+" OK"):GOTO 2540
+ 2530 ON ERROR GOTO 9000:bE%=TRUE
+ 2540 IF bE% THEN PROCfail("*INFO "+sTF$+" failed")
+ 2550 :
+ 2560 REM =====================================================
+ 2570 REM TEST 13: RENAME FILE (*RENAME)
+ 2580 REM =====================================================
+ 2590 PROCsec("TEST 13: Rename file (*RENAME)")
+ 2600 bE%=FALSE
+ 2610 ON ERROR GOTO 2640
+ 2620 OSCLI "RENAME "+sTF$+" TSTREN"
+ 2630 ON ERROR GOTO 9000:PROCpass("RENAME "+sTF$+" -> TSTREN OK"):GOTO 2650
+ 2640 ON ERROR GOTO 9000:bE%=TRUE
+ 2650 IF bE% THEN PROCfail("RENAME "+sTF$+" TSTREN failed")
+ 2660 :
+ 2670 REM =====================================================
+ 2680 REM TEST 14: DELETE FILE (*DELETE)
+ 2690 REM =====================================================
+ 2700 PROCsec("TEST 14: Delete file (*DELETE TSTREN)")
+ 2710 bE%=FALSE
+ 2720 ON ERROR GOTO 2750
+ 2730 OSCLI "DELETE TSTREN"
+ 2740 ON ERROR GOTO 9000:PROCpass("DELETE TSTREN OK"):GOTO 2760
+ 2750 ON ERROR GOTO 9000:bE%=TRUE
+ 2760 IF bE% THEN PROCfail("DELETE TSTREN failed")
+ 2770 :
+ 2780 REM =====================================================
+ 2790 REM TEST 15: VERIFY FILE IS GONE
+ 2800 REM =====================================================
+ 2810 PROCsec("TEST 15: Verify file deleted")
+ 2820 iF%=OPENIN "TSTREN"
+ 2830 IF iF%=0 THEN PROCpass("TSTREN gone after DELETE (correct)") ELSE CLOSE#iF%:iF%=0:PROCfail("TSTREN still exists after DELETE")
+ 2840 :
+ 2850 REM =====================================================
+ 2860 REM TEST 16: SET FILE ACCESS (*ACCESS)
+ 2870 REM =====================================================
+ 2880 PROCsec("TEST 16: Set file access (*ACCESS WR/)")
+ 2890 iF%=OPENOUT sTF$
+ 2900 IF iF%<>0 THEN BPUT#iF%,65:CLOSE#iF%:iF%=0
+ 2910 bE%=FALSE
+ 2920 ON ERROR GOTO 2950
+ 2930 OSCLI "ACCESS "+sTF$+" WR/"
+ 2940 ON ERROR GOTO 9000:PROCpass("*ACCESS "+sTF$+" WR/ OK"):GOTO 2960
+ 2950 ON ERROR GOTO 9000:bE%=TRUE
+ 2960 IF bE% THEN PROCfail("*ACCESS "+sTF$+" failed")
+ 2970 ON ERROR GOTO 2990:OSCLI "DELETE "+sTF$
+ 2980 :
+ 2990 ON ERROR GOTO 9000
+ 3000 :
+ 3010 REM =====================================================
+ 3020 REM TEST 17: LOGOUT (*BYE)
+ 3030 REM =====================================================
+ 3040 PROCsec("TEST 17: Logout (*BYE)")
+ 3050 bE%=FALSE
+ 3060 ON ERROR GOTO 3090
+ 3070 OSCLI "BYE"
+ 3080 ON ERROR GOTO 9000:PROCpass("*BYE OK"):GOTO 3100
+ 3090 ON ERROR GOTO 9000:bE%=TRUE
+ 3100 IF bE% THEN PROCfail("*BYE failed")
+ 3110 :
+ 3120 REM =====================================================
+ 3130 REM FINAL SUMMARY
+ 3140 REM =====================================================
+ 3150 PRINT
+ 3160 PRINT STRING$(29,"=")
+ 3170 PRINT "RESULTS: ";iPass%;" PASS, ";iFail%;" FAIL"
+ 3180 PRINT STRING$(29,"=")
+ 3190 :
+ 3200 PROCwl("")
+ 3210 PROCwl(STRING$(28,"="))
+ 3220 PROCwl("RESULTS: "+STR$(iPass%)+" passed, "+STR$(iFail%)+" failed")
+ 3230 PROCwl(STRING$(28,"="))
+ 3240 :
+ 3250 IF iLog%<>0 THEN CLOSE#iLog%:iLog%=0
+ 3260 PRINT "Log written to: ";sLog$
+ 3270 PRINT "Tests complete."
+ 3280 END
+ 3290 :
+ 3300 REM =====================================================
+ 3310 REM FATAL ERROR HANDLER
+ 3320 REM =====================================================
+ 3330 9000 PRINT "":PRINT "FATAL ERROR ";ERR;" at line ";ERL
+ 3340 9010 IF iF%<>0 THEN CLOSE#iF%:iF%=0
+ 3350 9020 ON ERROR GOTO 9040
+ 3360 9030 IF iLog%<>0 THEN CLOSE#iLog%:iLog%=0
+ 3370 9040 END
+ 3380 :
+ 3390 REM =====================================================
+ 3400 REM PROCEDURES
+ 3410 REM =====================================================
+ 3420 DEF PROCsec(s$)
+ 3430   PRINT s$
+ 3440   PROCwl(""):PROCwl(s$)
+ 3450 ENDPROC
+ 3460 :
+ 3470 DEF PROCpass(s$)
+ 3480   iPass%=iPass%+1
+ 3490   PRINT "  PASS: ";s$
+ 3500   PROCwl("  PASS: "+s$)
+ 3510 ENDPROC
+ 3520 :
+ 3530 DEF PROCfail(s$)
+ 3540   iFail%=iFail%+1
+ 3550   PRINT "  FAIL: ";s$
+ 3560   PROCwl("  FAIL: "+s$)
+ 3570 ENDPROC
+ 3580 :
+ 3590 REM PROCwl: writes a text line + CR + LF to the log file
+ 3600 DEF PROCwl(s$)
+ 3610   LOCAL iI%
+ 3620   FOR iI%=1 TO LEN(s$)
+ 3630     BPUT#iLog%,ASC(MID$(s$,iI%,1))
+ 3640   NEXT iI%
+ 3650   BPUT#iLog%,13:BPUT#iLog%,10
+ 3660 ENDPROC

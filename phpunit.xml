@@ -16,6 +16,7 @@
             <directory>unit-tests/vfs/</directory>
             <directory>unit-tests/ipv4/</directory>
             <directory>unit-tests/services/</directory>
+            <directory>unit-tests/command/</directory>
    </testsuite>
 </testsuites>
 

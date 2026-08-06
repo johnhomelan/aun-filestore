@@ -212,6 +212,7 @@ Plugin class names map to `HomeLan\FileStore\Vfs\Plugin\<Name>`.
 | `AdfsAdl` | Mounts Acorn ADFS `.adl` disc images as directories. |
 | `AdfsHD` | Mounts Acorn ADFS hard-disc images as directories. |
 | `S3` | Stores files in Amazon S3 (or S3-compatible) buckets (see below). |
+| `Catalogue` | Read-only plugin that serves files listed in a remotely-fetched JSON catalogue (see below). |
 
 ### .INF sidecar files ###
 
@@ -304,6 +305,170 @@ Options:
 | `--dry-run` | Show what would be uploaded without actually uploading anything |
 
 The source files must follow the same `.inf` sidecar convention as the LocalFile plugin.  If no `.inf` file exists alongside a source file the load and exec addresses default to `0xFFFF0000`.
+
+### Catalogue Plugin Configuration ###
+
+The Catalogue plugin is a **read-only** VFS plugin that exposes files described in a remotely-fetched JSON catalogue.  The catalogue is fetched over HTTP or HTTPS at startup and periodically refreshed.  When a file is first accessed its content is downloaded from the URL recorded in the catalogue and stored in a local disk cache; subsequent reads are served from the cache.  If the catalogue is reloaded and a file's version number has changed the cached copy is discarded and the file is re-fetched on next access.
+
+Use the `mkcatarchive` utility (see [mkcatarchive — Building Catalogue Archives](#mkcatarchive--building-catalogue-archives)) to package a local directory tree into a tar archive containing the catalogue `index.json` and all associated files, ready to be served over HTTP.  Re-running `mkcatarchive` with `--existing-tar` carries version numbers forward so that only changed files are re-downloaded by clients.
+
+Multiple catalogue URLs can be mapped to different subtrees of the Econet VFS.
+
+| Config key | Default | Description |
+|---|---|---|
+| `vfs_plugin_catalogue_mappings` | *(none)* | JSON array of mapping objects (see below) |
+| `vfs_plugin_catalogue_cache_dir` | `/var/lib/cache/aun/catalogue/` | Local directory used to cache downloaded files.  Must be writable by the server process. |
+| `vfs_plugin_catalogue_reload_interval` | `3600` | Default catalogue reload interval in seconds.  Can be overridden per mapping. |
+
+Each mapping object has the following fields:
+
+| Field | Required | Default | Description |
+|---|---|---|---|
+| `econet_path` | Yes | — | The Econet VFS path prefix this mapping covers (e.g. `$.apps`) |
+| `catalogue_url` | Yes | — | HTTP or HTTPS URL of the **directory** that contains `index.json`; the plugin appends `/index.json` automatically |
+| `reload_interval` | No | global default | Reload interval in seconds for this specific mapping, overrides `vfs_plugin_catalogue_reload_interval` |
+
+Example configuration:
+
+~~~
+vfs_plugin_catalogue_mappings = [{"econet_path":"$.apps","catalogue_url":"https://example.com/apps"},{"econet_path":"$.games","catalogue_url":"https://example.com/games","reload_interval":7200}]
+vfs_plugin_catalogue_cache_dir = /var/lib/cache/aun/catalogue/
+vfs_plugin_catalogue_reload_interval = 3600
+~~~
+
+#### Catalogue JSON format ####
+
+The catalogue file must be a JSON object with a `files` key containing an object where each key is the file path relative to the mapping's `econet_path`, using `.` as the directory separator:
+
+~~~json
+{
+  "files": {
+    "game": {
+      "version": 1,
+      "md5sum":  "d41d8cd98f00b204e9800998ecf8427e",
+      "load":    4294901760,
+      "exec":    4294901760,
+      "size":    16384,
+      "url":     "https://example.com/files/game"
+    },
+    "utils.editor": {
+      "version": 3,
+      "md5sum":  "abc123def456",
+      "load":    0,
+      "exec":    0,
+      "size":    8192,
+      "url":     "https://example.com/files/utils/editor"
+    }
+  }
+}
+~~~
+
+| Field | Description |
+|---|---|
+| `version` | Integer version number, starting at `1` and incrementing by `1` with each new version of the file.  When the catalogue is reloaded and this value has changed, the locally-cached copy is invalidated and the file is re-fetched on next access. |
+| `md5sum` | MD5 checksum of the file (informational; the plugin does not currently verify it but it is included for client tooling use). |
+| `load` | Econet load address (integer). |
+| `exec` | Econet execute address (integer). |
+| `size` | File size in bytes. |
+| `url` | HTTP or HTTPS URL from which the file content can be downloaded. |
+
+Directories are inferred automatically from path prefixes — they do not need to be listed explicitly in the catalogue.  In the example above, `utils` appears as a directory in the listing of `$.apps` because the file `utils.editor` exists.
+
+#### Local disk cache ####
+
+Downloaded files are stored in `{vfs_plugin_catalogue_cache_dir}/{md5_of_catalogue_url}/{file_path}`, where `file_path` replaces `.` separators with `/`.  Alongside each cached file a `.ver` sidecar stores the version string from the catalogue.
+
+**Invalidation rules:**
+
+* When the catalogue is reloaded (on startup or via housekeeping), any file whose version string in the new catalogue differs from the version stored in the local `.ver` sidecar is removed from the cache.  The file is re-fetched on next access.
+* A stale version tag discovered during a read (`.ver` content does not match the in-memory catalogue) also triggers immediate invalidation and a fresh fetch.
+
+If the cache directory is not writable the plugin logs a debug message and continues without caching; files are always fetched from their URL.
+
+#### Relative file URLs ####
+
+File `url` values in the catalogue may be either absolute or relative:
+
+* **Absolute** — any URL containing `://` (e.g. `https://cdn.example.com/game`) is used unchanged.
+* **Relative** — a path without a scheme (e.g. `game`, `utils/editor`) is resolved relative to the mapping's `catalogue_url` (which is already the directory).  For example, if `catalogue_url` is `https://example.com/myfiles`, the relative URL `utils/editor` resolves to `https://example.com/myfiles/utils/editor`.
+
+The `mkcatarchive` utility (see below) always generates relative URLs, so the same archive can be served from any base URL without editing the catalogue.
+
+#### HouseKeeping ####
+
+The Catalogue plugin participates in the server's regular housekeeping cycle.  Each call to `houseKeeping()` checks whether the elapsed time since the last successful catalogue fetch exceeds the configured `reload_interval` (per-mapping or global).  If it does, the catalogue is re-fetched and version checks are run against all cached files.
+
+### mkcatarchive — Building Catalogue Archives ###
+
+`src/util/mkcatarchive` builds a tar archive from a local directory tree that is ready to be served as a Catalogue VFS source.  The archive contains all the files from the directory (`.inf` sidecars excluded) plus an `index.json` catalogue at the archive root.
+
+~~~
+src/util/mkcatarchive [--output=<path>] [--existing-tar=<path>] <source>
+~~~
+
+| Option | Description |
+|---|---|
+| `source` | Path to the local directory to archive (required) |
+| `--output` / `-o` | Output tar file path.  Defaults to `<dirname>.tar` in the current directory. |
+| `--existing-tar` / `-e` | Path to a previously-built tar archive.  Its `index.json` is used to carry version numbers forward (see below). |
+
+#### What gets archived ####
+
+Every file in the source tree is added to the archive, preserving subdirectory structure.  `.inf` sidecar files are read for load/exec address metadata but are not included in the archive.  The `index.json` is generated automatically and added at the archive root.
+
+#### index.json format ####
+
+Each file entry is keyed by its path relative to the archive root, using the Econet `.` separator.  The file URL is the same path using `/` as the separator (relative to `index.json`, so the archive can be hosted at any URL).
+
+Example output for a directory containing `game` (with a `.inf` sidecar) and `utils/editor`:
+
+~~~json
+{
+  "files": {
+    "game": {
+      "version": 1,
+      "md5sum": "d41d8cd98f00b204e9800998ecf8427e",
+      "load": 4294901760,
+      "exec": 4294901760,
+      "size": 16384,
+      "url": "game"
+    },
+    "utils.editor": {
+      "version": 1,
+      "md5sum": "abc123def456",
+      "load": 0,
+      "exec": 0,
+      "size": 8192,
+      "url": "utils/editor"
+    }
+  }
+}
+~~~
+
+#### Version numbering ####
+
+Version numbers are integers starting at `1`.  When `--existing-tar` is not supplied, every file receives version `1`.
+
+When `--existing-tar` is supplied, the tool extracts `index.json` from the existing archive and compares MD5 checksums:
+
+| Situation | Version assigned |
+|---|---|
+| File not in old `index.json` (new file) | `1` |
+| File in old `index.json` with same MD5 | Old version number (unchanged) |
+| File in old `index.json` with different MD5 | Old version number `+ 1` |
+
+This lets the Catalogue VFS plugin detect which cached files need to be re-downloaded when an updated archive is deployed.
+
+#### Typical workflow ####
+
+~~~
+# Build the initial archive from a directory of BBC Micro software.
+src/util/mkcatarchive --output=myfiles.tar /srv/bbcfiles
+
+# After updating some files, rebuild — carry version numbers forward.
+src/util/mkcatarchive --output=myfiles-new.tar --existing-tar=myfiles.tar /srv/bbcfiles
+mv myfiles-new.tar myfiles.tar
+~~~
 
 ## It would be nice if ##
 * Work has started on a WebSocket Interface for

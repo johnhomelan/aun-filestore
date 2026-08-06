@@ -78,6 +78,167 @@ A browser-based admin interface is included and starts automatically with the se
     * *Print Jobs* — lists jobs currently in progress (data still being received from a workstation)
     * *Spooled Files* — lists all spool files stored on disk, grouped by user, with file size and modification time; each file has a **Download** button to retrieve it directly from the browser
 
+## Network Encapsulation ##
+
+The server supports three ways to carry Econet traffic, each targeting a different physical medium.  All three are active simultaneously; the correct transport is chosen automatically for each outbound packet based on the destination address.  Services (file server, print server, etc.) work entirely with a common internal `EconetPacket` representation and are unaware of which transport was used.
+
+| Encapsulation | Transport | Typical use |
+|---|---|---|
+| **AUN** | UDP/IP | Standard Acorn Universal Networking over an Ethernet LAN |
+| **Piconet** | Serial USB device | Physical Econet wire via an EconetUSB hardware interface |
+| **WebSocket** | TCP / WebSocket | Browser-based BBC Micro emulators (e.g. jsbeeb) |
+
+### Outbound routing priority ###
+
+When the server sends a packet to a given Econet network.station pair the routing decision follows a fixed priority order:
+
+1. **WebSocket** — if a WebSocket client has been dynamically allocated that exact network.station, the packet is delivered over the WebSocket connection.
+2. **Piconet** — if the destination network number appears in the Piconet map file, the packet is sent to the hardware interface.
+3. **AUN** — all other addresses are sent as AUN UDP datagrams.
+
+A Piconet-mapped network always takes precedence over AUN for that network, and an active WebSocket client always takes precedence over Piconet.
+
+---
+
+### AUN — Econet over UDP/IP ###
+
+AUN encodes Econet packets as UDP datagrams on port 32768 (by default).  Each remote station is identified by its IP address, optionally qualified by UDP port.  The AUN map file translates between IP addresses and Econet network.station pairs.
+
+#### AUN configuration ####
+
+| Config key | Default | Description |
+|---|---|---|
+| `local_ip` | *(required)* | The server's own IP address.  Used to identify inbound packets addressed to this host. |
+| `aun_listen_address` | `0.0.0.0` | IP address to bind the AUN UDP socket to.  Use `0.0.0.0` to listen on all interfaces. |
+| `aun_listen_port` | `32768` | UDP port to listen on for incoming AUN packets. |
+| `aun_default_port` | `32768` | UDP port used when sending AUN packets to a host that has no explicit port in the map. |
+| `aunmap_file` | `aunmap.txt` | Path to the AUN map file (see below). |
+| `aunmap_autonet` | `200` | Econet network number assigned to any IP address that sends AUN traffic but has no map entry.  The station number is taken from the last octet of the IP address. |
+| `version_minor` | *(required)* | Minor version byte returned in AUN echo (Immediate, cb=8) replies. |
+| `version_majour` | *(required)* | Major version byte returned in AUN echo replies. |
+
+#### AUN map file ####
+
+The AUN map file (`aunmap_file`) defines how IP addresses are translated to and from Econet network.station pairs.  Two entry types are supported and may be mixed freely in the same file.
+
+**Subnet entry** — maps a whole /24 subnet to an Econet network number.  The Econet station number is taken from the last octet of the IP address.
+
+~~~
+<ip>/<prefix>  <econet_network>
+~~~
+
+**Host entry** — maps a single IP address (or a specific IP:port combination) to an exact Econet network.station.  A host entry with an explicit port only matches traffic arriving on that UDP port; this is useful when running multiple logical Econet stations on the same host.
+
+~~~
+<ip>  <econet_network>.<econet_station>
+<ip>:<udp_port>  <econet_network>.<econet_station>
+~~~
+
+Host entries take precedence over subnet entries for the same IP address.
+
+Example `aunmap.txt`:
+
+~~~
+# Whole 192.168.0.0/24 subnet → Econet network 129.
+# 192.168.0.40 becomes Econet 129.40, 192.168.0.1 becomes 129.1, etc.
+192.168.0.0/24 129
+
+# A single host at 192.168.2.20 is Econet station 129.29
+192.168.2.20 129.29
+
+# A second logical station on localhost, distinguished by UDP port
+127.0.0.1:10101 0.101
+~~~
+
+Lines that do not match any of these patterns (including lines beginning with `#`) are silently ignored — there is no formal comment syntax, but unrecognised lines cause no harm.
+
+Any IP address that appears in inbound AUN traffic but is not covered by any map entry is automatically assigned to the `aunmap_autonet` network (default 200), with the station number derived from the last octet of the IP.  This means unknown stations are accessible but may appear under an unexpected network number rather than causing an error.
+
+---
+
+### Piconet — Physical Econet via EconetUSB ###
+
+The Piconet transport communicates with an EconetUSB serial USB hardware interface that provides a gateway onto a real physical Econet wire.  Because all traffic from the physical wire arrives through a single hardware device, the Piconet map only needs to list which Econet network numbers are reachable through it — the station address is carried in the Econet packet itself.
+
+#### Piconet configuration ####
+
+| Config key | Default | Description |
+|---|---|---|
+| `piconet_device` | `dev/econet` | Path to the Unix serial device file for the EconetUSB adapter.  The server opens this path with a `file:///` prefix via the ReactPHP event loop. |
+| `piconetmap_file` | `piconetmap.txt` | Path to the Piconet map file (see below). |
+| `piconet_station` | `254` | The Econet station number the server presents itself as on the physical Econet wire. |
+| `piconet_local_network` | `1` | The global Econet network number that corresponds to "network 0" on the local physical wire.  Outbound packets destined for this network have their destination network byte replaced with `0` before transmission to the device. |
+
+#### Piconet map file ####
+
+The Piconet map file (`piconetmap_file`) lists the Econet network numbers that are reachable via the physical Econet hardware.  Any outbound packet whose destination network appears in this file is sent to the EconetUSB device instead of going via AUN.
+
+Format — one network number per line:
+
+~~~
+<econet_network>
+~~~
+
+Example `piconetmap.txt`:
+
+~~~
+1
+2
+129
+~~~
+
+Lines that contain no digits are ignored.  There is no comment syntax, but non-numeric content on a line does not cause an error.
+
+Up to 8 network numbers may be listed.
+
+---
+
+### WebSocket — Econet for Browser Emulators ###
+
+The WebSocket transport allows browser-based BBC Micro emulators (such as jsbeeb) to participate in Econet as first-class stations.  Each browser tab that connects is dynamically assigned a unique Econet network.station pair from a pool of network numbers configured in the WebSocket map file.  When the tab closes its address is released back to the pool.
+
+#### WebSocket configuration ####
+
+| Config key | Default | Description |
+|---|---|---|
+| `websocket_listen_address` | `0.0.0.0` | IP address to bind the WebSocket server to. |
+| `websocket_listen_port` | `8090` | TCP port for incoming WebSocket connections. |
+| `websocket_network_address` | `128` | Econet network number the server presents itself as to WebSocket clients. |
+| `websocket_station_address` | `254` | Econet station number the server presents itself as to WebSocket clients. |
+| `websocketmap_file` | `websocket_map.cfg` | Path whose **existence** is checked at startup.  Must exist for the WebSocket map to initialise. |
+| `websocketmap_dynamic_network_range_file` | *(required if WebSocket is in use)* | Path to the file listing which Econet network numbers are available for dynamic allocation to WebSocket clients. |
+
+#### WebSocket map file ####
+
+The dynamic network range file (`websocketmap_dynamic_network_range_file`) lists the Econet network numbers whose station address space (stations 1–253) may be allocated to connecting WebSocket clients.  The format is identical to the Piconet map file — one network number per line.
+
+~~~
+<econet_network>
+~~~
+
+Example:
+
+~~~
+130
+131
+~~~
+
+With this configuration up to 506 browser clients (253 stations × 2 networks) can be connected simultaneously.  Addresses are allocated sequentially; when a client disconnects its slot is freed for re-use.
+
+**Note:** Both `websocketmap_file` (existence check) and `websocketmap_dynamic_network_range_file` (content read) must be configured for the WebSocket transport to initialise.  If `websocketmap_dynamic_network_range_file` is not set the WebSocket map will have no networks available and all dynamic allocation requests will fail.
+
+#### Dynamic address allocation ####
+
+When a WebSocket client connects it sends a `ctrl` message requesting an address:
+
+~~~json
+{"type": "ctrl", "action": "dynamic_alloction_request"}
+~~~
+
+The server responds with the allocated Econet network.station as a string (e.g. `"130.1"`).  Subsequent `pkt` messages from the client must be addressed to the server's `websocket_network_address` / `websocket_station_address`.  The server routes replies to the client using its allocated address.
+
+---
+
 ## Print Server Configuration ##
 
 Two config keys control the print server spool and conversion behaviour:

@@ -18,7 +18,7 @@ class ServiceController extends AbstractController
 		$oSmarty = $oSmartyService->getSmarty();
 
 		$oService = $oServices->getServiceByPort((int) $oRequest->query->get('port'));
-		if(!is_object($oService)){	
+		if(!is_object($oService)){
 			$oSmarty->assign('error',"There was no service on port ".$oRequest->query->get('port'));
 			return new Response($oSmarty->fetch('error.tpl'));
 		}
@@ -30,7 +30,24 @@ class ServiceController extends AbstractController
 			$sHtml = $oException->getMessage();
 		}
 		return new Response($sHtml);
+	}
 
+	public function download(Request $oRequest): \Symfony\Component\HttpFoundation\Response
+	{
+		$oServices = ServiceDispatcher::create();
+		$oService = $oServices->getServiceByPort((int) $oRequest->query->get('port'));
+		if (!is_object($oService)) {
+			return new Response('Service not found', 404);
+		}
+		if (!method_exists($oService, 'getSpooledFilePath')) {
+			return new Response('Service does not support file downloads', 400);
+		}
+		$sFile = (string) $oRequest->query->get('file', '');
+		$sPath = $oService->getSpooledFilePath($sFile);
+		if ($sPath === null) {
+			return new Response('File not found', 404);
+		}
+		return new \Symfony\Component\HttpFoundation\BinaryFileResponse($sPath);
 	}
 
 }

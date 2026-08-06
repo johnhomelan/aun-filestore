@@ -49,6 +49,8 @@
 									<td>{$oEntity->getValue($sField)|date_format:"%H:%M:%S %D"}</td>
 								{elseif $sFieldType=='bool'}
 									<td>{if $oEntity->getValue($sField)}<i class="fas fa-check text-success"></i>{else}<i class="fas fa-times text-danger"></i>{/if}</td>
+								{elseif $sFieldType=='download'}
+									<td><a href="{$oEntity->getValue($sField)|escape:'html'}" class="btn btn-sm btn-outline-secondary">Download</a></td>
 								{else}
 									<td>{$oEntity->getValue($sField)}</td>
 								{/if}

@@ -15,6 +15,7 @@ use HomeLan\FileStore\Messages\PrintServerEnquiry;
 use HomeLan\FileStore\Messages\PrintServerData; 
 use HomeLan\FileStore\Messages\EconetPacket; 
 use config;
+use React\ChildProcess\Process;
 /**
 /**
  * This class implements the econet printserver
@@ -28,6 +29,8 @@ class PrintServer implements ProviderInterface {
 	protected $aPrintBuffer = [];
 
 	protected $oLogger;
+
+	protected $oLoop;
 
 	/**
 	 * Initializes the service
@@ -95,6 +98,7 @@ class PrintServer implements ProviderInterface {
 
 	public function registerService(ServiceDispatcher $oServiceDispatcher): void
 	{
+		$this->oLoop = $oServiceDispatcher->getLoop();	
 	}
 
 	/**
@@ -113,9 +117,9 @@ class PrintServer implements ProviderInterface {
 	}
 
 	/**
-  * This method handles print enquires
-  */
- public function processEnquiry(PrintServerEnquiry $oEnquiry): void
+	 * This method handles print enquires
+	 */
+	public function processEnquiry(PrintServerEnquiry $oEnquiry): void
 	{
 		$sPrinterName = substr($oEnquiry->getString(1),0,6);
 		$iRequestCode = $oEnquiry->get16bitIntLittleEndian(7);
@@ -188,6 +192,7 @@ class PrintServer implements ProviderInterface {
 						$this->makeDir($sSpoolPath);
 					}
 					$this->putFile($sSpoolPath.DIRECTORY_SEPARATOR.date('H-i-s-d-n-Y').'.raw',$this->aPrintBuffer[$oPrintData->getSourceNetwork()][$oPrintData->getSourceStation()]['data']);
+					$this->convertFile($sSpoolPath.DIRECTORY_SEPARATOR.date('H-i-s-d-n-Y').'.raw');
 				}else{
 					$this->oLogger->info("Un-able to save print out as the spool directory does not exist (".$sSpoolBase.")");
 				}
@@ -204,6 +209,11 @@ class PrintServer implements ProviderInterface {
 	protected function getSpoolDir(): string
 	{
 		return config::getValue('print_server_spool_dir');
+	}
+
+	protected function getConvertorScript(): ?string
+	{
+		return config::getValue('print_server_conversion_script');
 	}
 
 	protected function isDir(string $sPath): bool
@@ -235,5 +245,89 @@ class PrintServer implements ProviderInterface {
 			}
 		}
 		return $aJobs;
+	}
+
+	public function getSpooledFiles(): array
+	{
+		$aFiles = [];
+		$sSpoolBase = $this->getSpoolDir();
+		if (!$this->isDir($sSpoolBase)) {
+			return $aFiles;
+		}
+		$aUserDirs = glob($sSpoolBase . DIRECTORY_SEPARATOR . '*', GLOB_ONLYDIR);
+		if ($aUserDirs === false) {
+			return $aFiles;
+		}
+		foreach ($aUserDirs as $sUserDir) {
+			$sUser = basename($sUserDir);
+			$aFileList = glob($sUserDir . DIRECTORY_SEPARATOR . '*');
+			if ($aFileList === false) {
+				continue;
+			}
+			foreach ($aFileList as $sFile) {
+				if (!is_file($sFile)) {
+					continue;
+				}
+				$iSize = filesize($sFile);
+				$iModified = filemtime($sFile);
+				$aFiles[] = [
+					'user'     => $sUser,
+					'filename' => basename($sFile),
+					'size'     => $iSize !== false ? $iSize : 0,
+					'modified' => $iModified !== false ? $iModified : 0,
+					'path'     => $sUser . DIRECTORY_SEPARATOR . basename($sFile),
+				];
+			}
+		}
+		return $aFiles;
+	}
+
+	public function getSpooledFilePath(string $sRelPath): ?string
+	{
+		$sSpoolBase = $this->getSpoolDir();
+		$sRealBase = realpath($sSpoolBase);
+		if ($sRealBase === false) {
+			return null;
+		}
+		// Strip path-traversal sequences before resolving
+		$sRelPath = str_replace(["\0", '..'], '', $sRelPath);
+		$sFullPath = $sRealBase . DIRECTORY_SEPARATOR . $sRelPath;
+		$sRealFull = realpath($sFullPath);
+		if ($sRealFull === false || !is_file($sRealFull)) {
+			return null;
+		}
+		// Ensure the resolved path is still within the spool directory
+		if (!str_starts_with($sRealFull, $sRealBase . DIRECTORY_SEPARATOR)) {
+			return null;
+		}
+		return $sRealFull;
+	}
+
+	/**
+ 	 * Creates a child process to convert print jobs
+ 	 * 
+ 	*/		
+	protected function convertFile(string $sPath): void
+	{
+		//Compute the output file name
+		$sDst = str_replace(".raw",",ps",$sPath);
+
+		//Compute the cli to run
+		$sCli =  $this->getConvertorScript();
+		if(is_null($sCli)){
+			return;
+		}
+		$sCli = str_replace("%soruce%",$sPath,$sCli);
+		$sCli = str_replace("%destination%",$sDst,$sCli);
+
+		$oLogger = $this->oLogger;
+		//Create the background process to run async (don't hold up the code)
+		$oProcess = new Process($sCli);
+		$oProcess->on("exit", function() use ($oLogger,$sDst){
+			$oLogger->info("Converted print job ".$sDst);
+		});
+		$oProcess->on("error", function(\Exception $oException) use ($oLogger,$sDst){
+			$oLogger->info("Failed to convert print job ".$sDst." with error ".$oException->getMessage());
+		});
 	}
 }

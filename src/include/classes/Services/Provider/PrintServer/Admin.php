@@ -89,35 +89,43 @@ class Admin implements AdminInterface
 	/**
 	 * Gets a list of all the entity type for this service provider
 	 *
-	*/ 
+	*/
 	public function getEntityTypes(): array
 	{
-		return ['jobs'=>'Print Jobs'];
+		return ['jobs' => 'Print Jobs', 'spooled' => 'Spooled Files'];
 	}
 
 	/**
 	 * Gets a list of all the fields for an entity type
 	 *
-	*/ 
+	*/
 	public function getEntityFields(string $sType): array
- {
-     return match ($sType) {
-         'jobs' => ['network'=>'int', 'station'=>'int', 'began'=>'datatime', 'size'=>'int'],
-         default => [],
-     };
- }
+	{
+		return match ($sType) {
+			'jobs'    => ['network' => 'int', 'station' => 'int', 'began' => 'datetime', 'size' => 'int'],
+			'spooled' => ['user' => 'string', 'filename' => 'string', 'size' => 'int', 'modified' => 'datetime', 'download' => 'download'],
+			default   => [],
+		};
+	}
 
 	/**
-	 * Gets the entity instances of a given type for this service 
+	 * Gets the entity instances of a given type for this service
 	 *
 	*/
 	public function getEntities(string $sType): array
 	{
-		switch($sType){
+		switch ($sType) {
 			case 'jobs':
 				$aJobs = $this->oProvider->getJobs();
-				$aReturn = AdminEntity::createCollection($sType,$this->getEntityFields($sType),$aJobs,fn($aRow) => $aRow['network'].'_'.$aRow['station']);
-				return $aReturn;
+				return AdminEntity::createCollection($sType, $this->getEntityFields($sType), $aJobs, fn($aRow) => $aRow['network'] . '_' . $aRow['station']);
+			case 'spooled':
+				$aFiles = $this->oProvider->getSpooledFiles();
+				$iPort  = $this->oProvider->getServicePorts()[0];
+				foreach ($aFiles as &$aFile) {
+					$aFile['download'] = '/service/download?port=' . $iPort . '&file=' . urlencode($aFile['path']);
+				}
+				unset($aFile);
+				return AdminEntity::createCollection($sType, $this->getEntityFields($sType), $aFiles, fn($aRow) => $aRow['path']);
 		}
 		return [];
 	}

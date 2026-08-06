@@ -26,10 +26,10 @@ Impliments a number of network services, that sit ontop of the econet encapsulat
     * Boot flags are modeled 
     * Implements all the Acorn filestore calls, and some of the MDFS extra features 
 * Print Service
-    * Print to modern printers (using cups)
-        * Print jobs converted to a pdf
-        * PDF e-mailed to the enduser
-        * PDF stored in a per user directory 
+    * Receives print jobs from BBC/Acorn workstations over Econet
+    * Raw print data is spooled to a per-user sub-directory under the configured spool directory
+    * Optionally converts raw spool files using a configurable shell script (see Print Server Configuration below)
+    * Spooled files are listed and downloadable from the admin web front end
 * IPv4
     * Basic IPv4 over econet routing, and work has started on NAT to IPv4 Address not on one of the encapsulated econet interfaces
 
@@ -58,17 +58,50 @@ Impliments a number of network services, that sit ontop of the econet encapsulat
     * Files are stored on the Acorn filesystem with `\` as the CP/M extension separator in the filename (e.g. the CP/M file `MYPROG.COM` is stored with the Acorn name `MYPROG\COM` inside the drive directory). The CP/M compatibility layer translates this transparently so Torch clients see standard `8.3` names.
 
 
+## Admin Web Front End ##
+A browser-based admin interface is included and starts automatically with the server.
+
+* Default address: `http://<host>:8080` (configurable with `webadmin_listen_address` and `webadmin_listen_port`)
+* Lists all running services and their current status, with the ability to enable or disable each service
+* **File Server** admin page shows currently logged-in sessions, open file streams, and all configured users
+* **Print Server** admin page has two tabs:
+    * *Print Jobs* — lists jobs currently in progress (data still being received from a workstation)
+    * *Spooled Files* — lists all spool files stored on disk, grouped by user, with file size and modification time; each file has a **Download** button to retrieve it directly from the browser
+
+## Print Server Configuration ##
+
+Two config keys control the print server spool and conversion behaviour:
+
+| Config key | Default | Description |
+|---|---|---|
+| `print_server_spool_dir` | `/tmp/econetprint` | Directory under which per-user spool sub-directories are created |
+| `print_server_conversion_script` | *(none)* | Optional shell command run after each job is spooled (see below) |
+
+### Conversion script ###
+When `print_server_conversion_script` is set the server runs it as a background process after the raw `.raw` spool file is written.  The command string supports two placeholders that the server substitutes at run time:
+
+| Placeholder | Substituted with |
+|---|---|
+| `%source%` | Full path to the input `.raw` spool file |
+| `%destination%` | Full path for the converted output file (`.ps` extension) |
+
+Example config value using `esc2ps`:
+
+~~~
+print_server_conversion_script = /usr/bin/esc2ps -i %source% -o %destination%
+~~~
+
+> **Note:** The placeholder spelling `%source%` is intentional — it matches what the server substitutes.  Use it exactly as shown.
+
 ## It would be nice if ##
-* Work has started on a WebSocket Interface for  
-    * Javascript BBC Emulators 
+* Work has started on a WebSocket Interface for
+    * Javascript BBC Emulators
     * Operating as a bridge and allow econet frames to be passed over the public internet to other bridges securely (tcp socket, using ssl).
 
 # Todo #
 While all the auth and file serving features are complete, there are some outstanding areas that need implementing.
 
-The print server is still very basic all print jobs are just dumped to a directory. I've yet to figure out how to convert the BBC's printout put to postscript. 
-
-The rest interface and control client has yet to be implemented, however there is now a basic webfront end 
+The rest interface and control client has yet to be implemented, however there is now a basic web front end (see Admin Web Front End above).
 
 # Install #
 ## Docker Install ##

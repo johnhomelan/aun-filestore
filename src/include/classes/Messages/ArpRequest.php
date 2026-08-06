@@ -18,8 +18,8 @@ use Exception;
 class ArpRequest extends Request {
 
 
-	private ?string $sSourceIP = NULL;
-	private ?string $sIPv4Addr = NULL;
+	protected ?string $sSourceIP = NULL;
+	protected ?string $sIPv4Addr = NULL;
 
 	//The types use by econet to presesent the std arp operations
 	//private  array $aArpTypes = [0x0a=>'ECOTYPE_ARP',0x09=>'ECOTYPE_REVARP',0x20=>'ECOTYPE_ARP_REPLY',0x21=>'ECOTYPE_ARP_REQUEST',0x22=>'ECOTYPE_ARP_REPLY',0x23=>'ECOTYPE_REVARP_REQUEST',0x24=>'ECOTYPE_REVARP_REPLY'];

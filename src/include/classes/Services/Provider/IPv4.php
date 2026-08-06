@@ -15,11 +15,15 @@ use HomeLan\FileStore\Services\Provider\IPv4\Admin;
 use HomeLan\FileStore\Aun\Map; 
 use HomeLan\FileStore\Messages\BridgeRequest; 
 use HomeLan\FileStore\Messages\EconetPacket; 
-use HomeLan\FileStore\Messages\ArpRequest; 
-use HomeLan\FileStore\Messages\IPv4Request; 
-use HomeLan\FileStore\Messages\ArpIsAt; 
+use HomeLan\FileStore\Messages\ArpRequest;
+use HomeLan\FileStore\Messages\Dci4ArpRequest;
+use HomeLan\FileStore\Messages\IPv4Request;
+use HomeLan\FileStore\Messages\ArpIsAt;
 use HomeLan\FileStore\Messages\ArpWhoHas; 
-use HomeLan\FileStore\Messages\TCPRequest; 
+use HomeLan\FileStore\Messages\TCPRequest;
+use HomeLan\FileStore\Messages\IcmpRequest;
+use HomeLan\FileStore\Messages\IcmpEchoReply;
+use HomeLan\FileStore\Messages\IcmpUnreachable;
 use HomeLan\FileStore\Services\Provider\IPv4\Arpcache;
 use HomeLan\FileStore\Services\Provider\IPv4\Interfaces;
 use HomeLan\FileStore\Services\Provider\IPv4\Routes;
@@ -56,10 +60,30 @@ class IPv4 implements ProviderInterface {
 	public function __construct(\Psr\Log\LoggerInterface $oLogger)
 	{
 		$this->oLogger = $oLogger;
-		$this->oArpTable = new Arpcache($this,$oLogger);
-		$this->oInterfaceTable = new Interfaces($this,$oLogger);
-		$this->oRoutingTable = new Routes($this,$oLogger);
-		$this->oNat = new NAT($this,$oLogger);
+		$this->oArpTable = $this->createArpCache();
+		$this->oInterfaceTable = $this->createInterfaces();
+		$this->oRoutingTable = $this->createRoutes();
+		$this->oNat = $this->createNat();
+	}
+
+	protected function createArpCache(): Arpcache
+	{
+		return new Arpcache($this, $this->oLogger);
+	}
+
+	protected function createInterfaces(?string $sConfig = null): Interfaces
+	{
+		return new Interfaces($this, $this->oLogger, $sConfig);
+	}
+
+	protected function createRoutes(?string $sConfig = null): Routes
+	{
+		return new Routes($this, $this->oLogger, $sConfig);
+	}
+
+	protected function createNat(?string $sConfig = null): NAT
+	{
+		return new NAT($this, $this->oLogger, $sConfig);
 	}
 
 	private function addReplyToBuffer($oReply): void
@@ -105,19 +129,21 @@ class IPv4 implements ProviderInterface {
 	{
 		//Deal with arp requests (0x21 = DCI-2/AUN, 0xA1 = DCI-4 native Econet)
 		if($oPacket->getFlags()==0x21 || $oPacket->getFlags()==0xA1){
-			$oArpReqeust = new ArpRequest($oPacket,$this->oLogger);
-			$this->oArpTable->addEntry($oArpReqeust->getSourceNetwork(),$oArpReqeust->getSourceStation(),$oArpReqeust->getSourceIP());  //Store the requestion stations ip details in the arp cache.
+			$oArpReqeust = $oPacket->getFlags()==0xA1
+				? new Dci4ArpRequest($oPacket,$this->oLogger)
+				: new ArpRequest($oPacket,$this->oLogger);
+			$this->oArpTable->addEntry($oArpReqeust->getSourceNetwork(),$oArpReqeust->getSourceStation(),$oArpReqeust->getSourceIP());  //Store the requesting station's ip details in the arp cache.
 			$this->oLogger->debug("Arp reqeuest recevived via broadcast for ".$oArpReqeust->getRequestedIP());
 
-			if($this->oInterfaceTable->isInterfaceIP($oArpReqeust->getRequestedIP())){  //Only reply if the arp request if for an interface IP addr 
+			if($this->oInterfaceTable->isInterfaceIP($oArpReqeust->getRequestedIP())){  //Only reply if the arp request is for an interface IP addr
 
-				//Get the detials for the relivent interface 
+				//Get the details for the relevant interface
 				$aIf = $this->oInterfaceTable->getInterfaceFor($oArpReqeust->getRequestedIP());
 
-				//Create the arp response (this automatically fills the ip details)
+				//Build the reply in the same dialect (DCI-2 or DCI-4) as the request
 				$oReply = $oArpReqeust->buildReply();
 
-				//Create the econet packet, and set the hw address for the source to be that of the correct interface 
+				//Create the econet packet, and set the hw address for the source to be that of the correct interface
 				$oReplyPacket= $oReply->buildEconetpacket();
 				$oReplyPacket->setSourceStation($aIf['station']);
 				$oReplyPacket->setSourceNetwork($aIf['network']);
@@ -125,7 +151,7 @@ class IPv4 implements ProviderInterface {
 				//Add the packet to the buffer for dispatch  (this is the only example where we don't have to grab the targets hw address from the arpcache)
 				$this->addReplyToBuffer($oReplyPacket);
 			}
-			
+
 		}
 		
 	}
@@ -153,8 +179,9 @@ class IPv4 implements ProviderInterface {
 
 				//If the IP is for this machine respond
 				if($this->oInterfaceTable->isInterfaceIP($oIPv4->getDstIP())){
-					//@TODO Deal with ICMP echo request 
-					//@TODO Send icmp host unreachable for all other message types 
+					if($oIPv4->getProtocol() === 'ICMP'){
+						$this->handleIcmpForInterface($oIPv4, $oPacket);
+					}
 					break;
 				};
 				//Deal with NAT
@@ -217,7 +244,7 @@ class IPv4 implements ProviderInterface {
 
 			}
 		}catch (InterfaceNotFound $oNotfound){
-			//See if we have a route to the subnet 
+			//See if we have a route to the subnet
 			$aRoute = $this->oRoutingTable->getRoute($oIPv4->getDstIP());
 			if(!is_null($aRoute)){
 				try {
@@ -240,14 +267,58 @@ class IPv4 implements ProviderInterface {
 						$this->queuePacketWaitingOnArp($aRoute['via'],$oPacket);
 					}
 				}catch(InterfaceNotFound $oNotfound){
-					//There is no interface with an ip in the same subnet as the router.
-					//Therefor its a invaild route the packet can't be forwarded, so it will be dropped.
-					//
-					//@TODO It should sened ICMP network unreachable
+					//The route specifies a gateway we have no interface for; send network unreachable.
+					$this->oLogger->debug("IPv4: No interface for route gateway, sending ICMP net unreachable");
+					$this->sendNetworkUnreachable($oIPv4, $oPacket);
 				}
+			}else{
+				//No route to the destination; send network unreachable.
+				$this->oLogger->debug("IPv4: No route to ".$oIPv4->getDstIP().", sending ICMP net unreachable");
+				$this->sendNetworkUnreachable($oIPv4, $oPacket);
 			}
 		}
 
+	}
+
+	private function handleIcmpForInterface(IPv4Request $oIPv4, EconetPacket $oPacket): void
+	{
+		$oIcmp = new IcmpRequest($oPacket, $this->oLogger);
+		if (!$oIcmp->isEchoRequest()) {
+			return;
+		}
+		$aIface = $this->oInterfaceTable->getInterfaceFor($oIPv4->getDstIP());
+
+		$oReply = new IcmpEchoReply();
+		$oReply->setSrcIP($oIPv4->getDstIP());
+		$oReply->setDstIP($oIPv4->getSrcIP());
+		$oReply->setSrcStation($aIface['station']);
+		$oReply->setSrcNetwork($aIface['network']);
+		$oReply->setDstStation($oPacket->getSourceStation());
+		$oReply->setDstNetwork($oPacket->getSourceNetwork());
+		$oReply->setId($oIcmp->getId());
+		$oReply->setSequence($oIcmp->getSequence());
+		$oReply->setData($oIcmp->getEchoData());
+		$this->oLogger->debug("IPv4: Sending ICMP echo reply to ".$oIPv4->getSrcIP());
+		$this->addReplyToBuffer($oReply->buildEconetpacket());
+	}
+
+	private function sendNetworkUnreachable(IPv4Request $oIPv4, EconetPacket $oPacket): void
+	{
+		try {
+			$aIface = $this->oInterfaceTable->getInterfaceFor($oIPv4->getSrcIP());
+		} catch (InterfaceNotFound $e) {
+			return; // can't determine which interface to reply from
+		}
+
+		$oReply = new IcmpUnreachable(IcmpUnreachable::NET_UNREACHABLE);
+		$oReply->setSrcIP($aIface['ipaddr']);
+		$oReply->setDstIP($oIPv4->getSrcIP());
+		$oReply->setSrcStation($aIface['station']);
+		$oReply->setSrcNetwork($aIface['network']);
+		$oReply->setDstStation($oPacket->getSourceStation());
+		$oReply->setDstNetwork($oPacket->getSourceNetwork());
+		$oReply->setOriginalPacket($oPacket->getData());
+		$this->addReplyToBuffer($oReply->buildEconetpacket());
 	}
 
 	public function registerService(ServiceDispatcher $oServiceDispatcher): void

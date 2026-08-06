@@ -31,7 +31,11 @@ Impliments a number of network services, that sit ontop of the econet encapsulat
     * Optionally converts raw spool files using a configurable shell script (see Print Server Configuration below)
     * Spooled files are listed and downloadable from the admin web front end
 * IPv4
-    * Basic IPv4 over econet routing, and work has started on NAT to IPv4 Address not on one of the encapsulated econet interfaces
+    * Implements the EconetA standard for IPv4 over Econet (AUN)
+    * Supports both DCI-2 (BBC Micro IPROM, 0x21/0x22 ARP flags) and DCI-4 (later RiscOS, 0xA1/0xA2 ARP flags) ARP dialects — the server auto-detects which dialect each machine uses and replies in kind
+    * Routes IPv4 packets between Econet networks, with a configurable routing table supporting multiple routes and metrics
+    * NAT TCP proxy: maps virtual IP:port addresses (reachable from Econet) to real TCP destinations, letting BBC Micros and similar machines reach TCP services on the LAN or internet
+    * Limited ICMP support (see below)
 
 * BBCTerm
     * Support for Andrew Gordons, BBC Term. Which allows BBC clients on Econet, to connect a terminal application to one of the configured commands that the service allows to run on the Linux box
@@ -64,6 +68,12 @@ A browser-based admin interface is included and starts automatically with the se
 * Default address: `http://<host>:8080` (configurable with `webadmin_listen_address` and `webadmin_listen_port`)
 * Lists all running services and their current status, with the ability to enable or disable each service
 * **File Server** admin page shows currently logged-in sessions, open file streams, and all configured users
+* **IPv4** admin page has five tabs:
+    * *ARP Table* — live ARP cache mapping Econet station/network pairs to IP addresses
+    * *IPv4 Interfaces* — the virtual IP interfaces currently configured on the Econet
+    * *Routing Table* — the active routing table with destination, subnet, gateway, and metric
+    * *NAT Rules* — the loaded NAT proxy rules (virtual IP:port → real IP:port)
+    * *Conn Track Entries* — active TCP proxy sessions showing source/destination addresses, ports, connection state, and last-activity time
 * **Print Server** admin page has two tabs:
     * *Print Jobs* — lists jobs currently in progress (data still being received from a workstation)
     * *Spooled Files* — lists all spool files stored on disk, grouped by user, with file size and modification time; each file has a **Download** button to retrieve it directly from the browser
@@ -92,6 +102,91 @@ print_server_conversion_script = /usr/bin/esc2ps -i %source% -o %destination%
 ~~~
 
 > **Note:** The placeholder spelling `%source%` is intentional — it matches what the server substitutes.  Use it exactly as shown.
+
+## IPv4 Configuration ##
+
+Five config keys control the IPv4 service.  The three file-based keys point to plain-text config files read at startup.
+
+| Config key | Default | Description |
+|---|---|---|
+| `ipv4_interfaces_file` | `interfaces.txt` | Defines the virtual IP interfaces hosted on the Econet |
+| `ipv4_routes_file` | `routes.txt` | Defines the IP routing table |
+| `ipv4_nat_file` | `nat.txt` | Defines NAT TCP proxy rules |
+| `nat_default_station` | `254` | Econet station number used as the source address for NAT reply packets |
+| `nat_default_network` | `254` | Econet network number used as the source address for NAT reply packets |
+
+### Interfaces file ###
+
+Each line defines one virtual IP interface that the server will answer ARP for and route traffic through.  The server will respond to ARP who-has requests for any IP listed here.
+
+Format: `<econet_network> <econet_station> <ip_address> <subnet_mask>`
+
+~~~
+# Econet network 1, station 1 owns 10.10.1.1/24
+1 1 10.10.1.1 255.255.255.0
+
+# Econet network 129, station 202 owns 10.10.129.202/24
+129 202 10.10.129.202 255.255.255.0
+~~~
+
+### Routes file ###
+
+Each line defines a static route.  When the server needs to forward a packet to a destination not directly on one of the interface subnets it consults the routing table.  Where multiple routes match, the most specific (longest prefix) wins; ties are broken by metric (lower is preferred).  Lines beginning with `#` are comments.
+
+Format: `<destination_network>/<subnet_mask> <via_gateway_ip> [metric]`
+
+~~~
+# Two paths to 192.168.4.0/24 — metric 20 gateway is preferred
+192.168.4.0/255.255.255.0 192.168.0.1 30
+192.168.4.0/255.255.255.0 192.168.0.10 20
+
+# Default route (0.0.0.0/0.0.0.0 matches everything not more specifically routed)
+0.0.0.0/0.0.0.0 192.168.0.103
+
+# Commented-out alternative default route
+#0.0.0.0/0.0.0.0 192.168.0.1
+~~~
+
+The gateway IP must be reachable on one of the configured interface subnets.
+
+### NAT / TCP Proxy ###
+
+The NAT feature is a **TCP reverse proxy**, not traditional IP masquerading.  Each rule maps a virtual IP address and port — which Econet clients can connect to as if it were a real host — to a real TCP destination.  When the server sees a SYN packet destined for a virtual IP:port it opens a TCP connection to the real destination and proxies bytes in both directions, so an 8-bit BBC Micro can reach a Telnet server, SMTP relay, web server, or any other TCP service.
+
+Each rule is one line in the NAT file.
+
+Format: `<virtual_ip> <real_ip> <virtual_port> <real_port>`
+
+~~~
+# Port 25 (SMTP) on virtual IP 192.168.5.1 → real mail relay at 81.23.53.156:25
+192.168.5.1 81.23.53.156 25 25
+
+# Port 80 (HTTP) on the same virtual IP → internal web server
+192.168.5.1 192.168.0.202 80 80
+
+# Telnet on 192.168.5.2 → a host on the LAN
+192.168.5.2 192.168.0.2 23 23
+
+# Port 200 on 192.168.5.3 → a high port on another machine
+192.168.5.3 192.168.0.3 200 1024
+~~~
+
+The virtual IPs must **not** overlap with any real Econet station's IP or with any interface IP defined in the interfaces file — they are purely fictional addresses that the server conjures up for Econet clients.  The `nat_default_station` and `nat_default_network` config values set the Econet layer-2 address that NAT reply packets appear to come from; this should be a station/network pair that does not conflict with any real Econet device (the default of 254/254 is suitable for most setups).
+
+### ICMP ###
+
+A limited subset of ICMP is implemented.  No configuration is required.
+
+**Supported:**
+* **Echo reply (ping)** — the server responds to ICMP echo requests (type 8) sent to any configured interface IP, returning a type-0 echo reply with the identifier, sequence number, and payload copied from the request.
+* **Destination Unreachable — Network Unreachable (type 3, code 0)** — sent back to the originating host when an IP packet arrives that has no matching route and no directly connected interface for the destination subnet.
+* **Destination Unreachable — Host Unreachable (type 3, code 1)** — sent back when a NAT TCP proxy connection attempt to the real destination fails (e.g. the remote host is down or refusing connections).
+
+**Not supported:**
+* The server cannot originate echo requests (it cannot ping out).
+* ICMP Time Exceeded (TTL expiry) is not generated when a forwarded packet's TTL reaches zero.
+* ICMP Redirect, Timestamp, Router Advertisement, and all other message types are not implemented.
+* Fragmentation-related ICMP (Destination Unreachable — Fragmentation Needed) is not generated; the server does not fragment packets.
 
 ## It would be nice if ##
 * Work has started on a WebSocket Interface for

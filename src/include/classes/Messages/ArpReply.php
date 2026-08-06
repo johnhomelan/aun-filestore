@@ -36,12 +36,17 @@ class ArpReply extends Reply {
 
 
 
+	protected function getArpReplyFlags(): int
+	{
+		return 0x22; // DCI-2 / AUN is-at
+	}
+
 	public function buildEconetpacket(): \HomeLan\FileStore\Messages\EconetPacket
 	{
-		$this->iFlags = 0x22; //ARP Is-At: use DCI-2/AUN wire value (0x22)
+		$this->iFlags = $this->getArpReplyFlags();
 		$this->sPkt .= inet_pton($this->oRequest->getRequestedIP());
 		$this->sPkt .= inet_pton($this->oRequest->getSourceIP());
-	
+
 		return parent::buildEconetpacket();
 	}
 }

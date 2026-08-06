@@ -17,6 +17,7 @@ use HomeLan\FileStore\Messages\TcpIPReply;
 use HomeLan\FileStore\Services\Provider\IPv4\Conntrack\Exception as ConntrackException;
 use HomeLan\FileStore\Services\Provider\IPv4\Conntrack\NotReadyException as NotReadyConntrackException;
 use HomeLan\FileStore\Services\Provider\IPv4\Exceptions\NatException;
+use HomeLan\FileStore\Messages\IcmpUnreachable;
 use React\Socket\TcpConnector;
 use React\Socket\ConnectionInterface;
 use React\Promise\PromiseInterface as Promise;
@@ -380,22 +381,17 @@ class NAT
 			}
 		}
 
-		// Build and send an RST back to the Econet client
-		$oTcpIpPkt = new TcpIPReply();
-		$oTcpIpPkt->setId($oIPv4->getId());
-		$oTcpIpPkt->setAckNumber($oTcp->getSequence() + 1);
-		$oTcpIpPkt->setSeqNumber(0);
-		$oTcpIpPkt->setSrcStation(config::getValue('nat_default_station'));
-		$oTcpIpPkt->setSrcNetwork(config::getValue('nat_default_network'));
-		$oTcpIpPkt->setDstIP($oIPv4->getSrcIP());
-		$oTcpIpPkt->setSrcIP($oIPv4->getDstIP());
-		$oTcpIpPkt->setDstPort($oTcp->getSrcPort()); // reply to client's source port
-		$oTcpIpPkt->setSrcPort($oTcp->getDstPort()); // from the server port
-		$oTcpIpPkt->setWindow(0);
-		$oTcpIpPkt->setFlagAck(true);
-		$oTcpIpPkt->setFlagReset(true);
-
-		$oEconetPacket = $oTcpIpPkt->buildEconetpacket();
+		// Send ICMP host unreachable back to the Econet client
+		$oIcmpPkt = new IcmpUnreachable(IcmpUnreachable::HOST_UNREACHABLE);
+		$oIcmpPkt->setSrcIP($oIPv4->getDstIP());
+		$oIcmpPkt->setDstIP($oIPv4->getSrcIP());
+		$oIcmpPkt->setSrcStation(config::getValue('nat_default_station'));
+		$oIcmpPkt->setSrcNetwork(config::getValue('nat_default_network'));
+		$oIcmpPkt->setDstStation($oIPv4->getSourceStation());
+		$oIcmpPkt->setDstNetwork($oIPv4->getSourceNetwork());
+		$oIcmpPkt->setPktId($oIPv4->getId());
+		$oIcmpPkt->setOriginalPacket($oTcp->getEconetPacket()->getData());
+		$oEconetPacket = $oIcmpPkt->buildEconetpacket();
 		$oIPv4Reply = new IPv4Request($oEconetPacket, $this->oProvider->getLogger());
 		$this->oProvider->processUnicastIPv4Pkt($oIPv4Reply, $oEconetPacket);
 	}

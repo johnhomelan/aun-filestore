@@ -161,7 +161,13 @@ class Admin implements AdminInterface
 	*/
 	public function getCommands(): array
 	{
-		return [];		
+		$aPorts = $this->oProvider->getServicePorts();
+		return [
+			[
+				'label' => 'Browse File System',
+				'url'   => '/service/fileserver/browse?port=' . $aPorts[0],
+			],
+		];
 	}
 
 }

@@ -11,9 +11,11 @@ use HomeLan\FileStore\Services\Provider\FileServer\Admin;
 use HomeLan\FileStore\Services\ProviderInterface;
 use HomeLan\FileStore\Services\ServiceDispatcher;
 use HomeLan\FileStore\Services\StreamIn;
-use HomeLan\FileStore\Vfs\Vfs; 
-use HomeLan\FileStore\Authentication\Security; 
-use HomeLan\FileStore\Authentication\User; 
+use HomeLan\FileStore\Vfs\Vfs;
+use HomeLan\FileStore\Vfs\Exception as VfsException;
+use HomeLan\FileStore\Vfs\FilePath;
+use HomeLan\FileStore\Authentication\Security;
+use HomeLan\FileStore\Authentication\User;
 use HomeLan\FileStore\Messages\EconetPacket; 
 use HomeLan\FileStore\Messages\FsRequest;
 use HomeLan\FileStore\Messages\FsReply;
@@ -2216,6 +2218,58 @@ class FileServer implements ProviderInterface{
 	public function getJobs(): array
 	{
 		return [];
+	}
+
+	// -------------------------------------------------------------------------
+	// Admin browsing helpers
+	// -------------------------------------------------------------------------
+
+	/**
+	 * List a directory by Acorn path, querying VFS plugins directly.
+	 * Bypasses the authentication layer so it is safe to call from the admin UI.
+	 */
+	public function getAdminDirectoryListing(string $sAcornPath): array
+	{
+		$aListing = [];
+		foreach (Vfs::getVfsPlugins() as $sPlugin) {
+			try {
+				$aListing = $sPlugin::getDirectoryListing($sAcornPath, $aListing);
+			} catch (VfsException $e) {
+				if ($e->isHard()) {
+					break;
+				}
+			} catch (\Throwable) {
+			}
+		}
+		return $aListing;
+	}
+
+	/**
+	 * Return the raw contents of a file by Acorn path, querying VFS plugins directly.
+	 * Returns null if no plugin can serve the file.
+	 */
+	public function getAdminFileContents(string $sAcornPath): ?string
+	{
+		$iLastDot = strrpos($sAcornPath, '.');
+		if ($iLastDot === false) {
+			return null;
+		}
+		$oPath      = new FilePath(substr($sAcornPath, 0, $iLastDot), substr($sAcornPath, $iLastDot + 1));
+		$oDummyUser = new User();
+		$oDummyUser->setUsername('_admin');
+		$oDummyUser->setUnixUid(posix_getuid());
+
+		foreach (Vfs::getVfsPlugins() as $sPlugin) {
+			try {
+				return $sPlugin::getFile($oDummyUser, $oPath);
+			} catch (VfsException $e) {
+				if ($e->isHard()) {
+					return null;
+				}
+			} catch (\Throwable) {
+			}
+		}
+		return null;
 	}
 
 	// -------------------------------------------------------------------------

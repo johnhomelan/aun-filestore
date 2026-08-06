@@ -15,6 +15,7 @@
         "shipmonk/composer-dependency-analyser": "^1.5"   
     },
     "require": {
+        "aws/aws-sdk-php": "^3.0",
         "monolog/monolog": "^1.23",
         "homelan/acorn-disk": "v1.1.0",
         "react/event-loop": "^1.1",

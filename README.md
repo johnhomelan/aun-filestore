@@ -188,6 +188,108 @@ A limited subset of ICMP is implemented.  No configuration is required.
 * ICMP Redirect, Timestamp, Router Advertisement, and all other message types are not implemented.
 * Fragmentation-related ICMP (Destination Unreachable — Fragmentation Needed) is not generated; the server does not fragment packets.
 
+## VFS (Virtual File System) ##
+
+The file server uses a layered, plugin-based VFS.  Each plugin is a PHP class implementing a common static interface.  Plugins are tried in order; the first one that handles a path wins.  Multiple plugins can be active simultaneously, covering different subtrees of the Econet directory tree.
+
+### VFS Configuration ###
+
+The active plugins are listed (comma-separated) in the `vfs_plugins` config key:
+
+~~~
+vfs_plugins = LocalFile,S3
+~~~
+
+Plugin class names map to `HomeLan\FileStore\Vfs\Plugin\<Name>`.
+
+### Available Plugins ###
+
+| Plugin | Description |
+|---|---|
+| `LocalFile` | Stores files on the local filesystem.  This is the standard plugin for most installations. |
+| `AFS` | Acorn Filing System — mounts AFS volumes. |
+| `DfsSsd` | Mounts Acorn DFS `.ssd` disc images as directories. |
+| `AdfsAdl` | Mounts Acorn ADFS `.adl` disc images as directories. |
+| `AdfsHD` | Mounts Acorn ADFS hard-disc images as directories. |
+| `S3` | Stores files in Amazon S3 (or S3-compatible) buckets (see below). |
+
+### .INF sidecar files ###
+
+The `LocalFile` and `S3` plugins store file metadata (load address and exec address) in a sidecar file with a `.inf` extension alongside each data file.  The format is a single line:
+
+~~~
+TAPE file LLLLLLLL EEEEEEEE
+~~~
+
+where `LLLLLLLL` and `EEEEEEEE` are the load and exec addresses in zero-padded 8-digit hex.
+
+The disk image plugins (`DfsSsd`, `AdfsAdl`, `AdfsHD`, `AFS`) do not use .inf sidecars — load and exec metadata is embedded directly in the native Acorn disc image format.
+
+### LocalFile Plugin Configuration ###
+
+| Config key | Default | Description |
+|---|---|---|
+| `vfs_plugin_localfile_root` | *(required)* | Absolute path to the root of the local filesystem tree |
+
+### S3 Plugin Configuration ###
+
+The S3 plugin stores Econet files as S3 objects.  Each file has a data object and a sidecar `.inf` object at the same key with `.inf` appended.  Multiple bucket/prefix mappings can be configured, each covering a different subtree of the Econet VFS.
+
+| Config key | Default | Description |
+|---|---|---|
+| `vfs_plugin_s3_mappings` | *(none)* | JSON array of mapping objects (see below) |
+
+Each mapping object has the following fields:
+
+| Field | Required | Default | Description |
+|---|---|---|---|
+| `econet_path` | Yes | — | The Econet VFS path prefix this mapping covers (e.g. `$.s3files`) |
+| `bucket` | Yes | — | S3 bucket name |
+| `prefix` | Yes | — | S3 key prefix within the bucket (e.g. `econet`) — objects are stored as `prefix/filename` |
+| `region` | Yes | — | AWS region (e.g. `eu-west-1`) |
+| `write_enabled` | No | `false` | Set to `true` to allow the file server to write, delete, rename, and create files in this mapping.  Omitting this field or setting it to `false` makes the mapping **read-only** — Econet clients can read and list files but all write operations are refused with a hard error. |
+| `endpoint` | No | — | Custom S3-compatible endpoint URL (e.g. `http://localhost:9000` for MinIO).  When set, path-style URL addressing is enabled automatically.  Leave unset to use AWS S3. |
+| `key` | No | — | AWS access key ID (or MinIO access key).  If omitted when connecting to AWS, the SDK's default credential chain is used (IAM role, environment variables, `~/.aws/credentials`, etc.).  Required for MinIO. |
+| `secret` | No | — | AWS/MinIO secret access key.  Required if `key` is set. |
+
+Example configuration with two mappings:
+
+~~~
+vfs_plugin_s3_mappings = [{"econet_path":"$.s3files","bucket":"my-econet-bucket","prefix":"econet","region":"eu-west-1"},{"econet_path":"$.archive","bucket":"my-archive-bucket","prefix":"bbc","region":"eu-west-1","key":"AKIAIOSFODNN7EXAMPLE","secret":"wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"}]
+~~~
+
+#### Connecting to MinIO or another local S3-compatible server ####
+
+Set `endpoint` to the base URL of the server and supply explicit credentials.  Path-style URL addressing is enabled automatically when `endpoint` is present.
+
+~~~
+vfs_plugin_s3_mappings = [{"econet_path":"$.local","bucket":"econet","prefix":"files","region":"us-east-1","endpoint":"http://localhost:9000","key":"minioadmin","secret":"minioadmin","write_enabled":true}]
+~~~
+
+The `region` value is not checked by MinIO but must be present to satisfy the SDK.  `us-east-1` is a safe default.
+
+Econet path dots are converted to S3 key slashes.  For example, the Econet file `$.s3files.docs.readme` is stored as the S3 object `econet/docs/readme` (with its metadata in `econet/docs/readme.inf`).
+
+Subdirectories are represented by zero-byte S3 objects with a trailing `/`.
+
+#### Uploading files to S3 ####
+
+The `src/util/s3upload` script uploads local files (with .inf sidecars) to one of the configured S3 mappings.  It writes directly to S3 and is not subject to the `write_enabled` flag — it always has write access regardless of how the mapping is configured for the file server.
+
+~~~
+src/util/s3upload --mapping=$.s3files --config=/etc/aun-filestored /local/path/to/files
+~~~
+
+Options:
+
+| Option | Description |
+|---|---|
+| `--mapping` | Econet VFS path of the target S3 mapping (must match the `econet_path` in the config) |
+| `--config` | Path to the config directory (same as the main server's `-c` option) |
+| `--dry-run` | Show what would be uploaded without actually uploading anything |
+
+The source files must follow the same `.inf` sidecar convention as the LocalFile plugin.  If no `.inf` file exists alongside a source file the load and exec addresses default to `0xFFFF0000`.
+
 ## It would be nice if ##
 * Work has started on a WebSocket Interface for
     * Javascript BBC Emulators

@@ -1,0 +1,15 @@
+#!/usr/bin/php
+<?php
+if (file_exists(__DIR__ . '/../vendor/autoload.php')) {
+    require_once __DIR__ . '/../vendor/autoload.php';
+} else {
+    require_once '/usr/share/aun-filestored/vendor/autoload.php';
+}
+
+use Symfony\Component\Console\Application;
+use HomeLan\FileStore\Command\S3Upload;
+
+$oApp = new Application('s3upload', '1.0.0');
+$oApp->add(new S3Upload());
+$oApp->setDefaultCommand('s3upload', true);
+$oApp->run();

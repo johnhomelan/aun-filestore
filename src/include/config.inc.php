@@ -44,7 +44,7 @@ safe_define('CONFIG_vfs_plugin_localadfshd_root','/var/lib/aun-filestore-root');
 safe_define('CONFIG_vfs_plugin_afs_root','/var/lib/aun-filestore-root');
 
 safe_define('CONFIG_print_server_spool_dir','/tmp/econetprint');
-safe_define('COMFIG_print_server_conversion_script','/usr/bin/esc2ps -i %soruce% -o %destination%');
+safe_define('CONFIG_print_server_conversion_script','/usr/bin/esc2ps -i %source% -o %destination%');
 safe_define('CONFIG_piconet_device','dev/econet');
 safe_define('CONFIG_piconetmap_file','piconetmap.txt');
 safe_define('CONFIG_piconet_station','254');

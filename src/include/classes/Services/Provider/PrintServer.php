@@ -317,7 +317,7 @@ class PrintServer implements ProviderInterface {
 		if(is_null($sCli)){
 			return;
 		}
-		$sCli = str_replace("%soruce%",$sPath,$sCli);
+		$sCli = str_replace("%source%",$sPath,$sCli);
 		$sCli = str_replace("%destination%",$sDst,$sCli);
 
 		$oLogger = $this->oLogger;

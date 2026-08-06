@@ -10,6 +10,12 @@ favicon:
 service_download:
     path: /service/download
     defaults: { _controller: 'HomeLan\FileStore\Admin\Controller\ServiceController::download' }
+torchnet_browse:
+    path: /service/torchnet/browse
+    defaults: { _controller: 'HomeLan\FileStore\Admin\Controller\TorchnetController::browse' }
+torchnet_download:
+    path: /service/torchnet/download
+    defaults: { _controller: 'HomeLan\FileStore\Admin\Controller\TorchnetController::fileDownload' }
 live:
     path: /kube/live
     defaults: { _controller: 'HomeLan\FileStore\Admin\Controller\IndexController::kube' }

@@ -21,6 +21,14 @@
 		</dl>
 
 
+		{if $oAdmin->getCommands()}
+		<div class="mb-3">
+			{foreach $oAdmin->getCommands() as $aCmd}
+			<a href="{$aCmd.url|escape:'html'}" class="btn btn-primary mr-2">{$aCmd.label|escape}</a>
+			{/foreach}
+		</div>
+		{/if}
+
 		<ul class="nav nav-pills mb-3" id="pills-tab" role="tablist">
 		{foreach from=$oAdmin->getEntityTypes() key="sEntityType" item="sEntityTypeName"}
 		  <li class="nav-item">

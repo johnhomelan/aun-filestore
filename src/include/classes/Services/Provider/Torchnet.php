@@ -6,10 +6,14 @@ use HomeLan\FileStore\Services\ProviderInterface;
 use HomeLan\FileStore\Services\Provider\AdminInterface;
 use HomeLan\FileStore\Services\ServiceDispatcher;
 use HomeLan\FileStore\Authentication\Security;
+use HomeLan\FileStore\Authentication\User;
 use HomeLan\FileStore\Messages\EconetPacket;
 use HomeLan\FileStore\Messages\TorchnetRequest;
 use HomeLan\FileStore\Messages\TorchnetReply;
 use HomeLan\FileStore\Vfs\CpmVfs;
+use HomeLan\FileStore\Vfs\Exception as VfsException;
+use HomeLan\FileStore\Vfs\FilePath;
+use HomeLan\FileStore\Vfs\Vfs;
 use HomeLan\FileStore\Services\Provider\Torchnet\Admin;
 
 use config;
@@ -525,6 +529,82 @@ class Torchnet implements ProviderInterface
         // Wrap at 0xFE — 0xFF is reserved as an error sentinel in responses.
         $this->aNextHandle[$iNet][$iStn] = ($iHandle % 0xFE) + 1;
         return $iHandle;
+    }
+
+    // -------------------------------------------------------------------------
+    // Admin browsing helpers
+    // -------------------------------------------------------------------------
+
+    /**
+     * Return configured drives as ['letter' => 'acorn_path'].
+     * Drive E is always included with its default or configured path.
+     */
+    public function getConfiguredDrives(): array
+    {
+        $aDrives = [];
+        foreach (range('A', 'Z') as $sLetter) {
+            $sKey = 'torchnet_drive_' . strtolower($sLetter);
+            try {
+                $sPath = config::getValue($sKey);
+                if (!empty($sPath)) {
+                    $aDrives[$sLetter] = $sPath;
+                }
+            } catch (\Throwable) {
+            }
+        }
+        if (!array_key_exists('E', $aDrives)) {
+            $aDrives['E'] = '$.TorchDrives.E';
+        }
+        ksort($aDrives);
+        return $aDrives;
+    }
+
+    /**
+     * List a directory by Acorn path, querying VFS plugins directly.
+     * Bypasses the authentication layer so it is safe to call from the admin UI.
+     */
+    public function getAdminDirectoryListing(string $sAcornPath): array
+    {
+        $aListing = [];
+        foreach (Vfs::getVfsPlugins() as $sPlugin) {
+            try {
+                $aListing = $sPlugin::getDirectoryListing($sAcornPath, $aListing);
+            } catch (VfsException $e) {
+                if ($e->isHard()) {
+                    break;
+                }
+            } catch (\Throwable) {
+            }
+        }
+        return $aListing;
+    }
+
+    /**
+     * Return the raw contents of a file by Acorn path, querying VFS plugins directly.
+     * Returns null if no plugin can serve the file.
+     */
+    public function getAdminFileContents(string $sAcornPath): ?string
+    {
+        $iLastDot = strrpos($sAcornPath, '.');
+        if ($iLastDot === false) {
+            return null;
+        }
+        $oPath      = new FilePath(substr($sAcornPath, 0, $iLastDot), substr($sAcornPath, $iLastDot + 1));
+        $oDummyUser = new User();
+        $oDummyUser->setUsername('_admin');
+        $oDummyUser->setUnixUid(posix_getuid());
+
+        foreach (Vfs::getVfsPlugins() as $sPlugin) {
+            try {
+                return $sPlugin::getFile($oDummyUser, $oPath);
+            } catch (VfsException $e) {
+                if ($e->isHard()) {
+                    return null;
+                }
+            } catch (\Throwable) {
+            }
+        }
+        return null;
     }
 
     // -------------------------------------------------------------------------

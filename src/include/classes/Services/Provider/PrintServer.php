@@ -329,5 +329,6 @@ class PrintServer implements ProviderInterface {
 		$oProcess->on("error", function(\Exception $oException) use ($oLogger,$sDst){
 			$oLogger->info("Failed to convert print job ".$sDst." with error ".$oException->getMessage());
 		});
+		$oProcess->start($this->oLoop);
 	}
 }

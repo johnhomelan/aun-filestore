@@ -243,10 +243,7 @@ class FileServer implements ProviderInterface{
 				$this->examine($oFsRequest);
 				break;
 			case 'EC_FS_FUNC_CAT_HEADER':
-				$this->oLogger->info("Call to obsolete unimplemented function EC_FS_FUNC_CAT_HEADER");
-				$oReply = $oFsRequest->buildReply();
-				$oReply->setError(0x8f, "Unsupported");
-				$this->addReplyToBuffer($oReply->buildEconetpacket());
+				$this->catHeader($oFsRequest);
 				break;
 			case 'EC_FS_FUNC_LOAD_COMMAND':
 				$this->loadCommand($oFsRequest);
@@ -319,6 +316,9 @@ class FileServer implements ProviderInterface{
 				$sDir = $oFsRequest->getString(2);
 				$this->createDirectory($oFsRequest,$sDir);
 				break;
+			case 'EC_FS_FUNC_RENAME':
+				$this->renameFileByHandle($oFsRequest);
+				break;
 			case 'EC_FS_FUNC_CREATE':
 				$this->createFile($oFsRequest);
 				break;
@@ -330,10 +330,12 @@ class FileServer implements ProviderInterface{
 				break;
 			case 'EC_FS_FUNC_USERS_EXT':
 			case 'EC_FS_FUNC_USER_INFO_EXT':
-			case 'EC_FS_FUNC_COPY_DATA':
 				$oReply = $oFsRequest->buildReply();
 				$oReply->setError(0x8f, "Not implemented");
 				$this->addReplyToBuffer($oReply->buildEconetpacket());
+				break;
+			case 'EC_FS_FUNC_COPY_DATA':
+				$this->copyData($oFsRequest);
 				break;
 			default:
 				$this->oLogger->debug("Un-handled fs function ".$sFunction);
@@ -435,10 +437,7 @@ class FileServer implements ProviderInterface{
 				$this->setPassword($oFsRequest,$sOptions);
 				break;
 			case 'CAT':
-				$oReply = $oFsRequest->buildReply();
-				$oReply->UnrecognisedOk();
-				$oReply->appendString('CAT');
-				$this->addReplyToBuffer($oReply->buildEconetpacket());
+				$this->cat($oFsRequest,$sOptions);
 				break;
 			case 'CDIR':
 				$this->createDirectory($oFsRequest,$sOptions);
@@ -462,11 +461,15 @@ class FileServer implements ProviderInterface{
 				$this->changeLibrary($oFsRequest,$sOptions);
 				break;
 			case 'LOAD':
+				$this->cliLoad($oFsRequest,$sOptions);
 				break;
 			case 'RENAME':
 				$this->renameFile($oFsRequest,$sOptions);
 				break;
 			case 'SAVE':
+				$oReply = $oFsRequest->buildReply();
+				$oReply->setError(0x8f,"Use SAVE function code");
+				$this->addReplyToBuffer($oReply->buildEconetpacket());
 				break;
 			case 'SDISC':
 				$this->sDisc($oFsRequest,$sOptions);
@@ -710,51 +713,6 @@ class FileServer implements ProviderInterface{
 					$oReply->appendByte(0x00);
 					$oReply->appendByte(0x00);
 				}	
-				$this->addReplyToBuffer($oReply->buildEconetpacket());
-				return;
-			case 1:
-				//EC_FS_GET_INFO_CTIME
-				$oReply = $oFsRequest->buildReply();
-				try {
-					$oMeta = $this->vfsGetMeta($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sDir);
-					$oReply->DoneOk();
-					//Append Type
-					if($oMeta->isDir()){
-						$oReply->appendByte(0x02);
-					}else{
-						$oReply->appendByte(0x01);
-					}
-					$oReply->appendRaw($oMeta->getCTime());
-				}catch(Exception){
-					$oReply->DoneOk();
-					$oReply->appendByte(0x00);
-					$oReply->appendByte(0x00);
-					$oReply->appendByte(0x00);
-				}
-				$this->addReplyToBuffer($oReply->buildEconetpacket());
-				return;
-			case 2:
-				//EC_FS_GET_INFO_META
-				$oReply = $oFsRequest->buildReply();
-				try {
-					$oMeta = $this->vfsGetMeta($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sDir);
-					$oReply->DoneOk();
-					//Append Type
-					if($oMeta->isDir()){
-						$this->oLogger->debug("isDir");
-						$oReply->appendByte(0x02);
-					}else{
-						$this->oLogger->debug("isFile");
-						$oReply->appendByte(0x01);
-					}
-					$oReply->append32bitIntLittleEndian($oMeta->getLoadAddr());
-					$oReply->append32bitIntLittleEndian($oMeta->getExecAddr());
-				}catch(Exception){
-					$oReply->DoneOk();
-					$oReply->appendByte(0x00);
-					$oReply->appendByte(0x00);
-					$oReply->appendByte(0x00);
-				}
 				$this->addReplyToBuffer($oReply->buildEconetpacket());
 				return;
 			case 3:
@@ -1276,10 +1234,234 @@ class FileServer implements ProviderInterface{
 	}
 
 	/**
+	 * Returns the directory catalogue header (disc name, CSD leaf, library leaf).
+	 * Called by older NFS ROMs that use function code 4 before EXAMINE.
+	*/
+	public function catHeader(FsRequest $oFsRequest): void
+	{
+		$oReply = $oFsRequest->buildReply();
+		try {
+			$oCsd = $this->vfsGetFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oFsRequest->getCsd());
+			$oLib = $this->vfsGetFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oFsRequest->getLib());
+
+			$oReply->CatOk();
+			$oReply->appendString(str_pad(substr((string) config::getValue('vfs_disc_name'),0,16),16,' '));
+			$oReply->appendByte(0x0d);
+			$oReply->appendString(str_pad(substr((string) $oCsd->getEconetDirName(),0,10),10,' '));
+			$oReply->appendByte(0x0d);
+			$oReply->appendString(str_pad(substr((string) $oLib->getEconetDirName(),0,10),10,' '));
+			$oReply->appendByte(0x0d);
+			$oReply->appendByte(0x80);
+		}catch(Exception){
+			$oReply->setError(0xff,"No such directory");
+		}
+		$this->addReplyToBuffer($oReply->buildEconetpacket());
+	}
+
+	/**
+	 * Implements *CAT — sends a text-mode directory listing to the client.
+	*/
+	public function cat(FsRequest $oFsRequest, string $sOptions): void
+	{
+		$oUser = $this->secGetUser($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation());
+		if(!is_object($oUser)){
+			$oReply = $oFsRequest->buildReply();
+			$oReply->setError(0xbf,"Who are you?");
+			$this->addReplyToBuffer($oReply->buildEconetpacket());
+			return;
+		}
+
+		$this->updateCsdLib($oFsRequest);
+		$oReply = $oFsRequest->buildReply();
+		try {
+			$oFd = $this->vfsGetFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oFsRequest->getCsd());
+			$aDirEntries = $this->vfsGetDirectoryListing($oFd);
+
+			$sDiscName = (string) config::getValue('vfs_disc_name');
+			$sDirName  = (string) $oFd->getEconetDirName();
+
+			$sCat  = "\r";
+			$sCat .= str_pad($sDiscName,16).$sDirName."\r\r";
+
+			$i = 0;
+			foreach($aDirEntries as $oFile){
+				$sCat .= str_pad(substr((string) $oFile->getEconetName(),0,10),20);
+				$i++;
+				if($i % 4 === 0){
+					$sCat .= "\r";
+				}
+			}
+			if($i % 4 !== 0){
+				$sCat .= "\r";
+			}
+			$sCat .= "\r";
+
+			$oReply->UnrecognisedOk();
+			$oReply->appendString($sCat);
+			$oReply->appendByte(0x80);
+		}catch(Exception){
+			$oReply->setError(0xff,"No such directory");
+		}
+		$this->addReplyToBuffer($oReply->buildEconetpacket());
+	}
+
+	/**
+	 * Implements *LOAD via the CLI broadcast path.
+	 * Streams file data to the configured econet data port.
+	*/
+	public function cliLoad(FsRequest $oFsRequest, string $sOptions): void
+	{
+		$aParts = preg_split('/\s+/',trim($sOptions),2);
+		$sPath  = $aParts[0] ?? '';
+
+		$oReply = $oFsRequest->buildReply();
+		if(strlen($sPath) === 0){
+			$oReply->setError(0xff,"Syntax");
+			$this->addReplyToBuffer($oReply->buildEconetpacket());
+			return;
+		}
+
+		$oUser = $this->secGetUser($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation());
+		if(!is_object($oUser)){
+			$oReply->setError(0xbf,"Who are you?");
+			$this->addReplyToBuffer($oReply->buildEconetpacket());
+			return;
+		}
+
+		$iDataPort = config::getValue('econet_data_stream_port');
+
+		try {
+			$sFileData = $this->vfsGetFile($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sPath);
+			$oMeta     = $this->vfsGetMeta($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sPath);
+		}catch(Exception){
+			$oReply->setError(0x99,"No such file");
+			$this->addReplyToBuffer($oReply->buildEconetpacket());
+			return;
+		}
+
+		$oReply->DoneOk();
+		$oReply->append32bitIntLittleEndian($oMeta->getLoadAddr());
+		$oReply->append32bitIntLittleEndian($oMeta->getExecAddr());
+		$oReply->append24bitIntLittleEndian($oMeta->getSize());
+		$oReply->appendByte($oMeta->getAccess());
+		$oReply->appendRaw($oMeta->getCTime());
+		$this->addReplyToBuffer($oReply->buildEconetpacket());
+
+		$oServiceDispatcher = $this->oServiceDispatcher;
+		$_this = $this;
+
+		$this->oServiceDispatcher->addAckEvent(
+			$oFsRequest->getSourceNetwork(),
+			$oFsRequest->getSourceStation(),
+			function() use ($_this, $sFileData, $oFsRequest, $iDataPort, $oServiceDispatcher){
+				$sBlock = substr((string) $sFileData,0,256);
+				$sFileData = substr((string) $sFileData,256);
+
+				$oEconetPacket = new EconetPacket();
+				$oEconetPacket->setDestinationNetwork($oFsRequest->getSourceNetwork());
+				$oEconetPacket->setDestinationStation($oFsRequest->getSourceStation());
+				$oEconetPacket->setPort($iDataPort);
+				$oEconetPacket->setFlags(0);
+				$oEconetPacket->setData($sBlock);
+				$_this->addReplyToBuffer($oEconetPacket);
+				$oServiceDispatcher->sendPackets($_this);
+
+				$cAckHandler = function($oAckPacket, $_this, $oFsRequest, $oServiceDispatcher, $sFileData, $iDataPort, &$cAckHandler){
+					if(strlen((string) $sFileData)>0){
+						$sBlock = substr((string) $sFileData,0,256);
+						$sFileData = substr((string) $sFileData,256);
+
+						$oEconetPacket = new EconetPacket();
+						$oEconetPacket->setDestinationNetwork($oFsRequest->getSourceNetwork());
+						$oEconetPacket->setDestinationStation($oFsRequest->getSourceStation());
+						$oEconetPacket->setPort($iDataPort);
+						$oEconetPacket->setFlags(0);
+						$oEconetPacket->setData($sBlock);
+						$_this->addReplyToBuffer($oEconetPacket);
+						$oServiceDispatcher->addAckEvent($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),function($oAckPacket) use ($_this, $oFsRequest, $oServiceDispatcher, $sFileData, $iDataPort, $cAckHandler){
+							($cAckHandler)($oAckPacket, $_this, $oFsRequest, $oServiceDispatcher, $sFileData, $iDataPort, $cAckHandler);
+						});
+						$oServiceDispatcher->sendPackets($_this);
+					}else{
+						$oReply2 = $oFsRequest->buildReply();
+						$oReply2->DoneOk();
+						$_this->addReplyToBuffer($oReply2->buildEconetpacket());
+						$oServiceDispatcher->sendPackets($_this);
+					}
+				};
+
+				$oServiceDispatcher->addAckEvent($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),function($oAckPacket) use (&$cAckHandler, $_this, $oFsRequest, $oServiceDispatcher, $sFileData, $iDataPort){
+					($cAckHandler)($oAckPacket, $_this, $oFsRequest, $oServiceDispatcher, $sFileData, $iDataPort, $cAckHandler);
+				});
+			}
+		);
+	}
+
+	/**
+	 * Handles function-code RENAME (code 28).
+	 * Packet data: [src_dir_handle][src_name\r][dst_dir_handle][dst_name\r]
+	*/
+	public function renameFileByHandle(FsRequest $oFsRequest): void
+	{
+		$oReply = $oFsRequest->buildReply();
+		try {
+			$iSrcHandle = $oFsRequest->getByte(1);
+			[$sSrcName, $iNextPos] = $oFsRequest->getStringEndPos(2);
+
+			$iDstHandle = $oFsRequest->getByte($iNextPos);
+			[$sDstName]  = $oFsRequest->getStringEndPos($iNextPos + 1);
+
+			$iResolvedSrc = ($iSrcHandle === 0) ? $oFsRequest->getCsd() : $iSrcHandle;
+			$iResolvedDst = ($iDstHandle === 0) ? $oFsRequest->getCsd() : $iDstHandle;
+
+			$oSrcDir  = $this->vfsGetFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$iResolvedSrc);
+			$sSrcPath = $oSrcDir->getEconetPath().'.'.$sSrcName;
+
+			$oDstDir  = $this->vfsGetFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$iResolvedDst);
+			$sDstPath = $oDstDir->getEconetPath().'.'.$sDstName;
+
+			$this->vfsMoveFile($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sSrcPath,$sDstPath);
+			$oReply->DoneOk();
+		}catch(Exception){
+			$oReply->setError(0xff,"No such file");
+		}
+		$this->addReplyToBuffer($oReply->buildEconetpacket());
+	}
+
+	/**
+	 * Handles function-code COPY_DATA (code 35) — server-side block copy between open handles.
+	 * Packet data: [src_handle][src_offset 3LE][dst_handle][dst_offset 3LE][length 3LE]
+	*/
+	public function copyData(FsRequest $oFsRequest): void
+	{
+		$iSrcHandle = $oFsRequest->getByte(1);
+		$iSrcOffset = $oFsRequest->get24bitIntLittleEndian(2);
+		$iDstHandle = $oFsRequest->getByte(5);
+		$iDstOffset = $oFsRequest->get24bitIntLittleEndian(6);
+		$iLength    = $oFsRequest->get24bitIntLittleEndian(9);
+
+		$oReply = $oFsRequest->buildReply();
+		try {
+			$oSrc = $this->vfsGetFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$iSrcHandle);
+			$oDst = $this->vfsGetFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$iDstHandle);
+
+			$oSrc->setPos($iSrcOffset);
+			$sData = $oSrc->read($iLength);
+			$oDst->setPos($iDstOffset);
+			$oDst->write($sData);
+
+			$oReply->DoneOk();
+		}catch(Exception){
+			$oReply->setError(0xff,"Copy failed");
+		}
+		$this->addReplyToBuffer($oReply->buildEconetpacket());
+	}
+
+	/**
 	 * Renames a given file
 	 *
 	 * This method is invoked as the cli command *RENAME
-	*/ 
+	*/
 	public function renameFile(FsRequest $oFsRequest,?string $sOptions): void
 	{
 		$oReply = $oFsRequest->buildReply();

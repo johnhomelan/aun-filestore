@@ -118,7 +118,9 @@ interface PluginInterface {
 	public static function isEof($oUser,$fLocalHandle);
 
 	public static function setPos($oUser,$fLocalHandle,$iPos);
-	
+
+	public static function setExt($oUser,$fLocalHandle,int $iExt): void;
+
 	public static function read($oUser,$fLocalHandle,$iLength);
 
 	public static function write($oUser,$fLocalHandle,$sData);

@@ -582,6 +582,11 @@ class Catalogue implements PluginInterface {
         throw new VfsException("Catalogue plugin is read-only", true);
     }
 
+    public static function setExt($oUser, $fLocalHandle, int $iExt): void
+    {
+        throw new VfsException("Catalogue plugin is read-only", true);
+    }
+
     public static function fsClose($oUser, $fLocalHandle): bool
     {
         if (!isset(self::$aFileHandles[$fLocalHandle])) {

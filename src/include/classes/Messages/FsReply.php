@@ -86,4 +86,9 @@ class FsReply extends Reply {
 		$this->sPkt = pack('CC',$this->aTypeMap['INFO'],0);
 	}
 
+	public function CatOk(): void
+	{
+		$this->sPkt = pack('CC',$this->aTypeMap['CAT'],0);
+	}
+
 }

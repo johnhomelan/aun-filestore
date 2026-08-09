@@ -346,6 +346,14 @@ class LocalFile implements PluginInterface {
 		return $mReturn;
 	}
 
+	public static function setExt($oUser,$fLocalHandle,int $iExt): void
+	{
+		self::$oLogger->debug("LocalFile: Truncating file to ".$iExt." bytes");
+		LocalFile::_setUid($oUser);
+		ftruncate($fLocalHandle,$iExt);
+		LocalFile::_returnUid();
+	}
+
 	public static function fsClose($oUser,$fLocalHandle): bool
 	{
 		LocalFile::_setUid($oUser);

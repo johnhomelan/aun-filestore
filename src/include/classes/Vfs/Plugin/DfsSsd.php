@@ -367,6 +367,11 @@ class DfsSsd implements PluginInterface {
 		self::$oLogger->debug("DfsSsd: Write bytes to file handle ".$fLocalHandle);
 	}
 
+	public static function setExt($oUser,$fLocalHandle,int $iExt): void
+	{
+		self::$oLogger->debug("DfsSsd: setExt not supported on disk image");
+	}
+
 	public static function fsClose($oUser,$fLocalHandle): void
 	{
 		if(array_key_exists($fLocalHandle,DfsSsd::$aFileHandles)){

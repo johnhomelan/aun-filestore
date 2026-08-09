@@ -361,6 +361,11 @@ class AdfsAdl implements PluginInterface {
 		throw new VfsException("Read Only FS");
 	}
 
+	public static function setExt($oUser,$fLocalHandle,int $iExt): void
+	{
+		throw new VfsException("Read Only FS");
+	}
+
 	public static function fsClose($oUser,$fLocalHandle): void
 	{
 		if(array_key_exists($fLocalHandle,AdfsAdl::$aFileHandles)){

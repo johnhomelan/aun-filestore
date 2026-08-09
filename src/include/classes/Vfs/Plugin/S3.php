@@ -675,6 +675,22 @@ class S3 implements PluginInterface {
         return $iDataLen;
     }
 
+    public static function setExt($oUser, $fLocalHandle, int $iExt): void
+    {
+        if (!isset(self::$aFileHandles[$fLocalHandle])) {
+            throw new VfsException("Invalid file handle");
+        }
+        $oHandle =& self::$aFileHandles[$fLocalHandle];
+        if ($oHandle['readonly']) {
+            throw new VfsException("File handle is read-only", true);
+        }
+        $oHandle['data']  = substr($oHandle['data'], 0, $iExt);
+        if (strlen($oHandle['data']) < $iExt) {
+            $oHandle['data'] = str_pad($oHandle['data'], $iExt, "\x00");
+        }
+        $oHandle['dirty'] = true;
+    }
+
     public static function fsClose($oUser, $fLocalHandle): bool
     {
         if (!isset(self::$aFileHandles[$fLocalHandle])) {

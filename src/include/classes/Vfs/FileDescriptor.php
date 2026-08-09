@@ -187,6 +187,22 @@ class FileDescriptor {
 
 	}
 
+	public function setExt(int $iExt): void
+	{
+		if(!is_null($this->iVfsHandle)){
+			try {
+				$sPlugin = $this->sVfsPlugin;
+				$sPlugin::setExt($this->oUser,$this->iVfsHandle,$iExt);
+			}catch(VfsException $oVfsException){
+				if($oVfsException->isHard()){
+					throw $oVfsException;
+				}
+				$this->changeVfs();
+				$this->setExt($iExt);
+			}
+		}
+	}
+
 	public function read($iLength)
 	{
 		if(!is_null($this->iVfsHandle)){

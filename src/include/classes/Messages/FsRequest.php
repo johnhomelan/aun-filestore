@@ -31,7 +31,7 @@ class FsRequest extends Request {
 	/**
 	 * @var  array<int, string>
 	*/  
-	protected array $aFunctionMap = [0=>'EC_FS_FUNC_CLI', 1=>'EC_FS_FUNC_SAVE', 2=>'EC_FS_FUNC_LOAD', 3=>'EC_FS_FUNC_EXAMINE', 4=>'EC_FS_FUNC_CAT_HEADER', 5=>'EC_FS_FUNC_LOAD_COMMAND', 6=>'EC_FS_FUNC_OPEN', 7=>'EC_FS_FUNC_CLOSE', 8=>'EC_FS_FUNC_GETBYTE', 9=>'EC_FS_FUNC_PUTBYTE', 10=>'EC_FS_FUNC_GETBYTES', 11=>'EC_FS_FUNC_PUTBYTES', 12=>'EC_FS_FUNC_GET_ARGS', 13=>'EC_FS_FUNC_SET_ARGS', 17=>'EC_FS_FUNC_GET_EOF', 14=>'EC_FS_FUNC_GET_DISCS', 18=>'EC_FS_FUNC_GET_INFO', 19=>'EC_FS_FUNC_SET_INFO', 21=>'EC_FS_FUNC_GET_UENV', 23=>'EC_FS_FUNC_LOGOFF', 15=>'EC_FS_FUNC_GET_USERS_ON', 24=>'EC_FS_FUNC_GET_USER', 16=>'EC_FS_FUNC_GET_TIME', 22=>'EC_FS_FUNC_SET_OPT4', 20=>'EC_FS_FUNC_DELETE', 25=>'EC_FS_FUNC_GET_VERSION', 26=>'EC_FS_FUNC_GET_DISC_FREE', 27=>'EC_FS_FUNC_CDIRN', 29=>'EC_FS_FUNC_CREATE', 30=>'EC_FS_FUNC_GET_USER_FREE',31=>'EC_FS_FUNC_SET_USER_FREE',32=>'EC_FS_FUNC_WHO_AM_I',33=>'EC_FS_FUNC_USERS_EXT',34=>'EC_FS_FUNC_USER_INFO_EXT',35=>'EC_FS_FUNC_COPY_DATA'];
+	protected array $aFunctionMap = [0=>'EC_FS_FUNC_CLI', 1=>'EC_FS_FUNC_SAVE', 2=>'EC_FS_FUNC_LOAD', 3=>'EC_FS_FUNC_EXAMINE', 4=>'EC_FS_FUNC_CAT_HEADER', 5=>'EC_FS_FUNC_LOAD_COMMAND', 6=>'EC_FS_FUNC_OPEN', 7=>'EC_FS_FUNC_CLOSE', 8=>'EC_FS_FUNC_GETBYTE', 9=>'EC_FS_FUNC_PUTBYTE', 10=>'EC_FS_FUNC_GETBYTES', 11=>'EC_FS_FUNC_PUTBYTES', 12=>'EC_FS_FUNC_GET_ARGS', 13=>'EC_FS_FUNC_SET_ARGS', 17=>'EC_FS_FUNC_GET_EOF', 14=>'EC_FS_FUNC_GET_DISCS', 18=>'EC_FS_FUNC_GET_INFO', 19=>'EC_FS_FUNC_SET_INFO', 21=>'EC_FS_FUNC_GET_UENV', 23=>'EC_FS_FUNC_LOGOFF', 15=>'EC_FS_FUNC_GET_USERS_ON', 24=>'EC_FS_FUNC_GET_USER', 16=>'EC_FS_FUNC_GET_TIME', 22=>'EC_FS_FUNC_SET_OPT4', 20=>'EC_FS_FUNC_DELETE', 25=>'EC_FS_FUNC_GET_VERSION', 26=>'EC_FS_FUNC_GET_DISC_FREE', 27=>'EC_FS_FUNC_CDIRN', 28=>'EC_FS_FUNC_RENAME', 29=>'EC_FS_FUNC_CREATE', 30=>'EC_FS_FUNC_GET_USER_FREE',31=>'EC_FS_FUNC_SET_USER_FREE',32=>'EC_FS_FUNC_WHO_AM_I',33=>'EC_FS_FUNC_USERS_EXT',34=>'EC_FS_FUNC_USER_INFO_EXT',35=>'EC_FS_FUNC_COPY_DATA'];
 
 	public function __construct(EconetPacket $oEconetPacket, \Psr\Log\LoggerInterface $oLogger)
 	{
@@ -108,6 +108,24 @@ class FsRequest extends Request {
 		//The reset is data
 		$this->sData = $sBinaryString;
 		
+	}
+
+	/**
+	 * Reads a CR-terminated string starting at the given 1-indexed byte position.
+	 *
+	 * Returns [string, first_byte_index_after_cr] so the caller can continue parsing.
+	 */
+	public function getStringEndPos(int $iStart): array
+	{
+		$aBytes = unpack('C*',(string) $this->sData);
+		$sStr = '';
+		$i = $iStart;
+		$iCount = is_countable($aBytes) ? count($aBytes) : 0;
+		while($i <= $iCount && isset($aBytes[$i]) && chr($aBytes[$i]) !== "\r" && chr($aBytes[$i]) !== "\n"){
+			$sStr .= chr($aBytes[$i]);
+			$i++;
+		}
+		return [$sStr, $i + 1]; // $i+1 skips the CR
 	}
 
 	public function buildReply(): \HomeLan\FileStore\Messages\FsReply

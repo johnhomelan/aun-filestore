@@ -115,9 +115,9 @@ class Handler {
 				switch(trim($aMessageParts[1])){
 					case 'OK':
 						$this->oLogger->debug("Piconet Handler: TX OK");
+						$aAck = array_shift($this->aAwaitingAck);
 						$this->_unQueue();
 						$oPacket = new PiconetPacket();
-						$aAck = array_shift($this->aAwaitingAck);
 						if(is_array($aAck)){
 							$oPacket->makeAck($aAck['dst_network'],$aAck['dst_station'],$aAck['port'],$aAck['flags']);
 							$this->oServices->inboundPacket($oPacket);
@@ -192,14 +192,7 @@ class Handler {
 	private function _unQueue():void
 	{
 		$this->oLogger->debug("Piconet Handler: Dequeuing packet due to scout ack");
-		$aQueueEntry = array_shift($this->aQueue);
-		if(is_null($aQueueEntry)){
-			$this->_runQueue();
-			return;
-		}
-		if($aQueueEntry['attempts']==0){
-			array_unshift($this->aQueue,$aQueueEntry);
-		}
+		array_shift($this->aQueue);
 		$this->_runQueue();
 	}
 	private function _writeOutPkt(EconetPacket $oPacket)

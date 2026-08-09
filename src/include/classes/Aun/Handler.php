@@ -30,9 +30,15 @@ class Handler Implements HandleInterface {
 	private array $aQueue = [];
 
 	/**
- 	 * @var array<string, int>	
- 	*/ 	
+ 	 * @var array<string, int>
+ 	*/
 	private array $aLastChance = [];
+
+	/**
+	 * Last inbound sequence number seen per source address, used to detect retransmitted duplicates.
+	 * @var array<string, int>
+	 */
+	private array $aLastSeq = [];
 	private Socket $oAunServer;
 
 
@@ -64,27 +70,40 @@ class Handler Implements HandleInterface {
 		$oAunPacket->decode($sMessage);
 		switch($oAunPacket->getPacketType()){
 			case 'Ack':
-				//Got an Ack use 
+				//Got an Ack use
 				$this->oLogger->debug("Aun Handler: Ack");
 				$this->_unQueue($oAunPacket);
 				break;
 			default:
+				// Drop duplicate packets (retransmissions where our ACK was lost in transit)
+				$iSeq = $oAunPacket->getSequence();
+				if(isset($this->aLastSeq[$sSrcAddress]) && $this->aLastSeq[$sSrcAddress] === $iSeq){
+					$this->oLogger->debug("Aun Handler: Duplicate packet from ".$sSrcAddress." seq ".$iSeq.", re-ACKing and dropping");
+					$sAck = $oAunPacket->buildAck();
+					if(!is_null($sAck) && strlen($sAck)>0){
+						$this->oAunServer->send($sAck,$sSrcAddress);
+					}
+					return;
+				}
+				$this->aLastSeq[$sSrcAddress] = $iSeq;
+
 				//Send an ack for the AUN packet if needed
 				$sAck = $oAunPacket->buildAck();
 				if(!is_null($sAck) && strlen($sAck)>0){
 					$this->oLogger->debug("Aun Handler: ".$oAunPacket->getPacketType()." Sending Ack packet");
 					$this->oAunServer->send($sAck,$sSrcAddress);
 				}
+
+				//Dispatch packet to all the services so the relevant one can deal with it
+				$this->oServices->inboundPacket($oAunPacket);
+
+				//Send any messages from the services
+				$aReplies = $this->oServices->getReplies();
+				foreach($aReplies as $oReply){
+					//In theory there can be packets queued for other abstractions (e.g. created via a timer that triggered)
+					$this->oPacketDispatcher->sendPacket($oReply);
+				}
 				break;
-		}
-		//Dispatch packet to all the services so the relivent one can deal with it 
-		$this->oServices->inboundPacket($oAunPacket);
-		
-		//Send any messages for the services
-		$aReplies = $this->oServices->getReplies();
-		foreach($aReplies as $oReply){
-			//In theroy there can be packets queued for other abstractions (e.g. created via a timer that triggered) 
-			$this->oPacketDispatcher->sendPacket($oReply);
 		}
 	}
 

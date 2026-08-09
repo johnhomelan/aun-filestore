@@ -354,6 +354,28 @@ class LocalFile implements PluginInterface {
 		LocalFile::_returnUid();
 	}
 
+	public static function fsLock($oUser,$fLocalHandle,bool $bExclusive): void
+	{
+		if(!is_resource($fLocalHandle)){
+			return;
+		}
+		self::$oLogger->debug("LocalFile: Acquiring ".($bExclusive ? "exclusive" : "shared")." lock on handle");
+		LocalFile::_setUid($oUser);
+		flock($fLocalHandle,$bExclusive ? LOCK_EX : LOCK_SH);
+		LocalFile::_returnUid();
+	}
+
+	public static function fsUnlock($oUser,$fLocalHandle): void
+	{
+		if(!is_resource($fLocalHandle)){
+			return;
+		}
+		self::$oLogger->debug("LocalFile: Releasing lock on handle");
+		LocalFile::_setUid($oUser);
+		flock($fLocalHandle,LOCK_UN);
+		LocalFile::_returnUid();
+	}
+
 	public static function fsClose($oUser,$fLocalHandle): bool
 	{
 		LocalFile::_setUid($oUser);

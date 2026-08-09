@@ -372,6 +372,10 @@ class DfsSsd implements PluginInterface {
 		self::$oLogger->debug("DfsSsd: setExt not supported on disk image");
 	}
 
+	public static function fsLock($oUser,$fLocalHandle,bool $bExclusive): void {}
+
+	public static function fsUnlock($oUser,$fLocalHandle): void {}
+
 	public static function fsClose($oUser,$fLocalHandle): void
 	{
 		if(array_key_exists($fLocalHandle,DfsSsd::$aFileHandles)){

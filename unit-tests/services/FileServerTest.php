@@ -63,6 +63,7 @@ class FakeHandle
     public function getEconetDirName(): string    { return $this->sDirName; }
     public function getEconetParentPath(): string { return $this->sParentPath; }
     public function isDir(): bool  { return $this->bIsDir; }
+    public function isFile(): bool { return !$this->bIsDir; }
     public function isEof(): bool  { return $this->bIsEof; }
     public function read(int $iLen) { $s = substr($this->sReadData, $this->iPos, $iLen); $this->iPos += strlen((string) $s); return $s; }
     public function write($data): void { $this->sWritten .= (string) $data; }
@@ -148,6 +149,7 @@ class FileServerTestable extends FileServer
     public bool    $stubMoveThrows    = false;
     public bool    $stubRemoveUser    = true;
     public bool    $stubCreateHandleThrows = false;
+    public bool    $stubLockedThrows = false;
 
     // ---- Captures ----
     public array   $capSetMeta       = [];
@@ -196,6 +198,7 @@ class FileServerTestable extends FileServer
 
     protected function vfsCreateFsHandle(int $iNet, int $iStn, string $sPath, bool $bMustExist=false, bool $bReadOnly=false)
     {
+        if($this->stubLockedThrows) throw new \HomeLan\FileStore\Vfs\Exception("Already open", false, true);
         if($this->stubCreateHandleThrows) throw new \Exception("Cannot create");
         if($this->stubHandle !== null) return $this->stubHandle;
         throw new \Exception("No handle for $sPath");
@@ -911,6 +914,32 @@ class FileServerTest extends TestCase
         $this->assertGreaterThan(0, $aB[1]);
     }
 
+    public function testOpenFileLockedReturns0xC3(): void
+    {
+        $this->oFs->stubLockedThrows = true;
+        [$oReply] = $this->dispatch($this->makePkt(6, pack('CC', 0, 0) . "LOCKED\r"));
+        $aB = $this->bytes($oReply);
+        $this->assertSame(0xc3, $aB[1]);
+    }
+
+    public function testOpenFileLockedReplyMessageIsAlreadyOpen(): void
+    {
+        $this->oFs->stubLockedThrows = true;
+        [$oReply] = $this->dispatch($this->makePkt(6, pack('CC', 0, 0) . "LOCKED\r"));
+        $sMsg = substr($oReply->getData(), 2);
+        $this->assertStringStartsWith('Already open', $sMsg);
+    }
+
+    public function testOpenFileOtherVfsExceptionReturnsNotFound(): void
+    {
+        // A VfsException without isLocked() should still produce 0xff (not 0xC3)
+        $this->oFs->stubCreateHandleThrows = true;
+        [$oReply] = $this->dispatch($this->makePkt(6, pack('CC', 0, 0) . "MISSING\r"));
+        $aB = $this->bytes($oReply);
+        $this->assertNotSame(0xc3, $aB[1]);
+        $this->assertGreaterThan(0, $aB[1]);
+    }
+
     public function testCloseFileSendsDoneOk(): void
     {
         $this->oFs->stubHandle = new FakeHandle();
@@ -1135,16 +1164,24 @@ class FileServerTest extends TestCase
 
     public function testSetOptReplyIsExactlyTwoBytes(): void
     {
-        [$oReply] = $this->dispatch($this->makePkt(22, pack('C', 4)));
+        [$oReply] = $this->dispatch($this->makePkt(22, pack('C', 2)));
         $this->assertSame(2, strlen($oReply->getData()));
     }
 
     public function testSetOptSendsDoneOk(): void
     {
-        [$oReply] = $this->dispatch($this->makePkt(22, pack('C', 4)));
+        [$oReply] = $this->dispatch($this->makePkt(22, pack('C', 2)));
         $aB = $this->bytes($oReply);
         $this->assertSame(0, $aB[0]);
         $this->assertSame(0, $aB[1]);
+    }
+
+    public function testSetOptRejectsOutOfRangeValue(): void
+    {
+        [$oReply] = $this->dispatch($this->makePkt(22, pack('C', 4)));
+        $aB = $this->bytes($oReply);
+        $this->assertSame(0, $aB[0]);
+        $this->assertNotSame(0, $aB[1]);
     }
 
     // -----------------------------------------------------------------------

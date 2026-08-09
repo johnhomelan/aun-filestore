@@ -37,6 +37,18 @@ class Vfs {
 
 	protected static $bMultiuser;
 
+	/**
+	 * File-level lock counts, keyed by econet path.
+	 * $aLocks['$.HOME.FILE'] = ['readers' => int, 'writers' => int]
+	 */
+	static protected $aLocks = [];
+
+	/**
+	 * Per-handle lock type, keyed by network/station/handle-id.
+	 * Value is 'read', 'write', or absent (directory / unlocked handle).
+	 */
+	static protected $aHandleLocks = [];
+
 	public static function init(\Psr\Log\LoggerInterface $oLogger,string $sVfsPlugins, bool $bMultiuser = false): void
 	{
 		self::$oLogger = $oLogger;
@@ -66,6 +78,9 @@ class Vfs {
 					$oUser = Security::getUser($iNetwork,$iStation);
 					if(!is_object($oUser)){
 						self::$oLogger->debug("vfs: Removing handle ".$iHandle." for station ".$iNetwork.":".$iStation." as the session has expired");
+						if($oHandle->isFile()){
+							self::_releaseLock($iNetwork,$iStation,$iHandle,$oHandle);
+						}
 						$oHandle->close();
 						unset(self::$aHandles[$iNetwork][$iStation][$iHandle]);
 					}
@@ -580,7 +595,12 @@ class Vfs {
 		$oPath = Vfs::buildFullPath($iNetwork,$iStation,$sEconetPath);
 		$oHandle = Vfs::_buildFiledescriptorFromEconetPath($oUser,$oPath,$bMustExist,$bReadOnly);
 
-		//Store the handel for later use
+		//Enforce file-level locking for file handles (not directories)
+		if($oHandle->isFile()){
+			self::_acquireLock($iNetwork,$iStation,$oHandle,$bReadOnly);
+		}
+
+		//Store the handle for later use
 		if(!array_key_exists($iNetwork,Vfs::$aHandles)){
 			Vfs::$aHandles[$iNetwork]=[];
 		}
@@ -589,7 +609,7 @@ class Vfs {
 		}
 		Vfs::$aHandles[$iNetwork][$iStation][$oHandle->getID()]=$oHandle;
 
-		//Return the handle 
+		//Return the handle
 		return $oHandle;
 	}
 
@@ -637,7 +657,11 @@ class Vfs {
 	static public function closeFsHandle(int $iNetwork,int $iStation, $iHandle): void
 	{
 		if(array_key_exists($iNetwork,Vfs::$aHandles) AND array_key_exists($iStation,Vfs::$aHandles[$iNetwork]) AND array_key_exists($iHandle,Vfs::$aHandles[$iNetwork][$iStation])){
-			Vfs::$aHandles[$iNetwork][$iStation][$iHandle]->close();
+			$oHandle = Vfs::$aHandles[$iNetwork][$iStation][$iHandle];
+			if($oHandle->isFile()){
+				self::_releaseLock($iNetwork,$iStation,$iHandle,$oHandle);
+			}
+			$oHandle->close();
 			unset(Vfs::$aHandles[$iNetwork][$iStation][$iHandle]);
 		}
 	}
@@ -648,6 +672,9 @@ class Vfs {
 			return;
 		}
 		foreach(Vfs::$aHandles[$iNetwork][$iStation] as $iHandle=>$oHandle){
+			if($oHandle->isFile()){
+				self::_releaseLock($iNetwork,$iStation,$iHandle,$oHandle);
+			}
 			$oHandle->close();
 		}
 		Vfs::$aHandles[$iNetwork][$iStation] = [];
@@ -666,6 +693,78 @@ class Vfs {
 			Vfs::$aSinMapping[$sEconetFullFilePath]=Vfs::$iSin;
 		}
 		return Vfs::$aSinMapping[$sEconetFullFilePath];
+	}
+
+	/**
+	 * Attempt to acquire a lock for a file handle.
+	 *
+	 * Enforces the Acorn FS locking model:
+	 *   - Read-only open: allowed when no write handle is open.
+	 *   - Read-write open: allowed only when no other handle (read or write) is open.
+	 *
+	 * On conflict, closes the descriptor and throws a locked VfsException.
+	 * On success, records the lock and calls the plugin's fsLock().
+	 */
+	static private function _acquireLock(int $iNetwork, int $iStation, \HomeLan\FileStore\Vfs\FileDescriptor $oHandle, bool $bReadOnly): void
+	{
+		$sPath = $oHandle->getEconetPath();
+		if(!isset(self::$aLocks[$sPath])){
+			self::$aLocks[$sPath] = ['readers' => 0, 'writers' => 0];
+		}
+		$aLock = &self::$aLocks[$sPath];
+
+		if($bReadOnly){
+			if($aLock['writers'] > 0){
+				$oHandle->close();
+				throw new VfsException("Already open", false, true);
+			}
+			$aLock['readers']++;
+		}else{
+			if($aLock['writers'] > 0 || $aLock['readers'] > 0){
+				$oHandle->close();
+				throw new VfsException("Already open", false, true);
+			}
+			$aLock['writers']++;
+		}
+
+		if(!isset(self::$aHandleLocks[$iNetwork])){
+			self::$aHandleLocks[$iNetwork] = [];
+		}
+		if(!isset(self::$aHandleLocks[$iNetwork][$iStation])){
+			self::$aHandleLocks[$iNetwork][$iStation] = [];
+		}
+		self::$aHandleLocks[$iNetwork][$iStation][$oHandle->getID()] = $bReadOnly ? 'read' : 'write';
+
+		$oHandle->fsLock(!$bReadOnly);
+	}
+
+	/**
+	 * Release the lock held by a file handle.
+	 *
+	 * Decrements the appropriate counter, calls the plugin's fsUnlock(),
+	 * and cleans up the per-handle tracking entry.
+	 */
+	static private function _releaseLock(int $iNetwork, int $iStation, $iHandleId, \HomeLan\FileStore\Vfs\FileDescriptor $oHandle): void
+	{
+		$sLockType = self::$aHandleLocks[$iNetwork][$iStation][$iHandleId] ?? null;
+		if($sLockType === null){
+			return;
+		}
+
+		$sPath = $oHandle->getEconetPath();
+		if(isset(self::$aLocks[$sPath])){
+			if($sLockType === 'read'){
+				self::$aLocks[$sPath]['readers'] = max(0, self::$aLocks[$sPath]['readers'] - 1);
+			}else{
+				self::$aLocks[$sPath]['writers'] = max(0, self::$aLocks[$sPath]['writers'] - 1);
+			}
+			if(self::$aLocks[$sPath]['readers'] === 0 && self::$aLocks[$sPath]['writers'] === 0){
+				unset(self::$aLocks[$sPath]);
+			}
+		}
+
+		$oHandle->fsUnlock();
+		unset(self::$aHandleLocks[$iNetwork][$iStation][$iHandleId]);
 	}
 
 

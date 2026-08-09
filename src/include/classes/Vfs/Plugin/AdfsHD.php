@@ -367,6 +367,10 @@ class AdfsHD implements PluginInterface {
 		throw new VfsException("Read Only FS");
 	}
 
+	public static function fsLock($oUser,$fLocalHandle,bool $bExclusive): void {}
+
+	public static function fsUnlock($oUser,$fLocalHandle): void {}
+
 	public static function fsClose($oUser,$fLocalHandle): void
 	{
 		if(array_key_exists($fLocalHandle,AdfsHD::$aFileHandles)){

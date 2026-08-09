@@ -403,13 +403,40 @@ class FileServerTest extends TestCase
         $this->assertSame(0x8f, $aB[1]);
     }
 
-    public function testCatHeaderSendsErrorReply(): void
+    public function testCatHeaderReturnsCatType(): void
     {
-        // Regression: was silent no-op (client hang)
-        $aReplies = $this->dispatch($this->makePkt(4));  // EC_FS_FUNC_CAT_HEADER
-        $this->assertCount(1, $aReplies);
-        $aB = $this->bytes($aReplies[0]);
-        $this->assertSame(0x8f, $aB[1]);
+        [$oReply] = $this->dispatch($this->makePkt(4));  // EC_FS_FUNC_CAT_HEADER
+        $aB = $this->bytes($oReply);
+        $this->assertSame(3, $aB[0]);  // reply type CAT
+        $this->assertSame(0, $aB[1]);  // status OK
+    }
+
+    public function testCatHeaderContainsDiscName(): void
+    {
+        config::overrideValue('vfs_disc_name', 'TESTDISC');
+        [$oReply] = $this->dispatch($this->makePkt(4));
+        $sData = $oReply->getData();
+        $this->assertStringContainsString('TESTDISC', $sData);
+        config::resetValue('vfs_disc_name');
+    }
+
+    public function testCatHeaderContainsCsdDirName(): void
+    {
+        $oHandle = new FakeHandle();
+        $oHandle->sDirName = 'MYDIR';
+        $this->oFs->stubHandle = $oHandle;
+        [$oReply] = $this->dispatch($this->makePkt(4));
+        $sData = $oReply->getData();
+        $this->assertStringContainsString('MYDIR', $sData);
+    }
+
+    public function testCatHeaderErrorWhenHandleThrows(): void
+    {
+        $this->oFs->stubHandleThrows = true;
+        [$oReply] = $this->dispatch($this->makePkt(4));
+        $aB = $this->bytes($oReply);
+        $this->assertSame(0, $aB[0]);   // DONE type (error)
+        $this->assertSame(0xff, $aB[1]); // error code
     }
 
     // -----------------------------------------------------------------------
@@ -1153,4 +1180,156 @@ class FileServerTest extends TestCase
         $aB = $this->bytes($oReply);
         $this->assertSame(8, $aB[0]);  // UNREC
     }
+
+    // -----------------------------------------------------------------------
+    // renameFileByHandle — function code 28
+    // -----------------------------------------------------------------------
+
+    public function testRenameByHandleSendsDoneOk(): void
+    {
+        // data: [src_dir=0][src_name\r][dst_dir=0][dst_name\r]
+        $sData = pack('C', 0) . "OLDFILE\r" . pack('C', 0) . "NEWFILE\r";
+        [$oReply] = $this->dispatch($this->makePkt(28, $sData));
+        $aB = $this->bytes($oReply);
+        $this->assertSame(0, $aB[0]);
+        $this->assertSame(0, $aB[1]);
+    }
+
+    public function testRenameByHandleCallsVfsMoveFile(): void
+    {
+        $oHandle = new FakeHandle();
+        $oHandle->sPath = '$.HOME';
+        $this->oFs->stubHandle = $oHandle;
+        $sData = pack('C', 0) . "SRC\r" . pack('C', 0) . "DST\r";
+        $this->dispatch($this->makePkt(28, $sData));
+        $this->assertCount(1, $this->oFs->capMovedFiles);
+        $this->assertSame('$.HOME.SRC', $this->oFs->capMovedFiles[0]['from']);
+        $this->assertSame('$.HOME.DST', $this->oFs->capMovedFiles[0]['to']);
+    }
+
+    public function testRenameByHandleReturnsErrorOnFailure(): void
+    {
+        $this->oFs->stubMoveThrows = true;
+        $sData = pack('C', 0) . "SRC\r" . pack('C', 0) . "DST\r";
+        [$oReply] = $this->dispatch($this->makePkt(28, $sData));
+        $aB = $this->bytes($oReply);
+        $this->assertGreaterThan(0, $aB[1]);
+    }
+
+    // -----------------------------------------------------------------------
+    // copyData — function code 35
+    // -----------------------------------------------------------------------
+
+    public function testCopyDataSendsDoneOk(): void
+    {
+        $oSrc = new FakeHandle(); $oSrc->iId = 5; $oSrc->sReadData = 'HELLO';
+        $oDst = new FakeHandle(); $oDst->iId = 6;
+        $this->oFs->stubHandles = [5 => $oSrc, 6 => $oDst];
+        // [src=5][src_offset=0 LE3][dst=6][dst_offset=0 LE3][len=5 LE3]
+        $sData = pack('C', 5) . "\x00\x00\x00" . pack('C', 6) . "\x00\x00\x00" . "\x05\x00\x00";
+        [$oReply] = $this->dispatch($this->makePkt(35, $sData));
+        $aB = $this->bytes($oReply);
+        $this->assertSame(0, $aB[1]);
+    }
+
+    public function testCopyDataCopiesBytesFromSrcToDst(): void
+    {
+        $oSrc = new FakeHandle(); $oSrc->iId = 5; $oSrc->sReadData = 'HELLO';
+        $oDst = new FakeHandle(); $oDst->iId = 6;
+        $this->oFs->stubHandles = [5 => $oSrc, 6 => $oDst];
+        $sData = pack('C', 5) . "\x00\x00\x00" . pack('C', 6) . "\x00\x00\x00" . "\x05\x00\x00";
+        $this->dispatch($this->makePkt(35, $sData));
+        $this->assertSame('HELLO', $oDst->sWritten);
+    }
+
+    public function testCopyDataReturnsErrorOnBadHandle(): void
+    {
+        $this->oFs->stubHandleThrows = true;
+        $sData = pack('C', 5) . "\x00\x00\x00" . pack('C', 6) . "\x00\x00\x00" . "\x05\x00\x00";
+        [$oReply] = $this->dispatch($this->makePkt(35, $sData));
+        $aB = $this->bytes($oReply);
+        $this->assertGreaterThan(0, $aB[1]);
+    }
+
+    // -----------------------------------------------------------------------
+    // setArgs — sub-arg 1 (setExt) now works
+    // -----------------------------------------------------------------------
+
+    public function testSetArgsPtrSendsDoneOk(): void
+    {
+        $oHandle = new FakeHandle(); $oHandle->iId = 2;
+        $this->oFs->stubHandle = $oHandle;
+        // handle=2, arg=0 (PTR), pos=100 LE3
+        $sData = pack('C', 2) . pack('C', 0) . "\x64\x00\x00";
+        [$oReply] = $this->dispatch($this->makePkt(13, $sData));
+        $aB = $this->bytes($oReply);
+        $this->assertSame(0, $aB[1]);
+    }
+
+    public function testSetArgsExtSendsDoneOk(): void
+    {
+        $oHandle = new FakeHandle(); $oHandle->iId = 2;
+        $this->oFs->stubHandle = $oHandle;
+        // handle=2, arg=1 (EXT), ext=256 LE3
+        $sData = pack('C', 2) . pack('C', 1) . "\x00\x01\x00";
+        [$oReply] = $this->dispatch($this->makePkt(13, $sData));
+        $aB = $this->bytes($oReply);
+        $this->assertSame(0, $aB[1]);
+    }
+
+    public function testSetArgsExtCallsSetExtOnHandle(): void
+    {
+        $oHandle = new FakeHandle(); $oHandle->iId = 2;
+        $this->oFs->stubHandle = $oHandle;
+        $sData = pack('C', 2) . pack('C', 1) . "\x00\x01\x00"; // ext = 256
+        $this->dispatch($this->makePkt(13, $sData));
+        $this->assertSame(256, $oHandle->capSetExt);
+    }
+
+    // -----------------------------------------------------------------------
+    // *CAT CLI — produces real directory listing
+    // -----------------------------------------------------------------------
+
+    public function testCliCatContainsFilenames(): void
+    {
+        $oEntry = new FakeDirEntry();
+        $oEntry->sName = 'MYFILE';
+        $this->oFs->stubDirEntries = ['MYFILE' => $oEntry];
+        [$oReply] = $this->dispatch($this->makePkt(0, "CAT\r"));
+        $this->assertStringContainsString('MYFILE', $oReply->getData());
+    }
+
+    public function testCliCatContainsDiscName(): void
+    {
+        config::overrideValue('vfs_disc_name', 'MYDISC');
+        [$oReply] = $this->dispatch($this->makePkt(0, "CAT\r"));
+        $this->assertStringContainsString('MYDISC', $oReply->getData());
+        config::resetValue('vfs_disc_name');
+    }
+
+    public function testCliCatRequiresLogin(): void
+    {
+        $this->oFs->stubUser = null;
+        [$oReply] = $this->dispatch($this->makePkt(0, "CAT\r"));
+        $aB = $this->bytes($oReply);
+        $this->assertGreaterThan(0, $aB[1]);
+    }
+
+    // -----------------------------------------------------------------------
+    // *SAVE CLI — must return a reply (not silently hang)
+    // -----------------------------------------------------------------------
+
+    public function testCliSaveReturnsReply(): void
+    {
+        $aReplies = $this->dispatch($this->makePkt(0, "SAVE MYFILE 0000 1000\r"));
+        $this->assertCount(1, $aReplies);
+    }
+
+    public function testCliSaveReturnsErrorCode(): void
+    {
+        [$oReply] = $this->dispatch($this->makePkt(0, "SAVE MYFILE 0000 1000\r"));
+        $aB = $this->bytes($oReply);
+        $this->assertGreaterThan(0, $aB[1]);  // error code > 0 means an error reply
+    }
+
 }

@@ -631,6 +631,15 @@ src/util/mkcatarchive --output=myfiles-new.tar --existing-tar=myfiles.tar /srv/b
 mv myfiles-new.tar myfiles.tar
 ~~~
 
+## Developer Documentation ##
+
+Guides for programmers who want to extend the server:
+
+* [Traffic Encapsulation](docs/encapsulation.md) — how AUN, Piconet, and WebSocket encapsulations work internally; how to add a new encapsulation
+* [Service Providers and the Admin System](docs/service-providers.md) — how service providers and port-based routing work; how to write a new provider; how the admin web front end integrates with providers and how to add admin support
+* [Virtual File System (VFS)](docs/vfs.md) — how the plugin chain, exception model, and file locking work; how to write a new VFS plugin
+* [Authentication System](docs/authentication.md) — how the plugin-based auth layer and session management work; how to write a new auth plugin
+
 ## It would be nice if ##
 * Work has started on a WebSocket Interface for
     * Javascript BBC Emulators

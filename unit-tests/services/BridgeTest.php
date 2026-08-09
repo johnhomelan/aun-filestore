@@ -241,12 +241,21 @@ class BridgeTest extends TestCase
     // EC_BR_LOCALNET
     // -----------------------------------------------------------------------
 
-    public function testLocalnetReplyContainsLocalNetworkNumber(): void
+    public function testLocalnetReplyContainsClientNetworkNumber(): void
     {
-        config::overrideValue('bridge_local_network_number', 7);
-        [$oReply] = $this->dispatch($this->localnetPkt());
+        [$oReply] = $this->dispatch($this->localnetPkt(iNet: 42, iStn: 3));
         $aBytes = unpack('C*', $oReply->getData());
-        $this->assertSame(7, $aBytes[1]);
+        $this->assertSame(42, $aBytes[1]);
+    }
+
+    public function testLocalnetReplyVariesBySourceNetwork(): void
+    {
+        [$oReplyA] = $this->dispatch($this->localnetPkt(iNet: 5,   iStn: 1));
+        [$oReplyB] = $this->dispatch($this->localnetPkt(iNet: 129, iStn: 1));
+        $aBytesA = unpack('C*', $oReplyA->getData());
+        $aBytesB = unpack('C*', $oReplyB->getData());
+        $this->assertSame(5,   $aBytesA[1]);
+        $this->assertSame(129, $aBytesB[1]);
     }
 
     public function testLocalnetReplySecondByteIsFirmwareVersion(): void

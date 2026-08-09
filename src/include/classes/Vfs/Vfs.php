@@ -642,6 +642,17 @@ class Vfs {
 		}
 	}
 
+	static public function closeAllFsHandles(int $iNetwork, int $iStation): void
+	{
+		if(!array_key_exists($iNetwork,Vfs::$aHandles) OR !array_key_exists($iStation,Vfs::$aHandles[$iNetwork])){
+			return;
+		}
+		foreach(Vfs::$aHandles[$iNetwork][$iStation] as $iHandle=>$oHandle){
+			$oHandle->close();
+		}
+		Vfs::$aHandles[$iNetwork][$iStation] = [];
+	}
+
 
 	/**
 	  * Gets a sin for a full econet file path

@@ -81,6 +81,7 @@ class FakeDirEntry
     public int    $iLoad     = 0xFFFF1900;
     public int    $iExec     = 0xFFFF1900;
     public int    $iSize     = 512;
+    public int    $iAccess   = 0b00001001;
     public string $sMode     = 'DRW/r ';
     public int    $iDay      = 10;
     public int    $iMonth    = 6;
@@ -90,6 +91,7 @@ class FakeDirEntry
     public function getEconetName(): string  { return $this->sName; }
     public function getLoadAddr(): int       { return $this->iLoad; }
     public function getExecAddr(): int       { return $this->iExec; }
+    public function getAccess(): int         { return $this->iAccess; }
     public function getEconetMode(): string  { return $this->sMode; }
     public function getDay(): int            { return $this->iDay; }
     public function getMonth(): int          { return $this->iMonth; }
@@ -153,6 +155,7 @@ class FileServerTestable extends FileServer
     public array   $capDeletedFiles  = [];
     public array   $capMovedFiles    = [];
     public array   $capSetOpt        = [];
+    public bool    $capCloseAll      = false;
 
     // ---- Wrappers ----
 
@@ -199,6 +202,9 @@ class FileServerTestable extends FileServer
     }
 
     protected function vfsCloseFsHandle(int $iNet, int $iStn, $iHandle): void {}
+
+    protected function vfsCloseAllFsHandles(int $iNet, int $iStn): void
+    { $this->capCloseAll = true; }
 
     protected function vfsGetDirectoryListing($oFd): array
     { return $this->stubDirEntries; }
@@ -1108,11 +1114,11 @@ class FileServerTest extends TestCase
     // getTime
     // -----------------------------------------------------------------------
 
-    public function testGetTimeSendsExactlyFourBytesOfPayload(): void
+    public function testGetTimeSendsFiveBytePayload(): void
     {
         [$oReply] = $this->dispatch($this->makePkt(16));
-        // done(1)+status(1)+day(1)+year+month(1)+hour(1)+min(1) = 6 bytes
-        $this->assertSame(6, strlen($oReply->getData()));
+        // done(1)+status(1)+day(1)+year+month(1)+hour(1)+min(1)+sec(1) = 7 bytes
+        $this->assertSame(7, strlen($oReply->getData()));
     }
 
     public function testGetTimeDayIsInRange(): void
@@ -1384,5 +1390,200 @@ class FileServerTest extends TestCase
         [$oReply] = $this->dispatch($this->makePkt(0, "OPT\r"));
         $aB = $this->bytes($oReply);
         $this->assertGreaterThan(0, $aB[1]);
+    }
+
+    // -----------------------------------------------------------------------
+    // CLOSE handle 0 closes all handles
+    // -----------------------------------------------------------------------
+
+    public function testCloseHandleZeroClosesAll(): void
+    {
+        $this->dispatch($this->makePkt(7, pack('C', 0)));
+        $this->assertTrue($this->oFs->capCloseAll);
+    }
+
+    public function testCloseHandleZeroSendsDoneOk(): void
+    {
+        [$oReply] = $this->dispatch($this->makePkt(7, pack('C', 0)));
+        $aB = $this->bytes($oReply);
+        $this->assertSame(0, $aB[1]);
+    }
+
+    public function testCloseNonZeroHandleDoesNotCloseAll(): void
+    {
+        $this->dispatch($this->makePkt(7, pack('C', 2)));
+        $this->assertFalse($this->oFs->capCloseAll);
+    }
+
+    // -----------------------------------------------------------------------
+    // EXAMINE_ALL — access byte from metadata, not hardcoded 0
+    // -----------------------------------------------------------------------
+
+    public function testExamineAllAccessByteComesFromDirectoryEntry(): void
+    {
+        $oEntry = new FakeDirEntry();
+        $oEntry->iAccess = 0x33;
+        $this->oFs->stubDirEntries = ['MYFILE' => $oEntry];
+        [$oReply] = $this->dispatch($this->makePkt(3, pack('CCC', 0, 0, 1)));
+        $aB = $this->bytes($oReply);
+        // Reply: done(1)+status(1)+count(1)+name(11)+load(4)+exec(4)+access(1)+ctime(2)+sin(3)+size(3)
+        // access byte is at offset 2+1+11+4+4 = 22 (1-indexed: aB[22])
+        $this->assertSame(0x33, $aB[22]);
+    }
+
+    // -----------------------------------------------------------------------
+    // EXAMINE_NAME — length prefix matches sent bytes
+    // -----------------------------------------------------------------------
+
+    public function testExamineNameLengthPrefixIsConsistentWithData(): void
+    {
+        $oEntry = new FakeDirEntry();
+        $oEntry->sName = 'ABCDEFGHIJ';  // exactly 10 chars
+        $this->oFs->stubDirEntries = ['ABCDEFGHIJ' => $oEntry];
+        [$oReply] = $this->dispatch($this->makePkt(3, pack('CCC', 2, 0, 1)));
+        $sData = $oReply->getData();
+        // Structure: done(1)+status(1)+count(1)+undef(1) then per-entry: len(1)+name(len)
+        // Length prefix byte is at offset 4 (0-indexed)
+        $aB = array_values(unpack('C*', $sData));
+        $iLenPrefix = $aB[4];
+        $this->assertSame(10, $iLenPrefix);
+    }
+
+    // -----------------------------------------------------------------------
+    // NEWUSER requires admin privilege
+    // -----------------------------------------------------------------------
+
+    public function testNewUserRequiresAdminPrivilege(): void
+    {
+        $oUser = new FsTestUser();
+        $oUser->bIsAdmin = false;
+        $this->oFs->stubUser = $oUser;
+        [$oReply] = $this->dispatch($this->makePkt(0, "NEWUSER JTEST\r"));
+        $aB = $this->bytes($oReply);
+        $this->assertGreaterThan(0, $aB[1]);
+    }
+
+    public function testNewUserSucceedsForAdmin(): void
+    {
+        $oUser = new FsTestUser();
+        $oUser->bIsAdmin = true;
+        $this->oFs->stubUser = $oUser;
+        [$oReply] = $this->dispatch($this->makePkt(0, "NEWUSER JTEST\r"));
+        $aB = $this->bytes($oReply);
+        $this->assertSame(0, $aB[1]);
+    }
+
+    // -----------------------------------------------------------------------
+    // GET_INFO sub-args 3/4/5 — file-not-found returns error, not zeros
+    // -----------------------------------------------------------------------
+
+    public function testGetInfoCase3NotFoundReturnsError(): void
+    {
+        $this->oFs->stubMeta = null;
+        [$oReply] = $this->dispatch($this->makeGetInfoPkt(3, 'NOPE'));
+        $aB = $this->bytes($oReply);
+        $this->assertGreaterThan(0, $aB[1]);
+    }
+
+    public function testGetInfoCase4NotFoundReturnsError(): void
+    {
+        $this->oFs->stubMeta = null;
+        [$oReply] = $this->dispatch($this->makeGetInfoPkt(4, 'NOPE'));
+        $aB = $this->bytes($oReply);
+        $this->assertGreaterThan(0, $aB[1]);
+    }
+
+    public function testGetInfoCase5NotFoundReturnsError(): void
+    {
+        $this->oFs->stubMeta = null;
+        [$oReply] = $this->dispatch($this->makeGetInfoPkt(5, 'NOPE'));
+        $aB = $this->bytes($oReply);
+        $this->assertGreaterThan(0, $aB[1]);
+    }
+
+    // -----------------------------------------------------------------------
+    // usersOnline — correct count across multiple stations
+    // -----------------------------------------------------------------------
+
+    public function testUsersOnlineCountsUsersNotNetworks(): void
+    {
+        $oU1 = new FsTestUser(); $oU1->sUsername = 'A';
+        $oU2 = new FsTestUser(); $oU2->sUsername = 'B';
+        $oU3 = new FsTestUser(); $oU3->sUsername = 'C';
+        $this->oFs->stubUsersOnline = [
+            1 => [5 => ['user' => $oU1], 6 => ['user' => $oU2]],
+            2 => [1 => ['user' => $oU3]],
+        ];
+        [$oReply] = $this->dispatch($this->makePkt(15, pack('CC', 0, 10)));
+        $aB = $this->bytes($oReply);
+        // byte[2] = remaining count — should be 3 (3 users total), not 2 (2 networks)
+        $this->assertSame(3, $aB[2]);
+    }
+
+    // -----------------------------------------------------------------------
+    // *CAT — directory argument
+    // -----------------------------------------------------------------------
+
+    public function testCliCatWithDirectoryArgListsNamedDirectory(): void
+    {
+        $oEntry = new FakeDirEntry();
+        $oEntry->sName = 'UTILS';
+        $this->oFs->stubDirEntries = ['UTILS' => $oEntry];
+        [$oReply] = $this->dispatch($this->makePkt(0, "CAT $.LIBRARY\r"));
+        $this->assertStringContainsString('UTILS', $oReply->getData());
+    }
+
+    // -----------------------------------------------------------------------
+    // *RENAME CLI — single-word argument returns syntax error
+    // -----------------------------------------------------------------------
+
+    public function testCliRenameWithOneWordReturnsSyntaxError(): void
+    {
+        [$oReply] = $this->dispatch($this->makePkt(0, "RENAME OLDNAME\r"));
+        $aB = $this->bytes($oReply);
+        $this->assertGreaterThan(0, $aB[1]);
+    }
+
+    public function testCliRenameWithTwoWordsSucceeds(): void
+    {
+        [$oReply] = $this->dispatch($this->makePkt(0, "RENAME OLD NEW\r"));
+        $aB = $this->bytes($oReply);
+        $this->assertSame(0, $aB[1]);
+        $this->assertSame('OLD', $this->oFs->capMovedFiles[0]['from']);
+        $this->assertSame('NEW', $this->oFs->capMovedFiles[0]['to']);
+    }
+
+    // -----------------------------------------------------------------------
+    // SET_INFO — unknown sub-arg returns error (not silent DoneOk)
+    // -----------------------------------------------------------------------
+
+    public function testSetInfoUnknownArgReturnsError(): void
+    {
+        $this->oFs->stubMeta = new FakeMeta();
+        [$oReply] = $this->dispatch($this->makePkt(19, pack('C', 99) . "MYFILE\r"));
+        $aB = $this->bytes($oReply);
+        $this->assertGreaterThan(0, $aB[1]);
+    }
+
+    // -----------------------------------------------------------------------
+    // getTime — seconds byte present, minutes is correct integer
+    // -----------------------------------------------------------------------
+
+    public function testGetTimeSecondsIsInRange(): void
+    {
+        [$oReply] = $this->dispatch($this->makePkt(16));
+        $aB = $this->bytes($oReply);
+        // byte[6] is seconds (0-59)
+        $this->assertGreaterThanOrEqual(0, $aB[6]);
+        $this->assertLessThanOrEqual(59, $aB[6]);
+    }
+
+    public function testGetTimeMinutesIsInteger(): void
+    {
+        [$oReply] = $this->dispatch($this->makePkt(16));
+        $aB = $this->bytes($oReply);
+        // byte[5] is minutes (0-59)
+        $this->assertGreaterThanOrEqual(0, $aB[5]);
+        $this->assertLessThanOrEqual(59, $aB[5]);
     }
 }

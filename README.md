@@ -675,7 +675,7 @@ The image has a number of volumes
 * /var/spool/aun-filestore-print
 ** Where print jobs submitted to the filestore a saved
 * /etc/aun-filestored
-** The config directory (see the Config.md file in docs for details of the config options)
+** The config directory (see [docs/Config.md](docs/Config.md) for details of the config options)
 * /var/log
 ** The directory used for log storage 
 

@@ -140,9 +140,60 @@ class vfspluginlocalfileTest extends TestCase {
 		$iExecAddr = 0xff9c;
 		$this->buildAndCheckDir('$',$sDir);
 		$this->assertTrue(is_dir(config::getValue('vfs_plugin_localfile_root').DIRECTORY_SEPARATOR.$sDir));
-		
+
 		$this->buildAndCheckFile('$.'.$sDir,$sFile,$sData,$iLoadAddr,$iExecAddr);
 		$this->assertTrue(file_exists(config::getValue('vfs_plugin_localfile_root').DIRECTORY_SEPARATOR.$sDir.DIRECTORY_SEPARATOR.$sFile));
+	}
+
+	public function testFsLockSharedDoesNotBlock()
+	{
+		$sRoot = config::getValue('vfs_plugin_localfile_root');
+		$sUnixPath = $sRoot.DIRECTORY_SEPARATOR.'locktest';
+		file_put_contents($sUnixPath,'data');
+		$fHandle = fopen($sUnixPath,'r');
+		// Shared lock should succeed without blocking
+		vfspluginlocalfile::fsLock($this->oUser,$fHandle,false);
+		$this->assertTrue(is_resource($fHandle));
+		vfspluginlocalfile::fsUnlock($this->oUser,$fHandle);
+		fclose($fHandle);
+	}
+
+	public function testFsLockExclusiveDoesNotBlock()
+	{
+		$sRoot = config::getValue('vfs_plugin_localfile_root');
+		$sUnixPath = $sRoot.DIRECTORY_SEPARATOR.'locktest2';
+		file_put_contents($sUnixPath,'data');
+		$fHandle = fopen($sUnixPath,'c+');
+		// Exclusive lock should succeed when no other holder exists
+		vfspluginlocalfile::fsLock($this->oUser,$fHandle,true);
+		$this->assertTrue(is_resource($fHandle));
+		vfspluginlocalfile::fsUnlock($this->oUser,$fHandle);
+		fclose($fHandle);
+	}
+
+	public function testFsUnlockReleasesLock()
+	{
+		$sRoot = config::getValue('vfs_plugin_localfile_root');
+		$sUnixPath = $sRoot.DIRECTORY_SEPARATOR.'locktest3';
+		file_put_contents($sUnixPath,'data');
+		$fHandle = fopen($sUnixPath,'c+');
+		vfspluginlocalfile::fsLock($this->oUser,$fHandle,true);
+		vfspluginlocalfile::fsUnlock($this->oUser,$fHandle);
+		// After unlock a second handle should be able to acquire LOCK_EX immediately
+		$fHandle2 = fopen($sUnixPath,'c+');
+		$bGot = flock($fHandle2,LOCK_EX|LOCK_NB);
+		if($bGot){ flock($fHandle2,LOCK_UN); }
+		fclose($fHandle);
+		fclose($fHandle2);
+		$this->assertTrue($bGot);
+	}
+
+	public function testFsLockOnNullHandleIsNoOp()
+	{
+		// Passing a non-resource should not throw
+		vfspluginlocalfile::fsLock($this->oUser,null,false);
+		vfspluginlocalfile::fsUnlock($this->oUser,null);
+		$this->assertTrue(true);
 	}
 
 }

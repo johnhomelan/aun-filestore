@@ -6,7 +6,7 @@
     <nav aria-label="breadcrumb">
         <ol class="breadcrumb">
             {foreach $aBreadcrumbs as $aCrumb}
-                {if is_null($aCrumb.path)}
+                {if $aCrumb.path === null}
                     <li class="breadcrumb-item active" aria-current="page">{$aCrumb.label|escape}</li>
                 {else}
                     <li class="breadcrumb-item">

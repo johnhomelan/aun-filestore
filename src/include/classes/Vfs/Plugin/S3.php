@@ -691,6 +691,10 @@ class S3 implements PluginInterface {
         $oHandle['dirty'] = true;
     }
 
+    public static function fsLock($oUser, $fLocalHandle, bool $bExclusive): void {}
+
+    public static function fsUnlock($oUser, $fLocalHandle): void {}
+
     public static function fsClose($oUser, $fLocalHandle): bool
     {
         if (!isset(self::$aFileHandles[$fLocalHandle])) {

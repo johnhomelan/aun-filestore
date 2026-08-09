@@ -120,6 +120,11 @@ class FileDescriptor {
 		return $this->bDir;
 	}
 
+	public function isFile(): bool
+	{
+		return (bool) $this->bFile;
+	}
+
 	public function fsFTell()
 	{
 		if(!is_null($this->iVfsHandle)){
@@ -235,6 +240,22 @@ class FileDescriptor {
 			}
 		}
 
+	}
+
+	public function fsLock(bool $bExclusive): void
+	{
+		if(!is_null($this->iVfsHandle)){
+			$sPlugin = $this->sVfsPlugin;
+			$sPlugin::fsLock($this->oUser,$this->iVfsHandle,$bExclusive);
+		}
+	}
+
+	public function fsUnlock(): void
+	{
+		if(!is_null($this->iVfsHandle)){
+			$sPlugin = $this->sVfsPlugin;
+			$sPlugin::fsUnlock($this->oUser,$this->iVfsHandle);
+		}
 	}
 
 	public function close()

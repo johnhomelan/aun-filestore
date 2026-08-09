@@ -125,5 +125,18 @@ interface PluginInterface {
 
 	public static function write($oUser,$fLocalHandle,$sData);
 
+	/**
+	 * Acquire a file-level advisory lock on an open handle.
+	 * $bExclusive=true for write (exclusive), false for read (shared).
+	 * Plugins that do not support native locking should provide a no-op.
+	 */
+	public static function fsLock($oUser,$fLocalHandle,bool $bExclusive): void;
+
+	/**
+	 * Release a file-level advisory lock previously acquired with fsLock.
+	 * Plugins that do not support native locking should provide a no-op.
+	 */
+	public static function fsUnlock($oUser,$fLocalHandle): void;
+
 	public static function fsClose($oUser,$fLocalHandle);
 }

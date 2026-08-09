@@ -28,7 +28,7 @@ class Exception extends BaseException {
   * @param string $sMessage Human readable description of the exception
   * @param boolean $bHard This indicates if the exception is a hard error or not.  Hard errors should stop the vfs operation, while soft errors should just cause the vfs to move on the next plugin
   */
- public function __construct($sMessage,protected $bHard=FALSE)
+ public function __construct($sMessage, protected $bHard=FALSE, protected bool $bLocked=FALSE)
 	{
 		parent::__construct($sMessage);
 	}
@@ -36,12 +36,20 @@ class Exception extends BaseException {
 	/**
 	 * Tests if this exception should be tread as a hard error.
 	 *
-	 * Oh matron 
+	 * Oh matron
 	 * @return boolean
 	*/
 	public function isHard(): bool
 	{
 		return $this->bHard;
 	}
-	
+
+	/**
+	 * True when the exception represents a file-lock conflict.
+	 */
+	public function isLocked(): bool
+	{
+		return $this->bLocked;
+	}
+
 }

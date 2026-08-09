@@ -1332,4 +1332,57 @@ class FileServerTest extends TestCase
         $this->assertGreaterThan(0, $aB[1]);  // error code > 0 means an error reply
     }
 
+    // -----------------------------------------------------------------------
+    // *OPT CLI
+    // -----------------------------------------------------------------------
+
+    public function testCliOptSendsDoneOk(): void
+    {
+        [$oReply] = $this->dispatch($this->makePkt(0, "OPT 4,2\r"));
+        $aB = $this->bytes($oReply);
+        $this->assertSame(0, $aB[0]);
+        $this->assertSame(0, $aB[1]);
+    }
+
+    public function testCliOptCapturesBootOption(): void
+    {
+        $this->dispatch($this->makePkt(0, "OPT 4,3\r"));
+        $this->assertSame(['3'], $this->oFs->capSetOpt);
+    }
+
+    public function testCliOptZeroIsValid(): void
+    {
+        [$oReply] = $this->dispatch($this->makePkt(0, "OPT 4,0\r"));
+        $aB = $this->bytes($oReply);
+        $this->assertSame(0, $aB[1]);
+        $this->assertSame(['0'], $this->oFs->capSetOpt);
+    }
+
+    public function testCliOptBadOptionNumberReturnsError(): void
+    {
+        [$oReply] = $this->dispatch($this->makePkt(0, "OPT 1,2\r"));
+        $aB = $this->bytes($oReply);
+        $this->assertGreaterThan(0, $aB[1]);
+    }
+
+    public function testCliOptValueOutOfRangeReturnsError(): void
+    {
+        [$oReply] = $this->dispatch($this->makePkt(0, "OPT 4,9\r"));
+        $aB = $this->bytes($oReply);
+        $this->assertGreaterThan(0, $aB[1]);
+    }
+
+    public function testCliOptMissingCommaReturnsError(): void
+    {
+        [$oReply] = $this->dispatch($this->makePkt(0, "OPT 4\r"));
+        $aB = $this->bytes($oReply);
+        $this->assertGreaterThan(0, $aB[1]);
+    }
+
+    public function testCliOptNoArgsReturnsError(): void
+    {
+        [$oReply] = $this->dispatch($this->makePkt(0, "OPT\r"));
+        $aB = $this->bytes($oReply);
+        $this->assertGreaterThan(0, $aB[1]);
+    }
 }

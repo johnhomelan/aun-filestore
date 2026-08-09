@@ -32,7 +32,7 @@ class FileServer implements ProviderInterface{
 
 	protected $oServiceDispatcher = NULL ;
 
-	protected $aCommands = ['BYE', 'CAT', 'CDIR', 'DELETE', 'DIR', 'FSOPT', 'INFO', 'I AM', 'LIB', 'LOAD', 'LOGOFF', 'PASS', 'RENAME', 'SAVE', 'SDISC', 'NEWUSER', 'PRIV', 'REMUSER', 'i.' ,'i .', 'CHROOTOFF', 'CHROOT'];
+	protected $aCommands = ['BYE', 'CAT', 'CDIR', 'DELETE', 'DIR', 'FSOPT', 'INFO', 'I AM', 'LIB', 'LOAD', 'LOGOFF', 'OPT', 'PASS', 'RENAME', 'SAVE', 'SDISC', 'NEWUSER', 'PRIV', 'REMUSER', 'i.' ,'i .', 'CHROOTOFF', 'CHROOT'];
 	
 	protected $aReplyBuffer = [];
 
@@ -462,6 +462,9 @@ class FileServer implements ProviderInterface{
 				break;
 			case 'LOAD':
 				$this->cliLoad($oFsRequest,$sOptions);
+				break;
+			case 'OPT':
+				$this->cliOpt($oFsRequest,$sOptions);
 				break;
 			case 'RENAME':
 				$this->renameFile($oFsRequest,$sOptions);
@@ -2380,7 +2383,30 @@ class FileServer implements ProviderInterface{
 		$oReply = $oFsRequest->buildReply();
 		$oReply->DoneOk();
 		$this->addReplyToBuffer($oReply->buildEconetpacket());
+	}
 
+	/**
+	 * Implements the *OPT CLI command.
+	 * Only option 4 (boot option) is supported: *OPT 4,n where n is 0–3.
+	*/
+	public function cliOpt(FsRequest $oFsRequest, string $sOptions): void
+	{
+		$oReply = $oFsRequest->buildReply();
+		$aParts = explode(',', $sOptions, 2);
+		if(count($aParts) !== 2 || (int) trim($aParts[0]) !== 4){
+			$oReply->setError(0xff,"Bad OPT");
+			$this->addReplyToBuffer($oReply->buildEconetpacket());
+			return;
+		}
+		$iBootOpt = (int) trim($aParts[1]);
+		if($iBootOpt < 0 || $iBootOpt > 3){
+			$oReply->setError(0xff,"Bad OPT value");
+			$this->addReplyToBuffer($oReply->buildEconetpacket());
+			return;
+		}
+		$this->secSetOpt($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),(string) $iBootOpt);
+		$oReply->DoneOk();
+		$this->addReplyToBuffer($oReply->buildEconetpacket());
 	}
 
 	public function whoAmI(FsRequest $oFsRequest): void

@@ -51,14 +51,86 @@ class aunpacketTest extends TestCase {
 		$sAck = $oPacket->buildAck();
 		$aAck = unpack('C*',$sAck);
 		$this->assertEquals($aAck[1],3);
-		
-		
+
+
 
 		//Check IP stuff
 		$this->assertEquals($oPacket->getSourceIP(),'192.168.0.2');
 		$this->assertEquals($oPacket->getDestinationIP(),'192.168.0.1');
 
-	
+
+	}
+
+	public function testBuildAckImmediateMachineType():void
+	{
+		$oPacket = new AunPacket();
+		$oPacket->setSourceIP('192.168.0.2');
+		$oPacket->setDestinationIP('192.168.0.1');
+
+		$sBinaryPacket  = pack('C', 5);  // type = Immediate
+		$sBinaryPacket .= pack('C', 0);  // port = 0
+		$sBinaryPacket .= pack('C', 0);  // cb = 0 (machine type query)
+		$sBinaryPacket .= pack('C', 0);  // pad = 0
+		$sBinaryPacket .= pack('V', 4);  // sequence = 4
+
+		$oPacket->decode($sBinaryPacket);
+		$sReply = $oPacket->buildAck();
+
+		$this->assertNotNull($sReply);
+		$aReply = unpack('C*', $sReply);
+		$this->assertEquals(6,    $aReply[1]);  // ImmediateReply
+		$this->assertEquals(0x40, $aReply[9]);  // FS01 machine type
+		$this->assertEquals(0x00, $aReply[10]);
+		$this->assertEquals(0x00, $aReply[11]);
+		$this->assertEquals(0x00, $aReply[12]);
+	}
+
+	public function testBuildAckImmediateOsVersion():void
+	{
+		config::overrideValue('version_major', 1);
+		config::overrideValue('version_minor', 2);
+
+		$oPacket = new AunPacket();
+		$oPacket->setSourceIP('192.168.0.2');
+		$oPacket->setDestinationIP('192.168.0.1');
+
+		$sBinaryPacket  = pack('C', 5);  // type = Immediate
+		$sBinaryPacket .= pack('C', 0);  // port = 0
+		$sBinaryPacket .= pack('C', 1);  // cb = 1 (OS version query)
+		$sBinaryPacket .= pack('C', 0);  // pad = 0
+		$sBinaryPacket .= pack('V', 4);  // sequence = 4
+
+		$oPacket->decode($sBinaryPacket);
+		$sReply = $oPacket->buildAck();
+
+		$this->assertNotNull($sReply);
+		$aReply = unpack('C*', $sReply);
+		$this->assertEquals(6, $aReply[1]);  // ImmediateReply
+		$this->assertEquals(1, $aReply[9]);  // version_major
+		$this->assertEquals(2, $aReply[10]); // version_minor
+		$this->assertEquals(0, $aReply[11]);
+		$this->assertEquals(0, $aReply[12]);
+
+		config::resetValue('version_major');
+		config::resetValue('version_minor');
+	}
+
+	public function testBuildAckImmediateUnknownCb():void
+	{
+		$oPacket = new AunPacket();
+		$oPacket->setSourceIP('192.168.0.2');
+		$oPacket->setDestinationIP('192.168.0.1');
+
+		$sBinaryPacket  = pack('C', 5);   // type = Immediate
+		$sBinaryPacket .= pack('C', 0);   // port = 0
+		$sBinaryPacket .= pack('C', 99);  // cb = 99 (unknown operation)
+		$sBinaryPacket .= pack('C', 0);   // pad = 0
+		$sBinaryPacket .= pack('V', 4);   // sequence = 4
+
+		$oPacket->decode($sBinaryPacket);
+		$sReply = $oPacket->buildAck();
+
+		$this->assertNull($sReply);
 	}
 
 }

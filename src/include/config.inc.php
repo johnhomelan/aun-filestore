@@ -21,6 +21,8 @@ safe_define('CONFIG_websocketmap_file','websocket_map.cfg');
 safe_define('CONFIG_aunmap_autonet',200);
 safe_define('CONFIG_aun_default_port',32768);
 safe_define('CONFIG_version','1.01');
+safe_define('CONFIG_version_major', 1);
+safe_define('CONFIG_version_minor', 1);
 safe_define('CONFIG_housekeeping_interval',300);
 
 safe_define('CONFIG_security_auth_plugins','file');

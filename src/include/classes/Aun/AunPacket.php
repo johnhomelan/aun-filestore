@@ -149,6 +149,30 @@ class AunPacket implements EncapsulationInterface {
 			//Sequence
 			$sPtk = $sPtk.pack('V',$this->iSeq);
 		}
+		if($this->aTypeMap[$this->iPktType]=='Immediate' AND $this->iCb==0){
+			// Machine type query — identify as Acorn FS01 FileStore
+			$sPtk = pack('C',6);
+			$sPtk .= pack('C',0);
+			$sPtk .= pack('C',0);
+			$sPtk .= pack('C',0);
+			$sPtk .= pack('V',$this->iSeq);
+			$sPtk .= pack('C',0x40); // FS01 FileStore machine type (Acorn Econet machine type table)
+			$sPtk .= pack('C',0x00);
+			$sPtk .= pack('C',0x00);
+			$sPtk .= pack('C',0x00);
+		}
+		if($this->aTypeMap[$this->iPktType]=='Immediate' AND $this->iCb==1){
+			// OS version query
+			$sPtk = pack('C',6);
+			$sPtk .= pack('C',0);
+			$sPtk .= pack('C',0);
+			$sPtk .= pack('C',0);
+			$sPtk .= pack('V',$this->iSeq);
+			$sPtk .= pack('C',config::getValue('version_major'));
+			$sPtk .= pack('C',config::getValue('version_minor'));
+			$sPtk .= pack('C',0x00);
+			$sPtk .= pack('C',0x00);
+		}
 		if($this->aTypeMap[$this->iPktType]=='Immediate' AND $this->iCb==8){
 			//Echo request equiv
 
@@ -167,7 +191,7 @@ class AunPacket implements EncapsulationInterface {
 			//Peek Hi
 			$sPtk = $sPtk.pack('C',0x66);
 			$sPtk = $sPtk.pack('C',config::getValue('version_minor'));
-			$sPtk = $sPtk.pack('C',config::getValue('version_majour'));
+			$sPtk = $sPtk.pack('C',config::getValue('version_major'));
 		}
 		return $sPtk;
 

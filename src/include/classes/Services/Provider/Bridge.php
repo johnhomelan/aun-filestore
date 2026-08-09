@@ -168,9 +168,10 @@ class Bridge implements ProviderInterface {
 	protected function queryLocalNet(BridgeRequest $oBridgeRequest): void
 	{
 		$oReply = $oBridgeRequest->buildReply();
-		//The first byte of the reply is the local network number	
-		$oReply->appendByte(config::getValue('bridge_local_network_number'));
-		//The second byte is the version number of the bridge firmware 
+		//The first byte is the client's own network number, derived from whichever
+		//encapsulation (AUN/Piconet/WebSocket) translated the inbound packet.
+		$oReply->appendByte($oBridgeRequest->getSourceNetwork());
+		//The second byte is the version number of the bridge firmware
 		$oReply->appendByte(128);
 		$this->_addReplyToBuffer($oReply);
 	}

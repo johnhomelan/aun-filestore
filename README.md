@@ -635,6 +635,7 @@ mv myfiles-new.tar myfiles.tar
 
 Guides for programmers who want to extend the server:
 
+* [Class Overview](docs/class_overview.md) — complete catalogue of every class and interface in the codebase
 * [Traffic Encapsulation](docs/encapsulation.md) — how AUN, Piconet, and WebSocket encapsulations work internally; how to add a new encapsulation
 * [Service Providers and the Admin System](docs/service-providers.md) — how service providers and port-based routing work; how to write a new provider; how the admin web front end integrates with providers and how to add admin support
 * [Virtual File System (VFS)](docs/vfs.md) — how the plugin chain, exception model, and file locking work; how to write a new VFS plugin

@@ -1,304 +1,629 @@
-Introduction
+Configuration
 =
-Once you've install aun-filestore you will need to configure it.  If you've installed it using one of the packages (rpm,deb) it will have a number of useful defaults and should work more or less out of the box.  
 
-For unix platforms the config is read from the directory /etc/aun-filestore, any file ending in .conf will be read by the config system.  If 2 files define the same config key but with conflicting values the one in the later file in the directory listing wins.
+Once you've installed aun-filestore you will need to configure it.  If you've installed it using one of the packages (rpm, deb) it will have a number of useful defaults and should work more or less out of the box.
+
+For Unix platforms the config is read from the directory `/etc/aun-filestored`; any file ending in `.conf` will be read by the config system.  If two files define the same config key with conflicting values the one in the later file (alphabetical directory order) wins.
 
 Security
 ==
-The security system is used to authenticate users making use of the file/print server. The system uses a number of authentication plugins that can use different formats of auth files.
+The security system authenticates users making use of the file and print servers.  It uses one or more authentication plugins that can each use a different backend format.
+
+**security_mode**
+
+Controls whether the server runs in single-user or multi-user mode.  In multi-user mode the LocalFile VFS plugin switches file-system ownership to each user's Unix UID when accessing files, enforcing per-user permissions.  The default is `singleuser`.
+
+Valid values: `singleuser`, `multiuser`
+
+~~~~~~
+security_mode = singleuser
+~~~~~~
 
 **security_max_session_idle**
 
-This configures how long a users connection is allowed to be idle before the user is automatically logged out.  The time period in measured in seconds and its default value is 2400.
+How long (in seconds) a user's connection may be idle before they are automatically logged out.  Default is `2400`.
 
 ~~~~~~
-e.g.
-
 security_max_session_idle = 2400
-
 ~~~~~~
 
 **security_auth_plugins**
 
-This configures which auth plugins are used by the server to check for username/password.  Multiple values are comer separated, and the order is significant as the first entry in the list is the plugin that will be called by the newuser command.
+Which authentication plugins to use, in order.  Multiple values are comma-separated.  The first plugin in the list is also the one used when the `NEWUSER` CLI command creates an account.  Default is `file`.
+
 ~~~~~~
-e.g.
-
-security_auth_plugins = "file"
+security_auth_plugins = file
 ~~~~~~
 
-#####File auth plugin#####
+**security_default_unix_uid**
 
+The Unix UID assigned to newly created user accounts when no explicit UID is specified.  Default is `500`.
+
+~~~~~~
+security_default_unix_uid = 500
+~~~~~~
+
+**system_user_id**
+
+The Unix UID the server process reverts to after impersonating a user (multi-user mode only).  This should be the UID the server itself runs as.  No default — must be set when `security_mode = multiuser`.
+
+~~~~~~
+system_user_id = 1001
+~~~~~~
+
+##### File auth plugin #####
 
 **security_plugin_file_user_file**
 
-This configures the file location of the user file used by the file-auth plugin 
+Path to the plain-text user file used by the `file` auth plugin.  Default is `users-live.txt`.
 
 ~~~~~~
-e.g.
-
-security_plugin_file_user_file="/etc/aun-filestore-passwd"
+security_plugin_file_user_file = /etc/aun-filestored/passwd
 ~~~~~~
-
 
 **security_plugin_file_default_crypt**
 
-This configure the password hashing algorithm used by the file-auth plugin the default is md5 the valid options are ;-
+Password hashing algorithm used by the `file` auth plugin when storing new or changed passwords.  Default is `md5`.
 
-*md5 A basic md5 crypt with no salt 
-*plain Plain text no crypt at all 
-*sha1 A sha1 crypt with no salt
+Valid values:
+* `md5` — unsalted MD5 hash
+* `sha1` — unsalted SHA-1 hash
+* `plain` — plain text (not recommended)
 
 ~~~~~~
-e.g.
-
-security_plugin_file_default_crypt="md5"
-
+security_plugin_file_default_crypt = md5
 ~~~~~~
 
 
 Network
 ==
-**aun_listen_address**
 
-This controls what ip address server will listen on for AUN packets, the default is 0.0.0.0 which means and interface.  Changing this to the ip addr of an interface will restrict the system to only listening for AUN packets on that interface.
+**local_ip**
+
+The server's own IP address.  Used by the AUN handler to identify inbound packets addressed to this host.  Required — no default.
 
 ~~~~~~
-e.g.
+local_ip = 192.168.0.10
+~~~~~~
 
-aun_listen_address="0.0.0.0"
+**aun_listen_address**
 
+IP address the server binds the AUN UDP socket to.  Use `0.0.0.0` to listen on all interfaces.  Default is `0.0.0.0`.
+
+~~~~~~
+aun_listen_address = 0.0.0.0
 ~~~~~~
 
 **aun_listen_port**
 
-This controls the port the server will listen on for AUN packets.  The default port is 32768 which is considered the standard port for AUN.
+UDP port the server listens on for incoming AUN packets.  Default is `32768`, the standard AUN port.
 
 ~~~~~~
-e.g.
-
-aun_listen_port=32768
+aun_listen_port = 32768
 ~~~~~~
 
 **aun_default_port**
 
-This controls the port the server will use to send AUN packets to.  The default is 32768 which is considered the standard port for AUN.
+UDP port the server sends AUN packets to when the destination host has no explicit port in the AUN map.  Default is `32768`.
 
 ~~~~~~
-e.g.
-
-aun_default_port=32768
-~~~~~~
-
-**econet_data_stream_port**
-
-Econet has a concept of ports which is not dissimilar to the ports concept in tcp/udp.  As AUN is an emulation of Econet over UDP it also emulates Econet ports inside the AUN payload.  This value configures the Econet port used for streaming data between fileserver and the client, this value has nothing todo with UDP/TCP ports.  The default value is 0x97 as this is the standard port used by BBC's for client/server data streams.
-
-~~~~~~
-e.g.
-
-econet_data_stream_port=0x97
-~~~~~~
-
-**bbc_default_pkg_sleep**
-
-Given the processing speed of a BBC very rapid replies from the server can cause problems thus the server sleeps between sending packets to a client to avoid cause issues.  This value sets the sleep period in micro seconds, the default is 40000. 
-
-~~~~~~
-e.g.
-
-bbc_default_pkg_sleep'=40000
+aun_default_port = 32768
 ~~~~~~
 
 **aunmap_file**
 
-The aunmap file allows the system admin to map subnets or individual ips to a econet network and station number.
+Path to the AUN map file.  This file maps IP addresses and subnets to Econet network/station numbers.  Default is `aunmap.txt`.
 
-The files is in the format :-
-
-ipaddr    network.station
-network_addr/mask    network
-
-
-When a subnet is mapped to an Econet network number the station number is the same as the last part of the ip addr. 
-
-This config value set the file path of the map file. 
+The file format is:
 
 ~~~~~~
-e.g.
-
-aunmap_file='aunmap.txt'
+<ip>/<prefix>  <econet_network>          (subnet entry)
+<ip>  <econet_network>.<econet_station>   (host entry)
+<ip>:<udp_port>  <econet_network>.<econet_station>
 ~~~~~~
+
+~~~~~~
+aunmap_file = aunmap.txt
+~~~~~~
+
+**aunmap_autonet**
+
+Econet network number automatically assigned to any IP address that sends AUN traffic but has no entry in the AUN map.  The station number is derived from the last octet of the IP address.  Default is `200`.
+
+~~~~~~
+aunmap_autonet = 200
+~~~~~~
+
+**econet_data_stream_port**
+
+Econet port number used for streaming data between the file server and a client during multi-packet operations (GETBYTES, PUTBYTES, LOAD, SAVE).  This is an Econet port, not a UDP/TCP port.  Default is `0x97`.
+
+~~~~~~
+econet_data_stream_port = 0x97
+~~~~~~
+
+**bbc_default_pkg_sleep**
+
+Microseconds to sleep between sending successive packets to a BBC client.  BBC Micros can be overwhelmed by rapid back-to-back replies.  Default is `40000`.
+
+~~~~~~
+bbc_default_pkg_sleep = 40000
+~~~~~~
+
+**version**
+
+Version string reported in the file server `INFO` command reply.  Default is `1.01`.
+
+~~~~~~
+version = 1.01
+~~~~~~
+
+**version_major**
+
+Major version byte returned in AUN echo (Immediate, cb=8) replies.  Default is `1`.
+
+~~~~~~
+version_major = 1
+~~~~~~
+
+**version_minor**
+
+Minor version byte returned in AUN echo replies.  Default is `1`.
+
+~~~~~~
+version_minor = 1
+~~~~~~
+
+### WebSocket ###
+
+**websocket_listen_address**
+
+IP address to bind the WebSocket server to.  Default is `0.0.0.0`.
+
+~~~~~~
+websocket_listen_address = 0.0.0.0
+~~~~~~
+
+**websocket_listen_port**
+
+TCP port for incoming WebSocket connections from browser-based BBC Micro emulators.  Default is `8090`.
+
+~~~~~~
+websocket_listen_port = 8090
+~~~~~~
+
+**websocket_network_address**
+
+Econet network number the server presents itself as to WebSocket clients.  Default is `128`.
+
+~~~~~~
+websocket_network_address = 128
+~~~~~~
+
+**websocket_station_address**
+
+Econet station number the server presents itself as to WebSocket clients.  Default is `254`.
+
+~~~~~~
+websocket_station_address = 254
+~~~~~~
+
+**websocketmap_file**
+
+Path to the WebSocket map configuration file.  The file must exist for the WebSocket transport to initialise; its presence acts as an enable flag.  Default is `websocket_map.cfg`.
+
+~~~~~~
+websocketmap_file = websocket_map.cfg
+~~~~~~
+
+**websocketmap_dynamic_network_range_file**
+
+Path to a file listing Econet network numbers available for dynamic allocation to connecting WebSocket clients, one per line.  Required when the WebSocket transport is in use — if not set, the transport will have no allocatable addresses.  No default.
+
+~~~~~~
+websocketmap_dynamic_network_range_file = websocket_networks.txt
+~~~~~~
+
+### Piconet ###
+
+**piconet_device**
+
+Path to the Unix serial device file for the EconetUSB hardware adapter.  Default is `dev/econet`.
+
+~~~~~~
+piconet_device = /dev/ttyUSB0
+~~~~~~
+
+**piconetmap_file**
+
+Path to the Piconet map file listing the Econet network numbers reachable via the physical hardware interface, one per line.  Default is `piconetmap.txt`.
+
+~~~~~~
+piconetmap_file = piconetmap.txt
+~~~~~~
+
+**piconet_station**
+
+Econet station number the server presents itself as on the physical Econet wire.  Default is `254`.
+
+~~~~~~
+piconet_station = 254
+~~~~~~
+
+**piconet_local_network**
+
+The global Econet network number that corresponds to network `0` on the local physical wire.  Outbound packets for this network have their destination network byte replaced with `0` before transmission.  Default is `1`.
+
+~~~~~~
+piconet_local_network = 1
+~~~~~~
+
+### Bridge ###
+
+**bridge_local_network_number**
+
+The Econet network number this server reports as its local network when responding to bridge topology queries.  No default — must be set if the Bridge service is in use.
+
+~~~~~~
+bridge_local_network_number = 1
+~~~~~~
+
 
 Logging
 ==
+
 **logbackend**
 
-The server can log to either syslog or a file.  This key controls which backend the system uses vaild values are syslog or logfile, the default is syslog.
+Controls where log output is written.  Default is `syslog`.
+
+Valid values: `syslog`, `logfile`
 
 ~~~~~~
-e.g.
-
-logbackend='logfile'
+logbackend = logfile
 ~~~~~~
 
 **loglevel**
 
-Controls the logging level valid values are 0 - 7 with 0 being the least verbose and 7 the most.  The default value is 6 which provides basic information logging about key events such as a user logging in/out etc.
+Logging verbosity level, 0 (least verbose) to 7 (most verbose).  Default is `6`, which logs key events such as user login and logout.
 
 ~~~~~~
-e.g.
-
-loglevel=7
+loglevel = 7
 ~~~~~~
 
 **logstderr**
 
-Controls if all logging is echoed to standard error, 1 turns logging to stderr on 0 turns it off, the default is off.
+Whether to echo all log output to standard error as well as the configured backend.  `1` enables, `0` disables.  Default is `0`.
 
 ~~~~~~
-e.g.
-
-logstderr=0
+logstderr = 0
 ~~~~~~
 
 **logfile**
 
-If the system if configure to use a log file for its logging (rather than syslog) this config key sets the path of the file the log is written to.
+Path to the log file.  Only used when `logbackend = logfile`.
 
 ~~~~~~
-e.g.
-
-logfile='/tmp/filestore.log'
+logfile = /var/log/aun-filestored.log
 ~~~~~~
+
 
 File System
 ==
-The file system exported by the file server is made up of a number vfs plugins.  The plugins are layered ontop of one another to form the final filing system exported by the file server.
-
-The base plugin that should be used is the localfile plugin, it exports a local directory as the root of the exported file system. 
-
+The file system exported by the file server is composed of one or more VFS plugins layered on top of each other.  Plugins are tried in order; the first one that handles a given path wins.
 
 **vfs_plugins**
 
-This configures which vfs plugin are used and in what order.  The pluigns are listed in order and are separated by "," with the right most plugin forming the lowest layer of the file system.  Please note the plugin names are case sensitive.  All the plugins can be found in src/include/classes/Vfs/Plugins. 
+Comma-separated list of VFS plugin names, in priority order (left = highest priority).  Plugin names are case-sensitive.  Default is `AFS,DfsSsd,AdfsAdl,AdfsHD,LocalFile`.
+
+Available plugins: `LocalFile`, `S3`, `Catalogue`, `DfsSsd`, `AdfsAdl`, `AdfsHD`, `AFS`, `AfsImg`
 
 ~~~~~~
-e.g.
-
-vfs_plugins='DfsSsd,AdfsAdl,LocalFile'
-
+vfs_plugins = DfsSsd,AdfsAdl,LocalFile
 ~~~~~~
 
 **vfs_default_disc_free**
 
-A BBC can't cope with modern disc sizes so the file server returns a fake value for the amount of disk space free.  This config key sets that value.
+Fake free-space value reported to BBC clients (which cannot handle real modern disk sizes).  Value is in Econet disc-space units.  Default is `0x9000`.
 
 ~~~~~~
-e.g.
-
-vfs_default_disc_free=0x9000
-
+vfs_default_disc_free = 0x9000
 ~~~~~~
 
 **vfs_default_disc_size**
 
-A BBC can't cope with modern disc sizes so the file server returns a fake value for the size of the disc.  This config key sets that value.
+Fake total-disc-size value reported to BBC clients.  Default is `0x9000`.
 
 ~~~~~~
-e.g.
-
-vfs_default_disc_size=0x9000
-
+vfs_default_disc_size = 0x9000
 ~~~~~~
 
 **vfs_disc_name**
 
-In a econet a file server can provide access to multiple disks, each disk has a unique name.  As this server shares a chuck of local disk space that space is repesented as a disk and thus must have a name.  This config value sets the name for that disk,
+Name of the virtual disc exported by the file server.  Maximum 16 characters.  Default is `VFSROOT`.
 
 ~~~~~~
-e.g.
-
-vfs_disc_name='VFSROOT'
-
+vfs_disc_name = VFSROOT
 ~~~~~~
 
 **library_path**
 
-The Library is used by all clients to load software from regardless of the currently selected directory.  BBC's don't have an equivalent to the UNIX and DOS path allowing the client to have a list of directories to search for given executable name.  Instead BBC's have the concept of a LIBRARY, one directory that can be searched for an executable as well as the current directory.  This config entry sets the path of the default library for the client when the user logs in.
+Econet path of the default library directory.  This directory is searched for executables in addition to the user's current selected directory.  Default is `$.LIBRARY`.
 
 ~~~~~~
-e.g.
-
-library_path='$.LIBRARY'
-
+library_path = $.LIBRARY
 ~~~~~~
 
 **vfs_home_dir_path**
-Each user potentially gets their own home directory, this config value sets the path of the directory any home directories are created under.  The default is $.HOME
+
+Econet path of the directory under which per-user home directories are created.  Default is `$.home`.
 
 ~~~~~~
-e.g.
-
-vfs_home_dir_path='$.HOME'
-
+vfs_home_dir_path = $.HOME
 ~~~~~~
+
+##### LocalFile plugin #####
 
 **vfs_plugin_localfile_root**
 
-This config entry is for the localfile vfs plugin.  This plugin allows the server to share an amount of local file system to remote clients. This config value sets which directory is shared out.
+Absolute Unix path of the local directory exported as the root of the Econet file system.  Default is `/var/lib/aun-filestore-root`.
 
 ~~~~~~
-e.g.
-
-vfs_plugin_localfile_root='/var/econetroot/'
-
+vfs_plugin_localfile_root = /var/lib/aun-filestore-root
 ~~~~~~
+
+##### DfsSsd plugin #####
 
 **vfs_plugin_localdfsssd_root**
-The vfs plugin localdfsssd allows you to place a DFS ssd disk image on your server and the file server will represent the disk image as a directory.  If a user changes into that directory all the files held in that image will be listed if the user list all the files in that directory.  This config value sets the directory the disk images can be stored.  This should be configured to be that same path that is used as the localgile_root path in most circumstances. 
+
+Directory in which Acorn DFS `.ssd` floppy-disk image files are stored.  Each image file is presented as a directory in the Econet file system.  Default is `/var/lib/aun-filestore-root`.
 
 ~~~~~~
-e.g.
-
-vfs_plugin_localdfsssd_root='/var/econetroot/'
-
+vfs_plugin_localdfsssd_root = /var/lib/aun-filestore-root
 ~~~~~~
+
+##### AdfsAdl plugin #####
 
 **vfs_plugin_localadfsadl_root**
-The vfs plugin localadfsadl allows you to place an ADFS adl disk image on your server and the file server will represent the disk image as a directory.  If a user changes into that directory all the files held in that image will be listed as will any of the directories contained in the ADFS image.  This config value sets the directory the disk images can be stored.  This should be configured to be that same path that is used as the localgile_root path in most circumstances. 
+
+Directory in which Acorn ADFS `.adl` floppy-disk image files are stored.  Default is `/var/lib/aun-filestore-root`.
 
 ~~~~~~
-e.g.
+vfs_plugin_localadfsadl_root = /var/lib/aun-filestore-root
+~~~~~~
 
-vfs_plugin_localadfsadl_root='/var/econetroot/'
+##### AdfsHD plugin #####
+
+**vfs_plugin_localadfshd_root**
+
+Directory in which Acorn ADFS hard-disk image files (matched by the pattern `scsi*.dat`) are stored.  Default is `/var/lib/aun-filestore-root`.
 
 ~~~~~~
+vfs_plugin_localadfshd_root = /var/lib/aun-filestore-root
+~~~~~~
+
+##### AFS plugin #####
+
+**vfs_plugin_afs_root**
+
+Directory in which AFS (Acorn Level-3 Fileserver) hard-disk image files (matched by the pattern `scsi*.l3`) are stored.  Default is `/var/lib/aun-filestore-root`.
+
+~~~~~~
+vfs_plugin_afs_root = /var/lib/aun-filestore-root
+~~~~~~
+
+##### AfsImg plugin #####
+
+**vfs_plugin_localafsimg_root**
+
+Directory in which AFS disk image files are stored for the AfsImg plugin.  No default — must be set if the `AfsImg` plugin is active.
+
+~~~~~~
+vfs_plugin_localafsimg_root = /var/lib/aun-filestore-root
+~~~~~~
+
+##### S3 plugin #####
+
+**vfs_plugin_s3_mappings**
+
+JSON array defining the S3 bucket/prefix mappings.  Each object in the array maps an Econet VFS path prefix to an S3 bucket.  No default — must be set if the `S3` plugin is active.
+
+Fields per mapping object:
+
+| Field | Required | Description |
+|---|---|---|
+| `econet_path` | Yes | Econet path prefix this mapping covers (e.g. `$.s3files`) |
+| `bucket` | Yes | S3 bucket name |
+| `prefix` | Yes | S3 key prefix within the bucket |
+| `region` | Yes | AWS region (e.g. `eu-west-1`) |
+| `write_enabled` | No | `true` to allow write operations; default `false` (read-only) |
+| `endpoint` | No | Custom S3-compatible endpoint URL (e.g. for MinIO) |
+| `key` | No | AWS/MinIO access key ID |
+| `secret` | No | AWS/MinIO secret access key |
+
+~~~~~~
+vfs_plugin_s3_mappings = [{"econet_path":"$.s3files","bucket":"my-bucket","prefix":"econet","region":"eu-west-1"}]
+~~~~~~
+
+**vfs_plugin_s3_cache_dir**
+
+Local directory used to cache files fetched from S3.  Must be writable by the server process.  Set to an empty string to disable the cache.  Default is `/var/lib/cache/aun/s3/`.
+
+~~~~~~
+vfs_plugin_s3_cache_dir = /var/lib/cache/aun/s3/
+~~~~~~
+
+##### Catalogue plugin #####
+
+**vfs_plugin_catalogue_mappings**
+
+JSON array defining the catalogue URL mappings.  Each object maps an Econet VFS path prefix to a URL hosting an `index.json` catalogue file.  No default — must be set if the `Catalogue` plugin is active.
+
+Fields per mapping object:
+
+| Field | Required | Description |
+|---|---|---|
+| `econet_path` | Yes | Econet path prefix this mapping covers (e.g. `$.apps`) |
+| `catalogue_url` | Yes | Base URL of the directory containing `index.json` |
+| `reload_interval` | No | Override the global reload interval (seconds) for this mapping |
+
+~~~~~~
+vfs_plugin_catalogue_mappings = [{"econet_path":"$.apps","catalogue_url":"https://example.com/apps"}]
+~~~~~~
+
+**vfs_plugin_catalogue_cache_dir**
+
+Local directory used to cache files downloaded from catalogue URLs.  Must be writable by the server process.  Default is `/var/lib/cache/aun/catalogue/`.
+
+~~~~~~
+vfs_plugin_catalogue_cache_dir = /var/lib/cache/aun/catalogue/
+~~~~~~
+
+**vfs_plugin_catalogue_reload_interval**
+
+How often (in seconds) the catalogue `index.json` is re-fetched to check for updated file versions.  Can be overridden per mapping in `vfs_plugin_catalogue_mappings`.  Default is `3600`.
+
+~~~~~~
+vfs_plugin_catalogue_reload_interval = 3600
+~~~~~~
+
 
 Print Server
 ==
-The server provides a basic print server, and printed jobs just get saved in a directory.   
 
 **print_server_spool_dir**
-This config entry sets the directory any print jobs are spooled to. 
+
+Directory to which incoming print jobs are spooled.  Per-user subdirectories are created automatically.  Default is `/tmp/econetprint`.
 
 ~~~~~~
-e.g.
+print_server_spool_dir = /var/spool/aun-filestore-print
+~~~~~~
 
-print_server_spool_dir='/tmp/econetprint'
+**print_server_conversion_script**
+
+Optional shell command run after each raw `.raw` spool file is written.  Two placeholders are substituted at run time:
+
+* `%source%` — full path to the input `.raw` file
+* `%destination%` — full path for the converted output file (`.ps` extension)
+
+If not set, no conversion is performed.  Default is `/usr/bin/esc2ps -i %source% -o %destination%`.
 
 ~~~~~~
+print_server_conversion_script = /usr/bin/esc2ps -i %source% -o %destination%
+~~~~~~
+
+
+IPv4 / EconetA
+==
+The IPv4 service implements IPv4-over-Econet (the EconetA standard), handling ARP, ICMP, and NAT-proxied TCP connections.
+
+**ipv4_interfaces_file**
+
+Path to the file defining the virtual IPv4 interfaces hosted on the Econet.  Each line has the form `<network> <station> <ip> <netmask>`.  Default is `interfaces.txt`.
+
+~~~~~~
+ipv4_interfaces_file = interfaces.txt
+~~~~~~
+
+**ipv4_routes_file**
+
+Path to the IPv4 routing table file.  Each line has the form `<destination>/<mask> <gateway> [metric]`.  Default is `routes.txt`.
+
+~~~~~~
+ipv4_routes_file = routes.txt
+~~~~~~
+
+**ipv4_nat_file**
+
+Path to the NAT TCP proxy rules file.  Each line has the form `<virtual_ip> <real_ip> <virtual_port> <real_port>`.  Default is `nat.txt`.
+
+~~~~~~
+ipv4_nat_file = nat.txt
+~~~~~~
+
+**nat_default_station**
+
+Econet station number used as the source address for NAT reply packets.  Should not conflict with any real Econet device.  Default is `254`.
+
+~~~~~~
+nat_default_station = 254
+~~~~~~
+
+**nat_default_network**
+
+Econet network number used as the source address for NAT reply packets.  Default is `254`.
+
+~~~~~~
+nat_default_network = 254
+~~~~~~
+
+
+BeebTerm
+==
+The BeebTerm service implements the SJ Research BeebTerm terminal protocol, allowing BBC clients to connect terminal sessions to commands running on the server.
+
+**beeb_term_services_file**
+
+Path to the BeebTerm services definition file.  Each line defines one service using the format:
+
+~~~~~~
+<service_name> "<shell_command>"
+~~~~~~
+
+For example:
+
+~~~~~~
+BBC "/usr/bin/bbcbasic"
+~~~~~~
+
+Default is `beebterm.txt`.
+
+~~~~~~
+beeb_term_services_file = beebterm.txt
+~~~~~~
+
+
+TorchNet
+==
+The TorchNet service provides CP/M file services for Torch Communicator workstations.  Each CP/M drive letter maps to an Econet VFS path.
+
+**torchnet_drive_\<letter\>**
+
+Maps a CP/M drive letter to an Econet VFS path.  The config key uses a lowercase drive letter suffix, e.g. `torchnet_drive_e` for drive E.  If a drive is not explicitly configured it defaults to `$.TorchDrives.<LETTER>`.
+
+~~~~~~
+torchnet_drive_e = $.TorchDrives.E
+torchnet_drive_f = $.TorchDrives.F
+~~~~~~
+
+
+Admin Web Interface
+==
+A browser-based admin interface is included and starts automatically with the server.
+
+**webadmin_listen_address**
+
+IP address to bind the admin web server to.  Default is `0.0.0.0` (all interfaces).
+
+~~~~~~
+webadmin_listen_address = 0.0.0.0
+~~~~~~
+
+**webadmin_listen_port**
+
+TCP port for the admin web interface.  Default is `8080`.
+
+~~~~~~
+webadmin_listen_port = 8080
+~~~~~~
+
 
 Misc
 ==
 
-The server performs house keeping tasks (expiring un-used connections, closing un-used file handles etc).  This config value sets the in time in seconds between each house cleaning.
- The default is 300 seconds.
+**housekeeping_interval**
+
+Interval in seconds between housekeeping runs.  Housekeeping expires idle sessions, closes stale file handles, and runs per-plugin maintenance tasks.  Default is `300`.
 
 ~~~~~~
-e.g.
-
-housekeeping_interval=300
-
+housekeeping_interval = 300
 ~~~~~~

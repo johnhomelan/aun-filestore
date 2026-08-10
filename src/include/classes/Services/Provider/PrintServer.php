@@ -75,7 +75,9 @@ class PrintServer implements ProviderInterface {
 	*/
 	public function broadcastPacketIn(EconetPacket $oPacket): void
 	{
-
+		if ($oPacket->getPortName() === 'PrinterServerEnquiry') {
+			$this->processEnquiry(new PrintServerEnquiry($oPacket, $this->oLogger));
+		}
 	}
 
 	/** 

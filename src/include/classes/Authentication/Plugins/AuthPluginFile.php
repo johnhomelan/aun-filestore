@@ -169,7 +169,7 @@ class AuthPluginFile implements AuthPluginInterface {
     };
 			}
 		}
-		AuthPluginFile::_writeOutUserFile();
+		static::_writeOutUserFile();
 	}
 
 	/**
@@ -183,7 +183,7 @@ class AuthPluginFile implements AuthPluginInterface {
 	{
 		if(!array_key_exists(strtoupper((string) $oUser->getUsername()),AuthPluginFile::$aUsers)){
 			AuthPluginFile::$aUsers[strtoupper((string) $oUser->getUsername())]=['username'=>$oUser->getUsername(), 'password'=>'', 'homedir'=>$oUser->getHomedir(), 'unixuid'=>$oUser->getUnixUid(), 'opt'=>$oUser->getBootOpt(), 'priv'=>$oUser->getPriv()];
-			AuthPluginFile::_writeOutUserFile();
+			static::_writeOutUserFile();
 		}else{
 			throw new Exception("User exists");
 		}
@@ -200,7 +200,7 @@ class AuthPluginFile implements AuthPluginInterface {
 	{
 		if(array_key_exists(strtoupper($sUsername),AuthPluginFile::$aUsers)){
 			unset(AuthPluginFile::$aUsers[strtoupper($sUsername)]);
-			AuthPluginFile::_writeOutUserFile();
+			static::_writeOutUserFile();
 			return TRUE;
 		}else{
 			throw new Exception("User does not exists");
@@ -215,7 +215,7 @@ class AuthPluginFile implements AuthPluginInterface {
 	{
 		if(array_key_exists(strtoupper($sUsername),AuthPluginFile::$aUsers)){
 			AuthPluginFile::$aUsers[strtoupper($sUsername)]['priv']=$sPriv;
-			AuthPluginFile::_writeOutUserFile();
+			static::_writeOutUserFile();
 		}
 	}
 
@@ -227,7 +227,7 @@ class AuthPluginFile implements AuthPluginInterface {
 	{
 		if(array_key_exists(strtoupper($sUsername),AuthPluginFile::$aUsers)){
 			AuthPluginFile::$aUsers[strtoupper($sUsername)]['opt']=$sOpt;
-			AuthPluginFile::_writeOutUserFile();
+			static::_writeOutUserFile();
 		}
 	}
 

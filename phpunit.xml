@@ -1,31 +1,29 @@
-<phpunit xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-         xsi:noNamespaceSchemaLocation="http://schema.phpunit.de/4.8/phpunit.xsd"
-         backupGlobals="false"
-         colors="true"
-         bootstrap="src/vendor/autoload.php"
->
-
-
-<testsuites>
-   <testsuite name="Project Test Suite">
-            <directory>unit-tests/aunmap/</directory>
-            <directory>unit-tests/piconetmap/</directory>
-            <directory>unit-tests/wsmap/</directory>
-            <directory>unit-tests/authplugins/</directory>
-            <directory>unit-tests/protocol/</directory>
-            <directory>unit-tests/vfs/</directory>
-            <directory>unit-tests/ipv4/</directory>
-            <directory>unit-tests/services/</directory>
-            <directory>unit-tests/command/</directory>
-   </testsuite>
-</testsuites>
-
-   <filter>
-        <whitelist>
-            <directory>src</directory>
-            <exclude>
-                <directory>src/vendor</directory>
-            </exclude>
-        </whitelist>
-    </filter>
+<?xml version="1.0"?>
+<phpunit xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="https://schema.phpunit.de/11.5/phpunit.xsd" colors="true" bootstrap="src/vendor/autoload.php" cacheDirectory=".phpunit.cache">
+  <testsuites>
+    <testsuite name="Project Test Suite">
+      <directory>unit-tests/aunmap/</directory>
+      <directory>unit-tests/piconetmap/</directory>
+      <directory>unit-tests/wsmap/</directory>
+      <directory>unit-tests/authplugins/</directory>
+      <directory>unit-tests/protocol/</directory>
+      <directory>unit-tests/vfs/</directory>
+      <directory>unit-tests/ipv4/</directory>
+      <directory>unit-tests/services/</directory>
+      <directory>unit-tests/command/</directory>
+      <directory>unit-tests/react/</directory>
+      <directory>unit-tests/remotebridge/</directory>
+      <directory>unit-tests/encapsulation/</directory>
+      <directory>unit-tests/admin/</directory>
+    </testsuite>
+  </testsuites>
+  <source>
+    <include>
+      <directory suffix=".php">src</directory>
+    </include>
+    <exclude>
+      <directory>src/vendor</directory>
+      <directory>src/var</directory>
+    </exclude>
+  </source>
 </phpunit>

@@ -2504,7 +2504,8 @@ class FileServer implements ProviderInterface{
 				if ($e->isHard()) {
 					break;
 				}
-			} catch (\Throwable) {
+			} catch (\Throwable $e) {
+				$this->oLogger->error('Admin directory listing failed for plugin '.$sPlugin.' path '.$sAcornPath.': '.$e->getMessage().' in '.$e->getFile().':'.$e->getLine());
 			}
 		}
 		return $aListing;

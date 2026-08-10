@@ -7,6 +7,10 @@ use Symfony\Component\HttpFoundation\Request;
 
 use HomeLan\FileStore\Admin\Service\Smarty;
 use HomeLan\FileStore\Services\ServiceDispatcher;
+use HomeLan\FileStore\Aun\Admin as AunAdmin;
+use HomeLan\FileStore\WebSocket\Admin as WebSocketAdmin;
+use HomeLan\FileStore\Piconet\Admin as PiconetAdmin;
+use HomeLan\FileStore\RemoteBridge\Admin as RemoteBridgeAdmin;
 
 class IndexController extends AbstractController 
 {
@@ -15,6 +19,12 @@ class IndexController extends AbstractController
 		$oServices = ServiceDispatcher::create();
 		$oSmarty = $oSmartyService->getSmarty();
 		$oSmarty->assign('aServices',$oServices->getServices());
+		$oSmarty->assign('aEncapsulations', [
+			new AunAdmin(),
+			new WebSocketAdmin(),
+			new PiconetAdmin(),
+			new RemoteBridgeAdmin(),
+		]);
 		return new Response($oSmarty->fetch('index.tpl'));
 	}
 

@@ -10,7 +10,7 @@
 	<h2>Registered Services</h2>
 	<table class="table">
 		<thead>
-			<tr><th>Services</th><th>Ports</th></tr>
+			<tr><th>Service</th><th>Ports</th></tr>
 		</thead>
 		<tbody>
 			{foreach from=$aServices item=oService}
@@ -21,7 +21,21 @@
 				{', '|implodemod:$oService->getServicePorts()}
 			</td></tr>
 			{/foreach}
+		</tbody>
+	</table>
 
+	<h2>Encapsulation Methods</h2>
+	<table class="table">
+		<thead>
+			<tr><th>Encapsulation</th><th>Status</th></tr>
+		</thead>
+		<tbody>
+			{foreach from=$aEncapsulations item=oAdmin}
+			<tr>
+				<td><a href="encapsulation?type={$oAdmin->getId()}">{$oAdmin->getName()}</a></td>
+				<td>{$oAdmin->getStatus()}</td>
+			</tr>
+			{/foreach}
 		</tbody>
 	</table>
 </div>

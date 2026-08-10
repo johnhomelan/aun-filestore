@@ -651,6 +651,9 @@ While all the auth and file serving features are complete, there are some outsta
 
 The rest interface and control client has yet to be implemented, however there is now a basic web front end (see Admin Web Front End above).
 
+# Configuration #
+Full documentation for every config key is in **[docs/Config.md](docs/Config.md)**.
+
 # Install #
 ## Docker Install ##
 There is a docker image pre-built read for use on dockerhub.

@@ -631,6 +631,19 @@ src/util/mkcatarchive --output=myfiles-new.tar --existing-tar=myfiles.tar /srv/b
 mv myfiles-new.tar myfiles.tar
 ~~~
 
+## Protocol Reference ##
+
+Detailed wire-format documentation for every protocol implemented by the server:
+
+* [AUN — Acorn Universal Networking](docs/protocols/aun.md) — UDP encapsulation of Econet: header layout, packet types, sequence numbers, ACK mechanism, immediate operations, address mapping
+* [Piconet](docs/protocols/piconet.md) — serial interface to the EconetUSB hardware adapter: frame format, command/event protocol, transmit queue, ACK handling, address mapping
+* [File Server](docs/protocols/file-server.md) — full Econet file server protocol: all 35 function codes with request and reply byte layouts, streaming data protocol, CLI commands, error codes
+* [Print Server](docs/protocols/print-server.md) — printer discovery (port 0x9F) and print data (port 0xD1) protocols: enquiry/reply status word, job start/data/end framing, spool file format
+* [BeebTerm](docs/protocols/beebterm.md) — terminal multiplexer protocol: login/reject/data/terminate packet types, sequence fields, service configuration
+* [Bridge](docs/protocols/bridge.md) — Econet bridge discovery protocol: bridge-to-bridge queries, station-to-bridge localnet and netknown queries
+* [EconetA IPv4](docs/protocols/ipv4.md) — IP over Econet (port 0xD2): DCI-2 and DCI-4 ARP, IPv4 forwarding, ICMP echo and unreachable
+* [TorchNet](docs/protocols/torchnet.md) — CP/M file server for Torch workstations: all command codes with request and reply byte layouts, record I/O, drive mapping, filename conventions
+
 ## Developer Documentation ##
 
 Guides for programmers who want to extend the server:

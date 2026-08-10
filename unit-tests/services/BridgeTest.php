@@ -12,6 +12,9 @@ use HomeLan\FileStore\Messages\BridgeRequest;
 use HomeLan\FileStore\Messages\Reply;
 use HomeLan\FileStore\Services\Provider\Bridge;
 use HomeLan\FileStore\Aun\Map;
+use HomeLan\FileStore\WebSocket\Map as WebSocketMap;
+use HomeLan\FileStore\Piconet\Map as PiconetMap;
+use HomeLan\FileStore\RemoteBridge\Map as RemoteBridgeMap;
 
 include_once('include/system.inc.php');
 
@@ -36,10 +39,13 @@ class BridgeTest extends TestCase
 
     protected function setUp(): void
     {
-        // Reset AUN map static state so tests don't bleed into each other.
         Map::$aHostMap      = [];
         Map::$aSubnetMap    = [];
         Map::$aIPLookupCache = [];
+        WebSocketMap::$aDynamicNetworks = [];
+        WebSocketMap::$aSocketList      = [];
+        PiconetMap::$aNetworks          = [];
+        RemoteBridgeMap::reset();
 
         config::overrideValue('bridge_local_network_number', 1);
 
@@ -54,6 +60,10 @@ class BridgeTest extends TestCase
         Map::$aHostMap      = [];
         Map::$aSubnetMap    = [];
         Map::$aIPLookupCache = [];
+        WebSocketMap::$aDynamicNetworks = [];
+        WebSocketMap::$aSocketList      = [];
+        PiconetMap::$aNetworks          = [];
+        RemoteBridgeMap::reset();
     }
 
     // -----------------------------------------------------------------------
@@ -212,9 +222,9 @@ class BridgeTest extends TestCase
         $this->assertSame([0x9C, 0x9D], $this->oBridge->getServicePorts());
     }
 
-    public function testGetAdminInterfaceReturnsNull(): void
+    public function testGetAdminInterfaceReturnsBridgeAdminInstance(): void
     {
-        $this->assertNull($this->oBridge->getAdminInterface());
+        $this->assertInstanceOf(\HomeLan\FileStore\Services\Provider\Bridge\Admin::class, $this->oBridge->getAdminInterface());
     }
 
     // -----------------------------------------------------------------------
@@ -362,12 +372,29 @@ class BridgeTest extends TestCase
         $this->assertSame('2.7', $this->oBridge->getRemoteNetworks()[99]);
     }
 
-    public function testQueryBridgeRepliesWithLocalNetworkNumber(): void
+    public function testQueryBridgeReplyContainsLocalNetworkNumber(): void
     {
         config::overrideValue('bridge_local_network_number', 4);
         [$oReply] = $this->dispatch($this->queryPkt([5]));
-        $aBytes = unpack('C*', $oReply->getData());
-        $this->assertSame(4, $aBytes[1]);
+        $aBytes = array_values(unpack('C*', $oReply->getData()));
+        $this->assertContains(4, $aBytes);
+    }
+
+    public function testQueryBridgeReplyExcludesRequesterNetwork(): void
+    {
+        config::overrideValue('bridge_local_network_number', 4);
+        // Peer is on network 1; reply must not include network 1.
+        [$oReply] = $this->dispatch($this->queryPkt([5], iNet: 1, iStn: 3));
+        $aBytes = array_values(unpack('C*', $oReply->getData()));
+        $this->assertNotContains(1, $aBytes);
+    }
+
+    public function testQueryBridgeReplyIncludesLearnedNetworks(): void
+    {
+        config::overrideValue('bridge_local_network_number', 9);
+        [$oReply] = $this->dispatch($this->queryPkt([5], iNet: 2, iStn: 3));
+        $aBytes = array_values(unpack('C*', $oReply->getData()));
+        $this->assertContains(5, $aBytes);
     }
 
     public function testQueryBridgeAlwaysRepliesEvenWithNoNetworks(): void
@@ -410,5 +437,163 @@ class BridgeTest extends TestCase
     {
         $aReplies = $this->dispatch($this->query2Pkt([3]));
         $this->assertCount(1, $aReplies);
+    }
+
+    // -----------------------------------------------------------------------
+    // getAllKnownNetworkNumbers
+    // -----------------------------------------------------------------------
+
+    public function testGetAllKnownNetworkNumbersIncludesLocalNetwork(): void
+    {
+        config::overrideValue('bridge_local_network_number', 7);
+        $this->assertContains(7, $this->oBridge->getAllKnownNetworkNumbers(0));
+    }
+
+    public function testGetAllKnownNetworkNumbersExcludesGivenNetwork(): void
+    {
+        config::overrideValue('bridge_local_network_number', 5);
+        $this->assertNotContains(5, $this->oBridge->getAllKnownNetworkNumbers(5));
+    }
+
+    public function testGetAllKnownNetworkNumbersIncludesAunSubnetNetworks(): void
+    {
+        Map::$aSubnetMap[10] = '10.0.10.0/24';
+        Map::$aSubnetMap[11] = '10.0.11.0/24';
+        $aNets = $this->oBridge->getAllKnownNetworkNumbers(0);
+        $this->assertContains(10, $aNets);
+        $this->assertContains(11, $aNets);
+    }
+
+    public function testGetAllKnownNetworkNumbersIncludesAunHostNetworks(): void
+    {
+        Map::$aHostMap['20.5'] = '192.168.20.5';
+        $this->assertContains(20, $this->oBridge->getAllKnownNetworkNumbers(0));
+    }
+
+    public function testGetAllKnownNetworkNumbersIncludesWebSocketNetworks(): void
+    {
+        WebSocketMap::$aDynamicNetworks[128] = [];
+        $this->assertContains(128, $this->oBridge->getAllKnownNetworkNumbers(0));
+    }
+
+    public function testGetAllKnownNetworkNumbersIncludesPiconetNetworks(): void
+    {
+        PiconetMap::$aNetworks = [3, 4];
+        $this->assertContains(3, $this->oBridge->getAllKnownNetworkNumbers(0));
+        $this->assertContains(4, $this->oBridge->getAllKnownNetworkNumbers(0));
+    }
+
+    public function testGetAllKnownNetworkNumbersIncludesRemoteBridgeNetworks(): void
+    {
+        $oConn = $this->createStub(\HomeLan\FileStore\RemoteBridge\Connection::class);
+        RemoteBridgeMap::registerPeerNetworks($oConn, [50, 51]);
+        $aNets = $this->oBridge->getAllKnownNetworkNumbers(0);
+        $this->assertContains(50, $aNets);
+        $this->assertContains(51, $aNets);
+    }
+
+    public function testGetAllKnownNetworkNumbersIncludesLearnedRemoteNetworks(): void
+    {
+        $this->dispatch($this->queryPkt([30], iNet: 2, iStn: 1));
+        $this->oBridge->getReplies();
+        $this->assertContains(30, $this->oBridge->getAllKnownNetworkNumbers(0));
+    }
+
+    public function testGetAllKnownNetworkNumbersDeduplicates(): void
+    {
+        // Same network visible in both AUN map and piconet — should appear once.
+        Map::$aSubnetMap[9] = '192.168.9.0/24';
+        PiconetMap::$aNetworks = [9];
+        $aNets = $this->oBridge->getAllKnownNetworkNumbers(0);
+        $this->assertSame(array_unique($aNets), $aNets);
+        $this->assertCount(1, array_filter($aNets, fn($n) => $n === 9));
+    }
+
+    public function testGetAllKnownNetworkNumbersReturnsEmptyWhenNothingConfigured(): void
+    {
+        // setUp sets local network to 1; exclude it → nothing left.
+        config::overrideValue('bridge_local_network_number', 0);
+        $this->assertSame([], $this->oBridge->getAllKnownNetworkNumbers(0));
+    }
+
+    // -----------------------------------------------------------------------
+    // getLocalKnownNetworks
+    // -----------------------------------------------------------------------
+
+    public function testGetLocalKnownNetworksReturnsEmptyWhenNoMapsPopulated(): void
+    {
+        config::overrideValue('bridge_local_network_number', 0);
+        $this->assertSame([], $this->oBridge->getLocalKnownNetworks());
+    }
+
+    public function testGetLocalKnownNetworksIncludesLocalNetworkWithLocalLabel(): void
+    {
+        config::overrideValue('bridge_local_network_number', 5);
+        $aResult = $this->oBridge->getLocalKnownNetworks();
+        $this->assertCount(1, $aResult);
+        $this->assertSame(5,       $aResult[0]['network']);
+        $this->assertSame('local', $aResult[0]['via']);
+    }
+
+    public function testGetLocalKnownNetworksIncludesAunNetworkWithAunLabel(): void
+    {
+        config::overrideValue('bridge_local_network_number', 0);
+        Map::$aSubnetMap[10] = '10.0.10.0/24';
+        $aResult = $this->oBridge->getLocalKnownNetworks();
+        $this->assertCount(1, $aResult);
+        $this->assertSame(10,    $aResult[0]['network']);
+        $this->assertSame('AUN', $aResult[0]['via']);
+    }
+
+    public function testGetLocalKnownNetworksIncludesWebSocketNetworkWithWebSocketLabel(): void
+    {
+        config::overrideValue('bridge_local_network_number', 0);
+        WebSocketMap::$aDynamicNetworks[128] = [];
+        $aResult = $this->oBridge->getLocalKnownNetworks();
+        $this->assertCount(1, $aResult);
+        $this->assertSame(128,         $aResult[0]['network']);
+        $this->assertSame('WebSocket', $aResult[0]['via']);
+    }
+
+    public function testGetLocalKnownNetworksIncludesPiconetNetworkWithPiconetLabel(): void
+    {
+        config::overrideValue('bridge_local_network_number', 0);
+        PiconetMap::$aNetworks = [3];
+        $aResult = $this->oBridge->getLocalKnownNetworks();
+        $this->assertCount(1, $aResult);
+        $this->assertSame(3,         $aResult[0]['network']);
+        $this->assertSame('Piconet', $aResult[0]['via']);
+    }
+
+    public function testGetLocalKnownNetworksIncludesRemoteBridgeNetworkWithRemoteBridgeLabel(): void
+    {
+        config::overrideValue('bridge_local_network_number', 0);
+        $oConn = $this->createStub(\HomeLan\FileStore\RemoteBridge\Connection::class);
+        RemoteBridgeMap::registerPeerNetworks($oConn, [50]);
+        $aResult = $this->oBridge->getLocalKnownNetworks();
+        $this->assertCount(1, $aResult);
+        $this->assertSame(50,              $aResult[0]['network']);
+        $this->assertSame('RemoteBridge',  $aResult[0]['via']);
+    }
+
+    public function testGetLocalKnownNetworksDoesNotIncludePeerLearnedNetworks(): void
+    {
+        config::overrideValue('bridge_local_network_number', 0);
+        // Teach the bridge about network 42 via a peer query.
+        $this->dispatch($this->queryPkt([42], iNet: 2, iStn: 1));
+        $this->oBridge->getReplies();
+
+        $aNetworks = array_column($this->oBridge->getLocalKnownNetworks(), 'network');
+        $this->assertNotContains(42, $aNetworks);
+    }
+
+    public function testGetLocalKnownNetworksDeduplicatesByNetworkNumber(): void
+    {
+        config::overrideValue('bridge_local_network_number', 0);
+        // Network 9 in both AUN and Piconet — should appear once.
+        Map::$aSubnetMap[9] = '192.168.9.0/24';
+        PiconetMap::$aNetworks = [9];
+        $aResult = $this->oBridge->getLocalKnownNetworks();
+        $this->assertCount(1, array_filter($aResult, fn($r) => $r['network'] === 9));
     }
 }

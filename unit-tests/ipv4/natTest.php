@@ -27,7 +27,9 @@ use HomeLan\FileStore\Services\Provider\IPv4\Exceptions\NatException;
 
 class natTest extends TestCase {
 
-    protected function setup(): void
+    private NAT $oNAT;
+
+    protected function setUp(): void
     {
         $oProvider = $this->createMock(IPv4::class);
         $sNatFile = "192.168.1.1 192.168.0.1 200 23\n192.168.1.2 192.168.0.2 23 23\n192.168.1.3 192.168.0.3 200 1024";

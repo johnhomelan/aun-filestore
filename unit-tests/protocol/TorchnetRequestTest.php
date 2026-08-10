@@ -87,16 +87,14 @@ class TorchnetRequestTest extends TestCase
     // Command decoding
     // -------------------------------------------------------------------------
 
-    /**
-     * @dataProvider commandCodeProvider
-     */
+    #[PHPUnit\Framework\Attributes\DataProvider('commandCodeProvider')]
     public function testGetCommandKnownCodes(int $iCode, string $sExpected): void
     {
         $oReq = $this->makeRequest(pack('C', $iCode));
         $this->assertEquals($sExpected, $oReq->getCommand());
     }
 
-    public function commandCodeProvider(): array
+    public static function commandCodeProvider(): array
     {
         return [
             'OPEN'           => [0x01, 'TORCH_OPEN'],

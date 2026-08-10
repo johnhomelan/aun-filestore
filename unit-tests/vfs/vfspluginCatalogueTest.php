@@ -379,7 +379,7 @@ class vfspluginCatalogueTest extends TestCase {
         CataloguePlugin::init($oLogger);
 
         // Cache should have been wiped because version changed from 1 to 2.
-        $this->assertFileNotExists($this->_catalogueCachePath('game'));
+        $this->assertFileDoesNotExist($this->_catalogueCachePath('game'));
 
         // Next getFile should fetch the new content.
         $sData = CataloguePlugin::getFile($this->oUser, new FilePath($this->sEconetBase, 'game'));

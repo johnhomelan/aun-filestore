@@ -10,10 +10,12 @@ use PHPUnit\Framework\TestCase;
 use Monolog\Logger;
 use HomeLan\FileStore\Aun\Map as aunmap;
 use HomeLan\FileStore\Aun\HandleInterface;
+use Mockery\Adapter\Phpunit\MockeryPHPUnitIntegration;
 
 class aunmapTest extends TestCase {
+	use MockeryPHPUnitIntegration;
 
-	protected function setup(): void
+	protected function setUp(): void
 	{
 		$oLogger = new Logger("filestored-unittests");
 		$sMapFile = "192.168.0.0/24 127\n192.168.0.40 127.254\n192.168.2.20 129.29\n192.168.1.0/24 128\n192.168.0.41\n192.168.2.0/24\n192.168.0.40:1000 127.200\n";

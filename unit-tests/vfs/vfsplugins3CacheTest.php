@@ -91,7 +91,7 @@ class vfsplugins3CacheTest extends vfsplugins3BaseTest {
         $this->assertFileExists($this->cachePathFor('econet/toupdate'));
 
         S3Plugin::saveFile($this->oUser, new FilePath($this->sEconetBase, 'toupdate'), 'new content', 0, 0);
-        $this->assertFileNotExists($this->cachePathFor('econet/toupdate'));
+        $this->assertFileDoesNotExist($this->cachePathFor('econet/toupdate'));
     }
 
     public function testCreateFileInvalidatesCache(): void
@@ -101,7 +101,7 @@ class vfsplugins3CacheTest extends vfsplugins3BaseTest {
         $this->assertFileExists($this->cachePathFor('econet/recreate'));
 
         S3Plugin::createFile($this->oUser, new FilePath($this->sEconetBase, 'recreate'), 4, 0, 0);
-        $this->assertFileNotExists($this->cachePathFor('econet/recreate'));
+        $this->assertFileDoesNotExist($this->cachePathFor('econet/recreate'));
     }
 
     public function testDeleteFileInvalidatesCache(): void
@@ -111,7 +111,7 @@ class vfsplugins3CacheTest extends vfsplugins3BaseTest {
         $this->assertFileExists($this->cachePathFor('econet/todelete'));
 
         S3Plugin::deleteFile($this->oUser, new FilePath($this->sEconetBase, 'todelete'));
-        $this->assertFileNotExists($this->cachePathFor('econet/todelete'));
+        $this->assertFileDoesNotExist($this->cachePathFor('econet/todelete'));
     }
 
     public function testMoveFileInvalidatesSourceCache(): void
@@ -125,7 +125,7 @@ class vfsplugins3CacheTest extends vfsplugins3BaseTest {
             new FilePath($this->sEconetBase, 'moveme'),
             new FilePath($this->sEconetBase, 'moved')
         );
-        $this->assertFileNotExists($this->cachePathFor('econet/moveme'));
+        $this->assertFileDoesNotExist($this->cachePathFor('econet/moveme'));
     }
 
     public function testWriteHandleOpenInvalidatesCacheImmediately(): void
@@ -139,13 +139,13 @@ class vfsplugins3CacheTest extends vfsplugins3BaseTest {
         $oFd = S3Plugin::_buildFiledescriptorFromEconetPath(
             $this->oUser, new FilePath($this->sEconetBase, 'writable'), true, false
         );
-        $this->assertFileNotExists($this->cachePathFor('econet/writable'));
+        $this->assertFileDoesNotExist($this->cachePathFor('econet/writable'));
 
         $oFd->write('after write');
         $oFd->close();
 
         // Cache should still be absent after write-back.
-        $this->assertFileNotExists($this->cachePathFor('econet/writable'));
+        $this->assertFileDoesNotExist($this->cachePathFor('econet/writable'));
     }
 
     // -------------------------------------------------------------------------
@@ -166,7 +166,7 @@ class vfsplugins3CacheTest extends vfsplugins3BaseTest {
         );
         $oFdRead->close();
 
-        $this->assertFileNotExists($this->cachePathFor('econet/fenced'));
+        $this->assertFileDoesNotExist($this->cachePathFor('econet/fenced'));
 
         $oFdWrite->close();
     }

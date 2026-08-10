@@ -134,10 +134,24 @@ class PrintServerTest extends TestCase
     // Packet routing
     // -----------------------------------------------------------------------
 
-    public function testBroadcastPacketInGeneratesNoReply(): void
+    public function testBroadcastEnquiryGeneratesReply(): void
     {
+        // broadcastPacketIn() must route PrinterServerEnquiry (0x9F) to
+        // processEnquiry() and queue a status reply — same as the unicast path.
+        $this->oServer->broadcastPacketIn($this->enquiryPkt());
+        $this->assertCount(1, $this->oServer->getReplies());
+    }
+
+    public function testBroadcastOnUnknownPortGeneratesNoReply(): void
+    {
+        // Broadcasts on ports other than 0x9F are ignored by the print server.
         $oPkt = new EconetPacket();
-        $oPkt->setPort(0x9F);
+        $oPkt->setPort(0xAB);
+        $oPkt->setFlags(0);
+        $oPkt->setSourceNetwork(1);
+        $oPkt->setSourceStation(5);
+        $oPkt->setDestinationNetwork(255);
+        $oPkt->setDestinationStation(255);
         $oPkt->setData('');
         $this->oServer->broadcastPacketIn($oPkt);
         $this->assertEmpty($this->oServer->getReplies());

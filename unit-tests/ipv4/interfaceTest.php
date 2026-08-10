@@ -44,4 +44,55 @@ class interfaceTest extends TestCase {
 		$this->expectException(InterfaceNotFound::class);
 		$this->oInterfaces->getInterfaceFor('192.168.10.21');
 	}
+
+	public function testIsInterfaceIPReturnsTrueForExactInterfaceAddress(): void
+	{
+		$this->assertTrue($this->oInterfaces->isInterfaceIP('192.168.1.24'));
+	}
+
+	public function testIsInterfaceIPReturnsTrueForSecondInterface(): void
+	{
+		$this->assertTrue($this->oInterfaces->isInterfaceIP('192.168.2.24'));
+	}
+
+	public function testIsInterfaceIPReturnsFalseForAddressInSubnetButNotInterface(): void
+	{
+		// 192.168.1.100 is in the 192.168.1.0/24 subnet but is NOT the interface address
+		$this->assertFalse($this->oInterfaces->isInterfaceIP('192.168.1.100'));
+	}
+
+	public function testIsInterfaceIPReturnsFalseForCompletelyUnknownAddress(): void
+	{
+		$this->assertFalse($this->oInterfaces->isInterfaceIP('10.0.0.1'));
+	}
+
+	public function testDumpInterfaceTableHasExpectedKeys(): void
+	{
+		$aTable = $this->oInterfaces->dumpInterfaceTable();
+		$this->assertNotEmpty($aTable);
+		$aEntry = $aTable[0];
+		$this->assertArrayHasKey('network', $aEntry);
+		$this->assertArrayHasKey('station', $aEntry);
+		$this->assertArrayHasKey('ipaddr', $aEntry);
+		$this->assertArrayHasKey('mask', $aEntry);
+	}
+
+	public function testDumpInterfaceTableEntryValuesMatchConfig(): void
+	{
+		$aTable = $this->oInterfaces->dumpInterfaceTable();
+		// First line: "1 24 192.168.1.24 255.255.255.0"
+		$aFirst = $aTable[0];
+		$this->assertSame(1, $aFirst['network']);
+		$this->assertSame(24, $aFirst['station']);
+		$this->assertSame('192.168.1.24', $aFirst['ipaddr']);
+		$this->assertSame('255.255.255.0', $aFirst['mask']);
+	}
+
+	public function testInterfaceSelectionPicksLowestStationWhenMultipleOnSameNetwork(): void
+	{
+		// Network 2 has two interfaces: 2.24 and 2.26.
+		// Both serve 192.168.2.0/24.  The one returned is whichever comes first in config.
+		$aIface = $this->oInterfaces->getInterfaceFor('192.168.2.100');
+		$this->assertSame(2, $aIface['network']);
+	}
 }

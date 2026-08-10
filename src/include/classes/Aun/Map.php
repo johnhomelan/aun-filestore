@@ -242,4 +242,56 @@ class Map {
 	{
 		return  self::$oHandler;
 	}
+
+	/**
+	 * Returns every unique Econet network number known to the AUN map.
+	 *
+	 * Covers both subnet-map keys and the network part of host-map entries.
+	 *
+	 * @return int[]
+	 */
+	public static function getNetworkNumbers(): array
+	{
+		$aNetworks = array_keys(self::$aSubnetMap);
+		foreach (self::$aHostMap as $sKey => $sIP) {
+			$iNet = (int) explode('.', (string) $sKey, 2)[0];
+			if (!in_array($iNet, $aNetworks, true)) {
+				$aNetworks[] = $iNet;
+			}
+		}
+		return $aNetworks;
+	}
+
+	/**
+	 * Returns all host mappings as rows suitable for the admin interface.
+	 *
+	 * @return array<int, array{network:int, station:int, ip:string}>
+	 */
+	public static function getHostMappings(): array
+	{
+		$aResult = [];
+		foreach (self::$aHostMap as $sEcoAddr => $sIPValue) {
+			[$sNet, $sStn] = explode('.', (string) $sEcoAddr, 2);
+			$aResult[] = [
+				'network' => (int) $sNet,
+				'station' => (int) $sStn,
+				'ip'      => (string) $sIPValue,
+			];
+		}
+		return $aResult;
+	}
+
+	/**
+	 * Returns all subnet mappings as rows suitable for the admin interface.
+	 *
+	 * @return array<int, array{network:int, subnet:string}>
+	 */
+	public static function getSubnetMappings(): array
+	{
+		$aResult = [];
+		foreach (self::$aSubnetMap as $iNetwork => $sSubnet) {
+			$aResult[] = ['network' => (int) $iNetwork, 'subnet' => (string) $sSubnet];
+		}
+		return $aResult;
+	}
 }

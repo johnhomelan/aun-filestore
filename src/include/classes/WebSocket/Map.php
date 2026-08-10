@@ -151,4 +151,42 @@ class Map {
 		return FALSE;
 	}
 
+	/**
+	 * Returns every unique Econet network number known to the WebSocket map.
+	 *
+	 * @return int[]
+	 */
+	public static function getNetworkNumbers(): array
+	{
+		return array_keys(self::$aDynamicNetworks);
+	}
+
+	/**
+	 * Returns all currently-connected clients as rows suitable for the admin interface.
+	 *
+	 * @return array<int, array{network:int, station:int}>
+	 */
+	public static function getConnectedClients(): array
+	{
+		$aResult = [];
+		foreach (self::$aSocketList as $aEntry) {
+			$aResult[] = ['network' => (int) $aEntry['network'], 'station' => (int) $aEntry['station']];
+		}
+		return $aResult;
+	}
+
+	/**
+	 * Returns all configured dynamic network ranges as rows suitable for the admin interface.
+	 *
+	 * @return array<int, array{network:int}>
+	 */
+	public static function getDynamicNetworkRanges(): array
+	{
+		$aResult = [];
+		foreach (self::$aDynamicNetworks as $iNetwork => $aStations) {
+			$aResult[] = ['network' => (int) $iNetwork];
+		}
+		return $aResult;
+	}
+
 }

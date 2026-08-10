@@ -87,6 +87,7 @@ The server supports three ways to carry Econet traffic, each targeting a differe
 | **AUN** | UDP/IP | Standard Acorn Universal Networking over an Ethernet LAN |
 | **Piconet** | Serial USB device | Physical Econet wire via an EconetUSB hardware interface |
 | **WebSocket** | TCP / WebSocket | Browser-based BBC Micro emulators (e.g. jsbeeb) |
+| **Remote Bridge** | TCP (text protocol) | Linking two server instances across a network (optional, feature-gated) |
 
 ### Outbound routing priority ###
 
@@ -94,7 +95,8 @@ When the server sends a packet to a given Econet network.station pair the routin
 
 1. **WebSocket** — if a WebSocket client has been dynamically allocated that exact network.station, the packet is delivered over the WebSocket connection.
 2. **Piconet** — if the destination network number appears in the Piconet map file, the packet is sent to the hardware interface.
-3. **AUN** — all other addresses are sent as AUN UDP datagrams.
+3. **Remote Bridge** — if `remote_bridge_enabled = true` and the destination network has been announced by an authenticated peer, the packet is forwarded over the bridge TCP connection.
+4. **AUN** — all other addresses are sent as AUN UDP datagrams.
 
 A Piconet-mapped network always takes precedence over AUN for that network, and an active WebSocket client always takes precedence over Piconet.
 
@@ -190,6 +192,38 @@ Example `piconetmap.txt`:
 Lines that contain no digits are ignored.  There is no comment syntax, but non-numeric content on a line does not cause an error.
 
 Up to 8 network numbers may be listed.
+
+---
+
+### Remote Bridge — Server-to-Server Linking ###
+
+The remote bridge allows two server instances to interconnect over TCP so that Econet clients on one network can transparently reach services on the other.  Both file and print services are reachable across the bridge, and the bridge service advertises remote networks to BBC Micro clients.
+
+The feature is disabled by default and must be enabled with `remote_bridge_enabled = true`.  When enabled, the piconet interface switches to **monitor mode** so it can see all Econet traffic on the wire (not only packets addressed to this station) and forward inter-network packets to the correct remote bridge connection.
+
+Authentication is required for every connection.  A shared HMAC-SHA256 secret is configured in the map file.  The server validates the client's credentials and the timestamp of the HELLO message (within ±60 seconds) before allowing any packet traffic.
+
+#### Remote bridge configuration ####
+
+| Config key | Default | Description |
+|---|---|---|
+| `remote_bridge_enabled` | `false` | Set to `true` to enable the remote bridge feature. |
+| `remote_bridge_map_file` | `remotebridge.txt` | Path to the remote bridge map file. |
+| `remote_bridge_server_address` | `0.0.0.0` | IP address to bind the remote bridge TCP server listeners to. |
+
+#### Remote bridge map file ####
+
+The map file contains `SERVER` and `CLIENT` directives.  A `SERVER` entry starts a TCP listener; a `CLIENT` entry connects to a remote server.  Both include the shared secret and the Econet network numbers that side of the bridge serves locally.
+
+```
+# This server serves Econet network 1; listen for incoming bridge connections
+SERVER 8765 my-shared-secret 1
+
+# Also connect to a peer that serves network 2
+CLIENT 192.168.1.20:8765 their-secret 2
+```
+
+See [docs/protocols/remote-bridge.md](docs/protocols/remote-bridge.md) for the full wire-format specification including the authentication handshake, NETWORKS announcement, and SEND packet format.
 
 ---
 
@@ -637,6 +671,7 @@ Detailed wire-format documentation for every protocol implemented by the server:
 
 * [AUN — Acorn Universal Networking](docs/protocols/aun.md) — UDP encapsulation of Econet: header layout, packet types, sequence numbers, ACK mechanism, immediate operations, address mapping
 * [Piconet](docs/protocols/piconet.md) — serial interface to the EconetUSB hardware adapter: frame format, command/event protocol, transmit queue, ACK handling, address mapping
+* [Remote Bridge](docs/protocols/remote-bridge.md) — TCP bridge-to-bridge protocol: authentication handshake, NETWORKS announcement, SEND packet format, monitor-mode filter rules
 * [File Server](docs/protocols/file-server.md) — full Econet file server protocol: all 35 function codes with request and reply byte layouts, streaming data protocol, CLI commands, error codes
 * [Print Server](docs/protocols/print-server.md) — printer discovery (port 0x9F) and print data (port 0xD1) protocols: enquiry/reply status word, job start/data/end framing, spool file format
 * [BeebTerm](docs/protocols/beebterm.md) — terminal multiplexer protocol: login/reject/data/terminate packet types, sequence fields, service configuration

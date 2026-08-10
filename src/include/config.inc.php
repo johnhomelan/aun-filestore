@@ -47,7 +47,7 @@ safe_define('CONFIG_vfs_plugin_afs_root','/var/lib/aun-filestore-root');
 
 safe_define('CONFIG_print_server_spool_dir','/tmp/econetprint');
 safe_define('CONFIG_print_server_conversion_script','/usr/bin/esc2ps -i %source% -o %destination%');
-safe_define('CONFIG_piconet_device','dev/econet');
+safe_define('CONFIG_piconet_device','/dev/econet');
 safe_define('CONFIG_piconetmap_file','piconetmap.txt');
 safe_define('CONFIG_piconet_station','254');
 safe_define('CONFIG_piconet_local_network',1);
@@ -59,3 +59,7 @@ safe_define('CONFIG_ipv4_interfaces_file','interfaces.txt');
 safe_define('CONFIG_ipv4_nat_file','nat.txt');
 
 safe_define('CONFIG_beeb_term_services_file','beebterm.txt');
+
+safe_define('CONFIG_remote_bridge_enabled', false);
+safe_define('CONFIG_remote_bridge_map_file', 'remotebridge.txt');
+safe_define('CONFIG_remote_bridge_server_address', '0.0.0.0');

@@ -35,11 +35,21 @@ wire or connection type. All three implement `EncapsulationInterface`.
 | Class | Kind | Description |
 |---|---|---|
 | `Encapsulation\EncapsulationInterface` | interface | Contract for all encapsulation types: `decode`, `buildEconetPacket`, `getPacketType`, `getPort`, `getData`, `toString` |
+| `Encapsulation\EncapsulationAdminInterface` | interface | Contract for encapsulation admin adapters: `getId`, `getName`, `getDescription`, `getStatus`, `getEntityTypes`, `getEntityFields`, `getEntities` |
 | `Aun\AunPacket` | class | AUN (Econet over UDP) encapsulation — decodes binary AUN headers and builds ACK / ImmediateReply responses |
 | `Piconet\PiconetPacket` | class | Piconet (EconetUSB serial hardware) encapsulation |
 | `WebSocket\JsonPacket` | class | WebSocket encapsulation — decodes the JSON envelope used by browser-based BBC emulators |
 | `Encapsulation\EncapsulationTypeMap` | class (singleton) | Decides the correct outbound transport for an `EconetPacket` based on destination address: WebSocket > Piconet > AUN |
 | `Encapsulation\PacketDispatcher` | class (singleton) | Routes outbound `EconetPacket` objects to the appropriate transport handler |
+
+### Encapsulation admin adapters
+
+| Class | Kind | Description |
+|---|---|---|
+| `Aun\Admin` | class | Admin adapter for AUN: host mappings (IP ↔ network.station) and subnet mappings |
+| `WebSocket\Admin` | class | Admin adapter for WebSocket: connected clients and configured dynamic network ranges |
+| `Piconet\Admin` | class | Admin adapter for Piconet: registered Econet network numbers |
+| `RemoteBridge\Admin` | class | Admin adapter for RemoteBridge: live peer connections, configured server entries, and configured client entries (shared secrets are stripped before display) |
 
 ---
 
@@ -236,5 +246,6 @@ wire or connection type. All three implement `EncapsulationInterface`.
 | `Admin\Smarty\IfIsObjectCompiler` | class | Smarty modifier compiler that translates the `\|is_object` template modifier into a PHP `is_object()` call |
 | `Admin\Controller\IndexController` | class | Symfony controller rendering the admin dashboard and serving the favicon |
 | `Admin\Controller\ServiceController` | class | Symfony controller for the per-service admin panel and spooled-file downloads |
+| `Admin\Controller\EncapsulationController` | class | Symfony controller for the per-encapsulation admin panel (`/encapsulation?type=…`) |
 | `Admin\Controller\FileServerController` | class | Symfony controller for the file server directory browser and file download |
 | `Admin\Controller\TorchnetController` | class | Symfony controller for the TorchNet CP/M filesystem browser and file download |

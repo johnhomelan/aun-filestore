@@ -4,7 +4,7 @@ The piconet interface connects the server to a hardware Econet adaptor built aro
 
 ## Physical Layer
 
-The serial link is configured at 115200 baud, 8 data bits, no parity, 1 stop bit (8N1), raw mode. No CR/LF translation is applied; the kernel line discipline passes bytes through unmodified. The server configures the port directly via `libc` termios calls (using PHP FFI) to avoid depending on `stty`.
+The serial link is configured at 115200 baud, 8 data bits, no parity, 1 stop bit (8N1), raw mode. No CR/LF translation is applied; the kernel line discipline passes bytes through unmodified. The server configures the port by calling `stty` via `proc_open` (array form — no shell is involved) at connection setup time. The flags used are `115200 raw -echo cs8 clocal`: `raw` disables all input/output processing and canonical mode; `-echo` prevents the kernel from echoing bytes received from the Pico back down the serial line (which would corrupt the protocol); `clocal` ignores modem status lines, which is required for USB CDC devices that never assert carrier-detect. On USB CDC devices such as the Raspberry Pi Pico the baud rate setting is virtual and has no effect on actual transfer speed.
 
 ## Framing
 
@@ -52,10 +52,11 @@ Sets the Econet station number the Pico will claim on the physical network. Sent
 
 ```
 SET_MODE LISTEN\r\r
+SET_MODE MONITOR\r\r
 SET_MODE STOP\r\r
 ```
 
-`LISTEN` puts the interface into receive mode. `STOP` halts it (sent on connection close).
+`LISTEN` puts the interface into receive mode; only packets addressed to our station (or broadcasts) are forwarded to the server.  `MONITOR` enables promiscuous receive — the device forwards all Econet frames it observes, regardless of destination.  Monitor mode is selected automatically when `remote_bridge_enabled = true` so the server can intercept inter-network traffic and forward it via the remote bridge.  `STOP` halts the interface (sent on connection close).
 
 ### TX (Unicast Transmit)
 

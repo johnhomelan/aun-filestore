@@ -9,11 +9,12 @@
 namespace HomeLan\FileStore\Encapsulation; 
 
 use HomeLan\FileStore\Encapsulation\EncapsulationTypeMap;
-use HomeLan\FileStore\Messages\EconetPacket; 
-use HomeLan\FileStore\Aun\AunPacket; 
-use HomeLan\FileStore\Aun\Map as AunMap; 
-use HomeLan\FileStore\WebSocket\Map as WebSocketMap; 
+use HomeLan\FileStore\Messages\EconetPacket;
+use HomeLan\FileStore\Aun\AunPacket;
+use HomeLan\FileStore\Aun\Map as AunMap;
+use HomeLan\FileStore\WebSocket\Map as WebSocketMap;
 use HomeLan\FileStore\Piconet\Map as PiconetMap;
+use HomeLan\FileStore\RemoteBridge\Map as RemoteBridgeMap;
 use React\Datagram\Socket;
 
 use config;
@@ -76,6 +77,12 @@ class PacketDispatcher {
 				$oPiconet = PiconetMap::ecoAddrToHandler($oPacket->getDestinationNetwork(),$oPacket->getDestinationStation());
 				if(!is_null($oPiconet)){
 					$oPiconet->send($oPacket);
+				}
+				break;
+			case 'RemoteBridge':
+				$oRemoteConn = RemoteBridgeMap::networkToConnection($oPacket->getDestinationNetwork());
+				if ($oRemoteConn !== null) {
+					$oRemoteConn->send($oPacket);
 				}
 				break;
 			case 'AUN':

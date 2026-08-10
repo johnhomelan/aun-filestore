@@ -8,10 +8,11 @@
 */
 namespace HomeLan\FileStore\Encapsulation; 
 
-use HomeLan\FileStore\Messages\EconetPacket; 
-use HomeLan\FileStore\WebSocket\Map as WebSocketMap; 
-use HomeLan\FileStore\Piconet\Map as PiconetMap; 
-use HomeLan\FileStore\Aun\Map as AunMap; 
+use HomeLan\FileStore\Messages\EconetPacket;
+use HomeLan\FileStore\WebSocket\Map as WebSocketMap;
+use HomeLan\FileStore\Piconet\Map as PiconetMap;
+use HomeLan\FileStore\Aun\Map as AunMap;
+use HomeLan\FileStore\RemoteBridge\Map as RemoteBridgeMap;
 use config;
 
 /**
@@ -51,6 +52,9 @@ class EncapsulationTypeMap {
 		}
 		if(PiconetMap::networkKnown($iDstNetwork)){
 			return 'Piconet';
+		}
+		if(config::getValue('remote_bridge_enabled') && RemoteBridgeMap::networkKnown($iDstNetwork)){
+			return 'RemoteBridge';
 		}
 		return 'AUN';
 	}

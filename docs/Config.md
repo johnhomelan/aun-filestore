@@ -627,3 +627,31 @@ Interval in seconds between housekeeping runs.  Housekeeping expires idle sessio
 ~~~~~~
 housekeeping_interval = 300
 ~~~~~~
+
+
+Remote Bridge
+==
+
+**remote_bridge_enabled**
+
+Enables the remote bridge encapsulation system.  When `true`, the piconet interface switches to monitor mode so it can observe all Econet traffic (not just packets addressed to this station), and the remote bridge server and client handlers are started according to the map file.  Default is `false`.
+
+~~~~~~
+remote_bridge_enabled = false
+~~~~~~
+
+**remote_bridge_map_file**
+
+Path to the remote bridge map file.  The map file lists `SERVER` entries (ports to listen on) and `CLIENT` entries (servers to connect to).  See [docs/protocols/remote-bridge.md](protocols/remote-bridge.md) for the full file format.  Default is `remotebridge.txt`.
+
+~~~~~~
+remote_bridge_map_file = remotebridge.txt
+~~~~~~
+
+**remote_bridge_server_address**
+
+IP address to bind the remote bridge TCP server listeners to.  Default is `0.0.0.0` (all interfaces).
+
+~~~~~~
+remote_bridge_server_address = 0.0.0.0
+~~~~~~

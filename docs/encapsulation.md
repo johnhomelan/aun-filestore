@@ -464,11 +464,189 @@ No changes are required in any provider (`FileServer`, `PrintServer`, …) or in
 
 ---
 
+## Admin interface
+
+The web admin UI (`/admin`) shows a live view of each encapsulation method
+alongside the service provider list. Each encapsulation type provides a small
+admin class that exposes its runtime state through a uniform interface.
+
+### EncapsulationAdminInterface
+
+**File:** `src/include/classes/Encapsulation/EncapsulationAdminInterface.php`
+**Namespace:** `HomeLan\FileStore\Encapsulation`
+
+```php
+interface EncapsulationAdminInterface
+{
+    public function getId(): string;
+    public function getName(): string;
+    public function getDescription(): string;
+    public function getStatus(): string;
+    public function getEntityTypes(): array;
+    public function getEntityFields(string $sType): array;
+    public function getEntities(string $sType): array;
+}
+```
+
+| Method | Returns | Notes |
+|---|---|---|
+| `getId()` | `string` | Slug used in URL (`/encapsulation?type=aun`). Must be unique and URL-safe. |
+| `getName()` | `string` | Human-readable display name |
+| `getDescription()` | `string` | Short description of the transport |
+| `getStatus()` | `string` | One-line runtime summary (e.g. "3 hosts, 2 subnets") |
+| `getEntityTypes()` | `string[]` | Map of `type_key → label`, e.g. `['host' => 'Host Mappings']` |
+| `getEntityFields(string $sType)` | `string[]` | Map of `field_name → field_type` for the given entity type; `[]` for unknown types |
+| `getEntities(string $sType)` | `AdminEntity[]` | Entities for the given type; `[]` for unknown types |
+
+`getEntities()` returns `HomeLan\FileStore\Services\Provider\AdminEntity` objects
+(the same DTO used by service provider admin classes). Use
+`AdminEntity::createCollection()` to build them from an array of row arrays:
+
+```php
+use HomeLan\FileStore\Services\Provider\AdminEntity;
+
+// String ID field:
+return AdminEntity::createCollection('host', $aRows, 'ip');
+
+// Computed ID (callable):
+return AdminEntity::createCollection('connection', $aRows, fn($r) => $r['network'].'.'.$r['station']);
+```
+
+### Existing admin classes
+
+| Class | File | `getId()` | Entity types |
+|---|---|---|---|
+| `Aun\Admin` | `src/include/classes/Aun/Admin.php` | `'aun'` | `host`, `subnet` |
+| `WebSocket\Admin` | `src/include/classes/WebSocket/Admin.php` | `'websocket'` | `connection`, `range` |
+| `Piconet\Admin` | `src/include/classes/Piconet/Admin.php` | `'piconet'` | `network` |
+| `RemoteBridge\Admin` | `src/include/classes/RemoteBridge/Admin.php` | `'remotebridge'` | `connection`, `server`, `client` |
+
+**Note:** `RemoteBridge\Admin::getEntities('server')` and
+`getEntities('client')` strip the `secret` field from Map entries before
+constructing entities, so shared secrets are never exposed in the admin UI.
+
+### Map data-access methods added for the admin layer
+
+The Map classes expose the following `public static` methods so the Admin
+classes can enumerate stored state without duplicating internal structure:
+
+| Class | Method | Returns |
+|---|---|---|
+| `Aun\Map` | `getHostMappings()` | `[['network'=>int, 'station'=>int, 'ip'=>string], …]` |
+| `Aun\Map` | `getSubnetMappings()` | `[['network'=>int, 'subnet'=>string], …]` |
+| `WebSocket\Map` | `getConnectedClients()` | `[['network'=>int, 'station'=>int], …]` |
+| `WebSocket\Map` | `getDynamicNetworkRanges()` | `[['network'=>int], …]` |
+| `Piconet\Map` | `getNetworks()` | `[['network'=>int], …]` |
+| `RemoteBridge\Map` | `getKnownNetworks()` | `[['network'=>int], …]` (live connections) |
+| `RemoteBridge\Map` | `getServerEntries()` | `[['port'=>int, 'networks'=>int[], 'secret'=>string], …]` |
+| `RemoteBridge\Map` | `getClientEntries()` | `[['host'=>string, 'port'=>int, 'networks'=>int[], 'secret'=>string], …]` |
+
+### Admin UI wiring
+
+**Controller:** `src/include/classes/Admin/Controller/EncapsulationController.php`
+
+The `index()` action reads a `?type=` query parameter, resolves it to the
+matching admin object from a hardcoded map (keyed by `getId()`), assigns it
+to Smarty as `$oAdmin`, and renders `encapsulation.tpl`.
+
+**Routes:** `src/include/classes/Admin/config/routes.yaml`
+
+```yaml
+encapsulation_page:
+  path: /encapsulation
+  controller: EncapsulationController::index
+```
+
+**Index page:** `IndexController::index()` populates `$aEncapsulations` with
+all four admin objects, and `index.tpl` renders an "Encapsulation Methods"
+table with links to `/encapsulation?type={$oAdmin->getId()}`.
+
+**Template:** `src/include/classes/Admin/templates/encapsulation.tpl`
+
+Renders a `<dl>` with name/status/description, then a tab pane per entity
+type — each tab shows a plain `<table>` with the entity fields as columns.
+
+### Adding an admin class for a new encapsulation type
+
+After completing steps 1–6 of "Adding a new encapsulation type" above:
+
+#### Step 7 — Implement `EncapsulationAdminInterface`
+
+Create `src/include/classes/FooNet/Admin.php`:
+
+```php
+namespace HomeLan\FileStore\FooNet;
+
+use HomeLan\FileStore\Encapsulation\EncapsulationAdminInterface;
+use HomeLan\FileStore\Services\Provider\AdminEntity;
+
+class Admin implements EncapsulationAdminInterface
+{
+    public function getId(): string          { return 'foonet'; }
+    public function getName(): string        { return 'FooNet'; }
+    public function getDescription(): string { return 'FooNet TCP transport.'; }
+
+    public function getStatus(): string
+    {
+        $iCount = count(Map::getNetworks());
+        return "{$iCount} network(s) registered";
+    }
+
+    public function getEntityTypes(): array
+    {
+        return ['network' => 'Registered Networks'];
+    }
+
+    public function getEntityFields(string $sType): array
+    {
+        return match ($sType) {
+            'network' => ['network' => 'int'],
+            default   => [],
+        };
+    }
+
+    public function getEntities(string $sType): array
+    {
+        return match ($sType) {
+            'network' => AdminEntity::createCollection('network', Map::getNetworks(), 'network'),
+            default   => [],
+        };
+    }
+}
+```
+
+Add the corresponding data-access method to `FooNet\Map` (e.g. `getNetworks()`)
+following the pattern of the existing Map classes above.
+
+#### Step 8 — Register in the controller and index
+
+In `EncapsulationController.php`, add `'foonet' => new FooNet\Admin()` to
+the type map array.
+
+In `IndexController.php`, add `new FooNet\Admin()` to the `$aEncapsulations`
+array that is assigned to Smarty.
+
+#### Step 9 — Write unit tests
+
+Create `unit-tests/encapsulation/foonetAdminTest.php` following the pattern
+of the existing encapsulation test files:
+
+- Reset Map state in `setUp()` / `tearDown()` (use `ReflectionProperty` for
+  private/protected static fields, or public reset methods if provided).
+- Test every `EncapsulationAdminInterface` method.
+- Test `getEntities()` with empty state, one entry, and multiple entries.
+- Test that `getEntities('unknown')` and `getEntityFields('unknown')` both
+  return `[]`.
+- Test the Map data-access method(s) directly.
+
+---
+
 ## Key files at a glance
 
 | File | Role |
 |---|---|
 | `src/include/classes/Encapsulation/EncapsulationInterface.php` | The interface every encapsulation must implement |
+| `src/include/classes/Encapsulation/EncapsulationAdminInterface.php` | Admin interface for the web UI |
 | `src/include/classes/Encapsulation/EncapsulationTypeMap.php` | Decides which transport an outbound packet uses |
 | `src/include/classes/Encapsulation/PacketDispatcher.php` | Sends outbound `EconetPacket` to the right handler |
 | `src/include/classes/Messages/EconetPacket.php` | The transport-neutral packet representation |
@@ -476,9 +654,15 @@ No changes are required in any provider (`FileServer`, `PrintServer`, …) or in
 | `src/include/classes/Aun/AunPacket.php` | AUN implementation of `EncapsulationInterface` |
 | `src/include/classes/Aun/Handler.php` | AUN UDP handler with per-host queue and retries |
 | `src/include/classes/Aun/Map.php` | IP ↔ Econet address translation for AUN |
+| `src/include/classes/Aun/Admin.php` | AUN admin class for the web UI |
 | `src/include/classes/Piconet/PiconetPacket.php` | Piconet (EconetUSB serial) implementation |
 | `src/include/classes/Piconet/Handler.php` | Serial device handler for Piconet |
 | `src/include/classes/Piconet/Map.php` | Network number set for Piconet routing |
+| `src/include/classes/Piconet/Admin.php` | Piconet admin class for the web UI |
 | `src/include/classes/WebSocket/JsonPacket.php` | WebSocket JSON implementation |
 | `src/include/classes/WebSocket/Handler.php` | Ratchet WebSocket handler |
 | `src/include/classes/WebSocket/Map.php` | Dynamic network.station allocation for WebSocket clients |
+| `src/include/classes/WebSocket/Admin.php` | WebSocket admin class for the web UI |
+| `src/include/classes/RemoteBridge/Admin.php` | RemoteBridge admin class for the web UI |
+| `src/include/classes/Admin/Controller/EncapsulationController.php` | HTTP controller for the encapsulation detail page |
+| `src/include/classes/Admin/templates/encapsulation.tpl` | Smarty template for the encapsulation detail page |

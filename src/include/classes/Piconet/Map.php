@@ -81,4 +81,28 @@ class Map {
 		return FALSE;
 	}
 
+	/**
+	 * Returns every unique Econet network number known to the Piconet map.
+	 *
+	 * @return int[]
+	 */
+	public static function getNetworkNumbers(): array
+	{
+		return self::$aNetworks;
+	}
+
+	/**
+	 * Returns all registered Piconet network numbers as rows suitable for the admin interface.
+	 *
+	 * @return array<int, array{network:int}>
+	 */
+	public static function getNetworks(): array
+	{
+		$aResult = [];
+		foreach (self::$aNetworks as $iNetwork) {
+			$aResult[] = ['network' => (int) $iNetwork];
+		}
+		return $aResult;
+	}
+
 }

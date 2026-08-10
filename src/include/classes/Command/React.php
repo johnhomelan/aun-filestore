@@ -28,7 +28,10 @@ use HomeLan\FileStore\Services\ServiceDispatcher;
 use HomeLan\FileStore\WebSocket\Handler as WebSocketHandler;
 use HomeLan\FileStore\Piconet\Handler as PiconetHandler;
 use HomeLan\FileStore\Piconet\Map as PiconetMap;
-use HomeLan\FileStore\Aun\Map; 
+use HomeLan\FileStore\RemoteBridge\Map as RemoteBridgeMap;
+use HomeLan\FileStore\RemoteBridge\ServerHandler as RemoteBridgeServerHandler;
+use HomeLan\FileStore\RemoteBridge\ClientHandler as RemoteBridgeClientHandler;
+use HomeLan\FileStore\Aun\Map;
 use HomeLan\FileStore\Aun\AunPacket; 
 use HomeLan\FileStore\Aun\Handler as AunHandler; 
 use HomeLan\FileStore\Authentication\Security; 
@@ -144,9 +147,14 @@ class React extends Command {
 		//Setup the Web admin handler
 		$this->adminService($oLoop);
 
-		//Setup the Piconet interface handler 
+		//Setup the Piconet interface handler
 		$oPiconet = $this->piconetService($oLoop,$oPacketDispatcher);
 		PiconetMap::init($oLogger, $oPiconet);
+
+		//Setup the remote bridge (feature-gated)
+		if (config::getValue('remote_bridge_enabled')) {
+			$this->remoteBridgeService($oLoop, $oPacketDispatcher);
+		}
 		
 		//Send any outstanding replies, normally its one request in one reply out.  However some services (e.g. File) have direct streams that can generate 
 		//mutiple replies to an initial request.
@@ -278,32 +286,61 @@ EOF;
 	*/
 	public function piconetService(LoopInterface $oLoop, PacketDispatcher $oPacketDispatcher):PiconetHandler
 	{
-
-		$oPiconet = new UnixSerialDeviceConnector($oLoop);
 		$oPiconetHandler = new PiconetHandler($this->oLogger, $this->oServices, $oPacketDispatcher);
-		$oPiconet->connect('file:///'.config::getValue('piconet_device'))->then(function (ConnectionInterface $oConnection) use ($oPiconetHandler){
+		$oPiconetHandler->setLoop($oLoop);
 
-			$oPiconetHandler->onOpen($oConnection);
-			$oPiconetHandler->onConnect();
-			
+		$fConnect = null;
+		$fConnect = function() use ($oLoop, $oPiconetHandler, &$fConnect) {
+			$sDevice = 'file://'.config::getValue('piconet_device');
+			$oPiconet = new UnixSerialDeviceConnector($oLoop);
+			$oPiconet->connect($sDevice)->then(
+				function (ConnectionInterface $oConnection) use ($oPiconetHandler) {
+					$oPiconetHandler->onOpen($oConnection);
+					$oPiconetHandler->onConnect();
 
-			$oConnection->on('data',function ($sMessage) use ($oPiconetHandler) {
-				$oPiconetHandler->onMessage($sMessage);
-			});
-			$oConnection->on('close',function () use ($oPiconetHandler) {
-				$oPiconetHandler->onClose();
-			});
-			$oConnection->on('error', function(\Exception $e) use ($oPiconetHandler){
-				$oPiconetHandler->onError($e);
-			});
-		});
+					$oConnection->on('data', function ($sMessage) use ($oPiconetHandler) {
+						$oPiconetHandler->onMessage($sMessage);
+					});
+					$oConnection->on('close', function () use ($oPiconetHandler) {
+						$oPiconetHandler->onClose();
+					});
+					$oConnection->on('error', function (\Exception $e) use ($oPiconetHandler) {
+						$oPiconetHandler->onError($e);
+					});
+				},
+				function (\Exception $e) use ($oPiconetHandler) {
+					$this->oLogger->error('Piconet: failed to open device "'.config::getValue('piconet_device').'": '.$e->getMessage().'.');
+					$oPiconetHandler->scheduleReconnect();
+				}
+			);
+		};
+
+		$oPiconetHandler->setReconnectCallback($fConnect);
+		$fConnect();
 
 		return $oPiconetHandler;
-
 	}
 
 
-	/** 
+	/**
+	 * Initializes the remote bridge service — starts TCP server listeners and outbound client connectors.
+	*/
+	private function remoteBridgeService(LoopInterface $oLoop, PacketDispatcher $oPacketDispatcher): void
+	{
+		RemoteBridgeMap::init($this->oLogger);
+
+		foreach (RemoteBridgeMap::getServerEntries() as $aEntry) {
+			$oServerHandler = new RemoteBridgeServerHandler($this->oLogger, $this->oServices, $oPacketDispatcher);
+			$oServerHandler->start($aEntry, $oLoop);
+		}
+
+		if (!empty(RemoteBridgeMap::getClientEntries())) {
+			$oClientHandler = new RemoteBridgeClientHandler($this->oLogger, $this->oServices, $oPacketDispatcher, $oLoop);
+			$oClientHandler->start();
+		}
+	}
+
+	/**
 	  * Seetup the Admin web interface service
 	  *
 	  * @param LoopInterface $oLoop The loop to add the service to

@@ -9,9 +9,13 @@ namespace HomeLan\FileStore\Services\Provider;
 
 use HomeLan\FileStore\Services\ProviderInterface;
 use HomeLan\FileStore\Services\ServiceDispatcher;
-use HomeLan\FileStore\Aun\Map; 
-use HomeLan\FileStore\Messages\BridgeRequest; 
-use HomeLan\FileStore\Messages\EconetPacket; 
+use HomeLan\FileStore\Aun\Map;
+use HomeLan\FileStore\WebSocket\Map as WebSocketMap;
+use HomeLan\FileStore\Piconet\Map as PiconetMap;
+use HomeLan\FileStore\RemoteBridge\Map as RemoteBridgeMap;
+use HomeLan\FileStore\Messages\BridgeRequest;
+use HomeLan\FileStore\Messages\EconetPacket;
+use HomeLan\FileStore\Services\Provider\Bridge\Admin;
 use config;
 use Exception;
 
@@ -57,7 +61,72 @@ class Bridge implements ProviderInterface {
 	*/
 	public function getAdminInterface(): ?AdminInterface
 	{
-		return NULL;
+		return new Admin($this);
+	}
+
+	/**
+	 * Returns the remote networks learned via bridge queries.
+	 *
+	 * Each entry is an array with keys 'network' (int) and 'via' (string),
+	 * where 'via' is "<sourceNetwork>.<sourceStation>" of the peer bridge.
+	 */
+	public function getRemoteNetworks(): array
+	{
+		$aResult = [];
+		foreach ($this->aRemoteNetworks as $iNet => $sPeerKey) {
+			$aResult[] = ['network' => $iNet, 'via' => $sPeerKey];
+		}
+		return $aResult;
+	}
+
+	/**
+	 * Returns all networks served locally by the encapsulation layer, labelled by transport.
+	 *
+	 * Each entry has 'network' (int) and 'via' (string), where 'via' is the transport
+	 * name ('AUN', 'WebSocket', 'Piconet', 'RemoteBridge', or 'local'). Each network
+	 * number appears at most once; the first matching transport wins.
+	 *
+	 * @return array<int, array{network:int, via:string}>
+	 */
+	public function getLocalKnownNetworks(): array
+	{
+		$aSeen   = [];
+		$aResult = [];
+
+		foreach (RemoteBridgeMap::getKnownNetworks() as $iNet) {
+			if (!isset($aSeen[$iNet])) {
+				$aSeen[$iNet] = true;
+				$aResult[]    = ['network' => $iNet, 'via' => 'RemoteBridge'];
+			}
+		}
+
+		foreach (Map::getNetworkNumbers() as $iNet) {
+			if (!isset($aSeen[$iNet])) {
+				$aSeen[$iNet] = true;
+				$aResult[]    = ['network' => $iNet, 'via' => 'AUN'];
+			}
+		}
+
+		foreach (WebSocketMap::getNetworkNumbers() as $iNet) {
+			if (!isset($aSeen[$iNet])) {
+				$aSeen[$iNet] = true;
+				$aResult[]    = ['network' => $iNet, 'via' => 'WebSocket'];
+			}
+		}
+
+		foreach (PiconetMap::getNetworkNumbers() as $iNet) {
+			if (!isset($aSeen[$iNet])) {
+				$aSeen[$iNet] = true;
+				$aResult[]    = ['network' => $iNet, 'via' => 'Piconet'];
+			}
+		}
+
+		$iLocalNet = (int) config::getValue('bridge_local_network_number');
+		if ($iLocalNet > 0 && !isset($aSeen[$iLocalNet])) {
+			$aResult[] = ['network' => $iLocalNet, 'via' => 'local'];
+		}
+
+		return $aResult;
 	}
 
 	/**
@@ -140,10 +209,42 @@ class Bridge implements ProviderInterface {
 
 
 	/**
+	 * Returns every Econet network number known across all encapsulation maps,
+	 * plus the configured local network and any networks learned from remote bridges,
+	 * with $iExcludeNetwork removed.
+	 *
+	 * Used by queryBridge() so the reply contains the full picture of what this
+	 * server can reach, minus the network the requesting station already belongs to.
+	 *
+	 * @param int $iExcludeNetwork Network number of the requesting station — omitted from the result
+	 * @return int[]
+	 */
+	public function getAllKnownNetworkNumbers(int $iExcludeNetwork): array
+	{
+		$aNetworks = array_merge(
+			Map::getNetworkNumbers(),
+			WebSocketMap::getNetworkNumbers(),
+			PiconetMap::getNetworkNumbers(),
+			RemoteBridgeMap::getKnownNetworks(),
+			array_keys($this->aRemoteNetworks),
+		);
+
+		$iLocalNet = (int) config::getValue('bridge_local_network_number');
+		if ($iLocalNet > 0) {
+			$aNetworks[] = $iLocalNet;
+		}
+
+		return array_values(array_filter(
+			array_unique($aNetworks),
+			fn(int $n) => $n !== $iExcludeNetwork,
+		));
+	}
+
+	/**
 	 * Handle a bridge-to-bridge query (EC_BR_QUERY / EC_BR_QUERY2)
 	 *
 	 * Records the networks advertised by the peer bridge, then replies with
-	 * our own local network number so the peer can update its routing table.
+	 * every network number this server knows about (excluding the peer's own network).
 	 *
 	 * @param BridgeRequest $oBridgeRequest
 	*/
@@ -156,7 +257,9 @@ class Bridge implements ProviderInterface {
 		}
 
 		$oReply = $oBridgeRequest->buildReply();
-		$oReply->appendByte(config::getValue('bridge_local_network_number'));
+		foreach ($this->getAllKnownNetworkNumbers($oBridgeRequest->getSourceNetwork()) as $iNet) {
+			$oReply->appendByte($iNet);
+		}
 		$this->_addReplyToBuffer($oReply);
 	}
 
@@ -185,7 +288,7 @@ class Bridge implements ProviderInterface {
 	{
 		$iNetworkNumber = $oBridgeRequest->getNetwork();
 
-		if(Map::networkKnown($iNetworkNumber) || array_key_exists($iNetworkNumber, $this->aRemoteNetworks)){
+		if(Map::networkKnown($iNetworkNumber) || array_key_exists($iNetworkNumber, $this->aRemoteNetworks) || (config::getValue('remote_bridge_enabled') && RemoteBridgeMap::networkKnown($iNetworkNumber))){
 			//Network known — reply once (the reply itself signals "yes I know this network")
 			$this->_addReplyToBuffer($oBridgeRequest->buildReply());
 		}

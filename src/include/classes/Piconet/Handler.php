@@ -10,8 +10,9 @@
 namespace HomeLan\FileStore\Piconet;
 
 use React\Socket\ConnectionInterface;
+use React\EventLoop\LoopInterface;
 
-use HomeLan\FileStore\Messages\EconetPacket; 
+use HomeLan\FileStore\Messages\EconetPacket;
 use HomeLan\FileStore\Services\ProviderInterface;
 use HomeLan\FileStore\Services\ServiceDispatcher;
 use HomeLan\FileStore\Encapsulation\PacketDispatcher;
@@ -26,25 +27,58 @@ use config;
 */
 class Handler {
 
-	private ConnectionInterface $oConnection;
+	const RECONNECT_DELAY_MIN = 5;
+	const RECONNECT_DELAY_MAX = 300;
+
+	private ?ConnectionInterface $oConnection = null;
+
+	private bool $bConnected = false;
+
+	private ?LoopInterface $oLoop = null;
+
+	private ?\Closure $fReconnect = null;
+
+	private int $iReconnectDelay = self::RECONNECT_DELAY_MIN;
 
 	private array $aQueue = [];
 
 	private array $aAwaitingAck = [];
 
-	public function __construct(private readonly \Psr\Log\LoggerInterface $oLogger,  private readonly ServiceDispatcher $oServices, private readonly PacketDispatcher $oPacketDispatcher) 
+	public function __construct(private readonly \Psr\Log\LoggerInterface $oLogger,  private readonly ServiceDispatcher $oServices, private readonly PacketDispatcher $oPacketDispatcher)
 	{
 		$this->oLogger->debug("Starting piconet handler");
+	}
+
+	public function setLoop(LoopInterface $oLoop): void
+	{
+		$this->oLoop = $oLoop;
+	}
+
+	public function setReconnectCallback(\Closure $fReconnect): void
+	{
+		$this->fReconnect = $fReconnect;
 	}
 
 	public function onOpen(ConnectionInterface $oConnection):void
 	{
 		$this->oConnection = $oConnection;
+		$this->bConnected = true;
+		$this->iReconnectDelay = self::RECONNECT_DELAY_MIN;
+	}
+
+	public function scheduleReconnect(): void
+	{
+		if ($this->oLoop === null || $this->fReconnect === null) {
+			return;
+		}
+		$this->oLogger->info("Piconet: will attempt to reconnect in ".$this->iReconnectDelay." seconds");
+		$this->oLoop->addTimer($this->iReconnectDelay, $this->fReconnect);
+		$this->iReconnectDelay = min($this->iReconnectDelay * 2, self::RECONNECT_DELAY_MAX);
 	}
 
 	public function onConnect(){
 		$this->oLogger->debug("Piconet handler: Connected");
-		//stream_set_blocking($this->oConnection->stream,true); 
+		//stream_set_blocking($this->oConnection->stream,true);
 		stream_set_write_buffer($this->oConnection->stream, 0); //Turn off the write buffer  @phpstan-ignore-line
 
 		fwrite($this->oConnection->stream,"STATUS\r\r"); //@phpstan-ignore-line
@@ -60,8 +94,13 @@ class Handler {
 		fwrite($this->oConnection->stream,"SET_STATION ".config::getValue('piconet_station')."\r\r"); //@phpstan-ignore-line
 		fflush($this->oConnection->stream); //@phpstan-ignore-line
 
-		$this->oLogger->debug("Piconet handler: Set to listen mode");
-		fwrite($this->oConnection->stream,"SET_MODE LISTEN\r\r"); //@phpstan-ignore-line
+		if (config::getValue('remote_bridge_enabled')) {
+			$this->oLogger->debug("Piconet handler: Set to monitor mode (remote bridge enabled)");
+			fwrite($this->oConnection->stream,"SET_MODE MONITOR\r\r"); //@phpstan-ignore-line
+		} else {
+			$this->oLogger->debug("Piconet handler: Set to listen mode");
+			fwrite($this->oConnection->stream,"SET_MODE LISTEN\r\r"); //@phpstan-ignore-line
+		}
 		fflush($this->oConnection->stream); //@phpstan-ignore-line
 
 		$this->oLogger->debug("Piconet handler: Interface setup and ready");
@@ -70,8 +109,30 @@ class Handler {
 
 	public function onClose():void
 	{
-		$this->oLogger->debug("Piconet handler: Closing");
-		$this->oConnection->write("SET_MODE STOP\r\r");
+		$this->oLogger->error("Piconet: device disconnected");
+		$this->bConnected = false;
+
+		// Tell the device to stop accepting Econet frames before we lose the connection.
+		// write() is a no-op on an already-closed connection so this is safe in both
+		// the normal-shutdown and unexpected-disconnect cases.
+		if ($this->oConnection !== null) {
+			$this->oConnection->write("SET_MODE STOP\r\r");
+		}
+		$this->oConnection = null;
+
+		// Unblock any services waiting for an ack from a packet already in flight
+		foreach ($this->aAwaitingAck as $aAck) {
+			$this->oServices->clearAckEvent($aAck['dst_network'], $aAck['dst_station']);
+		}
+		// Unblock any services waiting for an ack from packets still queued
+		foreach ($this->aQueue as $aEntry) {
+			$oPacket = $aEntry['packet'];
+			$this->oServices->clearAckEvent($oPacket->getDestinationNetwork(), $oPacket->getDestinationStation());
+		}
+		$this->aAwaitingAck = [];
+		$this->aQueue = [];
+
+		$this->scheduleReconnect();
 	}
 
 	public function onMessage($sMessage):void
@@ -101,8 +162,34 @@ class Handler {
 				$oPacket = new PiconetPacket();
 				$oPacket->decode($sMessage);
 				$this->oLogger->debug("Piconet Handler: RX Packet ".$oPacket->toString());
-				//Dispatch it to be processed
-				//Dispatch packet to all the services so the relivent one can deal with it 
+
+				// In monitor mode (when remote bridge is enabled) filter local-network unicast
+				// packets not addressed to our station, and forward inter-network packets via bridge.
+				if (config::getValue('remote_bridge_enabled') && trim($aMessageParts[0]) === 'RX_TRANSMIT') {
+					$iDstNet = (int) $oPacket->getDstNetwork();
+					$iDstStn = (int) $oPacket->getDstStation();
+					$iOurStn = (int) config::getValue('piconet_station');
+
+					if ($iDstNet === 0) {
+						// Local network — ignore unicasts not addressed to our station
+						if ($iDstStn !== $iOurStn && $iDstStn !== 255) {
+							$this->oLogger->debug("Piconet: monitor — ignoring local unicast for station {$iDstStn}");
+							break;
+						}
+					} else {
+						// Non-local network — forward via remote bridge
+						$oRemoteConn = \HomeLan\FileStore\RemoteBridge\Map::networkToConnection($iDstNet);
+						if ($oRemoteConn !== null) {
+							$this->oLogger->debug("Piconet: monitor — forwarding network {$iDstNet} via remote bridge");
+							$oRemoteConn->send($oPacket->buildEconetPacket());
+						} else {
+							$this->oLogger->debug("Piconet: monitor — no remote bridge for network {$iDstNet}, dropping");
+						}
+						break;
+					}
+				}
+
+				//Dispatch packet to all the services so the relevant one can deal with it
 				$this->oServices->inboundPacket($oPacket);
 
 				//Send any messages for the services
@@ -160,11 +247,15 @@ class Handler {
 
 	public function onError(\Exception $oError):void
 	{
-		$this->oLogger->debug("Piconet Handler: An eccor occured with the device ".$oError->getMessage());
+		$this->oLogger->error("Piconet: device error - ".$oError->getMessage());
 	}
 
 	public function send(EconetPacket $oPacket, int $iRetries = 3):void
 	{
+		if (!$this->bConnected) {
+			$this->oLogger->warning("Piconet: dropping packet to ".$oPacket->getDestinationNetwork().".".$oPacket->getDestinationStation()." — device not connected");
+			return;
+		}
 		$this->oLogger->debug("Piconet Handler: Sending packet to queue");
 		$this->aQueue[] = ['packet'=>$oPacket,'retries'=>$iRetries,'attempts'=>0];
 		if (count($this->aQueue)==1){

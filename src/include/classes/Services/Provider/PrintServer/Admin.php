@@ -92,7 +92,7 @@ class Admin implements AdminInterface
 	*/
 	public function getEntityTypes(): array
 	{
-		return ['jobs' => 'Print Jobs', 'spooled' => 'Spooled Files'];
+		return ['printers' => 'Printers', 'jobs' => 'Print Jobs', 'spooled' => 'Spooled Files'];
 	}
 
 	/**
@@ -102,9 +102,10 @@ class Admin implements AdminInterface
 	public function getEntityFields(string $sType): array
 	{
 		return match ($sType) {
-			'jobs'    => ['network' => 'int', 'station' => 'int', 'began' => 'datetime', 'size' => 'int'],
-			'spooled' => ['user' => 'string', 'filename' => 'string', 'size' => 'int', 'modified' => 'datetime', 'download' => 'download'],
-			default   => [],
+			'printers' => ['name' => 'string', 'description' => 'string', 'enabled' => 'bool', 'behavior' => 'string', 'allowed_users' => 'string'],
+			'jobs'     => ['network' => 'int', 'station' => 'int', 'began' => 'datetime', 'size' => 'int', 'printer' => 'string'],
+			'spooled'  => ['printer' => 'string', 'user' => 'string', 'filename' => 'string', 'size' => 'int', 'modified' => 'datetime', 'download' => 'download'],
+			default    => [],
 		};
 	}
 
@@ -115,6 +116,9 @@ class Admin implements AdminInterface
 	public function getEntities(string $sType): array
 	{
 		switch ($sType) {
+			case 'printers':
+				$aPrinters = $this->oProvider->getConfiguredPrinters();
+				return AdminEntity::createCollection($sType, $this->getEntityFields($sType), $aPrinters, fn($aRow) => $aRow['name']);
 			case 'jobs':
 				$aJobs = $this->oProvider->getJobs();
 				return AdminEntity::createCollection($sType, $this->getEntityFields($sType), $aJobs, fn($aRow) => $aRow['network'] . '_' . $aRow['station']);

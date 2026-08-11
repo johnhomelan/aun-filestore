@@ -8,6 +8,7 @@
 namespace HomeLan\FileStore\Services\Provider; 
 
 use HomeLan\FileStore\Services\Provider\FileServer\Admin;
+use HomeLan\FileStore\Services\Provider\PrintServer\PrinterRegistry;
 use HomeLan\FileStore\Services\ProviderInterface;
 use HomeLan\FileStore\Services\ServiceDispatcher;
 use HomeLan\FileStore\Services\StreamIn;
@@ -32,7 +33,7 @@ class FileServer implements ProviderInterface{
 
 	protected $oServiceDispatcher = NULL ;
 
-	protected $aCommands = ['BYE', 'CAT', 'CDIR', 'DELETE', 'DIR', 'FSOPT', 'INFO', 'I AM', 'LIB', 'LOAD', 'LOGOFF', 'OPT', 'PASS', 'RENAME', 'SAVE', 'SDISC', 'NEWUSER', 'PRIV', 'REMUSER', 'i.' ,'i .', 'CHROOTOFF', 'CHROOT'];
+	protected $aCommands = ['BYE', 'CAT', 'CDIR', 'DELETE', 'DIR', 'FSOPT', 'INFO', 'I AM', 'LIB', 'LOAD', 'LOGOFF', 'OPT', 'PASS', 'PRINTER', 'RENAME', 'SAVE', 'SDISC', 'NEWUSER', 'PRIV', 'REMUSER', 'SETPASS', 'i.' ,'i .', 'CHROOTOFF', 'CHROOT', 'BACKUP', 'COMPACT', 'VERIFY', 'MAP', 'COPY', 'TYPE', 'DUMP'];
 	
 	protected $aReplyBuffer = [];
 
@@ -325,14 +326,17 @@ class FileServer implements ProviderInterface{
 			case 'EC_FS_FUNC_GET_USER_FREE':
 				$this->getUserDiscFree($oFsRequest);
 				break;
+			case 'EC_FS_FUNC_SET_USER_FREE':
+				$this->setUserDiscFree($oFsRequest);
+				break;
 			case 'EC_FS_FUNC_WHO_AM_I':
 				$this->whoAmI($oFsRequest);
 				break;
 			case 'EC_FS_FUNC_USERS_EXT':
+				$this->usersExt($oFsRequest);
+				break;
 			case 'EC_FS_FUNC_USER_INFO_EXT':
-				$oReply = $oFsRequest->buildReply();
-				$oReply->setError(0x8f, "Not implemented");
-				$this->addReplyToBuffer($oReply->buildEconetpacket());
+				$this->userInfoExt($oFsRequest);
 				break;
 			case 'EC_FS_FUNC_COPY_DATA':
 				$this->copyData($oFsRequest);
@@ -449,9 +453,7 @@ class FileServer implements ProviderInterface{
 				$this->changeDirectory($oFsRequest,$sOptions);
 				break;
 			case 'FSOPT':
-				$oReply = $oFsRequest->buildReply();
-				$oReply->DoneOk();
-				$this->addReplyToBuffer($oReply->buildEconetpacket());
+				$this->cliFsopt($oFsRequest, $sOptions);
 				break;
 			case 'INFO':
 			case 'I.':
@@ -486,11 +488,32 @@ class FileServer implements ProviderInterface{
 			case 'REMUSER':
 				$this->removeUser($oFsRequest,$sOptions);
 				break;
+			case 'SETPASS':
+				$this->cliSetPass($oFsRequest,$sOptions);
+				break;
 			case 'CHROOT':
 				$this->chroot($oFsRequest,$sOptions);
 				break;
 			case 'CHROOTOFF':
 				$this->chrootoff($oFsRequest,$sOptions);
+				break;
+			case 'PRINTER':
+				$this->cliPrinter($oFsRequest, $sOptions);
+				break;
+			case 'BACKUP':
+			case 'COMPACT':
+			case 'VERIFY':
+			case 'MAP':
+				$this->cliNotSupported($oFsRequest, strtoupper($sCommand));
+				break;
+			case 'COPY':
+				$this->cliCopy($oFsRequest, $sOptions);
+				break;
+			case 'TYPE':
+				$this->cliType($oFsRequest, $sOptions);
+				break;
+			case 'DUMP':
+				$this->cliDump($oFsRequest, $sOptions);
 				break;
 			default:
 				$this->oLogger->debug("Un-handled command ".$sCommand);
@@ -2414,13 +2437,343 @@ class FileServer implements ProviderInterface{
 	*/
 	public function getUserDiscFree(FsRequest $oFsRequest): void
 	{
-		//Username
 		$sUsername = $oFsRequest->getString(1);
-
 		$oReply = $oFsRequest->buildReply();
 		$oReply->DoneOk();
-		$oReply->append24bitIntLittleEndian(config::getValue('vfs_default_disc_free'));
 
+		$oUser = $this->secGetUserByName($sUsername);
+		$iQuota = (is_object($oUser) && $oUser->getQuota() > 0)
+			? $oUser->getQuota()
+			: (int) config::getValue('vfs_default_disc_free');
+
+		$oReply->append24bitIntLittleEndian($iQuota);
+		$this->addReplyToBuffer($oReply->buildEconetpacket());
+	}
+
+	/**
+	 * EC_FS_FUNC_SET_USER_FREE (0x1F) — set per-user disc quota (sysop only)
+	 *
+	 * Request payload: username (CR-terminated) followed by quota (uint24 LE).
+	*/
+	public function setUserDiscFree(FsRequest $oFsRequest): void
+	{
+		$oReply = $oFsRequest->buildReply();
+		$oMyUser = $this->secGetUser($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation());
+		if(!is_object($oMyUser)){
+			$oReply->setError(0xbf,"Who are you?");
+			$this->addReplyToBuffer($oReply->buildEconetpacket());
+			return;
+		}
+		if(!$oMyUser->isAdmin()){
+			$oReply->setError(0xbd,"Insufficient privilege");
+			$this->addReplyToBuffer($oReply->buildEconetpacket());
+			return;
+		}
+		[$sUsername, $iAfterName] = $oFsRequest->getStringEndPos(1);
+		$iQuota = $oFsRequest->get24bitIntLittleEndian($iAfterName);
+		try {
+			$this->secSetUserQuota($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sUsername,$iQuota);
+			$oReply->DoneOk();
+		}catch(Exception $oException){
+			$oReply->setError(0xff,$oException->getMessage());
+		}
+		$this->addReplyToBuffer($oReply->buildEconetpacket());
+	}
+
+	/**
+	 * EC_FS_FUNC_USERS_EXT (0x21) — paginated list of all registered users
+	 *
+	 * Request payload: [1] start_index  [2] count
+	 * Reply:           [0x00, 0x00, remaining, (name(10)+0x0D+priv_flag)*n]
+	*/
+	public function usersExt(FsRequest $oFsRequest): void
+	{
+		$oReply = $oFsRequest->buildReply();
+		if(!$this->secIsLoggedIn($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation())){
+			$oReply->setError(0xbf,"Who are you?");
+			$this->addReplyToBuffer($oReply->buildEconetpacket());
+			return;
+		}
+		$iStart = $oFsRequest->getByte(1);
+		$iCount = $oFsRequest->getByte(2);
+
+		$aAllUsers = $this->secGetAllUsers();
+		$iTotalUsers = count($aAllUsers);
+		$aPage = array_slice($aAllUsers, $iStart, $iCount);
+		$iRemaining = max(0, $iTotalUsers - $iStart - count($aPage));
+
+		$oReply->DoneOk();
+		$oReply->appendByte($iRemaining);
+		foreach($aPage as $aEntry){
+			$oUser = $aEntry['user'];
+			$oReply->appendString(str_pad(substr((string) $oUser->getUsername(),0,10),10,' '));
+			$oReply->appendByte(0x0d);
+			$oReply->appendByte($oUser->isAdmin() ? 1 : 0);
+		}
+		$this->addReplyToBuffer($oReply->buildEconetpacket());
+	}
+
+	/**
+	 * EC_FS_FUNC_USER_INFO_EXT (0x22) — extended info for a named user
+	 *
+	 * Request payload: username (CR-terminated)
+	 * Reply OK:        [0x00, 0x00, priv_flag(1), boot_opt(1)]
+	 * Reply not found: [0x00, 0xBF]
+	*/
+	public function userInfoExt(FsRequest $oFsRequest): void
+	{
+		$oReply = $oFsRequest->buildReply();
+		if(!$this->secIsLoggedIn($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation())){
+			$oReply->setError(0xbf,"Who are you?");
+			$this->addReplyToBuffer($oReply->buildEconetpacket());
+			return;
+		}
+		$sUsername = $oFsRequest->getString(1);
+		$oUser = $this->secGetUserByName($sUsername);
+		if(!is_object($oUser)){
+			$oReply->DoneNoton();
+			$this->addReplyToBuffer($oReply->buildEconetpacket());
+			return;
+		}
+		$oReply->DoneOk();
+		$oReply->appendByte($oUser->isAdmin() ? 1 : 0);
+		$oReply->appendByte($oUser->getBootOpt());
+		$this->addReplyToBuffer($oReply->buildEconetpacket());
+	}
+
+	/**
+	 * CLI *SETPASS — sysop password reset for another user
+	 *
+	 * Syntax: *SETPASS USERNAME NEWPASSWORD
+	*/
+	public function cliSetPass(FsRequest $oFsRequest, string $sOptions): void
+	{
+		$oReply = $oFsRequest->buildReply();
+		$oMyUser = $this->secGetUser($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation());
+		if(!is_object($oMyUser)){
+			$oReply->setError(0xbf,"Who are you?");
+			$this->addReplyToBuffer($oReply->buildEconetpacket());
+			return;
+		}
+		if(!$oMyUser->isAdmin()){
+			$oReply->setError(0xff,"Only user with priv S can use *SETPASS");
+			$this->addReplyToBuffer($oReply->buildEconetpacket());
+			return;
+		}
+		$aOptions = explode(' ', trim($sOptions), 2);
+		if(count($aOptions) !== 2 || strlen($aOptions[0]) < 1 || strlen($aOptions[1]) < 1){
+			$oReply->setError(0xff,"Syntax: SETPASS USERNAME NEWPASSWORD");
+			$this->addReplyToBuffer($oReply->buildEconetpacket());
+			return;
+		}
+		$sUsername   = trim($aOptions[0]);
+		$sNewPassword = trim($aOptions[1]);
+		try {
+			$this->secSetAdminPassword($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sUsername,$sNewPassword);
+			$oReply->DoneOk();
+		}catch(Exception $oException){
+			$oReply->setError(0xff,$oException->getMessage());
+		}
+		$this->addReplyToBuffer($oReply->buildEconetpacket());
+	}
+
+	private function cliNotSupported(FsRequest $oFsRequest, string $sCommand): void
+	{
+		$oReply = $oFsRequest->buildReply();
+		if(!is_object($this->secGetUser($oFsRequest->getSourceNetwork(), $oFsRequest->getSourceStation()))){
+			$oReply->setError(0xbf, "Who are you?");
+			$this->addReplyToBuffer($oReply->buildEconetpacket());
+			return;
+		}
+		$oReply->UnrecognisedOk();
+		$oReply->appendString("\r*" . $sCommand . " is not supported on this server\r");
+		$oReply->appendByte(0x80);
+		$this->addReplyToBuffer($oReply->buildEconetpacket());
+	}
+
+	public function cliFsopt(FsRequest $oFsRequest, string $sOptions): void
+	{
+		$oReply = $oFsRequest->buildReply();
+		if(!is_object($this->secGetUser($oFsRequest->getSourceNetwork(), $oFsRequest->getSourceStation()))){
+			$oReply->setError(0xbf, "Who are you?");
+			$this->addReplyToBuffer($oReply->buildEconetpacket());
+			return;
+		}
+		$sOpt = strtoupper(trim($sOptions));
+		if($sOpt === '' || $sOpt === 'INFO'){
+			$sDiscName    = (string) config::getValue('vfs_disc_name');
+			$aUsersOnline = $this->secGetUsersOnline();
+			$iUsersOnline = count($aUsersOnline);
+			$sText  = "\r";
+			$sText .= "Server disc: " . $sDiscName . "\r";
+			$sText .= "Users online: " . $iUsersOnline . "\r";
+			$sText .= "\r";
+			$oReply->UnrecognisedOk();
+			$oReply->appendString($sText);
+			$oReply->appendByte(0x80);
+		} else {
+			$oReply->UnrecognisedOk();
+			$oReply->appendString("\rOption not supported on this server\r");
+			$oReply->appendByte(0x80);
+		}
+		$this->addReplyToBuffer($oReply->buildEconetpacket());
+	}
+
+	public function cliCopy(FsRequest $oFsRequest, string $sOptions): void
+	{
+		$oReply = $oFsRequest->buildReply();
+		if(!is_object($this->secGetUser($oFsRequest->getSourceNetwork(), $oFsRequest->getSourceStation()))){
+			$oReply->setError(0xbf, "Who are you?");
+			$this->addReplyToBuffer($oReply->buildEconetpacket());
+			return;
+		}
+		$aParts = preg_split('/\s+/', trim($sOptions), 2);
+		if(count($aParts) !== 2 || strlen($aParts[0]) === 0 || strlen($aParts[1]) === 0){
+			$oReply->setError(0xff, "Syntax: COPY <source> <dest>");
+			$this->addReplyToBuffer($oReply->buildEconetpacket());
+			return;
+		}
+		$sSrc = trim($aParts[0]);
+		$sDst = trim($aParts[1]);
+		try {
+			$sData = $this->vfsGetFile($oFsRequest->getSourceNetwork(), $oFsRequest->getSourceStation(), $sSrc);
+			$oMeta = $this->vfsGetMeta($oFsRequest->getSourceNetwork(), $oFsRequest->getSourceStation(), $sSrc);
+			$this->vfsSaveFile($oFsRequest->getSourceNetwork(), $oFsRequest->getSourceStation(), $sDst, $sData, $oMeta->getLoadAddr(), $oMeta->getExecAddr());
+			$oReply->DoneOk();
+		}catch(\Exception $oException){
+			$oReply->setError(0xff, $oException->getMessage());
+		}
+		$this->addReplyToBuffer($oReply->buildEconetpacket());
+	}
+
+	public function cliType(FsRequest $oFsRequest, string $sOptions): void
+	{
+		$oReply = $oFsRequest->buildReply();
+		if(!is_object($this->secGetUser($oFsRequest->getSourceNetwork(), $oFsRequest->getSourceStation()))){
+			$oReply->setError(0xbf, "Who are you?");
+			$this->addReplyToBuffer($oReply->buildEconetpacket());
+			return;
+		}
+		$sPath = trim($sOptions);
+		if(strlen($sPath) === 0){
+			$oReply->setError(0xff, "Syntax: TYPE <filename>");
+			$this->addReplyToBuffer($oReply->buildEconetpacket());
+			return;
+		}
+		try {
+			$sData = $this->vfsGetFile($oFsRequest->getSourceNetwork(), $oFsRequest->getSourceStation(), $sPath);
+			$oReply->UnrecognisedOk();
+			$oReply->appendString("\r" . $sData);
+			if(strlen($sData) === 0 || $sData[-1] !== "\r"){
+				$oReply->appendString("\r");
+			}
+			$oReply->appendByte(0x80);
+		}catch(\Exception $oException){
+			$oReply->setError(0xff, "No such file");
+		}
+		$this->addReplyToBuffer($oReply->buildEconetpacket());
+	}
+
+	public function cliDump(FsRequest $oFsRequest, string $sOptions): void
+	{
+		$oReply = $oFsRequest->buildReply();
+		if(!is_object($this->secGetUser($oFsRequest->getSourceNetwork(), $oFsRequest->getSourceStation()))){
+			$oReply->setError(0xbf, "Who are you?");
+			$this->addReplyToBuffer($oReply->buildEconetpacket());
+			return;
+		}
+		$sPath = trim($sOptions);
+		if(strlen($sPath) === 0){
+			$oReply->setError(0xff, "Syntax: DUMP <filename>");
+			$this->addReplyToBuffer($oReply->buildEconetpacket());
+			return;
+		}
+		try {
+			$sData   = $this->vfsGetFile($oFsRequest->getSourceNetwork(), $oFsRequest->getSourceStation(), $sPath);
+			$iLen    = strlen($sData);
+			$sOutput = "\r";
+			for($iOffset = 0; $iOffset < $iLen; $iOffset += 16){
+				$sLine  = sprintf('%06X  ', $iOffset);
+				$sAscii = '';
+				for($i = 0; $i < 16; $i++){
+					if($iOffset + $i < $iLen){
+						$iByte   = ord($sData[$iOffset + $i]);
+						$sLine  .= sprintf('%02X ', $iByte);
+						$sAscii .= ($iByte >= 0x20 && $iByte < 0x7f) ? chr($iByte) : '.';
+					} else {
+						$sLine  .= '   ';
+						$sAscii .= ' ';
+					}
+					if($i === 7){
+						$sLine .= ' ';
+					}
+				}
+				$sOutput .= $sLine . $sAscii . "\r";
+			}
+			$oReply->UnrecognisedOk();
+			$oReply->appendString($sOutput);
+			$oReply->appendByte(0x80);
+		}catch(\Exception $oException){
+			$oReply->setError(0xff, "No such file");
+		}
+		$this->addReplyToBuffer($oReply->buildEconetpacket());
+	}
+
+	/**
+	 * Returns the printer registry used by cliPrinter.
+	 * Override in test subclasses to inject a registry from a string.
+	*/
+	protected function getFileServerPrinterRegistry(): PrinterRegistry
+	{
+		return new PrinterRegistry();
+	}
+
+	public function cliPrinter(FsRequest $oFsRequest, string $sOptions): void
+	{
+		$oReply = $oFsRequest->buildReply();
+		if (!is_object($this->secGetUser($oFsRequest->getSourceNetwork(), $oFsRequest->getSourceStation()))) {
+			$oReply->setError(0xbf, "Who are you?");
+			$this->addReplyToBuffer($oReply->buildEconetpacket());
+			return;
+		}
+
+		$sPrinterName = strtoupper(trim($sOptions));
+		$oRegistry    = $this->getFileServerPrinterRegistry();
+
+		if ($sPrinterName === '') {
+			// List all enabled printers
+			$aEnabled = $oRegistry->getEnabled();
+			$sOutput  = "\r";
+			foreach ($aEnabled as $oPrinter) {
+				$sOutput .= sprintf("%-6s  %s\r", $oPrinter->getName(), $oPrinter->getDescription());
+			}
+			$oReply->UnrecognisedOk();
+			$oReply->appendString($sOutput);
+			$oReply->appendByte(0x80);
+			$this->addReplyToBuffer($oReply->buildEconetpacket());
+			return;
+		}
+
+		$oPrinter = $oRegistry->getByName($sPrinterName);
+		if ($oPrinter === null) {
+			$oReply->setError(0xff, "Unknown printer " . $sPrinterName);
+			$this->addReplyToBuffer($oReply->buildEconetpacket());
+			return;
+		}
+		if (!$oPrinter->isEnabled()) {
+			$oReply->setError(0xff, "Printer " . $sPrinterName . " is not available");
+			$this->addReplyToBuffer($oReply->buildEconetpacket());
+			return;
+		}
+		$oUser = $this->secGetUser($oFsRequest->getSourceNetwork(), $oFsRequest->getSourceStation());
+		if (!$oPrinter->isUserAllowed($oUser)) {
+			$oReply->setError(0xff, "You are not authorised to use printer " . $sPrinterName);
+			$this->addReplyToBuffer($oReply->buildEconetpacket());
+			return;
+		}
+		$oReply->UnrecognisedOk();
+		$oReply->appendString("\r" . $sPrinterName . " is available\r");
+		$oReply->appendByte(0x80);
 		$this->addReplyToBuffer($oReply->buildEconetpacket());
 	}
 
@@ -2625,4 +2978,16 @@ class FileServer implements ProviderInterface{
 
 	protected function secSetOpt(int $iNet, int $iStn, string $sOpt): void
 	{ Security::setOpt($iNet, $iStn, $sOpt); }
+
+	protected function secGetAllUsers(): array
+	{ return Security::getAllUsers(); }
+
+	protected function secGetUserByName(string $sUsername): ?\HomeLan\FileStore\Authentication\User
+	{ return Security::getUserByName($sUsername); }
+
+	protected function secSetUserQuota(int $iNet, int $iStn, string $sUsername, int $iQuota): void
+	{ Security::setUserQuota($iNet, $iStn, $sUsername, $iQuota); }
+
+	protected function secSetAdminPassword(int $iNet, int $iStn, string $sUsername, string $sPassword): void
+	{ Security::setAdminPassword($iNet, $iStn, $sUsername, $sPassword); }
 }

@@ -22,21 +22,21 @@ class AunPacket implements EncapsulationInterface {
 
 	//Single byte (unsigned int) Aun Packet Type 1=>BroadCast =
 	protected ?int $iPktType = NULL;
-	
-	//Single byte (unsigned int) Control/flag 
+
+	//Single byte (unsigned int) Control/flag
 	protected ?int $iCb = NULL;
 
 	//Single byte (unsigned int) Padding
 	protected ?int $iPadding = NULL;
 
 	//Single byte (unsigned int) Port number
-	protected ?int $iPort = NULL;
+	protected int $iPort = 0;
 
-	//32 bit int unsigned  little-endian 
-	protected ?int $iSeq = 0;
+	//32 bit int unsigned  little-endian
+	protected int $iSeq = 0;
 
 	//Binary Data String
-	protected ?string $sData = NULL;
+	protected string $sData = '';
 
 	protected ?string $sSoruceIP = NULL;
 
@@ -202,6 +202,11 @@ class AunPacket implements EncapsulationInterface {
 		return $this->iSeq;
 	}
 
+	public function getCb(): ?int
+	{
+		return $this->iCb;
+	}
+
 	public function setSourceIP(string $sHost): void
 	{
 		if(str_contains((string) $sHost,':')){
@@ -254,6 +259,11 @@ class AunPacket implements EncapsulationInterface {
 		$oEconetPacket = new EconetPacket();
 		$oEconetPacket->setPort($this->iPort);
 		$oEconetPacket->setFlags($this->iCb);
+
+		if (is_null($this->sSoruceIP)) {
+			return $oEconetPacket;
+		}
+
 		$sNetworkStation = Map::ipAddrToEcoAddr($this->sSoruceIP,$this->sSourceUdpPort);
 		$aEcoAddr = explode('.',$sNetworkStation);
 		if(array_key_exists(0,$aEcoAddr) AND array_key_exists(1,$aEcoAddr)){

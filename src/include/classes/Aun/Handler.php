@@ -1,13 +1,13 @@
 <?php
 /**
- * This file contains the aun handler class 
+ * This file contains the aun handler class
  *
  * @author John Brown <john@home-lan.co.uk>
  * @package corenet
 */
-namespace HomeLan\FileStore\Aun; 
+namespace HomeLan\FileStore\Aun;
 
-use HomeLan\FileStore\Messages\EconetPacket; 
+use HomeLan\FileStore\Messages\EconetPacket;
 use HomeLan\FileStore\Services\ProviderInterface;
 use HomeLan\FileStore\Services\ServiceDispatcher;
 use HomeLan\FileStore\Encapsulation\PacketDispatcher;
@@ -26,7 +26,7 @@ class Handler Implements HandleInterface {
 
 	/**
  	 * @var array<string, array<string, mixed>>
- 	*/  	
+ 	*/
 	private array $aQueue = [];
 
 	/**
@@ -35,19 +35,24 @@ class Handler Implements HandleInterface {
 	private array $aLastChance = [];
 
 	/**
-	 * Last inbound sequence number seen per source address, used to detect retransmitted duplicates.
-	 * @var array<string, int>
+	 * Sliding-window dedup: last SEQ_WINDOW_SIZE sequence numbers per source address.
+	 * Each entry: ['seqs' => int[], 'last_seen' => int (unix timestamp)]
+	 * @var array<string, array{seqs: int[], last_seen: int}>
 	 */
-	private array $aLastSeq = [];
+	private array $aSeqWindows = [];
+
+	private const SEQ_WINDOW_SIZE = 8;
+	private const SEQ_PRUNE_TTL   = 300; // seconds before an idle source entry is evicted
+
 	private Socket $oAunServer;
 
 
 	/**
 	 * Constructor registers the Logger
-	 *  
+	 *
 	*/
 	public function __construct(private readonly \Psr\Log\LoggerInterface $oLogger,private readonly ServiceDispatcher $oServices,private readonly PacketDispatcher $oPacketDispatcher)
-	{		
+	{
 	}
 
 	public function setSocket(Socket $oAunServer):void
@@ -64,10 +69,22 @@ class Handler Implements HandleInterface {
 	{
 		$this->oLogger->debug("Aun Handler: Received packet from ".$sSrcAddress);
 		$oAunPacket = new AunPacket();
-					
+
 		$oAunPacket->setSourceIP($sSrcAddress);
 		$oAunPacket->setDestinationIP(config::getValue('local_ip'));
-		$oAunPacket->decode($sMessage);
+
+		try {
+			$oAunPacket->decode($sMessage);
+		} catch (\Exception $oEx) {
+			$this->oLogger->warning("Aun Handler: Discarding malformed packet from {$sSrcAddress}: " . $oEx->getMessage());
+			return;
+		}
+
+		if ($oAunPacket->getPacketType() === 'Unknown') {
+			$this->oLogger->warning("Aun Handler: Discarding packet with unknown type from {$sSrcAddress}");
+			return;
+		}
+
 		switch($oAunPacket->getPacketType()){
 			case 'Ack':
 				//Got an Ack use
@@ -77,7 +94,7 @@ class Handler Implements HandleInterface {
 			default:
 				// Drop duplicate packets (retransmissions where our ACK was lost in transit)
 				$iSeq = $oAunPacket->getSequence();
-				if(isset($this->aLastSeq[$sSrcAddress]) && $this->aLastSeq[$sSrcAddress] === $iSeq){
+				if ($this->isDuplicate($sSrcAddress, $iSeq)) {
 					$this->oLogger->debug("Aun Handler: Duplicate packet from ".$sSrcAddress." seq ".$iSeq.", re-ACKing and dropping");
 					$sAck = $oAunPacket->buildAck();
 					if(!is_null($sAck) && strlen($sAck)>0){
@@ -85,13 +102,15 @@ class Handler Implements HandleInterface {
 					}
 					return;
 				}
-				$this->aLastSeq[$sSrcAddress] = $iSeq;
+				$this->recordSeq($sSrcAddress, $iSeq);
 
 				//Send an ack for the AUN packet if needed
 				$sAck = $oAunPacket->buildAck();
 				if(!is_null($sAck) && strlen($sAck)>0){
 					$this->oLogger->debug("Aun Handler: ".$oAunPacket->getPacketType()." Sending Ack packet");
 					$this->oAunServer->send($sAck,$sSrcAddress);
+				} elseif ($oAunPacket->getPacketType() === 'Immediate') {
+					$this->oLogger->debug("Aun Handler: Immediate packet with unhandled cb=0x" . dechex((int) $oAunPacket->getCb()) . " from {$sSrcAddress}, no reply sent");
 				}
 
 				//Dispatch packet to all the services so the relevant one can deal with it
@@ -109,6 +128,7 @@ class Handler Implements HandleInterface {
 
 	public function timer():void
 	{
+		$this->pruneSeqWindows();
 		$this->_runQueue();
 	}
 
@@ -119,7 +139,7 @@ class Handler Implements HandleInterface {
 		if(!array_key_exists($sHost,$this->aQueue)){
 			$this->aQueue[$sHost] = [];
 		}
-	
+
 		$this->aQueue[$sHost][] = ['packet'=>$oPacket,'retries'=>$iRetries,'attempts'=>0,'backoff'=>0];
 	}
 
@@ -131,7 +151,7 @@ class Handler Implements HandleInterface {
 	}
 
 	private function _runHostQueue(string $sHost):void
-	{	
+	{
 		if(is_array($this->aQueue[$sHost]) AND count($this->aQueue[$sHost])>0){
 			$aQueueEntry = array_shift($this->aQueue[$sHost]);
 			if($aQueueEntry['backoff']>1){
@@ -182,7 +202,7 @@ class Handler Implements HandleInterface {
 		}
 		if(array_key_exists($sHost,$this->aLastChance)){
 			if($oAck->getSequence()!=$this->aLastChance[$sHost]){
-				//The last attempt for a packet happened and it was never acked and the this ack 
+				//The last attempt for a packet happened and it was never acked and the this ack
 				//is for a different frame, clear any ack service events waiting for this host
 				//as this is the wrong ack.
 				$oPacket = $oAck->buildEconetPacket();
@@ -207,8 +227,8 @@ class Handler Implements HandleInterface {
 	}
 
 	/**
-	 * Get the ip:port combination for a given network and station 
-	*/ 	
+	 * Get the ip:port combination for a given network and station
+	*/
 	private function _getIpPortFromNetworkStation(int $iNetwork, int $iStation):string
 	{
 		$sIP = Map::ecoAddrToIpAddr($iNetwork,$iStation);
@@ -218,6 +238,46 @@ class Handler Implements HandleInterface {
 			$sHost=$sIP;
 		}
 		return $sHost;
+	}
+
+	/**
+	 * Returns true if $iSeq has been seen recently from $sSrcAddress (i.e. it is in the sliding window).
+	 */
+	private function isDuplicate(string $sSrcAddress, int $iSeq): bool
+	{
+		if (!isset($this->aSeqWindows[$sSrcAddress])) {
+			return false;
+		}
+		return in_array($iSeq, $this->aSeqWindows[$sSrcAddress]['seqs'], true);
+	}
+
+	/**
+	 * Adds $iSeq to the sliding window for $sSrcAddress, evicting the oldest entry when full.
+	 */
+	private function recordSeq(string $sSrcAddress, int $iSeq): void
+	{
+		if (!isset($this->aSeqWindows[$sSrcAddress])) {
+			$this->aSeqWindows[$sSrcAddress] = ['seqs' => [], 'last_seen' => time()];
+		}
+		$aWindow = &$this->aSeqWindows[$sSrcAddress];
+		$aWindow['seqs'][] = $iSeq;
+		if (count($aWindow['seqs']) > self::SEQ_WINDOW_SIZE) {
+			array_shift($aWindow['seqs']);
+		}
+		$aWindow['last_seen'] = time();
+	}
+
+	/**
+	 * Removes window entries for sources not seen within SEQ_PRUNE_TTL seconds.
+	 */
+	private function pruneSeqWindows(): void
+	{
+		$iCutoff = time() - self::SEQ_PRUNE_TTL;
+		foreach (array_keys($this->aSeqWindows) as $sKey) {
+			if ($this->aSeqWindows[$sKey]['last_seen'] < $iCutoff) {
+				unset($this->aSeqWindows[$sKey]);
+			}
+		}
 	}
 
 }

@@ -219,6 +219,7 @@ wire or connection type. All three implement `EncapsulationInterface`.
 | `Vfs\Plugin\AdfsHD` | class | Read-only access to files inside Acorn ADFS hard-disk image files (matched by `scsi*.dat`) |
 | `Vfs\Plugin\AfsImg` | class | Read-only access to files inside AFS (Acorn Level-3 Fileserver) disk image files |
 | `Vfs\Plugin\AFS` | class | Read-only access to files inside AFS L3 hard-disk image files (matched by `scsi*.l3`) |
+| `Vfs\Plugin\Mdfs` | class | Access to files inside SJ Research MDFS (`*.mdfs`) and HDFS (`*.hdfs`) disk image files via `homelan/mdfs-disk-reader`; read-only unless `vfs_plugin_mdfs_write_enabled` is set |
 
 ---
 

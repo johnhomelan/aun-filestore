@@ -407,6 +407,7 @@ Plugin class names map to `HomeLan\FileStore\Vfs\Plugin\<Name>`.
 | `DfsSsd` | Mounts Acorn DFS `.ssd` disc images as directories. |
 | `AdfsAdl` | Mounts Acorn ADFS `.adl` disc images as directories. |
 | `AdfsHD` | Mounts Acorn ADFS hard-disc images as directories. |
+| `Mdfs` | Mounts SJ Research MDFS floppy/hard-disc images (`.mdfs`) and HDFS hard-disc images (`.hdfs`) as directories (see below). |
 | `S3` | Stores files in Amazon S3 (or S3-compatible) buckets (see below). |
 | `Catalogue` | Read-only plugin that serves files listed in a remotely-fetched JSON catalogue (see below). |
 
@@ -420,13 +421,34 @@ TAPE file LLLLLLLL EEEEEEEE
 
 where `LLLLLLLL` and `EEEEEEEE` are the load and exec addresses in zero-padded 8-digit hex.
 
-The disk image plugins (`DfsSsd`, `AdfsAdl`, `AdfsHD`, `AFS`) do not use .inf sidecars — load and exec metadata is embedded directly in the native Acorn disc image format.
+The disk image plugins (`DfsSsd`, `AdfsAdl`, `AdfsHD`, `AFS`, `Mdfs`) do not use .inf sidecars — load and exec metadata is embedded directly in the native disc image format.
 
 ### LocalFile Plugin Configuration ###
 
 | Config key | Default | Description |
 |---|---|---|
 | `vfs_plugin_localfile_root` | *(required)* | Absolute path to the root of the local filesystem tree |
+
+### Mdfs Plugin Configuration ###
+
+The `Mdfs` plugin uses the [`homelan/mdfs-disk-reader`](https://packagist.org/packages/homelan/mdfs-disk-reader) package to read (and, optionally, write) SJ Research MDFS and HDFS disc images. Each image file is presented as a directory in the Econet file system, the same way `AFS` and `AdfsHD` present their disc images.
+
+Images are matched by file extension, not by filename pattern:
+
+* `*.mdfs` — SJ Research MDFS floppy or hard-disc images
+* `*.hdfs` — HDFS hard-disc images (the dedicated HDFS hardware fileserver's own on-disc format, which reserves the first 98 blocks for firmware)
+
+The plugin is **read-only by default**. Set `vfs_plugin_mdfs_write_enabled` to make it read/write, in the same way the S3 plugin's `write_enabled` flag does — the underlying image is then modified in place using the package's `MdfsWriter` class (create/delete files and directories, rename within an image, update load/exec addresses and access bits).
+
+| Config key | Default | Description |
+|---|---|---|
+| `vfs_plugin_mdfs_root` | `/var/lib/aun-filestore-root` | Directory in which `.mdfs`/`.hdfs` image files are stored |
+| `vfs_plugin_mdfs_write_enabled` | `false` | Set to `true` to allow the file server to write, delete, rename, and create files inside these images. Leaving this `false` makes every image **read-only** — Econet clients can read and list files but all write operations are refused. |
+
+~~~
+vfs_plugin_mdfs_root = /var/lib/aun-filestore-root
+vfs_plugin_mdfs_write_enabled = true
+~~~
 
 ### S3 Plugin Configuration ###
 

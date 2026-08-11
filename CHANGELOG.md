@@ -55,6 +55,11 @@ Work committed to `master` since the `2.0.1` tag.
 - Backwards-compatible user quota support (recorded but not yet enforced).
 - A compatibility document (`docs/compatibility.md`) covering how the File
   and Print services compare against Level 4/MDFS behaviour.
+- `Mdfs` VFS plugin for SJ Research MDFS floppy/hard-disc images (`*.mdfs`)
+  and HDFS hard-disc images (`*.hdfs`), built on the new
+  `homelan/mdfs-disk-reader` package. Read-only by default; set
+  `vfs_plugin_mdfs_write_enabled` to allow writes, the same way the S3
+  plugin's `write_enabled` flag does.
 
 ### Changed
 - AUN, Piconet, and WebSocket encapsulations made more robust against bad

@@ -33,7 +33,7 @@ safe_define('CONFIG_security_max_session_idle',2400);
 
 safe_define('CONFIG_library_path','$.LIBRARY');
 
-safe_define('CONFIG_vfs_plugins','AFS,DfsSsd,AdfsAdl,AdfsHD,LocalFile');
+safe_define('CONFIG_vfs_plugins','AFS,DfsSsd,AdfsAdl,AdfsHD,Mdfs,LocalFile');
 safe_define('CONFIG_vfs_plugin_localfile_root','/var/lib/aun-filestore-root');
 safe_define('CONFIG_vfs_disc_name','VFSROOT');
 safe_define('CONFIG_vfs_home_dir_path','$.home');
@@ -44,6 +44,8 @@ safe_define('CONFIG_vfs_plugin_localdfsssd_root','/var/lib/aun-filestore-root');
 safe_define('CONFIG_vfs_plugin_localadfsadl_root','/var/lib/aun-filestore-root');
 safe_define('CONFIG_vfs_plugin_localadfshd_root','/var/lib/aun-filestore-root');
 safe_define('CONFIG_vfs_plugin_afs_root','/var/lib/aun-filestore-root');
+safe_define('CONFIG_vfs_plugin_mdfs_root','/var/lib/aun-filestore-root');
+safe_define('CONFIG_vfs_plugin_mdfs_write_enabled', false);
 
 safe_define('CONFIG_print_server_spool_dir','/tmp/econetprint');
 safe_define('CONFIG_print_server_conversion_script','/usr/bin/esc2ps -i %source% -o %destination%');

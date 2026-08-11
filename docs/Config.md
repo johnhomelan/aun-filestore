@@ -313,9 +313,9 @@ The file system exported by the file server is composed of one or more VFS plugi
 
 **vfs_plugins**
 
-Comma-separated list of VFS plugin names, in priority order (left = highest priority).  Plugin names are case-sensitive.  Default is `AFS,DfsSsd,AdfsAdl,AdfsHD,LocalFile`.
+Comma-separated list of VFS plugin names, in priority order (left = highest priority).  Plugin names are case-sensitive.  Default is `AFS,DfsSsd,AdfsAdl,AdfsHD,Mdfs,LocalFile`.
 
-Available plugins: `LocalFile`, `S3`, `Catalogue`, `DfsSsd`, `AdfsAdl`, `AdfsHD`, `AFS`, `AfsImg`
+Available plugins: `LocalFile`, `S3`, `Catalogue`, `DfsSsd`, `AdfsAdl`, `AdfsHD`, `AFS`, `AfsImg`, `Mdfs`
 
 ~~~~~~
 vfs_plugins = DfsSsd,AdfsAdl,LocalFile
@@ -419,6 +419,24 @@ Directory in which AFS disk image files are stored for the AfsImg plugin.  No de
 
 ~~~~~~
 vfs_plugin_localafsimg_root = /var/lib/aun-filestore-root
+~~~~~~
+
+##### Mdfs plugin #####
+
+**vfs_plugin_mdfs_root**
+
+Directory in which SJ Research MDFS floppy/hard-disk image files (matched by the pattern `*.mdfs`) and HDFS hard-disk image files (matched by the pattern `*.hdfs`) are stored.  Both are read via the `homelan/mdfs-disk-reader` package.  Default is `/var/lib/aun-filestore-root`.
+
+~~~~~~
+vfs_plugin_mdfs_root = /var/lib/aun-filestore-root
+~~~~~~
+
+**vfs_plugin_mdfs_write_enabled**
+
+`true` to allow the plugin to write, delete, rename, and create files inside `.mdfs`/`.hdfs` images (via the package's `MdfsWriter` class).  Default `false` (read-only), the same way the S3 plugin's `write_enabled` flag works.
+
+~~~~~~
+vfs_plugin_mdfs_write_enabled = true
 ~~~~~~
 
 ##### S3 plugin #####

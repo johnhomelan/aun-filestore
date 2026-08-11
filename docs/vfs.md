@@ -608,4 +608,5 @@ claim).
 | `src/include/classes/Vfs/Plugin/AfsImg.php` | AFS disc image plugin; write methods are no-ops |
 | `src/include/classes/Vfs/Plugin/DfsSsd.php` | DFS SSD disc image plugin; write methods are no-ops |
 | `src/include/classes/Vfs/Plugin/AdfsHD.php` | ADFS hard-disc image plugin; write methods are no-ops |
+| `src/include/classes/Vfs/Plugin/Mdfs.php` | MDFS/HDFS disc image plugin (`homelan/mdfs-disk-reader`); read-only unless `vfs_plugin_mdfs_write_enabled` is set |
 | `src/include/classes/Vfs/Plugin/Catalogue.php` | Read-only HTTP catalogue plugin; write methods are no-ops |

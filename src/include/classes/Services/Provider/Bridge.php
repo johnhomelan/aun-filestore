@@ -288,7 +288,7 @@ class Bridge implements ProviderInterface {
 	{
 		$iNetworkNumber = $oBridgeRequest->getNetwork();
 
-		if(Map::networkKnown($iNetworkNumber) || array_key_exists($iNetworkNumber, $this->aRemoteNetworks) || (config::getValue('remote_bridge_enabled') && RemoteBridgeMap::networkKnown($iNetworkNumber))){
+		if(Map::networkKnown($iNetworkNumber) || WebSocketMap::networkKnown($iNetworkNumber) || PiconetMap::networkKnown($iNetworkNumber) || array_key_exists($iNetworkNumber, $this->aRemoteNetworks) || (config::getValue('remote_bridge_enabled') && RemoteBridgeMap::networkKnown($iNetworkNumber))){
 			//Network known — reply once (the reply itself signals "yes I know this network")
 			$this->_addReplyToBuffer($oBridgeRequest->buildReply());
 		}

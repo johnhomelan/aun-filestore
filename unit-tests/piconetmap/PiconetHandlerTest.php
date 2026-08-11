@@ -469,6 +469,86 @@ class PiconetHandlerTest extends TestCase
     }
 
     // =========================================================================
+    // decodeMessage() — malformed / unknown message types
+    // =========================================================================
+
+    public function testMalformedRxPacketDoesNotDispatchToServices(): void
+    {
+        // Invalid base64 in the scout field — decode() throws; packet must be discarded
+        $this->oServices->expects($this->never())->method('inboundPacket');
+        $this->oHandler->decodeMessage('RX_TRANSMIT !!!!notbase64!!!! !!!!notbase64!!!!');
+    }
+
+    public function testMalformedPacketLineDoesNotAbortSubsequentLines(): void
+    {
+        // A bad line in onMessage() must not stop subsequent valid lines from being processed
+        $this->oServices->expects($this->once())->method('inboundPacket');
+        $this->oServices->method('getReplies')->willReturn([]);
+
+        $sBadLine = 'RX_TRANSMIT !!!!notbase64!!!!';
+        $this->oHandler->onMessage($sBadLine . "\n" . $this->makeBroadcastMsg());
+    }
+
+    public function testUnknownMessageTypeIsIgnoredWithoutDispatching(): void
+    {
+        $this->oServices->expects($this->never())->method('inboundPacket');
+        $this->oHandler->decodeMessage('SOME_FUTURE_MESSAGE payload=xyz');
+    }
+
+    public function testRxTransmitMissingDataFieldIsDiscarded(): void
+    {
+        // Scout-only RX_TRANSMIT — no data field at all
+        $sScout = base64_encode(pack('CCCCCC', 5, 0, 1, 0, 0, 0x99));
+        $this->oServices->expects($this->never())->method('inboundPacket');
+        $this->oHandler->decodeMessage('RX_TRANSMIT ' . $sScout);
+    }
+
+    public function testShortScoutFrameIsDiscarded(): void
+    {
+        // Base64 of a 5-byte buffer — one byte short of the 6-byte minimum
+        $sShortScout = base64_encode(str_repeat("\x00", 5));
+        $sData       = base64_encode(str_repeat("\x00", 8));
+        $this->oServices->expects($this->never())->method('inboundPacket');
+        $this->oHandler->decodeMessage('RX_TRANSMIT ' . $sShortScout . ' ' . $sData);
+    }
+
+    public function testTxResultMissingStatusCodeIsHandledSafely(): void
+    {
+        // "TX_RESULT" with no code — must not crash or clear ack events
+        $this->oServices->expects($this->never())->method('clearAckEvent');
+        $this->oHandler->decodeMessage('TX_RESULT');
+    }
+
+    public function testTxResultUnknownCodeIsIgnored(): void
+    {
+        $this->oServices->expects($this->never())->method('clearAckEvent');
+        $this->oHandler->decodeMessage('TX_RESULT NEW_FUTURE_CODE');
+    }
+
+    // =========================================================================
+    // TX_RESULT with empty aAwaitingAck (spurious messages)
+    // =========================================================================
+
+    public function testDecodeTxResultOkWithEmptyAwaitingAckIsNoOp(): void
+    {
+        $this->oServices->expects($this->never())->method('clearAckEvent');
+        $this->oServices->expects($this->never())->method('inboundPacket');
+        $this->oHandler->decodeMessage('TX_RESULT OK');
+    }
+
+    public function testDecodeTxResultTimeoutWithEmptyAwaitingAckIsNoOp(): void
+    {
+        $this->oServices->expects($this->never())->method('clearAckEvent');
+        $this->oHandler->decodeMessage('TX_RESULT TIMEOUT');
+    }
+
+    public function testDecodeTxResultUnexpectedWithEmptyAwaitingAckIsNoOp(): void
+    {
+        $this->oServices->expects($this->never())->method('clearAckEvent');
+        $this->oHandler->decodeMessage('TX_RESULT UNEXPECTED');
+    }
+
+    // =========================================================================
     // decodeMessage()
     // =========================================================================
 
@@ -784,14 +864,28 @@ class PiconetHandlerTest extends TestCase
         $this->oHandler->decodeMessage($sMsg);
     }
 
-    public function testMonitorModeDropsNonLocalNetworkWhenNoBridgeKnown(): void
+    public function testMonitorModeForwardsNonLocalNetworkViaPacketDispatcher(): void
     {
         config::overrideValue('remote_bridge_enabled', 1);
         $oConn = new MockPiconetConnection();
         $this->oHandler->onOpen($oConn);
 
-        // Network 99 — not local (not 0) and no remote bridge registered
-        // RemoteBridge\Map::networkToConnection() will return null → packet dropped
+        // Network 99 — not local (not 0) → must be forwarded via PacketDispatcher
+        $sMsg = $this->makeTransmitMsg(5, 99, 1, 0, 0, 0x99);
+        $this->oPacketDispatcher->expects($this->once())
+            ->method('sendPacket')
+            ->with($this->isInstanceOf(\HomeLan\FileStore\Messages\EconetPacket::class));
+
+        $this->oHandler->decodeMessage($sMsg);
+    }
+
+    public function testMonitorModeDoesNotCallInboundPacketForNonLocalNetwork(): void
+    {
+        config::overrideValue('remote_bridge_enabled', 1);
+        $oConn = new MockPiconetConnection();
+        $this->oHandler->onOpen($oConn);
+
+        // Non-local network packet must not reach local services
         $sMsg = $this->makeTransmitMsg(5, 99, 1, 0, 0, 0x99);
         $this->oServices->expects($this->never())->method('inboundPacket');
 
@@ -820,6 +914,97 @@ class PiconetHandlerTest extends TestCase
         $this->oServices->method('getReplies')->willReturn([]);
 
         $this->oHandler->decodeMessage($sMsg);
+    }
+
+    // =========================================================================
+    // Retry backoff
+    // =========================================================================
+
+    public function testTxFailureSchedulesRetryViaLoopTimerWhenLoopAvailable(): void
+    {
+        $oLoop = $this->createMock(LoopInterface::class);
+        $oLoop->expects($this->once())
+            ->method('addTimer')
+            ->with($this->greaterThan(0), $this->isType('callable'));
+        $this->oHandler->setLoop($oLoop);
+
+        $oConn = new MockPiconetConnection();
+        $this->oHandler->onOpen($oConn);
+
+        $this->oHandler->send($this->makePacket(5, 1));
+        $this->oHandler->decodeMessage('TX_RESULT TIMEOUT');
+    }
+
+    public function testTxFailureRetriesImmediatelyWhenNoLoopAvailable(): void
+    {
+        // No loop set — falls back to immediate _runQueue(). Stream must grow.
+        $oConn = new MockPiconetConnection();
+        $this->oHandler->onOpen($oConn);
+
+        $this->oHandler->send($this->makePacket(5, 1));
+        $sAfterSend = $oConn->getStreamContent();
+
+        $this->oHandler->decodeMessage('TX_RESULT TIMEOUT');
+
+        $this->assertGreaterThan(strlen($sAfterSend), strlen($oConn->getStreamContent()));
+    }
+
+    public function testTxFailureWithLoopDoesNotRetryImmediately(): void
+    {
+        // When the loop handles the retry, the stream must NOT grow synchronously.
+        $oLoop = $this->createMock(LoopInterface::class);
+        $this->oHandler->setLoop($oLoop);
+
+        $oConn = new MockPiconetConnection();
+        $this->oHandler->onOpen($oConn);
+
+        $this->oHandler->send($this->makePacket(5, 1));
+        $sAfterSend = $oConn->getStreamContent();
+
+        $this->oHandler->decodeMessage('TX_RESULT TIMEOUT');
+
+        $this->assertSame($sAfterSend, $oConn->getStreamContent());
+    }
+
+    // =========================================================================
+    // onClose() — duplicate clearAckEvent prevention
+    // =========================================================================
+
+    public function testOnCloseClearsAckEventOnceForInFlightPacket(): void
+    {
+        // An in-flight packet appears in both aAwaitingAck and at the front of
+        // aQueue (with decremented retries). clearAckEvent must only fire once.
+        $this->oServices->expects($this->once())
+            ->method('clearAckEvent')
+            ->with(1, 5);
+
+        $this->setProp('aAwaitingAck', [
+            ['dst_network' => 1, 'dst_station' => 5, 'port' => 0x99, 'flags' => 0],
+        ]);
+        $this->setProp('aQueue', [
+            ['packet' => $this->makePacket(5, 1), 'retries' => 2, 'attempts' => 1],
+        ]);
+
+        $oConn = new MockPiconetConnection();
+        $this->oHandler->onOpen($oConn);
+        $this->oHandler->onClose();
+    }
+
+    public function testOnCloseClearsDistinctQueuedAndInFlightStationsSeparately(): void
+    {
+        // aAwaitingAck has station 5; aQueue has a different station 7 — two distinct clears
+        $this->oServices->expects($this->exactly(2))->method('clearAckEvent');
+
+        $this->setProp('aAwaitingAck', [
+            ['dst_network' => 1, 'dst_station' => 5, 'port' => 0x99, 'flags' => 0],
+        ]);
+        $this->setProp('aQueue', [
+            ['packet' => $this->makePacket(7, 1), 'retries' => 3, 'attempts' => 0],
+        ]);
+
+        $oConn = new MockPiconetConnection();
+        $this->oHandler->onOpen($oConn);
+        $this->oHandler->onClose();
     }
 
     // =========================================================================

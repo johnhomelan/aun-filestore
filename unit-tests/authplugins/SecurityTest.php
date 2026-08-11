@@ -457,4 +457,311 @@ class SecurityTest extends TestCase {
 		$this->assertNotEmpty($aCalls);
 	}
 
+	// =========================================================================
+	// getUserByName()
+	// =========================================================================
+
+	public function testGetUserByNameReturnsUserWhenFound(): void
+	{
+		$this->useMockPlugin();
+		$oExpected = new \HomeLan\FileStore\Authentication\User();
+		$oExpected->setUsername('JBROWN');
+		// getAllUsers() on the plugin returns plain User objects; Security wraps them
+		AuthPluginMock::$aUsersToReturn = [$oExpected];
+
+		$oResult = Security::getUserByName('JBROWN');
+		$this->assertNotNull($oResult);
+		$this->assertSame('JBROWN', $oResult->getUsername());
+	}
+
+	public function testGetUserByNameIsCaseInsensitive(): void
+	{
+		$this->useMockPlugin();
+		$oExpected = new \HomeLan\FileStore\Authentication\User();
+		$oExpected->setUsername('JBROWN');
+		AuthPluginMock::$aUsersToReturn = [$oExpected];
+
+		$this->assertNotNull(Security::getUserByName('jbrown'));
+		$this->assertNotNull(Security::getUserByName('JBrown'));
+	}
+
+	public function testGetUserByNameReturnsNullWhenNotFound(): void
+	{
+		$this->useMockPlugin();
+		AuthPluginMock::$aUsersToReturn = [];
+
+		$this->assertNull(Security::getUserByName('NOBODY'));
+	}
+
+	// =========================================================================
+	// setUserQuota()
+	// =========================================================================
+
+	public function testSetUserQuotaDelegatesWhenCallerIsAdmin(): void
+	{
+		$this->loginAdmin(127, 80);
+		$this->useMockPlugin();
+
+		Security::setUserQuota(127, 80, 'TEST', 204800);
+
+		$aCalls = array_filter(AuthPluginMock::$aCallLog, fn($e) => $e['method'] === 'setQuota');
+		$oCall = array_values($aCalls)[0];
+		$this->assertSame('TEST', $oCall['username']);
+		$this->assertSame(204800, $oCall['quota']);
+	}
+
+	public function testSetUserQuotaThrowsWhenNotLoggedIn(): void
+	{
+		$this->expectException(\Exception::class);
+		Security::setUserQuota(127, 90, 'TEST', 1024);
+	}
+
+	public function testSetUserQuotaThrowsWhenCallerIsNotAdmin(): void
+	{
+		$this->loginNonAdmin(127, 91);
+		$this->expectException(\Exception::class);
+		Security::setUserQuota(127, 91, 'TEST', 1024);
+	}
+
+	// =========================================================================
+	// setAdminPassword()
+	// =========================================================================
+
+	public function testSetAdminPasswordDelegatesWhenCallerIsAdmin(): void
+	{
+		$this->loginAdmin(127, 80);
+		$this->useMockPlugin();
+
+		Security::setAdminPassword(127, 80, 'TARGET', 'newpass');
+
+		$aCalls = array_filter(AuthPluginMock::$aCallLog, fn($e) => $e['method'] === 'setPasswordAdmin');
+		$oCall = array_values($aCalls)[0];
+		$this->assertSame('TARGET', $oCall['username']);
+	}
+
+	public function testSetAdminPasswordThrowsWhenNotLoggedIn(): void
+	{
+		$this->expectException(\Exception::class);
+		Security::setAdminPassword(127, 92, 'TARGET', 'newpass');
+	}
+
+	public function testSetAdminPasswordThrowsWhenCallerIsNotAdmin(): void
+	{
+		$this->loginNonAdmin(127, 93);
+		$this->expectException(\Exception::class);
+		Security::setAdminPassword(127, 93, 'TARGET', 'newpass');
+	}
+
+	// =========================================================================
+	// adminCreateUser() — no session required
+	// =========================================================================
+
+	public function testAdminCreateUserDelegatesToPlugin(): void
+	{
+		$this->useMockPlugin();
+		$oUser = new user();
+		$oUser->setUsername('NEWADMIN');
+
+		Security::adminCreateUser($oUser);
+
+		$aCalls = array_filter(AuthPluginMock::$aCallLog, fn($e) => $e['method'] === 'createUser');
+		$this->assertNotEmpty($aCalls);
+		$this->assertSame('NEWADMIN', array_values($aCalls)[0]['username']);
+	}
+
+	public function testAdminCreateUserDoesNotRequireASession(): void
+	{
+		// Intentionally no login — must not throw due to missing session
+		$this->useMockPlugin();
+		$oUser = new user();
+		$oUser->setUsername('NOSESSION');
+
+		$bThrown = false;
+		try {
+			Security::adminCreateUser($oUser);
+		} catch (\Exception $e) {
+			// Only rethrow if it looks like a session-guard error
+			if (str_contains($e->getMessage(), 'logged in')) {
+				$bThrown = true;
+			}
+		}
+		$this->assertFalse($bThrown, 'adminCreateUser should not check for a session');
+	}
+
+	public function testAdminCreateUserThrowsWhenNoPluginAccepts(): void
+	{
+		$this->useMockPlugin();
+		AuthPluginMock::$bCreateUserThrow = true;
+
+		$oUser = new user();
+		$oUser->setUsername('CANTCREATE');
+
+		$this->expectException(\Exception::class);
+		Security::adminCreateUser($oUser);
+	}
+
+	// =========================================================================
+	// adminRemoveUser() — no session required
+	// =========================================================================
+
+	public function testAdminRemoveUserDelegatesToPlugin(): void
+	{
+		$this->useMockPlugin();
+		Security::adminRemoveUser('TOREMOVE');
+
+		$aCalls = array_filter(AuthPluginMock::$aCallLog, fn($e) => $e['method'] === 'removeUser');
+		$this->assertNotEmpty($aCalls);
+		$this->assertSame('TOREMOVE', array_values($aCalls)[0]['username']);
+	}
+
+	public function testAdminRemoveUserDoesNotRequireASession(): void
+	{
+		$this->useMockPlugin();
+		$bThrown = false;
+		try {
+			Security::adminRemoveUser('ANYONE');
+		} catch (\Exception $e) {
+			if (str_contains($e->getMessage(), 'logged in')) {
+				$bThrown = true;
+			}
+		}
+		$this->assertFalse($bThrown, 'adminRemoveUser should not check for a session');
+	}
+
+	public function testAdminRemoveUserReturnsTrueOnSuccess(): void
+	{
+		$this->useMockPlugin();
+		AuthPluginMock::$bRemoveUserResult = true;
+		$this->assertTrue(Security::adminRemoveUser('TARGET'));
+	}
+
+	public function testAdminRemoveUserReturnsFalseWhenPluginThrows(): void
+	{
+		$this->useMockPlugin();
+		AuthPluginMock::$bRemoveUserThrow = true;
+		$this->assertFalse(Security::adminRemoveUser('NONEXISTENT'));
+	}
+
+	// =========================================================================
+	// adminSetPriv() — no session required
+	// =========================================================================
+
+	public function testAdminSetPrivDelegatesToPlugin(): void
+	{
+		$this->useMockPlugin();
+		Security::adminSetPriv('TARGET', 'S');
+
+		$aCalls = array_filter(AuthPluginMock::$aCallLog, fn($e) => $e['method'] === 'setPriv');
+		$oCall  = array_values($aCalls)[0];
+		$this->assertSame('TARGET', $oCall['username']);
+		$this->assertSame('S', $oCall['priv']);
+	}
+
+	public function testAdminSetPrivDoesNotRequireASession(): void
+	{
+		$this->useMockPlugin();
+		$bThrown = false;
+		try {
+			Security::adminSetPriv('ANYONE', 'U');
+		} catch (\Exception $e) {
+			if (str_contains($e->getMessage(), 'logged in')) {
+				$bThrown = true;
+			}
+		}
+		$this->assertFalse($bThrown);
+	}
+
+	public function testAdminSetPrivRejectsInvalidPrivValue(): void
+	{
+		$this->useMockPlugin();
+		$this->expectException(\Exception::class);
+		Security::adminSetPriv('TARGET', 'X');
+	}
+
+	// =========================================================================
+	// adminSetOpt() — no session required
+	// =========================================================================
+
+	public function testAdminSetOptDelegatesToPlugin(): void
+	{
+		$this->useMockPlugin();
+		Security::adminSetOpt('TARGET', '3');
+
+		$aCalls = array_filter(AuthPluginMock::$aCallLog, fn($e) => $e['method'] === 'setOpt');
+		$oCall  = array_values($aCalls)[0];
+		$this->assertSame('TARGET', $oCall['username']);
+		$this->assertSame('3', $oCall['opt']);
+	}
+
+	public function testAdminSetOptDoesNotRequireASession(): void
+	{
+		$this->useMockPlugin();
+		$bThrown = false;
+		try {
+			Security::adminSetOpt('ANYONE', '1');
+		} catch (\Exception $e) {
+			if (str_contains($e->getMessage(), 'logged in')) {
+				$bThrown = true;
+			}
+		}
+		$this->assertFalse($bThrown);
+	}
+
+	// =========================================================================
+	// adminSetQuota() — no session required
+	// =========================================================================
+
+	public function testAdminSetQuotaDelegatesToPlugin(): void
+	{
+		$this->useMockPlugin();
+		Security::adminSetQuota('TARGET', 16384);
+
+		$aCalls = array_filter(AuthPluginMock::$aCallLog, fn($e) => $e['method'] === 'setQuota');
+		$oCall  = array_values($aCalls)[0];
+		$this->assertSame('TARGET', $oCall['username']);
+		$this->assertSame(16384, $oCall['quota']);
+	}
+
+	public function testAdminSetQuotaDoesNotRequireASession(): void
+	{
+		$this->useMockPlugin();
+		$bThrown = false;
+		try {
+			Security::adminSetQuota('ANYONE', 0);
+		} catch (\Exception $e) {
+			if (str_contains($e->getMessage(), 'logged in')) {
+				$bThrown = true;
+			}
+		}
+		$this->assertFalse($bThrown);
+	}
+
+	// =========================================================================
+	// adminSetPassword() — no session required
+	// =========================================================================
+
+	public function testAdminSetPasswordDelegatesToPlugin(): void
+	{
+		$this->useMockPlugin();
+		Security::adminSetPassword('TARGET', 'newpass');
+
+		$aCalls = array_filter(AuthPluginMock::$aCallLog, fn($e) => $e['method'] === 'setPasswordAdmin');
+		$this->assertNotEmpty($aCalls);
+		$this->assertSame('TARGET', array_values($aCalls)[0]['username']);
+	}
+
+	public function testAdminSetPasswordDoesNotRequireASession(): void
+	{
+		$this->useMockPlugin();
+		$bThrown = false;
+		try {
+			Security::adminSetPassword('ANYONE', 'pass');
+		} catch (\Exception $e) {
+			if (str_contains($e->getMessage(), 'logged in')) {
+				$bThrown = true;
+			}
+		}
+		$this->assertFalse($bThrown);
+	}
+
 }

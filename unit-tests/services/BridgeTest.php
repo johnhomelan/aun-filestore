@@ -353,6 +353,20 @@ class BridgeTest extends TestCase
         $this->assertCount(1, $aReplies);
     }
 
+    public function testNetknownRepliesWhenNetworkInWebSocketMap(): void
+    {
+        WebSocketMap::$aDynamicNetworks[128] = [];
+        $aReplies = $this->dispatch($this->netknownPkt(128));
+        $this->assertCount(1, $aReplies);
+    }
+
+    public function testNetknownRepliesWhenNetworkInPiconetMap(): void
+    {
+        PiconetMap::$aNetworks = [3];
+        $aReplies = $this->dispatch($this->netknownPkt(3));
+        $this->assertCount(1, $aReplies);
+    }
+
     // -----------------------------------------------------------------------
     // EC_BR_QUERY
     // -----------------------------------------------------------------------

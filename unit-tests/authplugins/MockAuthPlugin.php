@@ -25,6 +25,9 @@ class AuthPluginMock implements AuthPluginInterface
     /** Value returned by removeUser() when it does not throw. */
     public static bool $bRemoveUserResult = true;
 
+    /** Whether createUser() should throw. */
+    public static bool $bCreateUserThrow = false;
+
     /**
      * Ordered log of calls made to methods that Security delegates to.
      * Each entry: ['method' => string, ...args]
@@ -34,10 +37,11 @@ class AuthPluginMock implements AuthPluginInterface
     /** Reset all spy state between tests. */
     public static function reset(): void
     {
-        self::$aUsersToReturn = [];
+        self::$aUsersToReturn   = [];
         self::$bRemoveUserThrow = false;
         self::$bRemoveUserResult = true;
-        self::$aCallLog = [];
+        self::$bCreateUserThrow  = false;
+        self::$aCallLog         = [];
     }
 
     // -------------------------------------------------------------------------
@@ -72,6 +76,9 @@ class AuthPluginMock implements AuthPluginInterface
     public static function createUser(User $oUser): void
     {
         self::$aCallLog[] = ['method' => 'createUser', 'username' => $oUser->getUsername()];
+        if (self::$bCreateUserThrow) {
+            throw new \Exception('User already exists');
+        }
     }
 
     public static function removeUser(string $sUsername): bool
@@ -91,5 +98,15 @@ class AuthPluginMock implements AuthPluginInterface
     public static function setOpt(string $sUsername, string $sOpt): void
     {
         self::$aCallLog[] = ['method' => 'setOpt', 'username' => $sUsername, 'opt' => $sOpt];
+    }
+
+    public static function setQuota(string $sUsername, int $iQuota): void
+    {
+        self::$aCallLog[] = ['method' => 'setQuota', 'username' => $sUsername, 'quota' => $iQuota];
+    }
+
+    public static function setPasswordAdmin(string $sUsername, string $sPassword): void
+    {
+        self::$aCallLog[] = ['method' => 'setPasswordAdmin', 'username' => $sUsername];
     }
 }

@@ -305,4 +305,122 @@ class authpluginfileTest extends TestCase {
 		$this->assertSame(1, TestAuthPluginFile::$iWriteCallCount);
 	}
 
+	// =========================================================================
+	// setQuota() / quota persistence via buildUserObject()
+	// =========================================================================
+
+	public function testSetQuotaUpdatesUserObject(): void
+	{
+		TestAuthPluginFile::setQuota('TEST', 204800);
+		$oUser = TestAuthPluginFile::buildUserObject('TEST');
+		$this->assertSame(204800, $oUser->getQuota());
+	}
+
+	public function testSetQuotaIsCaseInsensitive(): void
+	{
+		TestAuthPluginFile::setQuota('test', 10240);
+		$oUser = TestAuthPluginFile::buildUserObject('TEST');
+		$this->assertSame(10240, $oUser->getQuota());
+	}
+
+	public function testSetQuotaDoesNothingForNonExistentUser(): void
+	{
+		TestAuthPluginFile::setQuota('NOBODY', 1234);
+		$this->assertSame(0, TestAuthPluginFile::$iWriteCallCount);
+	}
+
+	public function testSetQuotaTriggersWrite(): void
+	{
+		TestAuthPluginFile::setQuota('TEST', 512);
+		$this->assertSame(1, TestAuthPluginFile::$iWriteCallCount);
+	}
+
+	public function testBuildUserObjectReturnsZeroQuotaByDefault(): void
+	{
+		$oUser = TestAuthPluginFile::buildUserObject('TEST');
+		$this->assertSame(0, $oUser->getQuota());
+	}
+
+	public function testGetAllUsersReflectsUpdatedQuota(): void
+	{
+		TestAuthPluginFile::setQuota('TEST', 999);
+		$aUsers = TestAuthPluginFile::getAllUsers();
+		$aMatch = array_filter($aUsers, fn($u) => $u->getUsername() === 'TEST');
+		$oUser = array_values($aMatch)[0];
+		$this->assertSame(999, $oUser->getQuota());
+	}
+
+	// =========================================================================
+	// Quota field in user file format (legacy 6-field lines still parse)
+	// =========================================================================
+
+	public function testLegacySixFieldLinesParsedWithZeroQuota(): void
+	{
+		// 6-field lines (no quota column) must load without error and default quota to 0
+		$sLegacy = "LEGACY:md5-".md5('pw').":home.legacy:5001:0:U";
+		$oLogger = new \Monolog\Logger('test');
+		$oLogger->pushHandler(new \Monolog\Handler\NullHandler());
+		TestAuthPluginFile::init($oLogger, $sLegacy);
+		$oUser = TestAuthPluginFile::buildUserObject('LEGACY');
+		$this->assertSame(0, $oUser->getQuota());
+	}
+
+	public function testSevenFieldLinesParseWithQuota(): void
+	{
+		$sLine = "QUOTAUSER:md5-".md5('pw').":home.qu:5002:0:U:65536";
+		$oLogger = new \Monolog\Logger('test');
+		$oLogger->pushHandler(new \Monolog\Handler\NullHandler());
+		TestAuthPluginFile::init($oLogger, $sLine);
+		$oUser = TestAuthPluginFile::buildUserObject('QUOTAUSER');
+		$this->assertSame(65536, $oUser->getQuota());
+	}
+
+	public function testCreateUserPersistsQuota(): void
+	{
+		$oUser = new user();
+		$oUser->setUsername('NEWQUSER');
+		$oUser->setHomedir('$.NEWQUSER');
+		$oUser->setUnixUid(5100);
+		$oUser->setPriv('U');
+		$oUser->setQuota(32768);
+		TestAuthPluginFile::createUser($oUser);
+		$oLoaded = TestAuthPluginFile::buildUserObject('NEWQUSER');
+		$this->assertSame(32768, $oLoaded->getQuota());
+	}
+
+	// =========================================================================
+	// setPasswordAdmin()
+	// =========================================================================
+
+	public function testSetPasswordAdminChangesPassword(): void
+	{
+		TestAuthPluginFile::setPasswordAdmin('TEST', 'newpass');
+		$this->assertTrue(TestAuthPluginFile::login('TEST', 'newpass'));
+	}
+
+	public function testSetPasswordAdminDoesNotRequireOldPassword(): void
+	{
+		// Should succeed even though we don't supply the current password
+		TestAuthPluginFile::setPasswordAdmin('TEST', 'anothernew');
+		$this->assertTrue(TestAuthPluginFile::login('TEST', 'anothernew'));
+	}
+
+	public function testSetPasswordAdminThrowsForUnknownUser(): void
+	{
+		$this->expectException(\Exception::class);
+		TestAuthPluginFile::setPasswordAdmin('NOBODY', 'pw');
+	}
+
+	public function testSetPasswordAdminTriggersWrite(): void
+	{
+		TestAuthPluginFile::setPasswordAdmin('TEST', 'writtenpass');
+		$this->assertSame(1, TestAuthPluginFile::$iWriteCallCount);
+	}
+
+	public function testSetPasswordAdminIsCaseInsensitive(): void
+	{
+		TestAuthPluginFile::setPasswordAdmin('test', 'casepass');
+		$this->assertTrue(TestAuthPluginFile::login('TEST', 'casepass'));
+	}
+
 }

@@ -334,6 +334,22 @@ class JsonPacketTest extends TestCase
     }
 
     // =========================================================================
+    // buildEconetPacket() — destination fields
+    // =========================================================================
+
+    public function testBuildEconetPacketSetsDstNetwork(): void
+    {
+        $oPkt = $this->decodePacket($this->makePktJson(iDstNet: 5));
+        $this->assertSame(5, $oPkt->buildEconetPacket()->getDestinationNetwork());
+    }
+
+    public function testBuildEconetPacketSetsDstStation(): void
+    {
+        $oPkt = $this->decodePacket($this->makePktJson(iDstStn: 42));
+        $this->assertSame(42, $oPkt->buildEconetPacket()->getDestinationStation());
+    }
+
+    // =========================================================================
     // toString()
     // =========================================================================
 
@@ -359,5 +375,139 @@ class JsonPacketTest extends TestCase
     {
         $oPkt = $this->decodePacket($this->makePktJson());
         $this->assertStringContainsString('Header', $oPkt->toString());
+    }
+
+    // =========================================================================
+    // Nullable-type / default value guards
+    // =========================================================================
+
+    public function testGetPortBeforeDecodeReturnsZero(): void
+    {
+        $oPkt = new JsonPacket($this->oConn);
+        $this->assertSame(0, $oPkt->getPort());
+    }
+
+    public function testGetDataBeforeDecodeReturnsEmptyString(): void
+    {
+        $oPkt = new JsonPacket($this->oConn);
+        $this->assertSame('', $oPkt->getData());
+    }
+
+    public function testGetPacketTypeWithUnknownAunTypeReturnsUnknown(): void
+    {
+        // Build a pkt with AUN type 7 (not in the type map)
+        $sJson = $this->makePktJson(iAunType: 7);
+        $oPkt = $this->decodePacket($sJson);
+        $this->assertSame('Unknown', $oPkt->getPacketType());
+    }
+
+    // =========================================================================
+    // decode() — malformed pkt: missing required fields
+    // =========================================================================
+
+    public function testDecodePktMissingPayloadFieldThrows(): void
+    {
+        $this->expectException(\Exception::class);
+        $sJson = json_encode([
+            'type' => 'pkt',
+            'src'  => ['station' => 1, 'network' => 1],
+            'dst'  => ['station' => 254, 'network' => 128],
+        ]);
+        $oPkt = new JsonPacket($this->oConn);
+        $oPkt->decode($sJson);
+    }
+
+    public function testDecodePktMissingSrcFieldThrows(): void
+    {
+        $this->expectException(\Exception::class);
+        $sPayload = pack('CCCCV', 2, 1, 0, 0, 1) . 'data';
+        $sJson = json_encode([
+            'type'    => 'pkt',
+            'dst'     => ['station' => 254, 'network' => 128],
+            'payload' => $sPayload,
+        ]);
+        $oPkt = new JsonPacket($this->oConn);
+        $oPkt->decode($sJson);
+    }
+
+    public function testDecodePktMissingDstFieldThrows(): void
+    {
+        $this->expectException(\Exception::class);
+        $sPayload = pack('CCCCV', 2, 1, 0, 0, 1) . 'data';
+        $sJson = json_encode([
+            'type'    => 'pkt',
+            'src'     => ['station' => 1, 'network' => 1],
+            'payload' => $sPayload,
+        ]);
+        $oPkt = new JsonPacket($this->oConn);
+        $oPkt->decode($sJson);
+    }
+
+    public function testDecodePktPayloadTooShortThrows(): void
+    {
+        $this->expectException(\Exception::class);
+        $sJson = json_encode([
+            'type'    => 'pkt',
+            'src'     => ['station' => 1, 'network' => 1],
+            'dst'     => ['station' => 254, 'network' => 128],
+            'payload' => 'short',  // only 5 bytes, minimum is 8
+        ]);
+        $oPkt = new JsonPacket($this->oConn);
+        $oPkt->decode($sJson);
+    }
+
+    public function testDecodePktEmptyPayloadThrows(): void
+    {
+        $this->expectException(\Exception::class);
+        $sJson = json_encode([
+            'type'    => 'pkt',
+            'src'     => ['station' => 1, 'network' => 1],
+            'dst'     => ['station' => 254, 'network' => 128],
+            'payload' => '',
+        ]);
+        $oPkt = new JsonPacket($this->oConn);
+        $oPkt->decode($sJson);
+    }
+
+    // =========================================================================
+    // decode() — malformed ctrl: missing required fields
+    // =========================================================================
+
+    public function testDecodeCtrlMissingRequestFieldThrows(): void
+    {
+        $this->expectException(\Exception::class);
+        $sJson = json_encode([
+            'type' => 'ctrl',
+            'args' => [],
+        ]);
+        $oPkt = new JsonPacket($this->oConn);
+        $oPkt->decode($sJson);
+    }
+
+    public function testDecodeCtrlMissingArgsFieldThrows(): void
+    {
+        $this->expectException(\Exception::class);
+        $sJson = json_encode([
+            'type'    => 'ctrl',
+            'request' => 'dynamic_alloction_request',
+        ]);
+        $oPkt = new JsonPacket($this->oConn);
+        $oPkt->decode($sJson);
+    }
+
+    // =========================================================================
+    // getSequence()
+    // =========================================================================
+
+    public function testGetSequenceReturnsDecodedValue(): void
+    {
+        $oPkt = $this->decodePacket($this->makePktJson(iSeq: 12345));
+        $this->assertSame(12345, $oPkt->getSequence());
+    }
+
+    public function testGetSequenceBeforeDecodeReturnsZero(): void
+    {
+        $oPkt = new JsonPacket($this->oConn);
+        $this->assertSame(0, $oPkt->getSequence());
     }
 }

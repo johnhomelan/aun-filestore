@@ -9,6 +9,7 @@ use Monolog\Logger;
 use Monolog\Handler\NullHandler;
 use HomeLan\FileStore\Messages\EconetPacket;
 use HomeLan\FileStore\Services\Provider\FileServer;
+use HomeLan\FileStore\Services\Provider\PrintServer\PrinterRegistry;
 
 include_once('include/system.inc.php');
 
@@ -150,6 +151,14 @@ class FileServerTestable extends FileServer
     public bool    $stubRemoveUser    = true;
     public bool    $stubCreateHandleThrows = false;
     public bool    $stubLockedThrows = false;
+    public array   $stubAllUsers      = [];          // entries: ['user' => FsTestUser]
+    public ?object $stubUserByName    = null;
+    public string  $stubFileData       = '';
+    public bool    $stubGetFileThrows  = false;
+    public bool    $stubSaveFileThrows = false;
+    public array   $capSetUserQuota   = [];
+    public array   $capSetAdminPass   = [];
+    public array   $capSavedFiles     = [];
 
     // ---- Captures ----
     public array   $capSetMeta       = [];
@@ -232,10 +241,17 @@ class FileServerTestable extends FileServer
 
     protected function vfsCreateFile(int $iNet, int $iStn, string $sPath, int $iSize, $iLoad, $iExec): void {}
 
-    protected function vfsSaveFile(int $iNet, int $iStn, string $sPath, string $sData, $iLoad, $iExec): void {}
+    protected function vfsSaveFile(int $iNet, int $iStn, string $sPath, string $sData, $iLoad, $iExec): void
+    {
+        if($this->stubSaveFileThrows) throw new \Exception("Cannot save");
+        $this->capSavedFiles[] = compact('sPath', 'sData', 'iLoad', 'iExec');
+    }
 
     protected function vfsGetFile(int $iNet, int $iStn, string $sPath): string
-    { return ''; }
+    {
+        if($this->stubGetFileThrows) throw new \Exception("No such file");
+        return $this->stubFileData;
+    }
 
     protected function vfsReplaceFsHandle(int $iNet, int $iStn, $iOldId, $iNewId): void {}
 
@@ -256,6 +272,38 @@ class FileServerTestable extends FileServer
 
     protected function secSetOpt(int $iNet, int $iStn, string $sOpt): void
     { $this->capSetOpt[] = $sOpt; }
+
+    protected function secGetAllUsers(): array
+    { return $this->stubAllUsers; }
+
+    protected function secGetUserByName(string $sUsername): ?\HomeLan\FileStore\Authentication\User
+    { return $this->stubUserByName instanceof \HomeLan\FileStore\Authentication\User ? $this->stubUserByName : null; }
+
+    protected function secSetUserQuota(int $iNet, int $iStn, string $sUsername, int $iQuota): void
+    { $this->capSetUserQuota[] = compact('sUsername', 'iQuota'); }
+
+    protected function secSetAdminPassword(int $iNet, int $iStn, string $sUsername, string $sPassword): void
+    { $this->capSetAdminPass[] = compact('sUsername', 'sPassword'); }
+
+    protected function getFileServerPrinterRegistry(): PrinterRegistry
+    {
+        return new PrinterRegistry(<<<INI
+[PRINT]
+description   = Default printer
+enabled       = yes
+behavior      = spool
+script        =
+allowed_users =
+
+[LASER]
+description   = Laser printer
+enabled       = yes
+behavior      = script
+script        = /usr/bin/topdf %source% %destination%
+allowed_users = SYSOP
+INI
+        );
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -405,11 +453,12 @@ class FileServerTest extends TestCase
     // Unknown / unhandled function codes
     // -----------------------------------------------------------------------
 
-    public function testUsersExtSendsErrorReply(): void
+    public function testUsersExtReturnsDoneOkWhenLoggedIn(): void
     {
-        $aReplies = $this->dispatch($this->makePkt(33));  // EC_FS_FUNC_USERS_EXT
+        $aReplies = $this->dispatch($this->makePkt(33, pack('CC', 0, 5)));  // EC_FS_FUNC_USERS_EXT
         $aB = $this->bytes($aReplies[0]);
-        $this->assertSame(0x8f, $aB[1]);
+        $this->assertSame(0, $aB[0]);  // reply type DONE
+        $this->assertSame(0, $aB[1]);  // status OK
     }
 
     public function testCatHeaderReturnsCatType(): void
@@ -1208,12 +1257,11 @@ class FileServerTest extends TestCase
         $this->assertSame(0, $aB[1]);
     }
 
-    public function testCliFsoptReturnsDoneOk(): void
+    public function testCliFsoptReturnsUnrecognisedOkWithServerInfo(): void
     {
-        // Regression: *FSOPT was break without any reply — client would hang
         [$oReply] = $this->dispatch($this->makePkt(0, "FSOPT\r"));
         $aB = $this->bytes($oReply);
-        $this->assertSame(0, $aB[0]);
+        $this->assertSame(8, $aB[0]);  // type UNREC = 8
         $this->assertSame(0, $aB[1]);
     }
 
@@ -1622,5 +1670,627 @@ class FileServerTest extends TestCase
         // byte[5] is minutes (0-59)
         $this->assertGreaterThanOrEqual(0, $aB[5]);
         $this->assertLessThanOrEqual(59, $aB[5]);
+    }
+
+    // -----------------------------------------------------------------------
+    // EC_FS_FUNC_USERS_EXT (0x21)
+    // -----------------------------------------------------------------------
+
+    private function makeUsersExtUser(string $sName, bool $bAdmin = false): object
+    {
+        $oU = new FsTestUser();
+        $oU->sUsername = $sName;
+        $oU->bIsAdmin  = $bAdmin;
+        return $oU;
+    }
+
+    public function testUsersExtReturnsDoneOkStatusWhenLoggedIn(): void
+    {
+        $aReplies = $this->dispatch($this->makePkt(33, pack('CC', 0, 5)));
+        $aB = $this->bytes($aReplies[0]);
+        $this->assertSame(0, $aB[0]);  // type DONE
+        $this->assertSame(0, $aB[1]);  // status OK
+    }
+
+    public function testUsersExtReturnsErrorWhenNotLoggedIn(): void
+    {
+        $this->oFs->stubIsLoggedIn = false;
+        $aReplies = $this->dispatch($this->makePkt(33, pack('CC', 0, 5)));
+        $aB = $this->bytes($aReplies[0]);
+        $this->assertSame(0xbf, $aB[1]);
+    }
+
+    public function testUsersExtReturnsAllUsersInPage(): void
+    {
+        $this->oFs->stubAllUsers = [
+            ['user' => $this->makeUsersExtUser('ALICE')],
+            ['user' => $this->makeUsersExtUser('BOB')],
+        ];
+        // start=0, count=5
+        $aReplies = $this->dispatch($this->makePkt(33, pack('CC', 0, 5)));
+        $aB = $this->bytes($aReplies[0]);
+        // byte[2] = remaining = 0 (both users fit)
+        $this->assertSame(0, $aB[2]);
+        // Each entry: 10 username bytes + 0x0D + priv byte = 12 bytes
+        // byte[3..12] = 'ALICE     ', byte[13]=0x0D, byte[14]=0 (non-admin)
+        $sName1 = implode('', array_map('chr', array_slice($aB, 3, 10)));
+        $this->assertSame('ALICE     ', $sName1);
+        $this->assertSame(0x0d, $aB[13]);
+        $this->assertSame(0, $aB[14]);    // non-admin
+    }
+
+    public function testUsersExtSetsAdminFlagForSysopUser(): void
+    {
+        $this->oFs->stubAllUsers = [
+            ['user' => $this->makeUsersExtUser('SYSOP', true)],
+        ];
+        $aReplies = $this->dispatch($this->makePkt(33, pack('CC', 0, 5)));
+        $aB = $this->bytes($aReplies[0]);
+        $this->assertSame(1, $aB[14]);  // admin flag
+    }
+
+    public function testUsersExtPaginatesCorrectly(): void
+    {
+        $this->oFs->stubAllUsers = [
+            ['user' => $this->makeUsersExtUser('ALICE')],
+            ['user' => $this->makeUsersExtUser('BOB')],
+            ['user' => $this->makeUsersExtUser('CAROL')],
+        ];
+        // start=1, count=1 → only BOB; remaining=1 (CAROL)
+        $aReplies = $this->dispatch($this->makePkt(33, pack('CC', 1, 1)));
+        $aB = $this->bytes($aReplies[0]);
+        $this->assertSame(1, $aB[2]);   // 1 remaining
+        $sName = implode('', array_map('chr', array_slice($aB, 3, 10)));
+        $this->assertSame('BOB       ', $sName);
+    }
+
+    public function testUsersExtReturnsZeroRemainingWhenNoMore(): void
+    {
+        $this->oFs->stubAllUsers = [
+            ['user' => $this->makeUsersExtUser('ONLY')],
+        ];
+        $aReplies = $this->dispatch($this->makePkt(33, pack('CC', 0, 10)));
+        $aB = $this->bytes($aReplies[0]);
+        $this->assertSame(0, $aB[2]);
+    }
+
+    public function testUsersExtEmptyListReturnsZeroRemaining(): void
+    {
+        $this->oFs->stubAllUsers = [];
+        $aReplies = $this->dispatch($this->makePkt(33, pack('CC', 0, 5)));
+        $aB = $this->bytes($aReplies[0]);
+        $this->assertSame(0, $aB[2]);
+    }
+
+    // -----------------------------------------------------------------------
+    // EC_FS_FUNC_USER_INFO_EXT (0x22)
+    // -----------------------------------------------------------------------
+
+    private function makeRealUser(string $sName, bool $bAdmin, int $iOpt = 0): \HomeLan\FileStore\Authentication\User
+    {
+        $oU = new \HomeLan\FileStore\Authentication\User();
+        $oU->setUsername($sName);
+        $oU->setPriv($bAdmin ? 'S' : 'U');
+        $oU->setBootOpt($iOpt);
+        return $oU;
+    }
+
+    public function testUserInfoExtReturnsDoneOkForKnownUser(): void
+    {
+        $this->oFs->stubUserByName = $this->makeRealUser('JBROWN', false, 2);
+        $sReq = "JBROWN\r";
+        $aReplies = $this->dispatch($this->makePkt(34, $sReq));
+        $aB = $this->bytes($aReplies[0]);
+        $this->assertSame(0, $aB[0]);
+        $this->assertSame(0, $aB[1]);
+    }
+
+    public function testUserInfoExtReturnsPrivFlagForSysop(): void
+    {
+        $this->oFs->stubUserByName = $this->makeRealUser('ADMIN', true, 0);
+        $aReplies = $this->dispatch($this->makePkt(34, "ADMIN\r"));
+        $aB = $this->bytes($aReplies[0]);
+        $this->assertSame(1, $aB[2]);  // priv flag = 1 for sysop
+    }
+
+    public function testUserInfoExtReturnsPrivFlagForNormalUser(): void
+    {
+        $this->oFs->stubUserByName = $this->makeRealUser('BOB', false, 0);
+        $aReplies = $this->dispatch($this->makePkt(34, "BOB\r"));
+        $aB = $this->bytes($aReplies[0]);
+        $this->assertSame(0, $aB[2]);  // priv flag = 0 for normal
+    }
+
+    public function testUserInfoExtReturnsBootOpt(): void
+    {
+        $this->oFs->stubUserByName = $this->makeRealUser('USER', false, 3);
+        $aReplies = $this->dispatch($this->makePkt(34, "USER\r"));
+        $aB = $this->bytes($aReplies[0]);
+        $this->assertSame(3, $aB[3]);  // boot opt
+    }
+
+    public function testUserInfoExtReturnsErrorWhenNotLoggedIn(): void
+    {
+        $this->oFs->stubIsLoggedIn = false;
+        $aReplies = $this->dispatch($this->makePkt(34, "ANYONE\r"));
+        $aB = $this->bytes($aReplies[0]);
+        $this->assertSame(0xbf, $aB[1]);
+    }
+
+    public function testUserInfoExtReturnsDoneNotonForUnknownUser(): void
+    {
+        $this->oFs->stubUserByName = null;
+        $aReplies = $this->dispatch($this->makePkt(34, "NOBODY\r"));
+        $aB = $this->bytes($aReplies[0]);
+        $this->assertSame(0xae, $aB[1]);  // DoneNoton
+    }
+
+    // -----------------------------------------------------------------------
+    // EC_FS_FUNC_SET_USER_FREE (0x1F)
+    // -----------------------------------------------------------------------
+
+    public function testSetUserDiscFreeReturnsDoneOkForSysop(): void
+    {
+        $this->oFs->stubUser = new FsTestUser();
+        $this->oFs->stubUser->bIsAdmin = true;
+        // payload: "TARGET\r" then 3-byte quota LE (1024 = 0x00 0x04 0x00)
+        $sPayload = "TARGET\r" . pack('CCC', 0x00, 0x04, 0x00);
+        $aReplies = $this->dispatch($this->makePkt(31, $sPayload));
+        $aB = $this->bytes($aReplies[0]);
+        $this->assertSame(0, $aB[0]);
+        $this->assertSame(0, $aB[1]);
+    }
+
+    public function testSetUserDiscFreeSetsQuotaViaSec(): void
+    {
+        $this->oFs->stubUser = new FsTestUser();
+        $this->oFs->stubUser->bIsAdmin = true;
+        $sPayload = "ALICE\r" . pack('CCC', 0x00, 0x10, 0x00);  // 4096
+        $this->dispatch($this->makePkt(31, $sPayload));
+        $this->assertCount(1, $this->oFs->capSetUserQuota);
+        $this->assertSame('ALICE', $this->oFs->capSetUserQuota[0]['sUsername']);
+        $this->assertSame(4096, $this->oFs->capSetUserQuota[0]['iQuota']);
+    }
+
+    public function testSetUserDiscFreeReturnsErrorWhenNotSysop(): void
+    {
+        $this->oFs->stubUser = new FsTestUser();
+        $this->oFs->stubUser->bIsAdmin = false;
+        $sPayload = "ALICE\r" . pack('CCC', 0x00, 0x10, 0x00);
+        $aReplies = $this->dispatch($this->makePkt(31, $sPayload));
+        $aB = $this->bytes($aReplies[0]);
+        $this->assertSame(0xbd, $aB[1]);
+    }
+
+    public function testSetUserDiscFreeReturnsErrorWhenNotLoggedIn(): void
+    {
+        $this->oFs->stubUser = null;
+        $sPayload = "ALICE\r" . pack('CCC', 0x00, 0x10, 0x00);
+        $aReplies = $this->dispatch($this->makePkt(31, $sPayload));
+        $aB = $this->bytes($aReplies[0]);
+        $this->assertSame(0xbf, $aB[1]);
+    }
+
+    public function testGetUserDiscFreeReturnsPerUserQuotaWhenSet(): void
+    {
+        $oU = $this->makeRealUser('ALICE', false);
+        $oU->setQuota(4096);   // 4 KB — fits in the 16-bit portion of append24bitIntLittleEndian
+        $this->oFs->stubUserByName = $oU;
+        $aReplies = $this->dispatch($this->makePkt(30, "ALICE\r"));
+        $aB = $this->bytes($aReplies[0]);
+        $iQuota = $aB[2] | ($aB[3] << 8) | ($aB[4] << 16);
+        $this->assertSame(4096, $iQuota);
+    }
+
+    public function testGetUserDiscFreeFallsBackToConfigWhenQuotaIsZero(): void
+    {
+        $oU = $this->makeRealUser('BOB', false);
+        $oU->setQuota(0);
+        $this->oFs->stubUserByName = $oU;
+        $aReplies = $this->dispatch($this->makePkt(30, "BOB\r"));
+        $aB = $this->bytes($aReplies[0]);
+        $iQuota = $aB[2] | ($aB[3] << 8) | ($aB[4] << 16);
+        $this->assertSame((int) config::getValue('vfs_default_disc_free'), $iQuota);
+    }
+
+    // -----------------------------------------------------------------------
+    // CLI *SETPASS
+    // -----------------------------------------------------------------------
+
+    private function makeCliPkt(string $sCmd): EconetPacket
+    {
+        // EC_FS_FUNC_CLI = 0, payload is raw command string
+        return $this->makePkt(0, $sCmd . "\r");
+    }
+
+    public function testCliSetPassReturnsDoneOkForSysop(): void
+    {
+        $this->oFs->stubUser = new FsTestUser();
+        $this->oFs->stubUser->bIsAdmin = true;
+        $aReplies = $this->dispatch($this->makeCliPkt('SETPASS BOB newpassword'));
+        $aB = $this->bytes($aReplies[0]);
+        $this->assertSame(0, $aB[1]);
+    }
+
+    public function testCliSetPassCallsSecSetAdminPassword(): void
+    {
+        $this->oFs->stubUser = new FsTestUser();
+        $this->oFs->stubUser->bIsAdmin = true;
+        $this->dispatch($this->makeCliPkt('SETPASS CAROL secretword'));
+        $this->assertCount(1, $this->oFs->capSetAdminPass);
+        $this->assertSame('CAROL', $this->oFs->capSetAdminPass[0]['sUsername']);
+        $this->assertSame('secretword', $this->oFs->capSetAdminPass[0]['sPassword']);
+    }
+
+    public function testCliSetPassReturnsErrorForNonSysop(): void
+    {
+        $this->oFs->stubUser = new FsTestUser();
+        $this->oFs->stubUser->bIsAdmin = false;
+        $aReplies = $this->dispatch($this->makeCliPkt('SETPASS BOB newpassword'));
+        $aB = $this->bytes($aReplies[0]);
+        $this->assertNotSame(0, $aB[1]);
+    }
+
+    public function testCliSetPassReturnsErrorWhenNotLoggedIn(): void
+    {
+        $this->oFs->stubUser = null;
+        $aReplies = $this->dispatch($this->makeCliPkt('SETPASS BOB newpassword'));
+        $aB = $this->bytes($aReplies[0]);
+        $this->assertSame(0xbf, $aB[1]);
+    }
+
+    public function testCliSetPassReturnsErrorOnBadSyntax(): void
+    {
+        $this->oFs->stubUser = new FsTestUser();
+        $this->oFs->stubUser->bIsAdmin = true;
+        $aReplies = $this->dispatch($this->makeCliPkt('SETPASS BOB'));  // missing new password
+        $aB = $this->bytes($aReplies[0]);
+        $this->assertNotSame(0, $aB[1]);
+    }
+
+    public function testCliSetPassDoesNotCallSecWhenSyntaxIsInvalid(): void
+    {
+        $this->oFs->stubUser = new FsTestUser();
+        $this->oFs->stubUser->bIsAdmin = true;
+        $this->dispatch($this->makeCliPkt('SETPASS'));
+        $this->assertCount(0, $this->oFs->capSetAdminPass);
+    }
+
+    // -----------------------------------------------------------------------
+    // CLI *BACKUP / *COMPACT / *VERIFY / *MAP (not supported)
+    // -----------------------------------------------------------------------
+
+    /** @dataProvider notSupportedCommandProvider */
+    public function testCliNotSupportedCommandReturnsUnrecognisedOk(string $sCmd): void
+    {
+        $aReplies = $this->dispatch($this->makeCliPkt($sCmd));
+        $aB = $this->bytes($aReplies[0]);
+        $this->assertSame(8, $aB[0]);   // UNREC
+        $this->assertSame(0, $aB[1]);
+    }
+
+    /** @dataProvider notSupportedCommandProvider */
+    public function testCliNotSupportedCommandContainsNotSupportedText(string $sCmd): void
+    {
+        $aReplies = $this->dispatch($this->makeCliPkt($sCmd));
+        $sData = (string) $aReplies[0]->getData();
+        $this->assertStringContainsString('not supported', $sData);
+    }
+
+    /** @dataProvider notSupportedCommandProvider */
+    public function testCliNotSupportedCommandRequiresLogin(string $sCmd): void
+    {
+        $this->oFs->stubUser = null;
+        $aReplies = $this->dispatch($this->makeCliPkt($sCmd));
+        $aB = $this->bytes($aReplies[0]);
+        $this->assertSame(0xbf, $aB[1]);
+    }
+
+    public static function notSupportedCommandProvider(): array
+    {
+        return [['BACKUP'], ['COMPACT'], ['VERIFY'], ['MAP']];
+    }
+
+    // -----------------------------------------------------------------------
+    // CLI *FSOPT
+    // -----------------------------------------------------------------------
+
+    public function testCliFsoptRequiresLogin(): void
+    {
+        $this->oFs->stubUser = null;
+        $aReplies = $this->dispatch($this->makeCliPkt('FSOPT'));
+        $aB = $this->bytes($aReplies[0]);
+        $this->assertSame(0xbf, $aB[1]);
+    }
+
+    public function testCliFsoptWithNoArgsReturnsDiscName(): void
+    {
+        $aReplies = $this->dispatch($this->makeCliPkt('FSOPT'));
+        $sData = (string) $aReplies[0]->getData();
+        $this->assertStringContainsString((string) config::getValue('vfs_disc_name'), $sData);
+    }
+
+    public function testCliFsoptWithInfoArgReturnsDiscName(): void
+    {
+        $aReplies = $this->dispatch($this->makeCliPkt('FSOPT INFO'));
+        $sData = (string) $aReplies[0]->getData();
+        $this->assertStringContainsString((string) config::getValue('vfs_disc_name'), $sData);
+    }
+
+    public function testCliFsoptWithUnknownOptionReturnsNotSupported(): void
+    {
+        $aReplies = $this->dispatch($this->makeCliPkt('FSOPT 99'));
+        $aB = $this->bytes($aReplies[0]);
+        $this->assertSame(8, $aB[0]);   // UNREC
+        $this->assertSame(0, $aB[1]);
+        $sData = (string) $aReplies[0]->getData();
+        $this->assertStringContainsString('not supported', $sData);
+    }
+
+    // -----------------------------------------------------------------------
+    // CLI *COPY
+    // -----------------------------------------------------------------------
+
+    public function testCliCopyReturnsDoneOkOnSuccess(): void
+    {
+        $this->oFs->stubFileData = "HELLO";
+        $this->oFs->stubMeta     = new FakeMeta();
+        $aReplies = $this->dispatch($this->makeCliPkt('COPY SRC DST'));
+        $aB = $this->bytes($aReplies[0]);
+        $this->assertSame(0, $aB[0]);
+        $this->assertSame(0, $aB[1]);
+    }
+
+    public function testCliCopyCallsVfsSaveFileWithDestinationPath(): void
+    {
+        $this->oFs->stubFileData = "CONTENT";
+        $this->oFs->stubMeta     = new FakeMeta();
+        $this->dispatch($this->makeCliPkt('COPY SRCFILE DSTFILE'));
+        $this->assertCount(1, $this->oFs->capSavedFiles);
+        $this->assertSame('DSTFILE', $this->oFs->capSavedFiles[0]['sPath']);
+    }
+
+    public function testCliCopySavesSourceFileContents(): void
+    {
+        $this->oFs->stubFileData = "TESTDATA";
+        $this->oFs->stubMeta     = new FakeMeta();
+        $this->dispatch($this->makeCliPkt('COPY SRC DST'));
+        $this->assertSame("TESTDATA", $this->oFs->capSavedFiles[0]['sData']);
+    }
+
+    public function testCliCopyPreservesLoadAndExecAddresses(): void
+    {
+        $oMeta = new FakeMeta();
+        $oMeta->iLoad = 0x1234;
+        $oMeta->iExec = 0x5678;
+        $this->oFs->stubFileData = "X";
+        $this->oFs->stubMeta     = $oMeta;
+        $this->dispatch($this->makeCliPkt('COPY SRC DST'));
+        $this->assertSame(0x1234, $this->oFs->capSavedFiles[0]['iLoad']);
+        $this->assertSame(0x5678, $this->oFs->capSavedFiles[0]['iExec']);
+    }
+
+    public function testCliCopyRequiresLogin(): void
+    {
+        $this->oFs->stubUser = null;
+        $aReplies = $this->dispatch($this->makeCliPkt('COPY SRC DST'));
+        $aB = $this->bytes($aReplies[0]);
+        $this->assertSame(0xbf, $aB[1]);
+    }
+
+    public function testCliCopyReturnsSyntaxErrorWithNoArgs(): void
+    {
+        $aReplies = $this->dispatch($this->makeCliPkt('COPY'));
+        $aB = $this->bytes($aReplies[0]);
+        $this->assertSame(0xff, $aB[1]);
+    }
+
+    public function testCliCopyReturnsSyntaxErrorWithOneArg(): void
+    {
+        $aReplies = $this->dispatch($this->makeCliPkt('COPY SRC'));
+        $aB = $this->bytes($aReplies[0]);
+        $this->assertSame(0xff, $aB[1]);
+    }
+
+    public function testCliCopyReturnsErrorWhenSourceNotFound(): void
+    {
+        $this->oFs->stubGetFileThrows = true;
+        $aReplies = $this->dispatch($this->makeCliPkt('COPY SRC DST'));
+        $aB = $this->bytes($aReplies[0]);
+        $this->assertSame(0xff, $aB[1]);
+    }
+
+    public function testCliCopyDoesNotCallSaveWhenSourceNotFound(): void
+    {
+        $this->oFs->stubGetFileThrows = true;
+        $this->dispatch($this->makeCliPkt('COPY SRC DST'));
+        $this->assertCount(0, $this->oFs->capSavedFiles);
+    }
+
+    // -----------------------------------------------------------------------
+    // CLI *TYPE
+    // -----------------------------------------------------------------------
+
+    public function testCliTypeReturnsUnrecognisedOkOnSuccess(): void
+    {
+        $this->oFs->stubFileData = "LINE1\rLINE2\r";
+        $aReplies = $this->dispatch($this->makeCliPkt('TYPE MYFILE'));
+        $aB = $this->bytes($aReplies[0]);
+        $this->assertSame(8, $aB[0]);   // UNREC
+        $this->assertSame(0, $aB[1]);
+    }
+
+    public function testCliTypeOutputContainsFileContent(): void
+    {
+        $this->oFs->stubFileData = "HELLO WORLD\r";
+        $aReplies = $this->dispatch($this->makeCliPkt('TYPE MYFILE'));
+        $sData = (string) $aReplies[0]->getData();
+        $this->assertStringContainsString('HELLO WORLD', $sData);
+    }
+
+    public function testCliTypeRequiresLogin(): void
+    {
+        $this->oFs->stubUser = null;
+        $aReplies = $this->dispatch($this->makeCliPkt('TYPE MYFILE'));
+        $aB = $this->bytes($aReplies[0]);
+        $this->assertSame(0xbf, $aB[1]);
+    }
+
+    public function testCliTypeReturnsSyntaxErrorWithNoArg(): void
+    {
+        $aReplies = $this->dispatch($this->makeCliPkt('TYPE'));
+        $aB = $this->bytes($aReplies[0]);
+        $this->assertSame(0xff, $aB[1]);
+    }
+
+    public function testCliTypeReturnsErrorWhenFileNotFound(): void
+    {
+        $this->oFs->stubGetFileThrows = true;
+        $aReplies = $this->dispatch($this->makeCliPkt('TYPE MISSING'));
+        $aB = $this->bytes($aReplies[0]);
+        $this->assertSame(0xff, $aB[1]);
+    }
+
+    // -----------------------------------------------------------------------
+    // CLI *DUMP
+    // -----------------------------------------------------------------------
+
+    public function testCliDumpReturnsUnrecognisedOkOnSuccess(): void
+    {
+        $this->oFs->stubFileData = "ABCDEF";
+        $aReplies = $this->dispatch($this->makeCliPkt('DUMP MYFILE'));
+        $aB = $this->bytes($aReplies[0]);
+        $this->assertSame(8, $aB[0]);   // UNREC
+        $this->assertSame(0, $aB[1]);
+    }
+
+    public function testCliDumpOutputContainsHexBytes(): void
+    {
+        $this->oFs->stubFileData = "\x41\x42\x43";  // ABC
+        $aReplies = $this->dispatch($this->makeCliPkt('DUMP MYFILE'));
+        $sData = (string) $aReplies[0]->getData();
+        $this->assertStringContainsString('41', $sData);
+        $this->assertStringContainsString('42', $sData);
+        $this->assertStringContainsString('43', $sData);
+    }
+
+    public function testCliDumpOutputContainsAsciiRepresentation(): void
+    {
+        $this->oFs->stubFileData = "HELLO";
+        $aReplies = $this->dispatch($this->makeCliPkt('DUMP MYFILE'));
+        $sData = (string) $aReplies[0]->getData();
+        $this->assertStringContainsString('HELLO', $sData);
+    }
+
+    public function testCliDumpOutputContainsOffset(): void
+    {
+        $this->oFs->stubFileData = str_repeat('X', 32);
+        $aReplies = $this->dispatch($this->makeCliPkt('DUMP MYFILE'));
+        $sData = (string) $aReplies[0]->getData();
+        $this->assertStringContainsString('000000', $sData);
+        $this->assertStringContainsString('000010', $sData);
+    }
+
+    public function testCliDumpRequiresLogin(): void
+    {
+        $this->oFs->stubUser = null;
+        $aReplies = $this->dispatch($this->makeCliPkt('DUMP MYFILE'));
+        $aB = $this->bytes($aReplies[0]);
+        $this->assertSame(0xbf, $aB[1]);
+    }
+
+    public function testCliDumpReturnsSyntaxErrorWithNoArg(): void
+    {
+        $aReplies = $this->dispatch($this->makeCliPkt('DUMP'));
+        $aB = $this->bytes($aReplies[0]);
+        $this->assertSame(0xff, $aB[1]);
+    }
+
+    public function testCliDumpReturnsErrorWhenFileNotFound(): void
+    {
+        $this->oFs->stubGetFileThrows = true;
+        $aReplies = $this->dispatch($this->makeCliPkt('DUMP MISSING'));
+        $aB = $this->bytes($aReplies[0]);
+        $this->assertSame(0xff, $aB[1]);
+    }
+
+    public function testCliDumpEmptyFileReturnsUnrecognisedOk(): void
+    {
+        $this->oFs->stubFileData = '';
+        $aReplies = $this->dispatch($this->makeCliPkt('DUMP EMPTYFILE'));
+        $aB = $this->bytes($aReplies[0]);
+        $this->assertSame(8, $aB[0]);
+        $this->assertSame(0, $aB[1]);
+    }
+
+    // -----------------------------------------------------------------------
+    // *PRINTER
+    // -----------------------------------------------------------------------
+
+    public function testCliPrinterNotLoggedInReturnsError(): void
+    {
+        $this->oFs->stubUser = null;
+        $aReplies = $this->dispatch($this->makeCliPkt('PRINTER'));
+        $aB = $this->bytes($aReplies[0]);
+        $this->assertSame(0xbf, $aB[1]);
+    }
+
+    public function testCliPrinterNoArgsReturnsUnrecognisedOk(): void
+    {
+        $aReplies = $this->dispatch($this->makeCliPkt('PRINTER'));
+        $aB = $this->bytes($aReplies[0]);
+        $this->assertSame(8, $aB[0]);   // UnrecognisedOk flag
+        $this->assertSame(0, $aB[1]);
+    }
+
+    public function testCliPrinterNoArgsListsEnabledPrinters(): void
+    {
+        $aReplies = $this->dispatch($this->makeCliPkt('PRINTER'));
+        $sData = $aReplies[0]->getData();
+        $this->assertStringContainsString('PRINT', $sData);
+        $this->assertStringContainsString('LASER', $sData);
+    }
+
+    public function testCliPrinterKnownAvailableNameReturnsUnrecognisedOk(): void
+    {
+        $aReplies = $this->dispatch($this->makeCliPkt('PRINTER PRINT'));
+        $aB = $this->bytes($aReplies[0]);
+        $this->assertSame(8, $aB[0]);
+        $this->assertSame(0, $aB[1]);
+    }
+
+    public function testCliPrinterKnownAvailableNameReturnsIsAvailable(): void
+    {
+        $aReplies = $this->dispatch($this->makeCliPkt('PRINTER PRINT'));
+        $sData = $aReplies[0]->getData();
+        $this->assertStringContainsString('PRINT', $sData);
+        $this->assertStringContainsString('available', $sData);
+    }
+
+    public function testCliPrinterUnknownNameReturnsError(): void
+    {
+        $aReplies = $this->dispatch($this->makeCliPkt('PRINTER FAKE'));
+        $aB = $this->bytes($aReplies[0]);
+        $this->assertSame(0xff, $aB[1]);
+    }
+
+    public function testCliPrinterUnauthorisedUserReturnsError(): void
+    {
+        // LASER is restricted to SYSOP; the stub user is not SYSOP
+        $aReplies = $this->dispatch($this->makeCliPkt('PRINTER LASER'));
+        $aB = $this->bytes($aReplies[0]);
+        $this->assertSame(0xff, $aB[1]);
+    }
+
+    public function testCliPrinterAuthorisedUserReturnsUnrecognisedOk(): void
+    {
+        // Override user to SYSOP so LASER is accessible
+        $oUser = new FsTestUser();
+        $oUser->sUsername = 'SYSOP';
+        $this->oFs->stubUser = $oUser;
+        $aReplies = $this->dispatch($this->makeCliPkt('PRINTER LASER'));
+        $aB = $this->bytes($aReplies[0]);
+        $this->assertSame(8, $aB[0]);
+        $this->assertSame(0, $aB[1]);
     }
 }

@@ -24,13 +24,15 @@ use HomeLan\FileStore\Services\ServiceDispatcher;
 // ---------------------------------------------------------------------------
 class FakePrintServer extends PrintServer
 {
-    public array $aStubJobs         = [];
-    public array $aStubSpooledFiles = [];
-    public int   $iStubPort         = 0x9C;
+    public array $aStubJobs             = [];
+    public array $aStubSpooledFiles     = [];
+    public array $aStubPrinters         = [];
+    public int   $iStubPort             = 0x9C;
 
-    public function getJobs(): array         { return $this->aStubJobs; }
-    public function getSpooledFiles(): array { return $this->aStubSpooledFiles; }
-    public function getServicePorts(): array { return [$this->iStubPort]; }
+    public function getJobs(): array               { return $this->aStubJobs; }
+    public function getSpooledFiles(): array        { return $this->aStubSpooledFiles; }
+    public function getConfiguredPrinters(): array  { return $this->aStubPrinters; }
+    public function getServicePorts(): array        { return [$this->iStubPort]; }
 }
 
 // ---------------------------------------------------------------------------
@@ -116,9 +118,29 @@ class PrintServerAdminTest extends TestCase
         $this->assertArrayHasKey('spooled', $aTypes);
     }
 
+    public function testGetEntityTypesHasPrintersKey(): void
+    {
+        $this->assertArrayHasKey('printers', $this->oAdmin->getEntityTypes());
+    }
+
     // -----------------------------------------------------------------------
     // getEntityFields
     // -----------------------------------------------------------------------
+
+    public function testGetEntityFieldsPrintersHasExpectedKeys(): void
+    {
+        $aFields = $this->oAdmin->getEntityFields('printers');
+        $this->assertArrayHasKey('name',          $aFields);
+        $this->assertArrayHasKey('description',   $aFields);
+        $this->assertArrayHasKey('enabled',       $aFields);
+        $this->assertArrayHasKey('behavior',      $aFields);
+        $this->assertArrayHasKey('allowed_users', $aFields);
+    }
+
+    public function testGetEntityFieldsPrintersEnabledIsBool(): void
+    {
+        $this->assertSame('bool', $this->oAdmin->getEntityFields('printers')['enabled']);
+    }
 
     public function testGetEntityFieldsJobsHasExpectedKeys(): void
     {
@@ -247,6 +269,46 @@ class PrintServerAdminTest extends TestCase
         ];
         $oEntity = $this->oAdmin->getEntities('spooled')[0];
         $this->assertSame('/spool/DAN/f.txt', $oEntity->getId());
+    }
+
+    // -----------------------------------------------------------------------
+    // getEntities — printers
+    // -----------------------------------------------------------------------
+
+    public function testGetEntitiesPrintersReturnsEmptyByDefault(): void
+    {
+        $this->assertSame([], $this->oAdmin->getEntities('printers'));
+    }
+
+    public function testGetEntitiesPrintersCallsProviderGetConfiguredPrinters(): void
+    {
+        $this->oProvider->aStubPrinters = [
+            ['name' => 'PRINT', 'description' => 'Default', 'enabled' => true, 'behavior' => 'spool', 'allowed_users' => 'All'],
+        ];
+        $aEntities = $this->oAdmin->getEntities('printers');
+        $this->assertCount(1, $aEntities);
+        $this->assertInstanceOf(AdminEntity::class, $aEntities[0]);
+    }
+
+    public function testGetEntitiesPrintersEntityHasCorrectValues(): void
+    {
+        $this->oProvider->aStubPrinters = [
+            ['name' => 'LASER', 'description' => 'Laser printer', 'enabled' => false, 'behavior' => 'script', 'allowed_users' => 'SYSOP'],
+        ];
+        $oEntity = $this->oAdmin->getEntities('printers')[0];
+        $this->assertSame('LASER',        $oEntity->getValue('name'));
+        $this->assertSame('Laser printer',$oEntity->getValue('description'));
+        $this->assertFalse($oEntity->getValue('enabled'));
+        $this->assertSame('script',       $oEntity->getValue('behavior'));
+        $this->assertSame('SYSOP',        $oEntity->getValue('allowed_users'));
+    }
+
+    public function testGetEntitiesPrintersUsesNameAsId(): void
+    {
+        $this->oProvider->aStubPrinters = [
+            ['name' => 'NULL', 'description' => 'Discard', 'enabled' => true, 'behavior' => 'discard', 'allowed_users' => 'All'],
+        ];
+        $this->assertSame('NULL', $this->oAdmin->getEntities('printers')[0]->getId());
     }
 
     // -----------------------------------------------------------------------

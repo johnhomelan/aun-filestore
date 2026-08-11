@@ -125,5 +125,30 @@ class userTest extends TestCase {
 		$this->assertSame('$.mylib', $oUser->getLib());
 	}
 
+	// =========================================================================
+	// getQuota() / setQuota()
+	// =========================================================================
+
+	public function testGetQuotaDefaultsToZero(): void
+	{
+		$oUser = new user();
+		$this->assertSame(0, $oUser->getQuota());
+	}
+
+	public function testSetQuotaStoresValue(): void
+	{
+		$oUser = new user();
+		$oUser->setQuota(524288);
+		$this->assertSame(524288, $oUser->getQuota());
+	}
+
+	public function testSetQuotaZeroIsAccepted(): void
+	{
+		$oUser = new user();
+		$oUser->setQuota(1000);
+		$oUser->setQuota(0);
+		$this->assertSame(0, $oUser->getQuota());
+	}
+
 }
 

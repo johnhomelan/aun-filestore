@@ -148,9 +148,9 @@ class AunHandlerTest extends TestCase
         $this->assertEmpty($this->getProp('aQueue'));
     }
 
-    public function testLastSeqIsEmptyInitially(): void
+    public function testSeqWindowsIsEmptyInitially(): void
     {
-        $this->assertEmpty($this->getProp('aLastSeq'));
+        $this->assertEmpty($this->getProp('aSeqWindows'));
     }
 
     // =========================================================================
@@ -290,17 +290,16 @@ class AunHandlerTest extends TestCase
         $this->oHandler->receive($sWire, self::SRC_HOST2, self::DST_HOST);
     }
 
-    public function testReceiveUpdatesLastSeqPerSource(): void
+    public function testReceiveUpdatesSeqWindowPerSource(): void
     {
         $this->oServices->method('getReplies')->willReturn([]);
         $this->oSocket->method('send');
 
-        $sWire = $this->makeAunWire(2, 0x99, 0, 55);
-        $this->oHandler->receive($sWire, self::SRC_HOST, self::DST_HOST);
+        $this->oHandler->receive($this->makeAunWire(2, 0x99, 0, 55), self::SRC_HOST, self::DST_HOST);
 
-        $aLastSeq = $this->getProp('aLastSeq');
-        $this->assertArrayHasKey(self::SRC_HOST, $aLastSeq);
-        $this->assertSame(55, $aLastSeq[self::SRC_HOST]);
+        $aWindows = $this->getProp('aSeqWindows');
+        $this->assertArrayHasKey(self::SRC_HOST, $aWindows);
+        $this->assertContains(55, $aWindows[self::SRC_HOST]['seqs']);
     }
 
     // =========================================================================
@@ -486,6 +485,103 @@ class AunHandlerTest extends TestCase
         $this->oServices->expects($this->never())->method('clearAckEvent');
 
         $this->oHandler->receive($sAck, self::DST_HOST, '127.0.0.1:32768');
+    }
+
+    // =========================================================================
+    // receive() — malformed / unknown type rejection
+    // =========================================================================
+
+    public function testMalformedPacketTooShortIsDiscarded(): void
+    {
+        // 7 bytes — one byte short of the 8-byte minimum AUN header
+        $this->oServices->expects($this->never())->method('inboundPacket');
+
+        $this->oHandler->receive(str_repeat("\x00", 7), self::SRC_HOST, self::DST_HOST);
+    }
+
+    public function testMalformedPacketDoesNotSendAck(): void
+    {
+        $this->oSocket->expects($this->never())->method('send');
+
+        $this->oHandler->receive(str_repeat("\x00", 4), self::SRC_HOST, self::DST_HOST);
+    }
+
+    public function testUnknownPacketTypeIsDiscarded(): void
+    {
+        // Type byte 7 is not in the AUN type map (valid types are 1–6)
+        $this->oServices->expects($this->never())->method('inboundPacket');
+
+        $this->oHandler->receive($this->makeAunWire(7), self::SRC_HOST, self::DST_HOST);
+    }
+
+    public function testUnknownPacketTypeDoesNotSendAck(): void
+    {
+        $this->oSocket->expects($this->never())->method('send');
+
+        $this->oHandler->receive($this->makeAunWire(7), self::SRC_HOST, self::DST_HOST);
+    }
+
+    // =========================================================================
+    // receive() — sliding-window dedup
+    // =========================================================================
+
+    public function testDelayedRetransmitInWindowIsDuplicate(): void
+    {
+        // The old single-entry implementation forgot seq=4 once seq=8 and seq=12 arrived.
+        // The sliding window must catch the retransmit even with intervening packets.
+        $iCallCount = 0;
+        $this->oServices->method('inboundPacket')
+            ->willReturnCallback(function () use (&$iCallCount) { $iCallCount++; });
+        $this->oServices->method('getReplies')->willReturn([]);
+        $this->oSocket->method('send');
+
+        $this->oHandler->receive($this->makeAunWire(2, 0x99, 0, 4),  self::SRC_HOST, self::DST_HOST);
+        $this->oHandler->receive($this->makeAunWire(2, 0x99, 0, 8),  self::SRC_HOST, self::DST_HOST);
+        $this->oHandler->receive($this->makeAunWire(2, 0x99, 0, 12), self::SRC_HOST, self::DST_HOST);
+        // Delayed retransmit of the first packet
+        $this->oHandler->receive($this->makeAunWire(2, 0x99, 0, 4),  self::SRC_HOST, self::DST_HOST);
+
+        $this->assertSame(3, $iCallCount, 'Delayed retransmit must not dispatch to services');
+    }
+
+    public function testWindowEvictsOldestSeqWhenFull(): void
+    {
+        $this->oServices->method('getReplies')->willReturn([]);
+        $this->oSocket->method('send');
+
+        // Feed SEQ_WINDOW_SIZE+1 unique sequences so the first one is evicted
+        $iWindowSize = 8;
+        for ($i = 1; $i <= $iWindowSize + 1; $i++) {
+            $this->oHandler->receive($this->makeAunWire(2, 0x99, 0, $i * 4), self::SRC_HOST, self::DST_HOST);
+        }
+
+        $aWindows = $this->getProp('aSeqWindows');
+        // seq=4 (the first) must have been evicted
+        $this->assertNotContains(4, $aWindows[self::SRC_HOST]['seqs']);
+        // seq=8 (the second) must still be present
+        $this->assertContains(8, $aWindows[self::SRC_HOST]['seqs']);
+        // The window must not exceed the maximum size
+        $this->assertCount($iWindowSize, $aWindows[self::SRC_HOST]['seqs']);
+    }
+
+    public function testEvictedSeqIsNoLongerDetectedAsDuplicate(): void
+    {
+        $iCallCount = 0;
+        $this->oServices->method('inboundPacket')
+            ->willReturnCallback(function () use (&$iCallCount) { $iCallCount++; });
+        $this->oServices->method('getReplies')->willReturn([]);
+        $this->oSocket->method('send');
+
+        // Fill and overflow the window so seq=4 is evicted
+        $iWindowSize = 8;
+        for ($i = 1; $i <= $iWindowSize + 1; $i++) {
+            $this->oHandler->receive($this->makeAunWire(2, 0x99, 0, $i * 4), self::SRC_HOST, self::DST_HOST);
+        }
+
+        // seq=4 is no longer in the window — a very-late retransmit passes through
+        $iCallsBefore = $iCallCount;
+        $this->oHandler->receive($this->makeAunWire(2, 0x99, 0, 4), self::SRC_HOST, self::DST_HOST);
+        $this->assertSame($iCallsBefore + 1, $iCallCount, 'Evicted seq must not be treated as duplicate');
     }
 
     // =========================================================================

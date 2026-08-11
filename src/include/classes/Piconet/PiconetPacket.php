@@ -29,10 +29,10 @@ class PiconetPacket implements EncapsulationInterface {
 	protected ?int $iCb = NULL;
 
 	//Single byte (unsigned int) Port number
-	protected ?int $iPort = NULL;
+	protected int $iPort = 0;
 
 	//Binary Data String
-	protected ?string $sData = NULL;
+	protected string $sData = '';
 
 	protected ?int $iNetworkNumber = NULL;
 
@@ -96,86 +96,98 @@ class PiconetPacket implements EncapsulationInterface {
 	*/
 	public function decode($sPacket): void
 	{
-		$aPacket = explode(" ",$sPacket);
+		$aPacket = explode(" ", $sPacket);
+		if (!isset($aPacket[0])) {
+			throw new Exception("Piconet message is empty");
+		}
 		$this->sMessageType = (string) $aPacket[0];
-		switch($this->sMessageType){
+
+		switch ($this->sMessageType) {
 			case 'RX_BROADCAST':
+				if (!isset($aPacket[1])) {
+					throw new Exception("RX_BROADCAST missing scout field");
+				}
 				$sScout = $aPacket[1];
-				$sData = "";
+				$sData  = "";
 				break;
 			case 'RX_IMMEDIATE':
-				$sScout = $aPacket[1];
-				$sData = $aPacket[2];
-				break;
 			case 'RX_TRANSMIT':
+				if (!isset($aPacket[1], $aPacket[2])) {
+					throw new Exception("{$this->sMessageType} missing scout or data field");
+				}
 				$sScout = $aPacket[1];
-				$sData = $aPacket[2];
+				$sData  = $aPacket[2];
 				break;
 			default:
-				$sData="";
-				$sScout="";
-				break;
+				throw new Exception("Unknown piconet message type: {$this->sMessageType}");
 		}
-		$sRawScout = base64_decode($sScout);
-		if($sRawScout === false){
+
+		$sRawScout = base64_decode($sScout, true);
+		if ($sRawScout === false) {
 			throw new Exception("Failed to base64 decode piconet scout frame");
 		}
 
+		if (strlen($sRawScout) < 6) {
+			throw new Exception("Piconet scout frame too short (" . strlen($sRawScout) . " bytes); minimum is 6");
+		}
 
-		//Read the dst/src contolbyte port each is 1 byte unsigned int |DstStn|DstNet|SrcStn|SrcNet|Cb|Port
-		$aScout=unpack('C',(string) $sRawScout);
-		$sRawScout = substr($sRawScout,1);
+		//Read the dst/src controlbyte port each is 1 byte unsigned int |DstStn|DstNet|SrcStn|SrcNet|Cb|Port
+		$aScout = unpack('C', (string) $sRawScout);
+		$sRawScout = substr($sRawScout, 1);
 		$this->iDstStationNumber = (int) $aScout[1];
 
-		$aScout=unpack('C',(string) $sRawScout);
-		$sRawScout = substr($sRawScout,1);
+		$aScout = unpack('C', (string) $sRawScout);
+		$sRawScout = substr($sRawScout, 1);
 		$this->iDstNetworkNumber = (int) $aScout[1];
 
-		$aScout=unpack('C',(string) $sRawScout);
-		$sRawScout = substr($sRawScout,1);
+		$aScout = unpack('C', (string) $sRawScout);
+		$sRawScout = substr($sRawScout, 1);
 		$this->iStationNumber = (int) $aScout[1];
 
-		$aScout=unpack('C',(string) $sRawScout);
-		$sRawScout = substr($sRawScout,1);
+		$aScout = unpack('C', (string) $sRawScout);
+		$sRawScout = substr($sRawScout, 1);
 		$this->iNetworkNumber = (int) $aScout[1];
 
-		$aScout=unpack('C',(string) $sRawScout);
-		$sRawScout = substr($sRawScout,1);
+		$aScout = unpack('C', (string) $sRawScout);
+		$sRawScout = substr($sRawScout, 1);
 		$this->iCb = (int) $aScout[1];
 
-		$aScout=unpack('C',(string) $sRawScout);
-		$sRawScout = substr($sRawScout,1);
+		$aScout = unpack('C', (string) $sRawScout);
+		$sRawScout = substr($sRawScout, 1);
 		$this->iPort = (int) $aScout[1];
 
 		//The packets on the local network always have a network number of 0, so update the network number to the correct global number
-		if($this->iNetworkNumber==0){
+		if ($this->iNetworkNumber == 0) {
 			$this->iNetworkNumber = config::getValue('piconet_local_network');
 		}
 
-		switch($aPacket[0]){
+		switch ($aPacket[0]) {
 			case 'RX_BROADCAST':
-				$this->sData = substr($sRawScout,0,8);
+				$this->sData = substr($sRawScout, 0, 8);
 				break;
 			case 'RX_IMMEDIATE':
-				$this->sData = substr($sRawScout,0,4);	
+				$this->sData = substr($sRawScout, 0, 4);
 				break;
 			case 'RX_TRANSMIT':
-				$sRawData = base64_decode($sData);
-				if($sRawData === false){
+				$sRawData = base64_decode($sData, true);
+				if ($sRawData === false) {
 					throw new Exception("Failed to base64 decode piconet data frame");
 				}
-				$this->sData = substr($sRawData,4,strlen($sRawData)-4);
+				$this->sData = substr($sRawData, 4, strlen($sRawData) - 4);
 				break;
 		}
 	}
 
 	public function makeAck(int $iNetwork, int $iStation, int $iPort, int $iCb):void
 	{
-		$this->iNetworkNumber = $iNetwork;
-		$this->iStationNumber = $iStation;
-		$this->iPort = $iPort;
-		$this->iCb = $iCb;
-		$this->sMessageType = 'Ack';
+		$this->iNetworkNumber    = $iNetwork;
+		$this->iStationNumber    = $iStation;
+		$this->iPort             = $iPort;
+		$this->iCb               = $iCb;
+		$this->sData             = '';
+		$this->iDstNetworkNumber = 0;
+		$this->iDstStationNumber = 0;
+		$this->sMessageType      = 'Ack';
 	}
 
 	public function buildAck(): ?string

@@ -27,8 +27,19 @@ use config;
 */
 class Handler {
 
-	const RECONNECT_DELAY_MIN = 5;
-	const RECONNECT_DELAY_MAX = 300;
+	const RECONNECT_DELAY_MIN    = 5;
+	const RECONNECT_DELAY_MAX    = 300;
+	const RETRY_BACKOFF_SECONDS  = 1;
+
+	// Remote bridge mode relies on the firmware's per-packet source station/network
+	// override on the TX command (see _writeOutPkt()), so packets relayed from a remote
+	// bridge appear on the physical wire as coming from their true origin rather than
+	// from this station. Firmware below this version silently ignores the extra fields,
+	// so we refuse to run in remote bridge mode against it.
+	const REQUIRED_FIRMWARE_VERSION = '2.1.0';
+	const REQUIRED_FIRMWARE_FEATURE = 'overriding the source station/network on a per-packet basis via the TX command';
+	const PICONET_FORK_URL          = 'https://github.com/johnhomelan/piconet';
+	const PICONET_UPSTREAM_URL      = 'https://github.com/jprayner/piconet';
 
 	private ?ConnectionInterface $oConnection = null;
 
@@ -43,6 +54,14 @@ class Handler {
 	private array $aQueue = [];
 
 	private array $aAwaitingAck = [];
+
+	// Set in onConnect() when remote_bridge_enabled — true until the first STATUS
+	// response has been checked against REQUIRED_FIRMWARE_VERSION.
+	private bool $bAwaitingFirmwareCheck = false;
+
+	// Set if the board's firmware is too old for remote bridge mode; bringupInterface()
+	// is never called and send() drops packets while this is true.
+	private bool $bPiconetDisabled = false;
 
 	public function __construct(private readonly \Psr\Log\LoggerInterface $oLogger,  private readonly ServiceDispatcher $oServices, private readonly PacketDispatcher $oPacketDispatcher)
 	{
@@ -64,6 +83,8 @@ class Handler {
 		$this->oConnection = $oConnection;
 		$this->bConnected = true;
 		$this->iReconnectDelay = self::RECONNECT_DELAY_MIN;
+		$this->bAwaitingFirmwareCheck = false;
+		$this->bPiconetDisabled = false;
 	}
 
 	public function scheduleReconnect(): void
@@ -84,7 +105,14 @@ class Handler {
 		fwrite($this->oConnection->stream,"STATUS\r\r"); //@phpstan-ignore-line
 		fflush($this->oConnection->stream); //@phpstan-ignore-line
 
-		$this->bringupInterface();
+		if (config::getValue('remote_bridge_enabled')) {
+			// Defer bringing up the interface until the STATUS reply has been checked
+			// against REQUIRED_FIRMWARE_VERSION — see decodeMessage()'s STATUS case.
+			$this->oLogger->debug("Piconet handler: remote bridge enabled, awaiting STATUS to check firmware version before bringing up interface");
+			$this->bAwaitingFirmwareCheck = true;
+		} else {
+			$this->bringupInterface();
+		}
 	}
 
 	public function bringupInterface()
@@ -106,6 +134,39 @@ class Handler {
 		$this->oLogger->debug("Piconet handler: Interface setup and ready");
 	}
 
+	/**
+	 * Checks a STATUS response's reported firmware version against
+	 * self::REQUIRED_FIRMWARE_VERSION before allowing remote bridge mode to bring up
+	 * the interface. If the firmware is missing, too old, or unparseable, the Piconet
+	 * interface is disabled (see bPiconetDisabled) rather than run with source
+	 * addressing that would silently be wrong.
+	 */
+	private function _checkFirmwareVersionAndBringUp(string $sMessage): void
+	{
+		$aParts = preg_split('/\s+/', trim($sMessage));
+		$sVersion = $aParts[1] ?? '';
+
+		if ($sVersion === '' || !preg_match('/^\d+\.\d+\.\d+$/', $sVersion)) {
+			$this->oLogger->error("Piconet Handler: could not determine firmware version from STATUS response (\"".$sMessage."\"); remote bridge mode requires firmware ".self::REQUIRED_FIRMWARE_VERSION." or greater. Disabling Piconet interface.");
+			$this->bPiconetDisabled = true;
+			return;
+		}
+
+		if (version_compare($sVersion, self::REQUIRED_FIRMWARE_VERSION, '<')) {
+			$this->oLogger->error(
+				"Piconet Handler: firmware version ".$sVersion." is too old for remote bridge mode. ".
+				"Requires version ".self::REQUIRED_FIRMWARE_VERSION." or greater for ".self::REQUIRED_FIRMWARE_FEATURE.". ".
+				"Update the firmware from ".self::PICONET_FORK_URL." (not yet merged upstream — check ".self::PICONET_UPSTREAM_URL." too). ".
+				"Disabling Piconet interface."
+			);
+			$this->bPiconetDisabled = true;
+			return;
+		}
+
+		$this->oLogger->debug("Piconet Handler: firmware version ".$sVersion." meets minimum required version ".self::REQUIRED_FIRMWARE_VERSION." for remote bridge mode");
+		$this->bringupInterface();
+	}
+
 
 	public function onClose():void
 	{
@@ -120,15 +181,25 @@ class Handler {
 		}
 		$this->oConnection = null;
 
-		// Unblock any services waiting for an ack from a packet already in flight
+		// Unblock services waiting on acks. Track which (network, station) pairs have
+		// already been cleared so the in-flight packet — which appears in both
+		// aAwaitingAck and at the front of aQueue — is only cleared once.
+		$aClearedKeys = [];
+
 		foreach ($this->aAwaitingAck as $aAck) {
+			$sKey = $aAck['dst_network'] . '.' . $aAck['dst_station'];
+			$aClearedKeys[$sKey] = true;
 			$this->oServices->clearAckEvent($aAck['dst_network'], $aAck['dst_station']);
 		}
-		// Unblock any services waiting for an ack from packets still queued
 		foreach ($this->aQueue as $aEntry) {
 			$oPacket = $aEntry['packet'];
-			$this->oServices->clearAckEvent($oPacket->getDestinationNetwork(), $oPacket->getDestinationStation());
+			$sKey = $oPacket->getDestinationNetwork() . '.' . $oPacket->getDestinationStation();
+			if (!isset($aClearedKeys[$sKey])) {
+				$aClearedKeys[$sKey] = true;
+				$this->oServices->clearAckEvent($oPacket->getDestinationNetwork(), $oPacket->getDestinationStation());
+			}
 		}
+
 		$this->aAwaitingAck = [];
 		$this->aQueue = [];
 
@@ -137,9 +208,13 @@ class Handler {
 
 	public function onMessage($sMessage):void
 	{
-		$aLines = explode ("\n",$sMessage);
-		foreach($aLines as $sLine){
-			$this->decodeMessage($sLine);
+		$aLines = explode("\n", $sMessage);
+		foreach ($aLines as $sLine) {
+			try {
+				$this->decodeMessage($sLine);
+			} catch (\Exception $oEx) {
+				$this->oLogger->warning("Piconet Handler: Error processing message line: " . $oEx->getMessage());
+			}
 		}
 	}
 
@@ -150,6 +225,10 @@ class Handler {
 		switch(trim($aMessageParts[0])){
 			case 'STATUS':
 				$this->oLogger->debug("Piconet Handler: Status is ".$sMessage);
+				if ($this->bAwaitingFirmwareCheck) {
+					$this->bAwaitingFirmwareCheck = false;
+					$this->_checkFirmwareVersionAndBringUp($sMessage);
+				}
 				break;
 			case 'ERROR':
 				$this->oLogger->error("Piconet Handler: An error occured (".$sMessage.")");
@@ -160,7 +239,12 @@ class Handler {
 			case 'RX_IMMEDIATE':
 			case 'RX_TRANSMIT':
 				$oPacket = new PiconetPacket();
-				$oPacket->decode($sMessage);
+				try {
+					$oPacket->decode($sMessage);
+				} catch (\Exception $oEx) {
+					$this->oLogger->warning("Piconet Handler: Discarding malformed RX packet: " . $oEx->getMessage());
+					break;
+				}
 				$this->oLogger->debug("Piconet Handler: RX Packet ".$oPacket->toString());
 
 				// In monitor mode (when remote bridge is enabled) filter local-network unicast
@@ -177,14 +261,9 @@ class Handler {
 							break;
 						}
 					} else {
-						// Non-local network — forward via remote bridge
-						$oRemoteConn = \HomeLan\FileStore\RemoteBridge\Map::networkToConnection($iDstNet);
-						if ($oRemoteConn !== null) {
-							$this->oLogger->debug("Piconet: monitor — forwarding network {$iDstNet} via remote bridge");
-							$oRemoteConn->send($oPacket->buildEconetPacket());
-						} else {
-							$this->oLogger->debug("Piconet: monitor — no remote bridge for network {$iDstNet}, dropping");
-						}
+						// Non-local network — forward via PacketDispatcher (WebSocket, RemoteBridge, or AUN)
+						$this->oLogger->debug("Piconet: monitor — forwarding network {$iDstNet} via PacketDispatcher");
+						$this->oPacketDispatcher->sendPacket($oPacket->buildEconetPacket());
 						break;
 					}
 				}
@@ -199,19 +278,25 @@ class Handler {
 				}
 				break;
 			case 'TX_RESULT':
+				if (!isset($aMessageParts[1])) {
+					$this->oLogger->warning("Piconet Handler: TX_RESULT received with no status code");
+					break;
+				}
 				switch(trim($aMessageParts[1])){
 					case 'OK':
 						$this->oLogger->debug("Piconet Handler: TX OK");
 						$aAck = array_shift($this->aAwaitingAck);
+						if (!is_array($aAck)) {
+							$this->oLogger->warning("Piconet Handler: TX_RESULT OK with no awaiting ack entry");
+							break;
+						}
 						$this->_unQueue();
 						$oPacket = new PiconetPacket();
-						if(is_array($aAck)){
-							$oPacket->makeAck($aAck['dst_network'],$aAck['dst_station'],$aAck['port'],$aAck['flags']);
-							$this->oServices->inboundPacket($oPacket);
-							$aReplies = $this->oServices->getReplies();
-							foreach($aReplies as $oReply){
-								$this->oPacketDispatcher->sendPacket($oReply);
-							}
+						$oPacket->makeAck($aAck['dst_network'],$aAck['dst_station'],$aAck['port'],$aAck['flags']);
+						$this->oServices->inboundPacket($oPacket);
+						$aReplies = $this->oServices->getReplies();
+						foreach($aReplies as $oReply){
+							$this->oPacketDispatcher->sendPacket($oReply);
 						}
 						break;
 					case 'UNINITIALISED':
@@ -223,27 +308,47 @@ class Handler {
 					case 'TIMEOUT':
 					case 'MISC':
 						$aAck = array_shift($this->aAwaitingAck);
-						$this->oLogger->info("Piconet Handler: TX failed the error ".trim($aMessageParts[1]));
-						$this->_runQueue();
-						// If _runQueue did not push a new TX, all retries are exhausted — clear any
-						// service-level ack event so the service does not wait indefinitely.
-						if(is_array($aAck) && count($this->aAwaitingAck)==0){
+						if (!is_array($aAck)) {
+							$this->oLogger->warning("Piconet Handler: TX_RESULT " . trim($aMessageParts[1]) . " with no awaiting ack entry");
+							break;
+						}
+						$this->oLogger->info("Piconet Handler: TX failed with error ".trim($aMessageParts[1]));
+						// If the queue still holds a retry entry (retries > 0 when it was
+						// last run), schedule the retry with a short backoff. Otherwise
+						// retries are exhausted and we clear the service ack event.
+						$bHasRetry = count($this->aQueue) > 0;
+						if ($bHasRetry) {
+							if ($this->oLoop !== null) {
+								$this->oLoop->addTimer(self::RETRY_BACKOFF_SECONDS, function () {
+									$this->_runQueue();
+								});
+							} else {
+								$this->_runQueue();
+							}
+						} else {
 							$this->oServices->clearAckEvent($aAck['dst_network'],$aAck['dst_station']);
 						}
 						break;
 					case 'UNEXPECTED':
-					default:
 						$aAck = array_shift($this->aAwaitingAck);
-						$this->oLogger->error("Piconet Handler: Encountered an internal error with the interface while transmitting (this should never happen), with the message ".trim($aMessageParts[1]));
-						// Clear ack event immediately on internal error — no further TX will happen.
-						if(is_array($aAck)){
-							$this->oServices->clearAckEvent($aAck['dst_network'],$aAck['dst_station']);
+						if (!is_array($aAck)) {
+							$this->oLogger->warning("Piconet Handler: TX_RESULT UNEXPECTED with no awaiting ack entry");
+							break;
 						}
+						$this->oLogger->error("Piconet Handler: Internal interface error while transmitting (UNEXPECTED), message: ".trim($aMessageParts[1]));
+						// No retry on internal errors — clear ack event immediately.
+						$this->oServices->clearAckEvent($aAck['dst_network'],$aAck['dst_station']);
+						break;
+					default:
+						$this->oLogger->warning("Piconet Handler: Ignoring unknown TX_RESULT code: " . trim($aMessageParts[1]));
 						break;
 				}
 				break;
+			default:
+				$this->oLogger->debug("Piconet Handler: Ignoring unknown message type: " . trim($aMessageParts[0]));
+				break;
 		}
-	}		
+	}
 
 	public function onError(\Exception $oError):void
 	{
@@ -252,6 +357,10 @@ class Handler {
 
 	public function send(EconetPacket $oPacket, int $iRetries = 3):void
 	{
+		if ($this->bPiconetDisabled) {
+			$this->oLogger->warning("Piconet: dropping packet to ".$oPacket->getDestinationNetwork().".".$oPacket->getDestinationStation()." — Piconet interface disabled (firmware too old for remote bridge mode)");
+			return;
+		}
 		if (!$this->bConnected) {
 			$this->oLogger->warning("Piconet: dropping packet to ".$oPacket->getDestinationNetwork().".".$oPacket->getDestinationStation()." — device not connected");
 			return;
@@ -288,8 +397,12 @@ class Handler {
 	}
 	private function _writeOutPkt(EconetPacket $oPacket)
 	{
+		if ($this->oConnection === null) {
+			$this->oLogger->warning("Piconet Handler: Cannot transmit — no active connection");
+			return;
+		}
 		$iDstNetwork = $oPacket->getDestinationNetwork();
-		//The local network is 
+		//The local network is
 		if($iDstNetwork == config::getValue('piconet_local_network')){
 			$iDstNetwork = 0;
 		}
@@ -302,11 +415,28 @@ class Handler {
 			default:
 				$this->oLogger->debug("Piconet Handler: Sending unicast packet to station ".$oPacket->getDestinationStation()." network ".$iDstNetwork." port ".$oPacket->getPort()." packet ".base64_encode($oPacket->getData()));
 				$this->aAwaitingAck[] = ['dst_station'=>$oPacket->getDestinationStation(),'dst_network'=>$oPacket->getDestinationNetwork(),'port'=>$oPacket->getPort(),'flags'=>$oPacket->getFlags()];
-				fwrite($this->oConnection->stream,"TX ".$oPacket->getDestinationStation()." ".$iDstNetwork." ".$oPacket->getFlags()." ".$oPacket->getPort()." ".base64_encode($oPacket->getData())."\r\r"); //@phpstan-ignore-line
+
+				$sTxCommand = "TX ".$oPacket->getDestinationStation()." ".$iDstNetwork." ".$oPacket->getFlags()." ".$oPacket->getPort()." ".base64_encode($oPacket->getData());
+
+				// When remote bridge mode is enabled, use the updated TX form and override
+				// the source station/network on this transmission so a packet relayed from
+				// a remote bridge appears on the physical wire as coming from its true
+				// origin, not from this station (requires firmware
+				// self::REQUIRED_FIRMWARE_VERSION or greater — see onConnect()/
+				// decodeMessage()). Packets with no explicit source — e.g. replies from the
+				// local FileServer — fall back to the original TX form so the board uses
+				// its own configured station, exactly as before this feature existed.
+				$iSrcStation = $oPacket->getSourceStation();
+				$iSrcNetwork = $oPacket->getSourceNetwork();
+				if (config::getValue('remote_bridge_enabled') && $iSrcStation !== null && $iSrcNetwork !== null) {
+					$sTxCommand .= " ".$iSrcStation." ".$iSrcNetwork;
+				}
+
+				fwrite($this->oConnection->stream, $sTxCommand."\r\r"); //@phpstan-ignore-line
 				fflush($this->oConnection->stream); //@phpstan-ignore-line
-				
+
 				break;
 		}
 	}
 
-}	
+}

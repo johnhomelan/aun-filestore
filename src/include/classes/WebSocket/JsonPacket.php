@@ -29,14 +29,14 @@ class JsonPacket implements EncapsulationInterface {
 	//Single byte (unsigned int) Aun Packet Type 1=>BroadCast =
 	protected ?int $iAunPktType = NULL;
 	
-	//Single byte (unsigned int) Control/flag 
-	protected ?int $iCb = NULL;
+	//Single byte (unsigned int) Control/flag
+	protected int $iCb = 0;
 
 	//Single byte (unsigned int) Padding
-	protected ?int $iPadding = NULL;
+	protected int $iPadding = 0;
 
 	//Single byte (unsigned int) Port number
-	protected ?int $iPort = NULL;
+	protected int $iPort = 0;
 
 	//32 bit int unsigned  little-endian 
 	protected int $iSeq = 0;
@@ -51,7 +51,7 @@ class JsonPacket implements EncapsulationInterface {
 	protected array $aCtrlRequestArgs = [];
 
 	//Binary Data String
-	protected ?string $sData = NULL;
+	protected string $sData = '';
 
 	protected ?int $iNetworkNumber = NULL;
 
@@ -95,7 +95,12 @@ class JsonPacket implements EncapsulationInterface {
 	*/ 
 	public function getPacketType(): string
 	{
-		return $this->aAunTypeMap[$this->iAunPktType];
+		return $this->aAunTypeMap[$this->iAunPktType] ?? 'Unknown';
+	}
+
+	public function getSequence(): int
+	{
+		return $this->iSeq;
 	}
 
 	public function getDstStation(): ?int
@@ -132,42 +137,59 @@ class JsonPacket implements EncapsulationInterface {
 		$this->sJsonMsgType = $aPacket['type'];
 		switch($this->sJsonMsgType){
 			case 'pkt':
+				if (!isset($aPacket['src'], $aPacket['dst'], $aPacket['payload'])) {
+					throw new Exception("pkt message missing required src, dst, or payload fields");
+				}
+				if (!isset($aPacket['src']['station'], $aPacket['src']['network'])) {
+					throw new Exception("pkt message src missing station or network");
+				}
+				if (!isset($aPacket['dst']['station'], $aPacket['dst']['network'])) {
+					throw new Exception("pkt message dst missing station or network");
+				}
+				$sPayload = (string) $aPacket['payload'];
+				if (strlen($sPayload) < 8) {
+					throw new Exception("pkt payload too short (" . strlen($sPayload) . " bytes); minimum is 8");
+				}
+
 				$this->iStationNumber = $aPacket['src']['station'];
 				$this->iNetworkNumber = $aPacket['src']['network'];
 				$this->iDstStationNumber = $aPacket['dst']['station'];
 				$this->iDstNetworkNumber = $aPacket['dst']['network'];
 
 				//Read the aun packet type 1 byte unsigned int
-				$aHeader=unpack('C',(string) $aPacket['payload']);
+				$aHeader=unpack('C',$sPayload);
 				$this->iAunPktType = $aHeader[1];
-				$sBinaryString = substr((string) $aPacket['payload'],1);
-				
+				$sBinaryString = substr($sPayload,1);
+
 				//Read the dst port 1 byte unsigned int
 				$aHeader=unpack('C',$sBinaryString);
 				$this->iPort = $aHeader[1];
 				$sBinaryString = substr($sBinaryString,1);
-				
+
 				//Read the flag 1 byte unsigned int
 				$aHeader=unpack('C',$sBinaryString);
 				$this->iCb = $aHeader[1];
 				$sBinaryString = substr($sBinaryString,1);
-				
+
 				//Retrans 1 byte unsigned int
 				$aHeader=unpack('C',$sBinaryString);
 				$this->iPadding = $aHeader[1];
 				$sBinaryString = substr($sBinaryString,1);
-				
+
 				//Sequence 4 bytes little-endian
 				$aHeader=unpack('V',$sBinaryString);
 				$this->iSeq = $aHeader[1];
 				$sBinaryString = substr($sBinaryString,4);
 
-				//The reset is data
+				//The rest is data
 				$this->sData = $sBinaryString;
 				AunMap::setAunCounter('ws_'.$this->iNetworkNumber.'_'.$this->iStationNumber,$this->iSeq);
 
 				break;
 			case 'ctrl':
+				if (!isset($aPacket['request'], $aPacket['args'])) {
+					throw new Exception("ctrl message missing required request or args fields");
+				}
 				$this->sCtrlRequest = $aPacket['request'];
 				$this->aCtrlRequestArgs = $aPacket['args'];
 				break;
@@ -284,6 +306,8 @@ class JsonPacket implements EncapsulationInterface {
 		$oEconetPacket->setFlags($this->iCb);
 		$oEconetPacket->setSourceNetwork($this->iNetworkNumber);
 		$oEconetPacket->setSourceStation($this->iStationNumber);
+		$oEconetPacket->setDestinationNetwork($this->iDstNetworkNumber);
+		$oEconetPacket->setDestinationStation($this->iDstStationNumber);
 		$oEconetPacket->setData($this->sData);
 		return $oEconetPacket;
 	}

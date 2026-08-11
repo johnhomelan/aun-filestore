@@ -44,7 +44,7 @@ class Map {
 	{
 		self::$oLogger = $oLogger;
 		if(is_null($sMap)){
-			if(!file_exists(config::getValue('websocketmap_file'))){
+			if(!file_exists(config::getValue('websocketmap_dynamic_network_range_file'))){
 				self::$oLogger->info("websocketmapper: The configuration files for the websocket map does not exist.");
 				return;
 			}

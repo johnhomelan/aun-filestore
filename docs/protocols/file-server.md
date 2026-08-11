@@ -71,6 +71,7 @@ When `status != 0x00`, the packet is an error reply:
 | 0x99 | No such file / unimplemented command |
 | 0xAE | Not logged on (DoneNoton)            |
 | 0xBB | Incorrect password                   |
+| 0xBD | Insufficient privilege               |
 | 0xBE | Not a directory                      |
 | 0xBF | Who are you? (not authenticated)     |
 | 0xC3 | File already open                    |
@@ -92,7 +93,19 @@ Byte 1: (year_2digit << 4) | month  — high nibble = year mod 100, low nibble =
 
 Sent as either a unicast or broadcast. The data payload is a raw CLI command string. The server parses and dispatches to the appropriate CLI handler. Broadcasts are accepted without an authenticated session (used for disc discovery).
 
-Supported CLI commands: `BYE`, `CAT`, `CDIR`, `DELETE`, `DIR`, `FSOPT`, `I AM`, `INFO`, `LIB`, `LOAD`, `LOGOFF`, `OPT`, `PASS`, `RENAME`, `SDISC`, `NEWUSER`, `PRIV`, `REMUSER`, `CHROOT`, `CHROOTOFF`.
+Supported CLI commands: `BYE`, `CAT`, `CDIR`, `DELETE`, `DIR`, `FSOPT`, `I AM`, `INFO`, `LIB`, `LOAD`, `LOGOFF`, `OPT`, `PASS`, `RENAME`, `SDISC`, `NEWUSER`, `PRIV`, `REMUSER`, `SETPASS`, `CHROOT`, `CHROOTOFF`.
+
+#### User management CLI commands
+
+| Command | Privilege | Description |
+|---------|-----------|-------------|
+| `*I AM username password` | None | Log in |
+| `*BYE` / `*LOGOFF` | Any | Log out |
+| `*PASS oldpassword newpassword` | Any | Change own password (old password required) |
+| `*SETPASS username newpassword` | Sysop | Reset another user's password without requiring the old password |
+| `*NEWUSER username` | Sysop | Create a new user account |
+| `*REMUSER username` | Sysop | Delete a user account |
+| `*PRIV username S\|U` | Sysop | Set a user's privilege level |
 
 ### 0x01 — EC_FS_FUNC_SAVE
 
@@ -468,20 +481,75 @@ If size > 0, the server allocates the file and instructs the client to stream da
 
 ```
 Request payload:
-  [1+]  Username string
+  [1+]  Username string (CR-terminated)
 ```
 
 Reply: `[0x00, 0x00, free(3 LE)]`
 
-Value is taken from configuration (`vfs_default_disc_free`).
+Returns the per-user disc quota if one has been set via `EC_FS_FUNC_SET_USER_FREE` (0x1F). Falls back to the global `vfs_default_disc_free` configuration value when no per-user quota is set (quota = 0).
+
+### 0x1F — EC_FS_FUNC_SET_USER_FREE
+
+Sets the disc quota for a named user. Requires sysop privilege (`S`). The quota is stored persistently in the user database.
+
+```
+Request payload:
+  [1+]  Username string (CR-terminated)
+  [n]   Quota (uint24 LE) — bytes; 0 resets to the global default
+```
+
+Reply: `[0x00, 0x00]`
+
+Error codes:
+- `0xBF` — caller is not logged in
+- `0xBD` — caller does not have sysop privilege
 
 ### 0x20 — EC_FS_FUNC_WHO_AM_I
 
 Reply: `[0x00, 0x00, username_string, 0x0D]`
 
-### 0x21 / 0x22 — EC_FS_FUNC_USERS_EXT / EC_FS_FUNC_USER_INFO_EXT
+### 0x21 — EC_FS_FUNC_USERS_EXT
 
-Not implemented. Returns error 0x8F "Not implemented".
+Returns a paginated list of **all registered users**, not just those currently logged in. Requires an authenticated session.
+
+```
+Request payload:
+  [1]  Start index (0-based)
+  [2]  Count (max entries to return)
+```
+
+Reply:
+```
+[0x00, 0x00, remaining_count,
+  (username(10 space-padded) + 0x0D + priv_flag(1)) × n]
+```
+
+`remaining_count` is the number of users after the returned page (i.e. not yet returned).
+`priv_flag`: `1` = sysop (`S`), `0` = normal user (`U`).
+
+Error codes:
+- `0xBF` — caller is not logged in
+
+### 0x22 — EC_FS_FUNC_USER_INFO_EXT
+
+Returns privilege and boot option for a named user. The user does not need to be currently logged in. Requires an authenticated session.
+
+```
+Request payload:
+  [1+]  Username string (CR-terminated)
+```
+
+Reply OK:
+```
+[0x00, 0x00, priv_flag(1), boot_opt(1)]
+```
+
+`priv_flag`: `1` = sysop (`S`), `0` = normal user (`U`).
+`boot_opt`: boot option value (0–3, same as `SET_OPT4`).
+
+Error codes:
+- `0xBF` — caller is not logged in
+- `0xAE` — (DoneNoton) named user not found in the user database
 
 ### 0x23 — EC_FS_FUNC_COPY_DATA
 
@@ -514,7 +582,7 @@ Two privilege levels are supported:
 
 | Level | Meaning                                           |
 |-------|---------------------------------------------------|
-| S     | Sysop — can create/remove users and change privileges |
+| S     | Sysop — can create/remove users, change privileges, reset passwords, and set per-user disc quotas |
 | U     | Normal user                                       |
 
 ## Streaming Data Protocol

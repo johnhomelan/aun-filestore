@@ -312,9 +312,10 @@ Example from `PrintServer\Admin`:
 public function getEntityFields(string $sType): array
 {
     return match ($sType) {
-        'jobs'    => ['network' => 'int', 'station' => 'int', 'began' => 'datetime', 'size' => 'int'],
-        'spooled' => ['user' => 'string', 'filename' => 'string', 'size' => 'int', 'modified' => 'datetime', 'download' => 'download'],
-        default   => [],
+        'printers' => ['name' => 'string', 'description' => 'string', 'enabled' => 'bool', 'behavior' => 'string', 'allowed_users' => 'string'],
+        'jobs'     => ['network' => 'int', 'station' => 'int', 'began' => 'datetime', 'size' => 'int', 'printer' => 'string'],
+        'spooled'  => ['printer' => 'string', 'user' => 'string', 'filename' => 'string', 'size' => 'int', 'modified' => 'datetime', 'download' => 'download'],
+        default    => [],
     };
 }
 ```

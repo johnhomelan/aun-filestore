@@ -323,7 +323,7 @@ vfs_plugins = DfsSsd,AdfsAdl,LocalFile
 
 **vfs_default_disc_free**
 
-Fake free-space value reported to BBC clients (which cannot handle real modern disk sizes).  Value is in Econet disc-space units.  Default is `0x9000`.
+Free-space value (in bytes) reported to BBC clients for the disc and for any user whose per-user quota has not been set (BBC clients cannot handle real modern disk sizes, so this is intentionally small).  This value also serves as the default per-user disc quota — it is returned by `EC_FS_FUNC_GET_USER_FREE` (0x1E) for any user whose quota is `0`.  Default is `0x9000` (36,864 bytes).
 
 ~~~~~~
 vfs_default_disc_free = 0x9000
@@ -490,9 +490,64 @@ vfs_plugin_catalogue_reload_interval = 3600
 Print Server
 ==
 
+**print_server_printers_file**
+
+Path to the virtual printer configuration file.  This file defines the named printers that Econet clients can send jobs to.  Default is `printers.cfg`.
+
+The file uses an INI-with-sections format — one `[SECTION]` per printer.  The section name is the printer name as seen by Econet clients (1–6 uppercase characters).
+
+Fields per printer:
+
+| Field | Values | Description |
+|-------|--------|-------------|
+| `description` | string | Human-readable label shown by `*PRINTER` and the admin UI |
+| `enabled` | `yes` / `no` | Whether the printer accepts jobs |
+| `behavior` | `spool`, `script`, `discard` | What to do when a job completes |
+| `script` | path string | Conversion command (see `print_server_conversion_script`); blank falls back to the global default |
+| `allowed_users` | comma-separated names | Users permitted to send to this printer; blank allows everyone |
+
+Behaviour values:
+
+* `spool` — save the raw print data to the spool directory.  No conversion.
+* `script` — save the raw data, then launch the per-printer or global conversion script asynchronously.  The script never blocks the server.
+* `discard` — accept the job and drop it.  Useful for a `/dev/null` queue.
+
+If this file does not exist, the server falls back to a single default `PRINT` printer using `script` behaviour (which preserves the pre-multi-printer semantics: save + optional conversion).
+
+Scripts are **always run asynchronously** via ReactPHP — they never delay replies to other Econet clients.  Both `%source%` and `%destination%` are substituted at run time.
+
+~~~~~~
+print_server_printers_file = printers.cfg
+~~~~~~
+
+Example `printers.cfg`:
+
+~~~~~~
+[PRINT]
+description   = Default printer
+enabled       = yes
+behavior      = script
+script        =
+allowed_users =
+
+[PDF]
+description   = PDF output
+enabled       = yes
+behavior      = script
+script        = /usr/bin/gs -q -dBATCH -sDEVICE=pdfwrite -sOutputFile=%destination% %source%
+allowed_users =
+
+[NULL]
+description   = Discard (testing)
+enabled       = yes
+behavior      = discard
+script        =
+allowed_users = ADMIN
+~~~~~~
+
 **print_server_spool_dir**
 
-Directory to which incoming print jobs are spooled.  Per-user subdirectories are created automatically.  Default is `/tmp/econetprint`.
+Base directory to which incoming print jobs are spooled.  Jobs are stored under `{spool_dir}/{printer}/{user}/`.  The printer and user subdirectories are created automatically.  Default is `/tmp/econetprint`.
 
 ~~~~~~
 print_server_spool_dir = /var/spool/aun-filestore-print
@@ -500,12 +555,12 @@ print_server_spool_dir = /var/spool/aun-filestore-print
 
 **print_server_conversion_script**
 
-Optional shell command run after each raw `.raw` spool file is written.  Two placeholders are substituted at run time:
+Global fallback conversion command used when a printer's `script` field is blank.  Two placeholders are substituted at run time:
 
 * `%source%` — full path to the input `.raw` file
 * `%destination%` — full path for the converted output file (`.ps` extension)
 
-If not set, no conversion is performed.  Default is `/usr/bin/esc2ps -i %source% -o %destination%`.
+The script is run asynchronously and never blocks the server.  If not set and a printer has an empty `script` field, no conversion is performed.  Default is `/usr/bin/esc2ps -i %source% -o %destination%`.
 
 ~~~~~~
 print_server_conversion_script = /usr/bin/esc2ps -i %source% -o %destination%

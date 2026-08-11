@@ -23,8 +23,9 @@ Impliments a number of network services, that sit ontop of the econet encapsulat
 
 * File Server
     * User/Password Login with a priv model which works the same way, as the Acorn filestore
-    * Boot flags are modeled 
-    * Implements all the Acorn filestore calls, and some of the MDFS extra features 
+    * Boot flags are modeled
+    * Disc quota values can be read and set on a per-user basis for compatibility with legacy Acorn admin tools (`*SETPASS`, `EC_FS_FUNC_GET_USER_FREE`, `EC_FS_FUNC_SET_USER_FREE`).  Quotas are not enforced — given that modern storage is effectively infinite compared to the storage requirements of a BBC Micro, limiting disk usage per user serves no practical purpose.  The reported quota defaults to the `vfs_default_disc_free` config value for any user without an explicit quota set.
+    * Implements all the Acorn filestore calls, and some of the MDFS extra features
 * Print Service
     * Receives print jobs from BBC/Acorn workstations over Econet
     * Raw print data is spooled to a per-user sub-directory under the configured spool directory

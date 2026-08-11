@@ -25,6 +25,21 @@ torchnet_download:
 encapsulation_page:
     path: /encapsulation
     defaults: { _controller: 'HomeLan\FileStore\Admin\Controller\EncapsulationController::index' }
+users_list:
+    path: /users
+    defaults: { _controller: 'HomeLan\FileStore\Admin\Controller\UserController::index' }
+users_create:
+    path: /users/create
+    defaults: { _controller: 'HomeLan\FileStore\Admin\Controller\UserController::create' }
+users_edit:
+    path: /users/edit
+    defaults: { _controller: 'HomeLan\FileStore\Admin\Controller\UserController::edit' }
+users_delete:
+    path: /users/delete
+    defaults: { _controller: 'HomeLan\FileStore\Admin\Controller\UserController::delete' }
+users_setpassword:
+    path: /users/setpassword
+    defaults: { _controller: 'HomeLan\FileStore\Admin\Controller\UserController::setPassword' }
 live:
     path: /kube/live
     defaults: { _controller: 'HomeLan\FileStore\Admin\Controller\IndexController::kube' }

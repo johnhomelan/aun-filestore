@@ -24,6 +24,9 @@
 		</tbody>
 	</table>
 
+	<h2>User Management</h2>
+	<p><a href="/users" class="btn btn-outline-primary">Manage Users</a></p>
+
 	<h2>Encapsulation Methods</h2>
 	<table class="table">
 		<thead>

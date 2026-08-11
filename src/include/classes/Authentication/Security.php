@@ -320,7 +320,194 @@ class Security {
 	}
 
 	/**
-	  * Sets the boot option for a user 
+	  * Looks up a user by username in the auth plugins (not restricted to logged-in users)
+	  *
+	  * @return null|\HomeLan\FileStore\Authentication\User
+	*/
+	public static function getUserByName(string $sUsername): ?\HomeLan\FileStore\Authentication\User
+	{
+		foreach(self::getAllUsers() as $aEntry){
+			$oUser = $aEntry['user'];
+			if(strtoupper((string) $oUser->getUsername()) === strtoupper(trim($sUsername))){
+				return $oUser;
+			}
+		}
+		return null;
+	}
+
+	/**
+	  * Sets the disc quota for a user (sysop only)
+	  *
+	  * @param int $iQuota Quota in bytes; 0 = use the global default
+	*/
+	public static function setUserQuota(int $iNetwork, int $iStation, string $sUsername, int $iQuota): void
+	{
+		if(!Security::isLoggedIn($iNetwork,$iStation)){
+			throw new Exception("Security: Unable to setUserQuota, no user is logged in on ".$iNetwork.".".$iStation);
+		}
+
+		$oLoggedInUser = Security::getUser($iNetwork,$iStation);
+		if(!$oLoggedInUser->isAdmin()){
+			throw new Exception("Security: Unable to setUserQuota, the user logged in on ".$iNetwork.".".$iStation." (".$oLoggedInUser->getUsername().") does not have admin rights.");
+		}
+
+		$aPlugins = Security::_getAuthPlugins();
+		self::$oLogger->info("Security: Setting quota for ".$sUsername." to ".$iQuota);
+		foreach($aPlugins as $sPlugin){
+			try {
+				$sPlugin::setQuota($sUsername,$iQuota);
+				break;
+			}catch(Exception $oException){
+				self::$oLogger->debug("Security: Exception thrown by plugin ".$sPlugin." when attempting to set quota for ".$sUsername." (".$oException->getMessage().")");
+			}
+		}
+	}
+
+	/**
+	  * Sets a user's password without requiring the old password (sysop only)
+	  *
+	*/
+	public static function setAdminPassword(int $iNetwork, int $iStation, string $sUsername, string $sPassword): void
+	{
+		if(!Security::isLoggedIn($iNetwork,$iStation)){
+			throw new Exception("Security: Unable to setAdminPassword, no user is logged in on ".$iNetwork.".".$iStation);
+		}
+
+		$oLoggedInUser = Security::getUser($iNetwork,$iStation);
+		if(!$oLoggedInUser->isAdmin()){
+			throw new Exception("Security: Unable to setAdminPassword, the user logged in on ".$iNetwork.".".$iStation." (".$oLoggedInUser->getUsername().") does not have admin rights.");
+		}
+
+		$aPlugins = Security::_getAuthPlugins();
+		self::$oLogger->info("Security: Admin password reset for ".$sUsername." by ".$oLoggedInUser->getUsername());
+		foreach($aPlugins as $sPlugin){
+			try {
+				$sPlugin::setPasswordAdmin($sUsername,$sPassword);
+				break;
+			}catch(Exception $oException){
+				self::$oLogger->debug("Security: Exception thrown by plugin ".$sPlugin." when attempting admin password reset for ".$sUsername." (".$oException->getMessage().")");
+			}
+		}
+	}
+
+	/**
+	  * Creates a new user directly (no session required — for trusted admin web interface use).
+	  *
+	  * @param \HomeLan\FileStore\Authentication\User $oUser
+	*/
+	public static function adminCreateUser(\HomeLan\FileStore\Authentication\User $oUser): void
+	{
+		$aPlugins = Security::_getAuthPlugins();
+		self::$oLogger->info("Security: Admin web interface creating user ".$oUser->getUsername());
+		$bCreated = false;
+		foreach($aPlugins as $sPlugin){
+			try {
+				$sPlugin::createUser($oUser);
+				$bCreated = true;
+				break;
+			}catch(Exception $oException){
+				self::$oLogger->debug("Security: Plugin ".$sPlugin." could not create user ".$oUser->getUsername()." (".$oException->getMessage().")");
+			}
+		}
+		if(!$bCreated){
+			throw new Exception("Security: No auth plugin accepted creating user ".$oUser->getUsername());
+		}
+	}
+
+	/**
+	  * Removes a user directly (no session required — for trusted admin web interface use).
+	*/
+	public static function adminRemoveUser(string $sUsername): bool
+	{
+		$aPlugins = Security::_getAuthPlugins();
+		self::$oLogger->info("Security: Admin web interface removing user ".$sUsername);
+		foreach($aPlugins as $sPlugin){
+			try {
+				return $sPlugin::removeUser($sUsername);
+			}catch(Exception $oException){
+				self::$oLogger->debug("Security: Plugin ".$sPlugin." could not remove user ".$sUsername." (".$oException->getMessage().")");
+			}
+		}
+		return false;
+	}
+
+	/**
+	  * Sets privilege for a user directly (no session required — for trusted admin web interface use).
+	  *
+	  * @param string $sPriv S|U
+	*/
+	public static function adminSetPriv(string $sUsername, string $sPriv): void
+	{
+		if($sPriv !== 'S' && $sPriv !== 'U'){
+			throw new Exception("Security: ".$sPriv." is an invalid priv setting.");
+		}
+		$aPlugins = Security::_getAuthPlugins();
+		self::$oLogger->info("Security: Admin web interface setting priv for ".$sUsername." to ".$sPriv);
+		foreach($aPlugins as $sPlugin){
+			try {
+				$sPlugin::setPriv($sUsername, $sPriv);
+				break;
+			}catch(Exception $oException){
+				self::$oLogger->debug("Security: Plugin ".$sPlugin." could not setPriv for ".$sUsername." (".$oException->getMessage().")");
+			}
+		}
+	}
+
+	/**
+	  * Sets boot option for a user directly (no session required — for trusted admin web interface use).
+	*/
+	public static function adminSetOpt(string $sUsername, string $sOpt): void
+	{
+		$aPlugins = Security::_getAuthPlugins();
+		self::$oLogger->info("Security: Admin web interface setting opt for ".$sUsername." to ".$sOpt);
+		foreach($aPlugins as $sPlugin){
+			try {
+				$sPlugin::setOpt($sUsername, $sOpt);
+				break;
+			}catch(Exception $oException){
+				self::$oLogger->debug("Security: Plugin ".$sPlugin." could not setOpt for ".$sUsername." (".$oException->getMessage().")");
+			}
+		}
+	}
+
+	/**
+	  * Sets disc quota for a user directly (no session required — for trusted admin web interface use).
+	  *
+	  * @param int $iQuota Quota in bytes; 0 = use the global default
+	*/
+	public static function adminSetQuota(string $sUsername, int $iQuota): void
+	{
+		$aPlugins = Security::_getAuthPlugins();
+		self::$oLogger->info("Security: Admin web interface setting quota for ".$sUsername." to ".$iQuota);
+		foreach($aPlugins as $sPlugin){
+			try {
+				$sPlugin::setQuota($sUsername, $iQuota);
+				break;
+			}catch(Exception $oException){
+				self::$oLogger->debug("Security: Plugin ".$sPlugin." could not setQuota for ".$sUsername." (".$oException->getMessage().")");
+			}
+		}
+	}
+
+	/**
+	  * Resets a user's password without requiring the old password (no session required — for trusted admin web interface use).
+	*/
+	public static function adminSetPassword(string $sUsername, string $sPassword): void
+	{
+		$aPlugins = Security::_getAuthPlugins();
+		self::$oLogger->info("Security: Admin web interface password reset for ".$sUsername);
+		foreach($aPlugins as $sPlugin){
+			try {
+				$sPlugin::setPasswordAdmin($sUsername, $sPassword);
+				break;
+			}catch(Exception $oException){
+				self::$oLogger->debug("Security: Plugin ".$sPlugin." could not reset password for ".$sUsername." (".$oException->getMessage().")");
+			}
+		}
+	}
+
+	/**
+	  * Sets the boot option for a user
 	  *
 	  * @param string $sOpt
 	*/

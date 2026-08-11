@@ -95,4 +95,23 @@ interface AuthPluginInterface {
 	 * @param string $sOpt
 	*/
 	static public function setOpt(string $sUsername,string $sOpt): void;
+
+	/**
+	 * Sets the disc quota for a given user (0 = use global default)
+	 *
+	 * @param string $sUsername
+	 * @param int $iQuota Quota in bytes; 0 means "use the global vfs_default_disc_free config value"
+	*/
+	static public function setQuota(string $sUsername, int $iQuota): void;
+
+	/**
+	 * Sets the password for a user without requiring the old password
+	 *
+	 * For sysop use only. The Security layer is responsible for enforcing that
+	 * the caller holds admin privilege before invoking this method.
+	 *
+	 * @param string $sUsername
+	 * @param string $sPassword Plain-text new password (may be empty string to clear)
+	*/
+	static public function setPasswordAdmin(string $sUsername, string $sPassword): void;
 }

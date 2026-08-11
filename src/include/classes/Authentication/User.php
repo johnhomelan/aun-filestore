@@ -33,6 +33,8 @@ class User {
 
 	protected ?string $sLib = NULL;
 
+	protected int $iQuota = 0;
+
 	public function setUsername(string $sUsername): void
 	{
 		$this->sUsername=strtoupper((string) $sUsername);
@@ -133,5 +135,15 @@ class User {
 	public function setRoot(string $sRoot): void
 	{
 		$this->sRoot = $sRoot;
+	}
+
+	public function getQuota(): int
+	{
+		return $this->iQuota;
+	}
+
+	public function setQuota(int $iQuota): void
+	{
+		$this->iQuota = $iQuota;
 	}
 }

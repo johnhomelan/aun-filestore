@@ -59,6 +59,7 @@ Key static methods used throughout the server:
 |---|---|
 | `Security::isLoggedIn(net, stn)` | True if a session exists for this station |
 | `Security::getUser(net, stn)` | Return the `User` object for the session, or `null` |
+| `Security::getUserByName(username)` | Return a `User` from any plugin by name (not session-scoped), or `null` |
 | `Security::login(net, stn, user, pass)` | Attempt login; return true on success |
 | `Security::logout(net, stn)` | Remove the session |
 | `Security::getUsersOnline()` | Return all active sessions (for the admin UI) |
@@ -67,7 +68,9 @@ Key static methods used throughout the server:
 | `Security::removeUser(net, stn, username)` | Delete a user (admin only) |
 | `Security::setPriv(net, stn, username, 'S'\|'U')` | Set administrator privilege (admin only) |
 | `Security::setOpt(net, stn, optString)` | Set the current user's boot option |
-| `Security::setConnectedUsersPassword(net, stn, old, new)` | Change the current user's password |
+| `Security::setConnectedUsersPassword(net, stn, old, new)` | Change the current user's own password (old password required) |
+| `Security::setAdminPassword(net, stn, username, new)` | Reset any user's password without the old password (admin only) |
+| `Security::setUserQuota(net, stn, username, quota)` | Set per-user disc quota in bytes; 0 = use global default (admin only) |
 
 ---
 
@@ -90,6 +93,7 @@ model.
 | `getBootOpt()` / `setBootOpt()` | int | Boot option (0–3); controls what the client does on login |
 | `getPriv()` / `setPriv()` | `'S'` or `'U'` | Privilege: `'S'` = system manager (admin), `'U'` = user |
 | `isAdmin()` | bool | True when `getPriv() === 'S'` |
+| `getQuota()` / `setQuota()` | int | Per-user disc quota in bytes; `0` means use the global `vfs_default_disc_free` config value |
 
 Plugins receive and return `User` objects. The `Security` class stores the
 object built by the winning plugin's `buildUserObject()` method in the session.
@@ -112,10 +116,12 @@ interface AuthPluginInterface {
     static public function buildUserObject(string $sUsername): User;
     static public function getAllUsers(): array;
     static public function setPassword(string $sUsername, string $sOldPassword, string $sPassword): void;
+    static public function setPasswordAdmin(string $sUsername, string $sPassword): void;
     static public function createUser(User $oUser): void;
     static public function removeUser(string $sUsername): bool;
     static public function setPriv(string $sUsername, string $sPriv): void;
     static public function setOpt(string $sUsername, string $sOpt): void;
+    static public function setQuota(string $sUsername, int $iQuota): void;
 }
 ```
 
@@ -181,6 +187,14 @@ Set the boot option string for the user. The value is always the string
 representation of the option (e.g. `'0'`, `'1'`, `'2'`, `'3'`). Persist
 the change.
 
+**`setPasswordAdmin($sUsername, $sPassword)`**
+
+Reset a user's password without requiring the current password. For sysop use only. The `Security` class verifies admin rights before calling this; the plugin itself must **not** re-check privileges. Throw an exception if the user does not exist or the backend is read-only.
+
+**`setQuota($sUsername, $iQuota)`**
+
+Set the per-user disc quota in bytes. A value of `0` means "use the global `vfs_default_disc_free` config value" — it does not set a zero-byte quota. Persist the change. If the user does not exist, the method may silently do nothing (consistent with the `setPriv`/`setOpt` pattern).
+
 ---
 
 ## Built-in plugin: `AuthPluginFile`
@@ -193,8 +207,10 @@ and after every mutation.
 **File format** — one user per line:
 
 ```
-USERNAME:hashtype-hash:homedir:unixuid:opt:priv
+USERNAME:hashtype-hash:homedir:unixuid:opt:priv[:quota]
 ```
+
+The optional 7th field `quota` was added to support per-user disc quotas. Lines without a 7th field (legacy format) parse with a quota of `0` (use the global default).
 
 | Field | Example | Description |
 |---|---|---|
@@ -204,6 +220,7 @@ USERNAME:hashtype-hash:homedir:unixuid:opt:priv
 | unixuid | `5001` | Unix UID for file ownership |
 | opt | `3` | Boot option (0–3) |
 | priv | `U` | `S` = system manager, `U` = user |
+| quota | `0` | Per-user disc quota in bytes; `0` or absent = use global default |
 
 **Config keys:**
 
@@ -355,6 +372,26 @@ class AuthPluginMyBackend implements AuthPluginInterface
         $sUsername = strtoupper($sUsername);
         if (array_key_exists($sUsername, self::$aUsers)) {
             self::$aUsers[$sUsername]['boot_opt'] = (int) $sOpt;
+            self::_persist();
+        }
+    }
+
+    public static function setPasswordAdmin(string $sUsername, string $sPassword): void
+    {
+        $sUsername = strtoupper($sUsername);
+        if (!array_key_exists($sUsername, self::$aUsers)) {
+            throw new Exception("User not found");
+        }
+        // No old-password check — caller (Security) has already verified admin privilege
+        self::$aUsers[$sUsername]['password_hash'] = password_hash($sPassword, PASSWORD_DEFAULT);
+        self::_persist();
+    }
+
+    public static function setQuota(string $sUsername, int $iQuota): void
+    {
+        $sUsername = strtoupper($sUsername);
+        if (array_key_exists($sUsername, self::$aUsers)) {
+            self::$aUsers[$sUsername]['quota'] = $iQuota;
             self::_persist();
         }
     }

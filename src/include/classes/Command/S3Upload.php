@@ -141,7 +141,7 @@ class S3Upload extends Command
         return Command::SUCCESS;
     }
 
-    private function _buildClient(array $aMapping): S3Client
+    protected function _buildClient(array $aMapping): S3Client
     {
         $aConfig = [
             'region'  => $aMapping['region'] ?? 'us-east-1',

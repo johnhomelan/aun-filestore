@@ -209,6 +209,207 @@ class PiconetHandlerTest extends TestCase
     }
 
     // =========================================================================
+    // Firmware version gate (remote bridge mode)
+    // =========================================================================
+
+    public function testOnConnectDefersBringupWhenRemoteBridgeEnabled(): void
+    {
+        config::overrideValue('remote_bridge_enabled', 1);
+        $oConn = new MockPiconetConnection();
+        $this->oHandler->onOpen($oConn);
+        $this->oHandler->onConnect();
+
+        // Only STATUS should have been sent — bringupInterface() must wait for the
+        // STATUS reply to be checked against the required firmware version.
+        $sContent = $oConn->getStreamContent();
+        $this->assertStringContainsString("STATUS\r\r", $sContent);
+        $this->assertStringNotContainsString("SET_STATION", $sContent);
+        $this->assertTrue($this->getProp('bAwaitingFirmwareCheck'));
+    }
+
+    public function testOnConnectBringsUpImmediatelyWhenRemoteBridgeDisabled(): void
+    {
+        $oConn = new MockPiconetConnection();
+        $this->oHandler->onOpen($oConn);
+        $this->oHandler->onConnect();
+
+        $this->assertFalse($this->getProp('bAwaitingFirmwareCheck'));
+        $this->assertStringContainsString("SET_STATION", $oConn->getStreamContent());
+    }
+
+    public function testStatusMeetingRequiredVersionBringsUpInterface(): void
+    {
+        config::overrideValue('remote_bridge_enabled', 1);
+        $oConn = new MockPiconetConnection();
+        $this->oHandler->onOpen($oConn);
+        $this->oHandler->onConnect();
+
+        $this->oHandler->decodeMessage('STATUS ' . Handler::REQUIRED_FIRMWARE_VERSION . ' 5 C0 0');
+
+        $sContent = $oConn->getStreamContent();
+        $this->assertStringContainsString("SET_STATION 5\r\r", $sContent);
+        $this->assertStringContainsString("SET_MODE MONITOR\r\r", $sContent);
+        $this->assertFalse($this->getProp('bPiconetDisabled'));
+    }
+
+    public function testStatusWithNewerVersionBringsUpInterface(): void
+    {
+        config::overrideValue('remote_bridge_enabled', 1);
+        $oConn = new MockPiconetConnection();
+        $this->oHandler->onOpen($oConn);
+        $this->oHandler->onConnect();
+
+        $this->oHandler->decodeMessage('STATUS 9.9.9 5 C0 0');
+
+        $this->assertStringContainsString("SET_STATION", $oConn->getStreamContent());
+        $this->assertFalse($this->getProp('bPiconetDisabled'));
+    }
+
+    public function testStatusWithOldVersionDisablesPiconetAndDoesNotBringUp(): void
+    {
+        config::overrideValue('remote_bridge_enabled', 1);
+        $oConn = new MockPiconetConnection();
+        $this->oHandler->onOpen($oConn);
+        $this->oHandler->onConnect();
+
+        $this->oHandler->decodeMessage('STATUS 2.0.20 5 C0 0');
+
+        $this->assertStringNotContainsString("SET_STATION", $oConn->getStreamContent());
+        $this->assertStringNotContainsString("SET_MODE", $oConn->getStreamContent());
+        $this->assertTrue($this->getProp('bPiconetDisabled'));
+    }
+
+    public function testStatusWithUnparseableVersionDisablesPiconet(): void
+    {
+        config::overrideValue('remote_bridge_enabled', 1);
+        $oConn = new MockPiconetConnection();
+        $this->oHandler->onOpen($oConn);
+        $this->oHandler->onConnect();
+
+        $this->oHandler->decodeMessage('STATUS garbage 5 C0 0');
+
+        $this->assertStringNotContainsString("SET_STATION", $oConn->getStreamContent());
+        $this->assertTrue($this->getProp('bPiconetDisabled'));
+    }
+
+    public function testStatusVersionCheckIsOnlyAppliedOnce(): void
+    {
+        // A second STATUS response (e.g. from a later STATUS command) must not
+        // re-run the check or re-trigger bringupInterface().
+        config::overrideValue('remote_bridge_enabled', 1);
+        $oConn = new MockPiconetConnection();
+        $this->oHandler->onOpen($oConn);
+        $this->oHandler->onConnect();
+
+        $this->oHandler->decodeMessage('STATUS ' . Handler::REQUIRED_FIRMWARE_VERSION . ' 5 C0 0');
+        $sAfterFirst = $oConn->getStreamContent();
+
+        $this->oHandler->decodeMessage('STATUS ' . Handler::REQUIRED_FIRMWARE_VERSION . ' 5 C0 1');
+        $sAfterSecond = $oConn->getStreamContent();
+
+        $this->assertSame($sAfterFirst, $sAfterSecond);
+    }
+
+    public function testStatusVersionNotCheckedWhenRemoteBridgeDisabled(): void
+    {
+        // remote_bridge_enabled=0 (default) — onConnect() already brought the
+        // interface up; an old-looking STATUS version must not disable it.
+        $oConn = new MockPiconetConnection();
+        $this->oHandler->onOpen($oConn);
+        $this->oHandler->onConnect();
+
+        $this->oHandler->decodeMessage('STATUS 1.0.0 5 C0 0');
+
+        $this->assertFalse($this->getProp('bPiconetDisabled'));
+    }
+
+    public function testSendDropsPacketWhenPiconetDisabledByFirmwareCheck(): void
+    {
+        $oConn = new MockPiconetConnection();
+        $this->oHandler->onOpen($oConn);
+        $this->setProp('bPiconetDisabled', true);
+
+        $this->oHandler->send($this->makePacket());
+
+        $this->assertEmpty($this->getProp('aQueue'));
+        $this->assertEmpty($this->getProp('aAwaitingAck'));
+    }
+
+    public function testOnOpenResetsFirmwareCheckState(): void
+    {
+        $this->setProp('bAwaitingFirmwareCheck', true);
+        $this->setProp('bPiconetDisabled', true);
+
+        $oConn = new MockPiconetConnection();
+        $this->oHandler->onOpen($oConn);
+
+        $this->assertFalse($this->getProp('bAwaitingFirmwareCheck'));
+        $this->assertFalse($this->getProp('bPiconetDisabled'));
+    }
+
+    // =========================================================================
+    // _writeOutPkt() source station/network override (remote bridge mode)
+    // =========================================================================
+
+    public function testUnicastOmitsSourceOverrideWhenRemoteBridgeDisabled(): void
+    {
+        $oConn = new MockPiconetConnection();
+        $this->oHandler->onOpen($oConn);
+
+        $oPacket = $this->makePacket(5, 1, 0x99, 0);
+        $oPacket->setSourceStation(10);
+        $oPacket->setSourceNetwork(3);
+        $this->oHandler->send($oPacket);
+
+        // Original TX form: exactly 5 fields, no trailing source override
+        $this->assertMatchesRegularExpression('/^TX 5 0 0 153 \S+\r\r$/', $oConn->getStreamContent());
+    }
+
+    public function testUnicastOmitsSourceOverrideWhenSourceNotSetOnPacket(): void
+    {
+        config::overrideValue('remote_bridge_enabled', 1);
+        $oConn = new MockPiconetConnection();
+        $this->oHandler->onOpen($oConn);
+
+        // makePacket() leaves source station/network unset (null) — as with a
+        // reply generated locally by the FileServer.
+        $this->oHandler->send($this->makePacket(5, 1, 0x99, 0));
+
+        $this->assertMatchesRegularExpression('/^TX 5 0 0 153 \S+\r\r$/', $oConn->getStreamContent());
+    }
+
+    public function testUnicastIncludesSourceOverrideWhenRemoteBridgeEnabledAndSourceSet(): void
+    {
+        config::overrideValue('remote_bridge_enabled', 1);
+        $oConn = new MockPiconetConnection();
+        $this->oHandler->onOpen($oConn);
+
+        $oPacket = $this->makePacket(5, 1, 0x99, 0);
+        $oPacket->setSourceStation(10);
+        $oPacket->setSourceNetwork(3);
+        $this->oHandler->send($oPacket);
+
+        $this->assertMatchesRegularExpression('/^TX 5 0 0 153 \S+ 10 3\r\r$/', $oConn->getStreamContent());
+    }
+
+    public function testUnicastSourceOverrideUsesTrueOriginNotLocalNetworkTranslation(): void
+    {
+        // Only the destination network is translated from local_network to 0 —
+        // a remote source network must be passed through unmodified.
+        config::overrideValue('remote_bridge_enabled', 1);
+        config::overrideValue('piconet_local_network', 1);
+        $oConn = new MockPiconetConnection();
+        $this->oHandler->onOpen($oConn);
+
+        $oPacket = $this->makePacket(5, 1, 0x99, 0); // dst network 1 == local → becomes 0 on wire
+        $oPacket->setSourceStation(20);
+        $oPacket->setSourceNetwork(4); // a genuinely remote network — must pass through as-is
+        $this->oHandler->send($oPacket);
+
+        $this->assertMatchesRegularExpression('/^TX 5 0 0 153 \S+ 20 4\r\r$/', $oConn->getStreamContent());
+    }
+
+    // =========================================================================
     // onClose()
     // =========================================================================
 

@@ -187,6 +187,9 @@ class ServiceDispatcher {
 					}
 				}
 				break;
+			default:
+				$this->oLogger->error("Unicast Packet in of unknown type: ".$oPacket->toString());
+				break;
 		}
 
 	}

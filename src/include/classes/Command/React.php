@@ -356,10 +356,16 @@ EOF;
 			$oLogger->info("Admin page request ".$oRequest->getUri()->getPath());
 
 			$aPost = [];
-			if (in_array(strtoupper($sMethod), ['POST', 'PUT', 'DELETE', 'PATCH']) &&
-				isset($aHeaders['Content-Type']) && (str_starts_with($aHeaders['Content-Type'], 'application/x-www-form-urlencoded')) //@phpstan-ignore-line
-			) {
-				parse_str($sContent, $result);
+			if (in_array(strtoupper($sMethod), ['POST', 'PUT', 'DELETE', 'PATCH'])) {
+				$sContentType = '';
+				if (isset($aHeaders['Content-Type'])) {
+					$sContentType = is_array($aHeaders['Content-Type'])
+						? (string) ($aHeaders['Content-Type'][0] ?? '')
+						: (string) $aHeaders['Content-Type'];
+				}
+				if (str_starts_with($sContentType, 'application/x-www-form-urlencoded')) {
+					parse_str((string) $sContent, $aPost);
+				}
 			}
 			$sfRequest = new \Symfony\Component\HttpFoundation\Request(
 				$oRequest->getQueryParams(),

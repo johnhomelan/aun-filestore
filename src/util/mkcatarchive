@@ -1,0 +1,15 @@
+#!/usr/bin/php
+<?php
+if (file_exists(__DIR__ . '/../vendor/autoload.php')) {
+    require_once __DIR__ . '/../vendor/autoload.php';
+} else {
+    require_once '/usr/share/aun-filestored/vendor/autoload.php';
+}
+
+use Symfony\Component\Console\Application;
+use HomeLan\FileStore\Command\MakeCatalogueArchive;
+
+$oApp = new Application('mkcatarchive', '1.0.0');
+$oApp->add(new MakeCatalogueArchive());
+$oApp->setDefaultCommand('mkcatarchive', true);
+$oApp->run();

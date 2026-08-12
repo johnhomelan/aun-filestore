@@ -70,6 +70,13 @@ Work committed to `master` since the `2.0.1` tag.
 - Various components (the React command, S3 upload, service dispatcher,
   Piconet handling) reworked to be more unit-testable, backed by a large
   expansion of the unit test suite.
+- The `AFS`, `AdfsHD`, `AfsImg`, `DfsSsd`, and `AdfsAdl` VFS plugins gained a
+  `setImageReader()`/`reset()` testing seam (matching the `Mdfs` plugin's),
+  so their disk-image readers (`L3fsReader`, `AdfsReaderHD`, `DfsReader`,
+  `AdfsReader`) can be mocked in unit tests instead of requiring a real
+  synthesised binary disk image — their test suites were rewritten around
+  this to cover catalogue traversal, handle I/O, and the path-resolution bug
+  above.
 - Piconet serial port setup rewritten to avoid FFI, since most PHP installs
   block its use.
 - The network bridge now reports the real network number a client is
@@ -90,6 +97,17 @@ Work committed to `master` since the `2.0.1` tag.
   issues.
 - Various malformed, too-short, or null packet handling issues in AUN and
   Piconet.
+- The disk-image VFS plugins (`AFS`, `AdfsHD`, `AfsImg`, `DfsSsd`, `AdfsAdl`)
+  could silently hand back a directory handle for an image's root instead of
+  failing with "No such file" when asked to open a nonexistent file or
+  directory nested inside an otherwise-valid image (e.g. `$.scsi0.NOSUCHFILE`
+  when `scsi0.l3` exists but has no `NOSUCHFILE` entry) — a second,
+  looser fallback check re-derived the path and matched on the image alone,
+  ignoring the requested sub-path. Also fixed a related double-slash artefact
+  in the same plugins' case-insensitive path resolution.
+- `AdfsHD` and `AdfsAdl` could emit an "undefined array key" warning when
+  listing a directory entry with no `size` in its catalogue metadata (e.g.
+  sub-directories), matching the `?? 0` fallback `AFS` already had.
 
 ## [2.0.1] - 2024-05-20
 

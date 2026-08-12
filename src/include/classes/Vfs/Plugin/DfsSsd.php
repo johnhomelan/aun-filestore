@@ -58,6 +58,25 @@ class DfsSsd implements PluginInterface {
 		}
 	}
 
+	/**
+	 * Injects a reader instance for a given image file, bypassing the normal
+	 * DfsReader construction. Used by unit tests to mock out the acorn-disk class.
+	 */
+	public static function setImageReader(string $sImageFile, object $oReader): void
+	{
+		self::$aImageReaders[$sImageFile] = $oReader;
+	}
+
+	/**
+	 * Resets all static state (used in tests).
+	 */
+	public static function reset(): void
+	{
+		self::$aImageReaders = [];
+		self::$aFileHandles = [];
+		self::$iFileHandle = 0;
+	}
+
 	protected static function _getImageReader($sImageFile)
 	{
 		if(!array_key_exists($sImageFile,DfsSsd::$aImageReaders)){
@@ -93,7 +112,7 @@ class DfsSsd implements PluginInterface {
 				}
 			}else{
 				//The directroy does not exist so walk the directory tree in a case insensitve way an try to find the real dir/file
-				$aDirParts = explode(DIRECTORY_SEPARATOR,$sUnixPath);
+				$aDirParts = array_values(array_filter(explode(DIRECTORY_SEPARATOR,$sUnixPath),fn($sPart) => $sPart!==''));
 				$sNewDirPath = "";
 				$iMatches = 0;
 				foreach($aDirParts as $sDirPart){
@@ -187,6 +206,15 @@ class DfsSsd implements PluginInterface {
 		$sImageFile = DfsSsd::_getImageFile($oEconetPath->getFilePath());
 		if(strlen($sImageFile)>0){
 			$sPathInsideImage = DfsSsd::_getPathInsideImage($oEconetPath->getFilePath(),$sImageFile);
+
+			if($sPathInsideImage===''){
+				//The path refers to the image itself — present it as a directory
+				$iEconetHandle = Vfs::getFreeFileHandleID($oUser);
+				$iVfsHandle = DfsSsd::$iFileHandle++;
+				DfsSsd::$aFileHandles[$iVfsHandle]=['image-file'=>$sImageFile, 'path-inside-image'=>'', 'pos'=>0];
+				return new FileDescriptor(self::$oLogger,'HomeLan\FileStore\Vfs\Plugin\DfsSsd',$oUser,$sImageFile,$oEconetPath->getFilePath(),$iVfsHandle,$iEconetHandle,FALSE,TRUE);
+			}
+
 			if(DfsSsd::_checkImageFileExists($sImageFile,$sPathInsideImage)){
 				$iEconetHandle = Vfs::getFreeFileHandleID($oUser);
 				$iVfsHandle = DfsSsd::$iFileHandle++;
@@ -196,17 +224,7 @@ class DfsSsd implements PluginInterface {
 			}
 		}
 
-		//Scan the unix dir, see of there is a diskimage in that directory to see if it need changing to a directory
-		$sUnixPath = DfsSsd::_econetToUnix($oEconetPath->getFilePath());
-		if(file_exists($sUnixPath.'.ssd')){
-			//Disk Image found
-			$iEconetHandle = Vfs::getFreeFileHandleID($oUser);
-			$iVfsHandle = DfsSsd::$iFileHandle++;
-			DfsSsd::$aFileHandles[$iVfsHandle]=['image-file'=>$sUnixPath.'.ssd', 'path-inside-image'=>'', 'pos'=>0];
-			return new FileDescriptor(self::$oLogger,'HomeLan\FileStore\Vfs\Plugin\DfsSsd',$oUser,$sUnixPath.'.ssd',$oEconetPath->getFilePath(),$iVfsHandle,$iEconetHandle,FALSE,TRUE);
-		}
 		throw new VfsException("No such file");
-	
 	}
 
 

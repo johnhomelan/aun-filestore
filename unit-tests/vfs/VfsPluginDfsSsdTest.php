@@ -7,7 +7,15 @@
  *
  * The plugin provides read-only access to DFS SSD (single-sided) disk image files
  * stored on the local filesystem. .ssd files appear as virtual directories in
- * the econet namespace.
+ * the econet namespace. Unlike the other Acorn disk-image plugins, DfsSsd's
+ * catalogue is flat — a single directory letter (e.g. '$' or 'A') followed by a
+ * filename, never more than two levels deep.
+ *
+ * DfsReader is mocked out via DfsSsd::setImageReader() rather than reading a
+ * real binary image, so the tests exercise the full catalogue-walking behaviour
+ * of the plugin — including the path-resolution edge cases around an existing
+ * image with a requested sub-path that does not exist inside it — without
+ * needing to synthesise a valid on-disk DFS image format.
  */
 
 if (!defined('CONFIG_security_mode')) {
@@ -26,9 +34,13 @@ use HomeLan\FileStore\Authentication\User;
 use HomeLan\FileStore\Vfs\Plugin\DfsSsd;
 use HomeLan\FileStore\Vfs\FilePath;
 use HomeLan\FileStore\Vfs\Exception as VfsException;
+use HomeLan\Retro\Acorn\Disk\DfsReader;
+use Mockery\Adapter\Phpunit\MockeryPHPUnitIntegration;
 
 class VfsPluginDfsSsdTest extends TestCase
 {
+    use MockeryPHPUnitIntegration;
+
     protected User $oUser;
     protected string $sRoot;
 
@@ -45,6 +57,7 @@ class VfsPluginDfsSsdTest extends TestCase
 
         $oLogger = new Logger('dfsssd-test');
         $oLogger->pushHandler(new NullHandler());
+        DfsSsd::reset();
         DfsSsd::init($oLogger, false);
 
         $this->oUser = new User();
@@ -53,37 +66,18 @@ class VfsPluginDfsSsdTest extends TestCase
         $this->oUser->setBootOpt(0);
         $this->oUser->setUnixUid(5000);
         $this->oUser->setPriv('u');
-
-        $this->_resetPluginState();
     }
 
     protected function tearDown(): void
     {
         config::resetValue('vfs_plugin_localdfsssd_root');
         $this->_deleteDir($this->sRoot);
-        $this->_resetPluginState();
+        DfsSsd::reset();
     }
 
     // -------------------------------------------------------------------------
     // Helpers
     // -------------------------------------------------------------------------
-
-    /**
-     * Reset static plugin state between tests using reflection.
-     */
-    protected function _resetPluginState(): void
-    {
-        $oRefl = new ReflectionClass(DfsSsd::class);
-
-        foreach (['aImageReaders', 'aFileHandles'] as $sProp) {
-            $oProp = $oRefl->getProperty($sProp);
-            $oProp->setAccessible(true);
-            $oProp->setValue(null, []);
-        }
-        $oProp = $oRefl->getProperty('iFileHandle');
-        $oProp->setAccessible(true);
-        $oProp->setValue(null, 0);
-    }
 
     protected function _deleteDir(string $sDir): void
     {
@@ -101,53 +95,28 @@ class VfsPluginDfsSsdTest extends TestCase
     }
 
     /**
-     * Build a minimal valid DFS SSD disk image containing one file:
-     *   Directory: $
-     *   Name:      HELLO
-     *   Load addr: 0xFF04
-     *   Exec addr: 0xFF19
-     *   Size:      11 bytes
-     *   Data:      "Hello World"
+     * Creates a stub *.ssd file on disk and registers a mock reader for it. The
+     * stub file's content is irrelevant — the mock is always used in place of a
+     * real DfsReader.
      */
-    protected function _buildMinimalDfsSsd(): string
+    protected function _seedImage(string $sName, object $oMock): string
     {
-        // Sector 0 (256 bytes): disc title + catalogue
-        $sSector0 = str_repeat("\x00", 256);
-        // Bytes 0-7: disc title 'TESTDISK'
-        $sSector0 = substr_replace($sSector0, 'TESTDISK', 0, 8);
-        // Bytes 8-14: filename 'HELLO  ' (7 bytes), byte 15: directory '$' (0x24)
-        $sSector0 = substr_replace($sSector0, "HELLO  \x24", 8, 8);
-
-        // Sector 1 (256 bytes): disc options + file metadata
-        $sSector1 = str_repeat("\x00", 256);
-        // Bytes 0-3: title continuation 'TEST'
-        $sSector1 = substr_replace($sSector1, 'TEST', 0, 4);
-        // Bytes 8-15: file metadata
-        //   [0] load-low=0x04 [1] load-mid=0xFF  → decoded load = 0xFF04
-        //   [2] exec-low=0x19 [3] exec-mid=0xFF  → decoded exec = 0xFF19
-        //   [4] size-low=0x0B [5] size-mid=0x00  → decoded size = 11
-        //   [6] high-bits=0x00 (all high nibbles = 0)
-        //   [7] start-sector=0x02
-        $sSector1 = substr_replace(
-            $sSector1,
-            pack('C8', 0x04, 0xFF, 0x19, 0xFF, 0x0B, 0x00, 0x00, 0x02),
-            8,
-            8
-        );
-
-        // Sector 2 (256 bytes): file data "Hello World" at the start
-        $sSector2 = str_repeat("\x00", 256);
-        $sSector2 = substr_replace($sSector2, 'Hello World', 0, 11);
-
-        return $sSector0 . $sSector1 . $sSector2;
+        $sImagePath = $this->sRoot . $sName . '.ssd';
+        file_put_contents($sImagePath, str_repeat("\x00", 64));
+        DfsSsd::setImageReader($sImagePath, $oMock);
+        return $sImagePath;
     }
 
-    /** Write a minimal SSD image to the test root and return its path. */
-    protected function _writeSsdImage(string $sName = 'testdisk'): string
+    protected function _sampleCatalogue(): array
     {
-        $sPath = $this->sRoot . $sName . '.ssd';
-        file_put_contents($sPath, $this->_buildMinimalDfsSsd());
-        return $sPath;
+        return [
+            '$' => [
+                'HELLO' => ['loadaddr' => 0xFF04, 'execaddr' => 0xFF19, 'size' => 11, 'startsector' => 2],
+            ],
+            'A' => [
+                'PROG' => ['loadaddr' => 0x8000, 'execaddr' => 0x8000, 'size' => 20, 'startsector' => 5],
+            ],
+        ];
     }
 
     // -------------------------------------------------------------------------
@@ -178,7 +147,300 @@ class VfsPluginDfsSsdTest extends TestCase
     }
 
     // -------------------------------------------------------------------------
-    // Read-only write-path operations (return false / no-op, NOT exceptions)
+    // getFile against a mocked image
+    // -------------------------------------------------------------------------
+
+    public function testGetFileReturnsContentsForFileInDefaultDir(): void
+    {
+        $oMock = Mockery::mock(DfsReader::class);
+        $oMock->shouldReceive('getCatalogue')->andReturn($this->_sampleCatalogue());
+        $oMock->shouldReceive('getFile')->with('HELLO')->andReturn('Hello World');
+        $this->_seedImage('testdisk', $oMock);
+
+        $sData = DfsSsd::getFile($this->oUser, new FilePath('$.testdisk', 'HELLO'));
+        $this->assertSame('Hello World', $sData);
+    }
+
+    public function testGetFileReturnsContentsForFileInNamedDir(): void
+    {
+        $oMock = Mockery::mock(DfsReader::class);
+        $oMock->shouldReceive('getCatalogue')->andReturn($this->_sampleCatalogue());
+        $oMock->shouldReceive('getFile')->with('A.PROG')->andReturn('PROGDATA');
+        $this->_seedImage('testdisk', $oMock);
+
+        $sData = DfsSsd::getFile($this->oUser, new FilePath('$.testdisk', 'A.PROG'));
+        $this->assertSame('PROGDATA', $sData);
+    }
+
+    public function testGetFileThrowsForPathWithNoImage(): void
+    {
+        $this->expectException(VfsException::class);
+        DfsSsd::getFile($this->oUser, new FilePath('$.nonexistent', 'file'));
+    }
+
+    public function testGetFileThrowsForNonExistentFileInsideImage(): void
+    {
+        $oMock = Mockery::mock(DfsReader::class);
+        $oMock->shouldReceive('getCatalogue')->andReturn($this->_sampleCatalogue());
+        $this->_seedImage('testdisk', $oMock);
+
+        $this->expectException(VfsException::class);
+        DfsSsd::getFile($this->oUser, new FilePath('$.testdisk', 'NOSUCHFILE'));
+    }
+
+    // -------------------------------------------------------------------------
+    // getDirectoryListing
+    // -------------------------------------------------------------------------
+
+    public function testGetDirectoryListingReturnsOriginalArrayWhenNoDiskImages(): void
+    {
+        $aExisting = ['prior' => 'entry'];
+        $aResult   = DfsSsd::getDirectoryListing('$', $aExisting);
+        $this->assertArrayHasKey('prior', $aResult);
+    }
+
+    public function testGetDirectoryListingRootShowsSsdAsVirtualDirectory(): void
+    {
+        file_put_contents($this->sRoot . 'testdisk.ssd', str_repeat("\x00", 256));
+
+        $aListing = DfsSsd::getDirectoryListing('$', []);
+
+        $this->assertArrayHasKey('testdisk.ssd', $aListing);
+        $this->assertTrue($aListing['testdisk.ssd']->isDir());
+    }
+
+    public function testGetDirectoryListingInsideImageShowsDefaultDirFilesAndOtherDirs(): void
+    {
+        $oMock = Mockery::mock(DfsReader::class);
+        $oMock->shouldReceive('getCatalogue')->andReturn($this->_sampleCatalogue());
+        $this->_seedImage('testdisk', $oMock);
+
+        $aListing = DfsSsd::getDirectoryListing('$.testdisk', []);
+
+        $this->assertArrayHasKey('HELLO', $aListing);
+        $this->assertFalse($aListing['HELLO']->isDir());
+
+        // Non-'$' directory letters are exposed as virtual sub-directories.
+        $this->assertArrayHasKey('A', $aListing);
+        $this->assertTrue($aListing['A']->isDir());
+    }
+
+    public function testGetDirectoryListingInsideImageFileHasCorrectLoadAndExecAddresses(): void
+    {
+        $oMock = Mockery::mock(DfsReader::class);
+        $oMock->shouldReceive('getCatalogue')->andReturn($this->_sampleCatalogue());
+        $this->_seedImage('testdisk', $oMock);
+
+        $aListing = DfsSsd::getDirectoryListing('$.testdisk', []);
+
+        $this->assertSame(0xFF04, $aListing['HELLO']->getLoadAddr());
+        $this->assertSame(0xFF19, $aListing['HELLO']->getExecAddr());
+    }
+
+    public function testGetDirectoryListingDescendsIntoNamedDir(): void
+    {
+        $oMock = Mockery::mock(DfsReader::class);
+        $oMock->shouldReceive('getCatalogue')->andReturn($this->_sampleCatalogue());
+        $this->_seedImage('testdisk', $oMock);
+
+        $aListing = DfsSsd::getDirectoryListing('$.testdisk.A', []);
+
+        $this->assertArrayHasKey('PROG', $aListing);
+        $this->assertSame(0x8000, $aListing['PROG']->getLoadAddr());
+    }
+
+    public function testGetDirectoryListingPreservesExistingEntries(): void
+    {
+        $oMock = Mockery::mock(DfsReader::class);
+        $oMock->shouldReceive('getCatalogue')->andReturn($this->_sampleCatalogue());
+        $this->_seedImage('testdisk', $oMock);
+
+        $aExisting = ['prior' => 'value'];
+        $aResult   = DfsSsd::getDirectoryListing('$.testdisk', $aExisting);
+
+        $this->assertArrayHasKey('prior', $aResult);
+        $this->assertArrayHasKey('HELLO', $aResult);
+    }
+
+    public function testGetDirectoryListingUnknownSubdirReturnsOriginalArray(): void
+    {
+        $oMock = Mockery::mock(DfsReader::class);
+        $oMock->shouldReceive('getCatalogue')->andReturn($this->_sampleCatalogue());
+        $this->_seedImage('testdisk', $oMock);
+
+        $aExisting = ['x' => 'y'];
+        $aResult   = DfsSsd::getDirectoryListing('$.testdisk.NOSUCHDIR', $aExisting);
+
+        $this->assertSame($aExisting, $aResult);
+    }
+
+    // -------------------------------------------------------------------------
+    // _buildFiledescriptorFromEconetPath
+    // -------------------------------------------------------------------------
+
+    public function testBuildFiledescriptorThrowsForNonExistentPath(): void
+    {
+        $this->expectException(VfsException::class);
+        DfsSsd::_buildFiledescriptorFromEconetPath(
+            $this->oUser, new FilePath('$.nonexistent', 'file'), true, true
+        );
+    }
+
+    public function testBuildFiledescriptorForImageRootIsADirectoryHandle(): void
+    {
+        $oMock = Mockery::mock(DfsReader::class);
+        $this->_seedImage('testdisk', $oMock);
+
+        $oFd = DfsSsd::_buildFiledescriptorFromEconetPath(
+            $this->oUser, new FilePath('$', 'testdisk'), true, true
+        );
+
+        $this->assertTrue($oFd->isDir());
+        $this->assertFalse($oFd->isFile());
+    }
+
+    public function testBuildFiledescriptorForFileInDefaultDir(): void
+    {
+        $oMock = Mockery::mock(DfsReader::class);
+        $oMock->shouldReceive('getCatalogue')->andReturn($this->_sampleCatalogue());
+        $oMock->shouldReceive('isFile')->with('HELLO')->andReturn(true);
+        $oMock->shouldReceive('isDir')->with('HELLO')->andReturn(false);
+        $this->_seedImage('testdisk', $oMock);
+
+        $oFd = DfsSsd::_buildFiledescriptorFromEconetPath(
+            $this->oUser, new FilePath('$.testdisk', 'HELLO'), true, true
+        );
+
+        $this->assertTrue($oFd->isFile());
+        $this->assertFalse($oFd->isDir());
+    }
+
+    public function testBuildFiledescriptorForNamedDir(): void
+    {
+        $oMock = Mockery::mock(DfsReader::class);
+        $oMock->shouldReceive('getCatalogue')->andReturn($this->_sampleCatalogue());
+        $oMock->shouldReceive('isFile')->with('A')->andReturn(false);
+        $oMock->shouldReceive('isDir')->with('A')->andReturn(true);
+        $this->_seedImage('testdisk', $oMock);
+
+        $oFd = DfsSsd::_buildFiledescriptorFromEconetPath(
+            $this->oUser, new FilePath('$.testdisk', 'A'), true, true
+        );
+
+        $this->assertTrue($oFd->isDir());
+        $this->assertFalse($oFd->isFile());
+    }
+
+    /**
+     * Regression test for the bug where a nonexistent sub-path under an existing
+     * image would fall through to a second "does the whole path map to an image
+     * file?" check that silently ignored the sub-path and matched the image root
+     * instead of throwing "No such file".
+     */
+    public function testBuildFiledescriptorThrowsForNonExistentFileInDefaultDir(): void
+    {
+        $oMock = Mockery::mock(DfsReader::class);
+        $oMock->shouldReceive('getCatalogue')->andReturn($this->_sampleCatalogue());
+        $this->_seedImage('testdisk', $oMock);
+
+        $this->expectException(VfsException::class);
+        DfsSsd::_buildFiledescriptorFromEconetPath(
+            $this->oUser, new FilePath('$.testdisk', 'NOSUCHFILE'), true, true
+        );
+    }
+
+    public function testBuildFiledescriptorThrowsForNonExistentFileInNamedDir(): void
+    {
+        $oMock = Mockery::mock(DfsReader::class);
+        $oMock->shouldReceive('getCatalogue')->andReturn($this->_sampleCatalogue());
+        $this->_seedImage('testdisk', $oMock);
+
+        $this->expectException(VfsException::class);
+        DfsSsd::_buildFiledescriptorFromEconetPath(
+            $this->oUser, new FilePath('$.testdisk', 'A.NOSUCHFILE'), true, true
+        );
+    }
+
+    // -------------------------------------------------------------------------
+    // Handle-based read I/O
+    // -------------------------------------------------------------------------
+
+    public function testReadReturnsDataAtCurrentPosition(): void
+    {
+        $oMock = Mockery::mock(DfsReader::class);
+        $oMock->shouldReceive('getCatalogue')->andReturn($this->_sampleCatalogue());
+        $oMock->shouldReceive('isFile')->with('HELLO')->andReturn(true);
+        $oMock->shouldReceive('isDir')->with('HELLO')->andReturn(false);
+        $oMock->shouldReceive('getFile')->with('HELLO')->andReturn('Hello World');
+        $this->_seedImage('testdisk', $oMock);
+
+        $oFd = DfsSsd::_buildFiledescriptorFromEconetPath($this->oUser, new FilePath('$.testdisk', 'HELLO'), true, true);
+        $oFd->setPos(6);
+        $this->assertSame('World', $oFd->read(5));
+    }
+
+    public function testSetPosUpdatesFsFtell(): void
+    {
+        $oMock = Mockery::mock(DfsReader::class);
+        $oMock->shouldReceive('getCatalogue')->andReturn($this->_sampleCatalogue());
+        $oMock->shouldReceive('isFile')->with('HELLO')->andReturn(true);
+        $oMock->shouldReceive('isDir')->with('HELLO')->andReturn(false);
+        $this->_seedImage('testdisk', $oMock);
+
+        $oFd = DfsSsd::_buildFiledescriptorFromEconetPath($this->oUser, new FilePath('$.testdisk', 'HELLO'), true, true);
+        $oFd->setPos(5);
+        $this->assertSame(5, $oFd->fsFTell());
+    }
+
+    public function testFsFStatReturnsSizeAndSector(): void
+    {
+        $oMock = Mockery::mock(DfsReader::class);
+        $oMock->shouldReceive('getCatalogue')->andReturn($this->_sampleCatalogue());
+        $oMock->shouldReceive('isFile')->with('HELLO')->andReturn(true);
+        $oMock->shouldReceive('isDir')->with('HELLO')->andReturn(false);
+        $oMock->shouldReceive('getStat')->with('HELLO')->andReturn(['size' => 11, 'sector' => 2]);
+        $this->_seedImage('testdisk', $oMock);
+
+        $oFd = DfsSsd::_buildFiledescriptorFromEconetPath($this->oUser, new FilePath('$.testdisk', 'HELLO'), true, true);
+        $aStat = $oFd->fsFStat();
+
+        $this->assertSame(11, $aStat['size']);
+        $this->assertSame(2, $aStat['ino']);
+        $this->assertSame(1, $aStat['nlink']);
+        $this->assertNull($aStat['dev']);
+    }
+
+    public function testIsEofFalseBeforeEndAndTrueAtEnd(): void
+    {
+        $oMock = Mockery::mock(DfsReader::class);
+        $oMock->shouldReceive('getCatalogue')->andReturn($this->_sampleCatalogue());
+        $oMock->shouldReceive('isFile')->with('HELLO')->andReturn(true);
+        $oMock->shouldReceive('isDir')->with('HELLO')->andReturn(false);
+        $oMock->shouldReceive('getStat')->with('HELLO')->andReturn(['size' => 11, 'sector' => 2]);
+        $this->_seedImage('testdisk', $oMock);
+
+        $oFd = DfsSsd::_buildFiledescriptorFromEconetPath($this->oUser, new FilePath('$.testdisk', 'HELLO'), true, true);
+
+        $oFd->setPos(0);
+        $this->assertFalse($oFd->isEof());
+        $oFd->setPos(11);
+        $this->assertTrue($oFd->isEof());
+    }
+
+    public function testFsCloseRemovesHandle(): void
+    {
+        $oMock = Mockery::mock(DfsReader::class);
+        $this->_seedImage('testdisk', $oMock);
+
+        $oFd = DfsSsd::_buildFiledescriptorFromEconetPath($this->oUser, new FilePath('$', 'testdisk'), true, true);
+        $oFd->close();
+
+        $this->expectException(VfsException::class);
+        DfsSsd::fsFtell($this->oUser, 0);
+    }
+
+    // -------------------------------------------------------------------------
+    // Mutating whole-file operations — read-only plugin
     // -------------------------------------------------------------------------
 
     public function testCreateDirectoryReturnsFalse(): void
@@ -218,7 +480,7 @@ class VfsPluginDfsSsdTest extends TestCase
     }
 
     // -------------------------------------------------------------------------
-    // Locking — no-ops on image plugins
+    // Locking — no-ops
     // -------------------------------------------------------------------------
 
     public function testFsLockIsNoOp(): void
@@ -235,12 +497,12 @@ class VfsPluginDfsSsdTest extends TestCase
     }
 
     // -------------------------------------------------------------------------
-    // DfsSsd write / setExt are no-ops (unlike the other image plugins)
+    // DfsSsd write / setExt are no-ops (unlike the other image plugins, which
+    // throw VfsException) — they just log and return.
     // -------------------------------------------------------------------------
 
     public function testWriteIsNoOpDoesNotThrow(): void
     {
-        // DfsSsd::write() just logs — it does NOT throw VfsException.
         DfsSsd::write($this->oUser, 9999, 'somedata');
         $this->assertTrue(true);
     }
@@ -287,204 +549,7 @@ class VfsPluginDfsSsdTest extends TestCase
 
     public function testFsCloseWithInvalidHandleIsNoOp(): void
     {
-        // fsClose on a non-existent handle should silently do nothing.
         DfsSsd::fsClose($this->oUser, 9999);
         $this->assertTrue(true);
-    }
-
-    // -------------------------------------------------------------------------
-    // getFile — error paths
-    // -------------------------------------------------------------------------
-
-    public function testGetFileThrowsForPathWithNoImage(): void
-    {
-        $this->expectException(VfsException::class);
-        DfsSsd::getFile($this->oUser, new FilePath('$.nonexistent', 'file'));
-    }
-
-    public function testGetFileThrowsForNonExistentFileInsideImage(): void
-    {
-        $this->_writeSsdImage('testdisk');
-        $this->expectException(VfsException::class);
-        DfsSsd::getFile($this->oUser, new FilePath('$.testdisk', 'NOSUCHFILE'));
-    }
-
-    // -------------------------------------------------------------------------
-    // getDirectoryListing — without images
-    // -------------------------------------------------------------------------
-
-    public function testGetDirectoryListingReturnsOriginalArrayWhenNoDiskImages(): void
-    {
-        $aExisting = ['prior' => 'entry'];
-        $aResult   = DfsSsd::getDirectoryListing('$', $aExisting);
-        // 'prior' entry must be preserved; no extra disk-image entries.
-        $this->assertArrayHasKey('prior', $aResult);
-    }
-
-    // -------------------------------------------------------------------------
-    // getDirectoryListing — with a real SSD image
-    // -------------------------------------------------------------------------
-
-    public function testGetDirectoryListingRootShowsSsdAsVirtualDirectory(): void
-    {
-        $this->_writeSsdImage('testdisk');
-        $aListing = DfsSsd::getDirectoryListing('$', []);
-
-        // The .ssd file is exposed under the key 'testdisk.ssd' with isDir() == TRUE.
-        $this->assertArrayHasKey('testdisk.ssd', $aListing);
-        $this->assertTrue($aListing['testdisk.ssd']->isDir());
-    }
-
-    public function testGetDirectoryListingInsideImageShowsFiles(): void
-    {
-        $this->_writeSsdImage('testdisk');
-        $aListing = DfsSsd::getDirectoryListing('$.testdisk', []);
-
-        $this->assertArrayHasKey('HELLO', $aListing);
-        $this->assertFalse($aListing['HELLO']->isDir());
-    }
-
-    public function testGetDirectoryListingFileHasCorrectLoadAndExecAddresses(): void
-    {
-        $this->_writeSsdImage('testdisk');
-        $aListing = DfsSsd::getDirectoryListing('$.testdisk', []);
-
-        $this->assertSame(0xFF04, $aListing['HELLO']->getLoadAddr());
-        $this->assertSame(0xFF19, $aListing['HELLO']->getExecAddr());
-    }
-
-    public function testGetDirectoryListingPreservesExistingEntries(): void
-    {
-        $this->_writeSsdImage('testdisk');
-        $aExisting = ['prior' => 'value'];
-        $aResult   = DfsSsd::getDirectoryListing('$.testdisk', $aExisting);
-
-        $this->assertArrayHasKey('prior', $aResult);
-        $this->assertArrayHasKey('HELLO', $aResult);
-    }
-
-    public function testGetDirectoryListingUnknownSubdirReturnsOriginalArray(): void
-    {
-        $this->_writeSsdImage('testdisk');
-        $aExisting = ['x' => 'y'];
-        $aResult   = DfsSsd::getDirectoryListing('$.testdisk.A', $aExisting);
-
-        // No catalogue dir 'A' in the minimal image; original array must be unchanged.
-        $this->assertSame($aExisting, $aResult);
-    }
-
-    // -------------------------------------------------------------------------
-    // getFile — happy path
-    // -------------------------------------------------------------------------
-
-    public function testGetFileReturnsFileContents(): void
-    {
-        $this->_writeSsdImage('testdisk');
-        $sData = DfsSsd::getFile($this->oUser, new FilePath('$.testdisk', 'HELLO'));
-        $this->assertSame('Hello World', $sData);
-    }
-
-    // -------------------------------------------------------------------------
-    // File handle I/O
-    // -------------------------------------------------------------------------
-
-    /** Extract the VFS (plugin-internal) handle integer from a FileDescriptor. */
-    protected function _getVfsHandle(\HomeLan\FileStore\Vfs\FileDescriptor $oFd): int
-    {
-        $oRefl = new ReflectionClass($oFd);
-        $oProp = $oRefl->getProperty('iVfsHandle');
-        $oProp->setAccessible(true);
-        return (int) $oProp->getValue($oFd);
-    }
-
-    public function testFsFtellInitiallyZero(): void
-    {
-        $this->_writeSsdImage('testdisk');
-        $oFd = DfsSsd::_buildFiledescriptorFromEconetPath(
-            $this->oUser, new FilePath('$.testdisk', 'HELLO'), true, true
-        );
-        $this->assertSame(0, $oFd->fsFTell());
-        $oFd->close();
-    }
-
-    public function testSetPosUpdatesFsFtell(): void
-    {
-        $this->_writeSsdImage('testdisk');
-        $oFd = DfsSsd::_buildFiledescriptorFromEconetPath(
-            $this->oUser, new FilePath('$.testdisk', 'HELLO'), true, true
-        );
-        $oFd->setPos(5);
-        $this->assertSame(5, $oFd->fsFTell());
-        $oFd->close();
-    }
-
-    public function testReadReturnsSubstringAtCurrentPosition(): void
-    {
-        $this->_writeSsdImage('testdisk');
-        $oFd = DfsSsd::_buildFiledescriptorFromEconetPath(
-            $this->oUser, new FilePath('$.testdisk', 'HELLO'), true, true
-        );
-        $oFd->setPos(6);
-        $sData = $oFd->read(5);
-        $this->assertSame('World', $sData);
-        $oFd->close();
-    }
-
-    public function testFsFStatReturnsSizeAndSector(): void
-    {
-        $this->_writeSsdImage('testdisk');
-        $oFd   = DfsSsd::_buildFiledescriptorFromEconetPath(
-            $this->oUser, new FilePath('$.testdisk', 'HELLO'), true, true
-        );
-        $aStat = $oFd->fsFStat();
-        $this->assertSame(11, $aStat['size']);
-        $this->assertSame(2, $aStat['ino']);      // start sector
-        $this->assertSame(1, $aStat['nlink']);
-        $this->assertNull($aStat['dev']);
-        $oFd->close();
-    }
-
-    public function testIsEofFalseBeforeEnd(): void
-    {
-        $this->_writeSsdImage('testdisk');
-        $oFd = DfsSsd::_buildFiledescriptorFromEconetPath(
-            $this->oUser, new FilePath('$.testdisk', 'HELLO'), true, true
-        );
-        $oFd->setPos(0);
-        $this->assertFalse($oFd->isEof());
-        $oFd->close();
-    }
-
-    public function testIsEofTrueAtEnd(): void
-    {
-        $this->_writeSsdImage('testdisk');
-        $oFd = DfsSsd::_buildFiledescriptorFromEconetPath(
-            $this->oUser, new FilePath('$.testdisk', 'HELLO'), true, true
-        );
-        $oFd->setPos(11); // file size = 11
-        $this->assertTrue($oFd->isEof());
-        $oFd->close();
-    }
-
-    public function testFsCloseRemovesHandle(): void
-    {
-        $this->_writeSsdImage('testdisk');
-        $oFd     = DfsSsd::_buildFiledescriptorFromEconetPath(
-            $this->oUser, new FilePath('$.testdisk', 'HELLO'), true, true
-        );
-        $iHandle = $this->_getVfsHandle($oFd);
-        $oFd->close();
-
-        // After close the VFS handle should be gone — fsFtell must throw.
-        $this->expectException(VfsException::class);
-        DfsSsd::fsFtell($this->oUser, $iHandle);
-    }
-
-    public function testBuildFiledescriptorThrowsForNonExistentFile(): void
-    {
-        $this->expectException(VfsException::class);
-        DfsSsd::_buildFiledescriptorFromEconetPath(
-            $this->oUser, new FilePath('$.testdisk', 'NOSUCHFILE'), true, true
-        );
     }
 }

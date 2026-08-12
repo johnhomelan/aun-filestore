@@ -59,6 +59,25 @@ class AdfsHD implements PluginInterface {
 		}
 	}
 
+	/**
+	 * Injects a reader instance for a given image file, bypassing the normal
+	 * AdfsReaderHD construction. Used by unit tests to mock out the acorn-disk class.
+	 */
+	public static function setImageReader(string $sImageFile, object $oReader): void
+	{
+		self::$aImageReaders[$sImageFile] = $oReader;
+	}
+
+	/**
+	 * Resets all static state (used in tests).
+	 */
+	public static function reset(): void
+	{
+		self::$aImageReaders = [];
+		self::$aFileHandles = [];
+		self::$iFileHandle = 0;
+	}
+
 	protected static function _getImageReader($sImageFile)
 	{
 		if(!array_key_exists($sImageFile,AdfsHD::$aImageReaders)){
@@ -94,7 +113,7 @@ class AdfsHD implements PluginInterface {
 				}
 			}else{
 				//The directroy does not exist so walk the directory tree in a case insensitve way an try to find the real dir/file
-				$aDirParts = explode(DIRECTORY_SEPARATOR,$sUnixPath);
+				$aDirParts = array_values(array_filter(explode(DIRECTORY_SEPARATOR,$sUnixPath),fn($sPart) => $sPart!==''));
 				$sNewDirPath = "";
 				$iMatches = 0;
 				foreach($aDirParts as $sDirPart){
@@ -184,6 +203,15 @@ class AdfsHD implements PluginInterface {
 		$sImageFile = AdfsHD::_getImageFile($oEconetPath->getFilePath());
 		if(strlen($sImageFile)>0){
 			$sPathInsideImage = AdfsHD::_getPathInsideImage($oEconetPath->getFilePath(),$sImageFile);
+
+			if($sPathInsideImage===''){
+				//The path refers to the image itself — present it as a directory
+				$iEconetHandle = Vfs::getFreeFileHandleID($oUser);
+				$iVfsHandle = AdfsHD::$iFileHandle++;
+				AdfsHD::$aFileHandles[$iVfsHandle]=['image-file'=>$sImageFile, 'path-inside-image'=>'', 'pos'=>0];
+				return new FileDescriptor(self::$oLogger,'HomeLan\FileStore\Vfs\Plugin\AdfsHD',$oUser,$sImageFile,$oEconetPath->getFilePath(),$iVfsHandle,$iEconetHandle,FALSE,TRUE);
+			}
+
 			if(AdfsHD::_checkImageFileExists($sImageFile,$sPathInsideImage)){
 				$iEconetHandle = Vfs::getFreeFileHandleID($oUser);
 				$iVfsHandle = AdfsHD::$iFileHandle++;
@@ -193,17 +221,7 @@ class AdfsHD implements PluginInterface {
 			}
 		}
 
-		//Scan the unix dir, see of there is a diskimage in that directory to see if it need changing to a directory
-		$sUnixPath = AdfsHD::_econetToUnix($oEconetPath->getFilePath());
-		if(file_exists($sUnixPath.'.dat')){
-			//Disk Image found
-			$iEconetHandle = Vfs::getFreeFileHandleID($oUser);
-			$iVfsHandle = AdfsHD::$iFileHandle++;
-			AdfsHD::$aFileHandles[$iVfsHandle]=['image-file'=>$sUnixPath.'.dat', 'path-inside-image'=>'', 'pos'=>0];
-			return new FileDescriptor(self::$oLogger,'HomeLan\FileStore\Vfs\Plugin\AdfsHD',$oUser,$sUnixPath.'.dat',$oEconetPath->getFilePath(),$iVfsHandle,$iEconetHandle,FALSE,TRUE);
-		}
 		throw new VfsException("No such file");
-			
 	}
 
 
@@ -230,7 +248,7 @@ class AdfsHD implements PluginInterface {
 			}
 
 			foreach($aCat as $sFile=>$aMeta){
-				$aDirectoryListing[$sFile] = new DirectoryEntry($sFile,$sImageFile,'HomeLan\FileStore\Vfs\Plugin\AdfsHD',$aMeta['load'],$aMeta['exec'],$aMeta['size'] ,$sEconetPath.'.'.$sFile,$aImageStat['ctime'],'-r/-r', $aMeta['type']=='dir' ? TRUE : FALSE);
+				$aDirectoryListing[$sFile] = new DirectoryEntry($sFile,$sImageFile,'HomeLan\FileStore\Vfs\Plugin\AdfsHD',$aMeta['load'],$aMeta['exec'],$aMeta['size'] ?? 0,$sEconetPath.'.'.$sFile,$aImageStat['ctime'],'-r/-r', $aMeta['type']=='dir' ? TRUE : FALSE);
 			}
 		}
 		

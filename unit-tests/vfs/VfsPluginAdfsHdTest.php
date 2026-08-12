@@ -7,8 +7,13 @@
  *
  * The plugin provides read-only access to ADFS hard disk image files (.dat)
  * stored on the local filesystem. .dat images appear as virtual directories in
- * the econet namespace. Unlike AdfsAdl the images are NOT interleaved (sectors
- * are stored sequentially on disk).
+ * the econet namespace.
+ *
+ * AdfsReaderHD is mocked out via AdfsHD::setImageReader() rather than reading a
+ * real binary image, so the tests exercise the full catalogue-walking behaviour
+ * of the plugin — including the path-resolution edge cases around an existing
+ * image with a requested sub-path that does not exist inside it — without
+ * needing to synthesise a valid on-disk ADFS image format.
  */
 
 if (!defined('CONFIG_security_mode')) {
@@ -27,9 +32,13 @@ use HomeLan\FileStore\Authentication\User;
 use HomeLan\FileStore\Vfs\Plugin\AdfsHD;
 use HomeLan\FileStore\Vfs\FilePath;
 use HomeLan\FileStore\Vfs\Exception as VfsException;
+use HomeLan\Retro\Acorn\Disk\AdfsReaderHD;
+use Mockery\Adapter\Phpunit\MockeryPHPUnitIntegration;
 
 class VfsPluginAdfsHdTest extends TestCase
 {
+    use MockeryPHPUnitIntegration;
+
     protected User $oUser;
     protected string $sRoot;
 
@@ -46,6 +55,7 @@ class VfsPluginAdfsHdTest extends TestCase
 
         $oLogger = new Logger('adfshd-test');
         $oLogger->pushHandler(new NullHandler());
+        AdfsHD::reset();
         AdfsHD::init($oLogger, false);
 
         $this->oUser = new User();
@@ -54,33 +64,18 @@ class VfsPluginAdfsHdTest extends TestCase
         $this->oUser->setBootOpt(0);
         $this->oUser->setUnixUid(5000);
         $this->oUser->setPriv('u');
-
-        $this->_resetPluginState();
     }
 
     protected function tearDown(): void
     {
         config::resetValue('vfs_plugin_localadfshd_root');
         $this->_deleteDir($this->sRoot);
-        $this->_resetPluginState();
+        AdfsHD::reset();
     }
 
     // -------------------------------------------------------------------------
     // Helpers
     // -------------------------------------------------------------------------
-
-    protected function _resetPluginState(): void
-    {
-        $oRefl = new ReflectionClass(AdfsHD::class);
-        foreach (['aImageReaders', 'aFileHandles'] as $sProp) {
-            $oProp = $oRefl->getProperty($sProp);
-            $oProp->setAccessible(true);
-            $oProp->setValue(null, []);
-        }
-        $oProp = $oRefl->getProperty('iFileHandle');
-        $oProp->setAccessible(true);
-        $oProp->setValue(null, 0);
-    }
 
     protected function _deleteDir(string $sDir): void
     {
@@ -98,24 +93,29 @@ class VfsPluginAdfsHdTest extends TestCase
     }
 
     /**
-     * Build a minimal valid ADFS HD image with an empty root directory.
-     *
-     * AdfsReaderHD uses non-interleaved layout (bInterleaved=false), so sector n
-     * is simply at byte offset n*256. The root directory occupies sectors 2-6
-     * (bytes 512-1791). All-zero content means the catalogue loop breaks
-     * immediately on the first entry (byte 0 of first metadata slot = 0).
+     * Creates a stub *.dat file on disk and registers a mock reader for it. The
+     * stub file's content is irrelevant — the mock is always used in place of a
+     * real AdfsReaderHD.
      */
-    protected function _buildMinimalAdfsHd(): string
+    protected function _seedImage(string $sName, object $oMock): string
     {
-        return str_repeat("\x00", 2048);
+        $sImagePath = $this->sRoot . $sName . '.dat';
+        file_put_contents($sImagePath, str_repeat("\x00", 64));
+        AdfsHD::setImageReader($sImagePath, $oMock);
+        return $sImagePath;
     }
 
-    /** Write a minimal .dat image to the test root and return its path. */
-    protected function _writeDatImage(string $sName = 'scsi0'): string
+    protected function _sampleCatalogue(): array
     {
-        $sPath = $this->sRoot . $sName . '.dat';
-        file_put_contents($sPath, $this->_buildMinimalAdfsHd());
-        return $sPath;
+        return [
+            'FILE1' => ['type' => 'file', 'load' => 0xFFFF0E00, 'exec' => 0xFFFF0E00, 'size' => 4, 'startsector' => 10],
+            'DIR1'  => [
+                'type' => 'dir', 'load' => 0, 'exec' => 0, 'startsector' => 20,
+                'dir'  => [
+                    'NESTED' => ['type' => 'file', 'load' => 0x1900, 'exec' => 0x8023, 'size' => 2, 'startsector' => 30],
+                ],
+            ],
+        ];
     }
 
     // -------------------------------------------------------------------------
@@ -146,7 +146,276 @@ class VfsPluginAdfsHdTest extends TestCase
     }
 
     // -------------------------------------------------------------------------
-    // Mutating operations — read-only plugin, all return false
+    // getFile against a mocked image
+    // -------------------------------------------------------------------------
+
+    public function testGetFileReturnsContentsForFileInsideImage(): void
+    {
+        $oMock = Mockery::mock(AdfsReaderHD::class);
+        $oMock->shouldReceive('getCatalogue')->andReturn($this->_sampleCatalogue());
+        $oMock->shouldReceive('getFile')->with('FILE1')->andReturn('DATA');
+        $this->_seedImage('scsi0', $oMock);
+
+        $sData = AdfsHD::getFile($this->oUser, new FilePath('$', 'scsi0.FILE1'));
+        $this->assertSame('DATA', $sData);
+    }
+
+    public function testGetFileFindsNestedFileInsideImage(): void
+    {
+        $oMock = Mockery::mock(AdfsReaderHD::class);
+        $oMock->shouldReceive('getCatalogue')->andReturn($this->_sampleCatalogue());
+        $oMock->shouldReceive('getFile')->with('DIR1.NESTED')->andReturn('NN');
+        $this->_seedImage('scsi0', $oMock);
+
+        $sData = AdfsHD::getFile($this->oUser, new FilePath('$.scsi0', 'DIR1.NESTED'));
+        $this->assertSame('NN', $sData);
+    }
+
+    public function testGetFileThrowsWhenNoImageExists(): void
+    {
+        $this->expectException(VfsException::class);
+        AdfsHD::getFile($this->oUser, new FilePath('$.nonexistent', 'file'));
+    }
+
+    public function testGetFileThrowsForPathNotInCatalogue(): void
+    {
+        $oMock = Mockery::mock(AdfsReaderHD::class);
+        $oMock->shouldReceive('getCatalogue')->andReturn($this->_sampleCatalogue());
+        $this->_seedImage('scsi0', $oMock);
+
+        $this->expectException(VfsException::class);
+        AdfsHD::getFile($this->oUser, new FilePath('$', 'scsi0.NOSUCHFILE'));
+    }
+
+    public function testGetFileThrowsForFileNotInEmptyImage(): void
+    {
+        $oMock = Mockery::mock(AdfsReaderHD::class);
+        $oMock->shouldReceive('getCatalogue')->andReturn([]);
+        $this->_seedImage('scsi0', $oMock);
+
+        $this->expectException(VfsException::class);
+        AdfsHD::getFile($this->oUser, new FilePath('$.scsi0', 'NOSUCHFILE'));
+    }
+
+    // -------------------------------------------------------------------------
+    // getDirectoryListing
+    // -------------------------------------------------------------------------
+
+    public function testGetDirectoryListingReturnsCatalogueEntries(): void
+    {
+        $oMock = Mockery::mock(AdfsReaderHD::class);
+        $oMock->shouldReceive('getCatalogue')->andReturn($this->_sampleCatalogue());
+        $this->_seedImage('scsi0', $oMock);
+
+        $aListing = AdfsHD::getDirectoryListing('$.scsi0', []);
+
+        $this->assertArrayHasKey('FILE1', $aListing);
+        $this->assertFalse($aListing['FILE1']->isDir());
+        $this->assertSame(4, $aListing['FILE1']->getSize());
+
+        $this->assertArrayHasKey('DIR1', $aListing);
+        $this->assertTrue($aListing['DIR1']->isDir());
+    }
+
+    public function testGetDirectoryListingDescendsIntoSubdirectory(): void
+    {
+        $oMock = Mockery::mock(AdfsReaderHD::class);
+        $oMock->shouldReceive('getCatalogue')->andReturn($this->_sampleCatalogue());
+        $this->_seedImage('scsi0', $oMock);
+
+        $aListing = AdfsHD::getDirectoryListing('$.scsi0.DIR1', []);
+
+        $this->assertArrayHasKey('NESTED', $aListing);
+        $this->assertSame(0x1900, $aListing['NESTED']->getLoadAddr());
+        $this->assertSame(0x8023, $aListing['NESTED']->getExecAddr());
+    }
+
+    public function testGetDirectoryListingReturnsOriginalArrayWhenNoDiskImages(): void
+    {
+        $aExisting = ['prior' => 'entry'];
+        $aResult   = AdfsHD::getDirectoryListing('$', $aExisting);
+        $this->assertArrayHasKey('prior', $aResult);
+    }
+
+    public function testGetDirectoryListingInsideEmptyImageReturnsEmptyArray(): void
+    {
+        $oMock = Mockery::mock(AdfsReaderHD::class);
+        $oMock->shouldReceive('getCatalogue')->andReturn([]);
+        $this->_seedImage('scsi0', $oMock);
+
+        $aListing = AdfsHD::getDirectoryListing('$.scsi0', []);
+        $this->assertEmpty($aListing);
+    }
+
+    public function testGetDirectoryListingRootShowsDatAsVirtualDirectory(): void
+    {
+        file_put_contents($this->sRoot . 'scsi0.dat', str_repeat("\x00", 256));
+
+        $aListing = AdfsHD::getDirectoryListing('$', []);
+
+        $this->assertArrayHasKey('scsi0.dat', $aListing);
+        $this->assertTrue($aListing['scsi0.dat']->isDir());
+    }
+
+    public function testGetDirectoryListingPreservesExistingEntries(): void
+    {
+        file_put_contents($this->sRoot . 'scsi0.dat', str_repeat("\x00", 256));
+
+        $aExisting = ['prior' => 'value'];
+        $aResult   = AdfsHD::getDirectoryListing('$', $aExisting);
+
+        $this->assertArrayHasKey('prior', $aResult);
+        $this->assertArrayHasKey('scsi0.dat', $aResult);
+    }
+
+    // -------------------------------------------------------------------------
+    // _buildFiledescriptorFromEconetPath
+    // -------------------------------------------------------------------------
+
+    public function testBuildFiledescriptorThrowsForNonExistentPath(): void
+    {
+        $this->expectException(VfsException::class);
+        AdfsHD::_buildFiledescriptorFromEconetPath(
+            $this->oUser, new FilePath('$.nonexistent', 'file'), true, true
+        );
+    }
+
+    public function testBuildFiledescriptorForDiskImageItselfReturnsDirectory(): void
+    {
+        $oMock = Mockery::mock(AdfsReaderHD::class);
+        $this->_seedImage('scsi0', $oMock);
+
+        $oFd = AdfsHD::_buildFiledescriptorFromEconetPath(
+            $this->oUser, new FilePath('$', 'scsi0'), true, true
+        );
+
+        $this->assertTrue($oFd->isDir());
+        $this->assertFalse($oFd->isFile());
+    }
+
+    public function testBuildFiledescriptorForFileInsideImage(): void
+    {
+        $oMock = Mockery::mock(AdfsReaderHD::class);
+        $oMock->shouldReceive('getCatalogue')->andReturn($this->_sampleCatalogue());
+        $oMock->shouldReceive('isFile')->with('FILE1')->andReturn(true);
+        $oMock->shouldReceive('isDir')->with('FILE1')->andReturn(false);
+        $this->_seedImage('scsi0', $oMock);
+
+        $oFd = AdfsHD::_buildFiledescriptorFromEconetPath(
+            $this->oUser, new FilePath('$', 'scsi0.FILE1'), true, true
+        );
+
+        $this->assertTrue($oFd->isFile());
+        $this->assertFalse($oFd->isDir());
+    }
+
+    public function testBuildFiledescriptorForDirectoryInsideImage(): void
+    {
+        $oMock = Mockery::mock(AdfsReaderHD::class);
+        $oMock->shouldReceive('getCatalogue')->andReturn($this->_sampleCatalogue());
+        $oMock->shouldReceive('isFile')->with('DIR1')->andReturn(false);
+        $oMock->shouldReceive('isDir')->with('DIR1')->andReturn(true);
+        $this->_seedImage('scsi0', $oMock);
+
+        $oFd = AdfsHD::_buildFiledescriptorFromEconetPath(
+            $this->oUser, new FilePath('$.scsi0', 'DIR1'), true, true
+        );
+
+        $this->assertTrue($oFd->isDir());
+        $this->assertFalse($oFd->isFile());
+    }
+
+    /**
+     * Regression test for the bug where a nonexistent sub-path under an existing
+     * image would fall through to a second "does the whole path map to an image
+     * file?" check that silently ignored the sub-path and matched the image root
+     * instead of throwing "No such file".
+     */
+    public function testBuildFiledescriptorThrowsForNonExistentPathInsideImage(): void
+    {
+        $oMock = Mockery::mock(AdfsReaderHD::class);
+        $oMock->shouldReceive('getCatalogue')->andReturn($this->_sampleCatalogue());
+        $this->_seedImage('scsi0', $oMock);
+
+        $this->expectException(VfsException::class);
+        AdfsHD::_buildFiledescriptorFromEconetPath(
+            $this->oUser, new FilePath('$', 'scsi0.NOSUCHFILE'), true, true
+        );
+    }
+
+    public function testBuildFiledescriptorThrowsForNonExistentNestedPathInsideImage(): void
+    {
+        $oMock = Mockery::mock(AdfsReaderHD::class);
+        $oMock->shouldReceive('getCatalogue')->andReturn($this->_sampleCatalogue());
+        $this->_seedImage('scsi0', $oMock);
+
+        $this->expectException(VfsException::class);
+        AdfsHD::_buildFiledescriptorFromEconetPath(
+            $this->oUser, new FilePath('$.scsi0', 'DIR1.NOSUCHFILE'), true, true
+        );
+    }
+
+    // -------------------------------------------------------------------------
+    // Handle-based read I/O
+    // -------------------------------------------------------------------------
+
+    public function testReadReturnsDataAtCurrentPosition(): void
+    {
+        $oMock = Mockery::mock(AdfsReaderHD::class);
+        $oMock->shouldReceive('getCatalogue')->andReturn($this->_sampleCatalogue());
+        $oMock->shouldReceive('isFile')->with('FILE1')->andReturn(true);
+        $oMock->shouldReceive('isDir')->with('FILE1')->andReturn(false);
+        $oMock->shouldReceive('getFile')->with('FILE1')->andReturn('DATA');
+        $this->_seedImage('scsi0', $oMock);
+
+        AdfsHD::_buildFiledescriptorFromEconetPath($this->oUser, new FilePath('$', 'scsi0.FILE1'), true, true);
+
+        $this->assertSame('DA', AdfsHD::read($this->oUser, 0, 2));
+        AdfsHD::setPos($this->oUser, 0, 2);
+        $this->assertSame('TA', AdfsHD::read($this->oUser, 0, 2));
+    }
+
+    public function testSetPosAndFsFtell(): void
+    {
+        $oMock = Mockery::mock(AdfsReaderHD::class);
+        $this->_seedImage('scsi0', $oMock);
+
+        $oFd = AdfsHD::_buildFiledescriptorFromEconetPath($this->oUser, new FilePath('$', 'scsi0'), true, true);
+        $oFd->setPos(42);
+        $this->assertSame(42, $oFd->fsFTell());
+    }
+
+    public function testFsFStatReturnsSizeAndSector(): void
+    {
+        $oMock = Mockery::mock(AdfsReaderHD::class);
+        $oMock->shouldReceive('getCatalogue')->andReturn($this->_sampleCatalogue());
+        $oMock->shouldReceive('isFile')->with('FILE1')->andReturn(true);
+        $oMock->shouldReceive('isDir')->with('FILE1')->andReturn(false);
+        $oMock->shouldReceive('getFile')->with('FILE1')->andReturn('DATA');
+        $oMock->shouldReceive('getStat')->with('FILE1')->andReturn(['size' => 4, 'sector' => 10]);
+        $this->_seedImage('scsi0', $oMock);
+
+        AdfsHD::_buildFiledescriptorFromEconetPath($this->oUser, new FilePath('$', 'scsi0.FILE1'), true, true);
+
+        $aStat = AdfsHD::fsFStat($this->oUser, 0);
+        $this->assertSame(4, $aStat['size']);
+        $this->assertSame(10, $aStat['ino']);
+    }
+
+    public function testFsCloseRemovesHandle(): void
+    {
+        $oMock = Mockery::mock(AdfsReaderHD::class);
+        $this->_seedImage('scsi0', $oMock);
+
+        $oFd = AdfsHD::_buildFiledescriptorFromEconetPath($this->oUser, new FilePath('$', 'scsi0'), true, true);
+        $oFd->close();
+
+        $this->expectException(VfsException::class);
+        AdfsHD::fsFtell($this->oUser, 0);
+    }
+
+    // -------------------------------------------------------------------------
+    // Mutating operations — all return false (read-only plugin)
     // -------------------------------------------------------------------------
 
     public function testCreateDirectoryReturnsFalse(): void
@@ -255,128 +524,5 @@ class VfsPluginAdfsHdTest extends TestCase
     {
         AdfsHD::fsClose($this->oUser, 9999);
         $this->assertTrue(true);
-    }
-
-    // -------------------------------------------------------------------------
-    // getFile — error paths
-    // -------------------------------------------------------------------------
-
-    public function testGetFileThrowsWhenNoImageExists(): void
-    {
-        $this->expectException(VfsException::class);
-        AdfsHD::getFile($this->oUser, new FilePath('$.nonexistent', 'file'));
-    }
-
-    public function testGetFileThrowsForFileNotInEmptyImage(): void
-    {
-        $this->_writeDatImage('scsi0');
-        $this->expectException(VfsException::class);
-        AdfsHD::getFile($this->oUser, new FilePath('$.scsi0', 'NOSUCHFILE'));
-    }
-
-    // -------------------------------------------------------------------------
-    // getDirectoryListing
-    // -------------------------------------------------------------------------
-
-    public function testGetDirectoryListingReturnsOriginalArrayWhenNoDiskImages(): void
-    {
-        $aExisting = ['prior' => 'entry'];
-        $aResult   = AdfsHD::getDirectoryListing('$', $aExisting);
-        $this->assertArrayHasKey('prior', $aResult);
-    }
-
-    public function testGetDirectoryListingRootShowsDatAsVirtualDirectory(): void
-    {
-        $this->_writeDatImage('scsi0');
-        $aListing = AdfsHD::getDirectoryListing('$', []);
-
-        // The .dat file is exposed with its full filename as the key.
-        $this->assertArrayHasKey('scsi0.dat', $aListing);
-        $this->assertTrue($aListing['scsi0.dat']->isDir());
-    }
-
-    public function testGetDirectoryListingInsideEmptyImageReturnsEmptyArray(): void
-    {
-        $this->_writeDatImage('scsi0');
-        $aListing = AdfsHD::getDirectoryListing('$.scsi0', []);
-
-        // The zero-filled image has an empty ADFS catalogue.
-        $this->assertEmpty($aListing);
-    }
-
-    public function testGetDirectoryListingPreservesExistingEntries(): void
-    {
-        $this->_writeDatImage('scsi0');
-        $aExisting = ['prior' => 'value'];
-        $aResult   = AdfsHD::getDirectoryListing('$', $aExisting);
-
-        $this->assertArrayHasKey('prior', $aResult);
-        $this->assertArrayHasKey('scsi0.dat', $aResult);
-    }
-
-    // -------------------------------------------------------------------------
-    // _buildFiledescriptorFromEconetPath
-    // -------------------------------------------------------------------------
-
-    public function testBuildFiledescriptorThrowsForNonExistentPath(): void
-    {
-        $this->expectException(VfsException::class);
-        AdfsHD::_buildFiledescriptorFromEconetPath(
-            $this->oUser, new FilePath('$.nonexistent', 'file'), true, true
-        );
-    }
-
-    /** Extract the VFS handle integer from a FileDescriptor via reflection. */
-    protected function _getVfsHandle(\HomeLan\FileStore\Vfs\FileDescriptor $oFd): int
-    {
-        $oRefl = new ReflectionClass($oFd);
-        $oProp = $oRefl->getProperty('iVfsHandle');
-        $oProp->setAccessible(true);
-        return (int) $oProp->getValue($oFd);
-    }
-
-    public function testBuildFiledescriptorForDiskImageItselfReturnsDirectory(): void
-    {
-        $this->_writeDatImage('scsi0');
-        $oFd = AdfsHD::_buildFiledescriptorFromEconetPath(
-            $this->oUser, new FilePath('$', 'scsi0'), true, true
-        );
-        $this->assertTrue($oFd->isDir());
-        $this->assertFalse($oFd->isFile());
-        $oFd->close();
-    }
-
-    public function testFsFtellInitiallyZeroForDiskRoot(): void
-    {
-        $this->_writeDatImage('scsi0');
-        $oFd = AdfsHD::_buildFiledescriptorFromEconetPath(
-            $this->oUser, new FilePath('$', 'scsi0'), true, true
-        );
-        $this->assertSame(0, $oFd->fsFTell());
-        $oFd->close();
-    }
-
-    public function testSetPosAndFsFtellRoundTrip(): void
-    {
-        $this->_writeDatImage('scsi0');
-        $oFd = AdfsHD::_buildFiledescriptorFromEconetPath(
-            $this->oUser, new FilePath('$', 'scsi0'), true, true
-        );
-        $oFd->setPos(42);
-        $this->assertSame(42, $oFd->fsFTell());
-        $oFd->close();
-    }
-
-    public function testFsCloseRemovesHandle(): void
-    {
-        $this->_writeDatImage('scsi0');
-        $oFd     = AdfsHD::_buildFiledescriptorFromEconetPath(
-            $this->oUser, new FilePath('$', 'scsi0'), true, true
-        );
-        $iHandle = $this->_getVfsHandle($oFd);
-        $oFd->close();
-
-        $this->expectException(VfsException::class);
-        AdfsHD::fsFtell($this->oUser, $iHandle);
     }
 }

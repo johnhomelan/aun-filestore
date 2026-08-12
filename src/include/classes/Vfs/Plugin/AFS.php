@@ -59,6 +59,25 @@ class AFS implements PluginInterface {
 		}
 	}
 
+	/**
+	 * Injects a reader instance for a given image file, bypassing the normal
+	 * L3fsReader construction. Used by unit tests to mock out the l3fsreader class.
+	 */
+	public static function setImageReader(string $sImageFile, object $oReader): void
+	{
+		self::$aImageReaders[$sImageFile] = $oReader;
+	}
+
+	/**
+	 * Resets all static state (used in tests).
+	 */
+	public static function reset(): void
+	{
+		self::$aImageReaders = [];
+		self::$aFileHandles = [];
+		self::$iFileHandle = 0;
+	}
+
 	protected static function _getImageReader($sImageFile)
 	{
 		if(!array_key_exists($sImageFile,AFS::$aImageReaders)){
@@ -94,7 +113,7 @@ class AFS implements PluginInterface {
 				}
 			}else{
 				//The directroy does not exist so walk the directory tree in a case insensitve way an try to find the real dir/file
-				$aDirParts = explode(DIRECTORY_SEPARATOR,$sUnixPath);
+				$aDirParts = array_values(array_filter(explode(DIRECTORY_SEPARATOR,$sUnixPath),fn($sPart) => $sPart!==''));
 				$sNewDirPath = "";
 				$iMatches = 0;
 				foreach($aDirParts as $sDirPart){
@@ -184,6 +203,15 @@ class AFS implements PluginInterface {
 		$sImageFile = AFS::_getImageFile($oEconetPath->getFilePath());
 		if(strlen($sImageFile)>0){
 			$sPathInsideImage = AFS::_getPathInsideImage($oEconetPath->getFilePath(),$sImageFile);
+
+			if($sPathInsideImage===''){
+				//The path refers to the image itself — present it as a directory
+				$iEconetHandle = Vfs::getFreeFileHandleID($oUser);
+				$iVfsHandle = AFS::$iFileHandle++;
+				AFS::$aFileHandles[$iVfsHandle]=['image-file'=>$sImageFile, 'path-inside-image'=>'', 'pos'=>0];
+				return new FileDescriptor(self::$oLogger,'HomeLan\FileStore\Vfs\Plugin\AFS',$oUser,$sImageFile,$oEconetPath->getFilePath(),$iVfsHandle,$iEconetHandle,FALSE,TRUE);
+			}
+
 			if(AFS::_checkImageFileExists($sImageFile,$sPathInsideImage)){
 				$iEconetHandle = Vfs::getFreeFileHandleID($oUser);
 				$iVfsHandle = AFS::$iFileHandle++;
@@ -193,17 +221,7 @@ class AFS implements PluginInterface {
 			}
 		}
 
-		//Scan the unix dir, see of there is a diskimage in that directory to see if it need changing to a directory
-		$sUnixPath = AFS::_econetToUnix($oEconetPath->getFilePath());
-		if(file_exists($sUnixPath.'.l3')){
-			//Disk Image found
-			$iEconetHandle = Vfs::getFreeFileHandleID($oUser);
-			$iVfsHandle = AFS::$iFileHandle++;
-			AFS::$aFileHandles[$iVfsHandle]=['image-file'=>$sUnixPath.'.l3', 'path-inside-image'=>'', 'pos'=>0];
-			return new FileDescriptor(self::$oLogger,'HomeLan\FileStore\Vfs\Plugin\AFS',$oUser,$sUnixPath.'.l3',$oEconetPath->getFilePath(),$iVfsHandle,$iEconetHandle,FALSE,TRUE);
-		}
 		throw new VfsException("No such file");
-			
 	}
 
 

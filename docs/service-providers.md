@@ -133,6 +133,8 @@ ACKs are expected.
 | `IPv4` | several | EconetA IPv4 forwarding, ARP, NAT, ICMP |
 | `BeebTerm` | — | SJ Research BeebTerm terminal sessions |
 | `Torchnet` | `0x90`, `0x91` | TorchNet CP/M file services |
+| `MaceMail` | several (see `docs/protocols/macemail.md`) | MaceMail electronic-mail server — logon/logoff, directory listing, mail check, send/list/read/delete mail, new-mail notifications, per-user store slots, mailbox scan/Look, and chat invites/availability, plus an admin interface for slot provisioning, forced logoff, and canned system-broadcast messages (the peer-to-peer chat text exchange itself is client-to-client and needs no server support) |
+| `Teletext` | 0xB0–0xB5 (see `docs/protocols/teletext.md`) | Econet teletext server (TSERV) — discovery, page request (with subpage support)/read-version/max-users/date-time/logoff/cancel/view-screen/toggle-service/toggle-header, and a "currently displayed page" broadcast; pages are served read-only from a directory-per-channel, file-per-page(-subpage) store on local disk, one channel of which can be kept automatically populated from the Teefax teletext archive via a housekeeping-driven background import (`registerService()` → `addHousingKeepingTask()` → a detached `React\ChildProcess\Process`, same mechanism `BeebTerm` uses for its sessions); admin page shows status, a channel/page-count listing, and a manual "Refresh Teefax Now" trigger |
 
 ---
 

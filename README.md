@@ -62,6 +62,20 @@ Impliments a number of network services, that sit ontop of the econet encapsulat
 
     * Files are stored on the Acorn filesystem with `\` as the CP/M extension separator in the filename (e.g. the CP/M file `MYPROG.COM` is stored with the Acorn name `MYPROG\COM` inside the drive directory). The CP/M compatibility layer translates this transparently so Torch clients see standard `8.3` names.
 
+* MaceMail
+    * Server for the 1985 MaceMail electronic-mail system, letting unmodified MaceMail terminal clients log on, browse the directory, and send/read/delete mail against this server. See [docs/protocols/macemail.md](docs/protocols/macemail.md) for the reverse-engineered wire protocol.
+    * Authentication and user identity are delegated entirely to the existing file server user database (`Authentication\Security`) — MaceMail keeps no password store of its own, only a slot-number-to-username assignment table provisioned from the admin web front end.
+    * Mail, per-user store slots, and the slot assignment table live under their own configured directory (`macemail_store_dir`) as native file storage, independent of the VFS plugin system.
+    * Supports sending mail (to explicit recipients or everyone), listing/reading/deleting a mailbox with new-mail push notifications, 8 general-purpose per-user store slots, mailbox scan/Look paging, and chat invites gated by a per-user availability flag (the chat text itself is exchanged directly between clients, not through the server).
+    * The admin interface provisions mail slots against existing filestore users, can force a user off, and can send one of the vintage client's canned system-broadcast messages.
+
+* Teletext
+    * Econet teletext server (the "TSERV" protocol) for vintage teletext client programs — discovery, page requests by channel/page number, version/max-users/date-time queries, and a "currently displayed page" broadcast. See [docs/protocols/teletext.md](docs/protocols/teletext.md) for the wire protocol.
+    * Like [PiEconetBridge](https://github.com/cr12925/PiEconetBridge)'s own teletext server, pages are always served from local storage rather than a live receiver: one directory per channel, one file per page (a raw 1024-byte Mode 7 screen dump), configured via `teletext_store_dir` as native file storage, independent of the VFS plugin system. The server never writes pages itself — populate the store directory directly.
+    * Subpages are supported (unlike PiEconetBridge's own documented limitation): the plain `{page}.dat` file is subpage 1, additional subpages live alongside it as `{page}_{N}.dat`.
+    * One channel can be kept automatically populated from the [Teefax](https://magazine.raspberrypi.com/articles/teefax) teletext archive — set `teletext_teefax_channel` and the server periodically downloads and converts it in the background via its own housekeeping mechanism (no cron job needed), the same way it never blocks on anything else. See the "Teefax import" section of [docs/protocols/teletext.md](docs/protocols/teletext.md).
+    * The admin interface shows service status, a read-only listing of channels and how many pages each has, and a "Refresh Teefax Now" button.
+
 
 ## Admin Web Front End ##
 A browser-based admin interface is included and starts automatically with the server.
@@ -701,6 +715,8 @@ Detailed wire-format documentation for every protocol implemented by the server:
 * [Bridge](docs/protocols/bridge.md) — Econet bridge discovery protocol: bridge-to-bridge queries, station-to-bridge localnet and netknown queries
 * [EconetA IPv4](docs/protocols/ipv4.md) — IP over Econet (port 0xD2): DCI-2 and DCI-4 ARP, IPv4 forwarding, ICMP echo and unreachable
 * [TorchNet](docs/protocols/torchnet.md) — CP/M file server for Torch workstations: all command codes with request and reply byte layouts, record I/O, drive mapping, filename conventions
+* [MaceMail](docs/protocols/macemail.md) — reverse-engineered 1985 MaceMail electronic-mail protocol: quick-command envelope, operation codes, logon/mail/store/directory/chat payload layouts
+* [Teletext](docs/protocols/teletext.md) — Econet teletext server protocol (TSERV): ports, discovery, operation codes, page/current-page payload layouts
 
 ## Developer Documentation ##
 

@@ -728,3 +728,93 @@ IP address to bind the remote bridge TCP server listeners to.  Default is `0.0.0
 ~~~~~~
 remote_bridge_server_address = 0.0.0.0
 ~~~~~~
+
+MaceMail
+==
+
+See [docs/protocols/macemail.md](protocols/macemail.md) for the wire protocol. Authentication, sessions, and idle timeout are handled entirely by the existing `security_*` configuration and auth plugins — MaceMail keeps no password store of its own, only a slot-number-to-username assignment table.
+
+**macemail_store_dir**
+
+Root directory for MaceMail's own native storage — the slot registry, per-user metadata, mailboxes, and store-slot files.  This is independent of the VFS layer (no `vfs_plugin_*` settings apply here).  No default — must be set for the `MaceMail` provider to work.
+
+~~~~~~
+macemail_store_dir = /var/lib/aun-filestore-macemail
+~~~~~~
+
+**macemail_usergroup**
+
+The 4-character "user group" identifier sent to clients during the connect handshake.  The original protocol used this to partition multiple installations sharing one physical disc; this server does not use multiple usergroups, so the value only needs to satisfy the vintage client's own client-side check of it.  Default is `MAIL`.
+
+~~~~~~
+macemail_usergroup = MAIL
+~~~~~~
+
+**macemail_max_slots**
+
+Number of MaceMail user slots (0 to this value minus 1) available for assignment.  The original hardware-constrained implementation fixed this at 32; the wire protocol's 1-byte slot field and the vintage client's 2-digit entry field allow up to 100.  Default is `32`.
+
+~~~~~~
+macemail_max_slots = 32
+~~~~~~
+
+Teletext
+==
+
+See [docs/protocols/teletext.md](protocols/teletext.md) for the wire protocol. The server always serves pages from local storage — there is no live receiver — so populate the store directory directly (one sub-directory per channel, one `.dat` file per page, each holding a raw 1024-byte Mode 7 screen dump); the server itself is read-only and never writes there.
+
+**teletext_store_dir**
+
+Root directory for the teletext page store — a directory per channel, a `.dat` file per page inside it (`{teletext_store_dir}/{channel}/{page}.dat`).  A page with more than one subpage adds `{page}_{N}.dat` files alongside it for subpage 2 onwards (`{page}.dat` is always subpage 1).  This is independent of the VFS layer (no `vfs_plugin_*` settings apply here).
+
+~~~~~~
+teletext_store_dir = /var/lib/aun-filestore-teletext
+~~~~~~
+
+**teletext_server_name**
+
+Optional server name reported in the discovery reply (port 0xB1), alongside the fixed `TELETEXT` server type. Empty by default, meaning no name is sent.
+
+~~~~~~
+teletext_server_name =
+~~~~~~
+
+**teletext_max_users**
+
+The "max users per channel" value reported by the read-max-users operation (0x83) — informational only, not enforced. Default is `99`.
+
+~~~~~~
+teletext_max_users = 99
+~~~~~~
+
+**teletext_carousel_interval**
+
+How often, in seconds, the server broadcasts the "currently displayed page" packet on port 0xB5 (see docs/protocols/teletext.md for what this server reports, since it has no live carousel of its own). Default is `4`.
+
+~~~~~~
+teletext_carousel_interval = 4
+~~~~~~
+
+**teletext_teefax_channel**
+
+Which channel (0-9) to automatically keep populated from the [Teefax](https://magazine.raspberrypi.com/articles/teefax) teletext archive — see the "Teefax import" section of docs/protocols/teletext.md.  Empty by default, which disables the feature entirely: nothing is downloaded from anywhere unless this is set.
+
+~~~~~~
+teletext_teefax_channel =
+~~~~~~
+
+**teletext_teefax_source**
+
+Tarball URL the importer downloads Teefax's content from.  Defaults to a GitHub mirror of the original SVN repository, since that isn't always reliably reachable.
+
+~~~~~~
+teletext_teefax_source = https://github.com/opless/teefax-mirror/archive/refs/heads/master.tar.gz
+~~~~~~
+
+**teletext_teefax_refresh_interval**
+
+Minimum number of seconds between automatic Teefax refreshes, checked on every housekeeping tick.  Default is `86400` (one day).
+
+~~~~~~
+teletext_teefax_refresh_interval = 86400
+~~~~~~

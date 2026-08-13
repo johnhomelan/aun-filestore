@@ -155,4 +155,70 @@ class RemoteBridgePacketTest extends TestCase
         $this->assertNotFalse($sDecoded);
         $this->assertSame("\x00\xff\xfe\x80", $sDecoded);
     }
+
+    // -------------------------------------------------------------------------
+    // ACK (protocol 1.1+) — see docs/protocols/remote-bridge.md
+    // -------------------------------------------------------------------------
+
+    public function testEncodeAckProducesAckLine(): void
+    {
+        $sLine = BridgePacket::encodeAck(2, 254);
+        $this->assertSame("ACK 2 254\n", $sLine);
+    }
+
+    public function testMakeAckSetsPacketTypeToAck(): void
+    {
+        $oPkt = new BridgePacket();
+        $oPkt->makeAck(2, 254);
+        $this->assertSame('Ack', $oPkt->getPacketType());
+    }
+
+    public function testMakeAckPlacesNetworkAndStationInEconetSourceFields(): void
+    {
+        // ServiceDispatcher::ackEvents() reads getSourceNetwork()/getSourceStation()
+        // to find the matching addAckEvent() registration — an ack-flavoured
+        // BridgePacket must map (net, stn) there, not into the destination fields.
+        $oPkt = new BridgePacket();
+        $oPkt->makeAck(2, 254);
+        $oEco = $oPkt->buildEconetPacket();
+        $this->assertSame(2, $oEco->getSourceNetwork());
+        $this->assertSame(254, $oEco->getSourceStation());
+    }
+
+    public function testFromAckLineParsesCorrectly(): void
+    {
+        $oPkt = BridgePacket::fromAckLine("ACK 2 254\n");
+        $this->assertNotNull($oPkt);
+        $this->assertSame('Ack', $oPkt->getPacketType());
+        $this->assertSame(2, $oPkt->getSrcNetwork());
+        $this->assertSame(254, $oPkt->getSrcStation());
+    }
+
+    public function testFromAckLineRoundTripsWithEncodeAck(): void
+    {
+        $oPkt = BridgePacket::fromAckLine(BridgePacket::encodeAck(3, 100));
+        $this->assertNotNull($oPkt);
+        $this->assertSame(3, $oPkt->getSrcNetwork());
+        $this->assertSame(100, $oPkt->getSrcStation());
+    }
+
+    public function testFromAckLineRejectsWrongCommand(): void
+    {
+        $this->assertNull(BridgePacket::fromAckLine("SEND 2 5 1 254 151 0"));
+    }
+
+    public function testFromAckLineRejectsMissingFields(): void
+    {
+        $this->assertNull(BridgePacket::fromAckLine("ACK 2"));
+    }
+
+    public function testFromAckLineRejectsExtraFields(): void
+    {
+        $this->assertNull(BridgePacket::fromAckLine("ACK 2 254 999"));
+    }
+
+    public function testFromAckLineRejectsEmptyString(): void
+    {
+        $this->assertNull(BridgePacket::fromAckLine(''));
+    }
 }

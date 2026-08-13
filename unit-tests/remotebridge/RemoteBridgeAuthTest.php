@@ -44,6 +44,7 @@ class RemoteBridgeAuthTest extends TestCase
             $sSecret,
             $aLocalNetworks,
             $fOnPacket ?? static function (BridgePacket $p) {},
+            static function (BridgePacket $p) {},
         );
     }
 
@@ -60,6 +61,7 @@ class RemoteBridgeAuthTest extends TestCase
             $sSecret,
             $aLocalNetworks,
             $fOnPacket ?? static function (BridgePacket $p) {},
+            static function (BridgePacket $p) {},
         );
     }
 
@@ -381,6 +383,9 @@ class RemoteBridgeAuthTest extends TestCase
         $this->assertTrue(Map::networkKnown(2), 'Network 2 should be registered after NETWORKS exchange');
 
         $oServer->onClose();
-        $this->assertFalse(Map::networkKnown(2), 'Network 2 should be removed after connection close');
+        // Network stays "known" for a short grace period after close, so in-flight outbound
+        // packets get buffered rather than mis-routed, but it's no longer directly routable.
+        $this->assertTrue(Map::networkKnown(2), 'Network 2 should stay known during the reconnect grace period');
+        $this->assertNull(Map::networkToConnection(2), 'Network 2 should no longer resolve to a live connection');
     }
 }

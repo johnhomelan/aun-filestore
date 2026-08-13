@@ -40,6 +40,7 @@ class RemoteBridgeVersionTest extends TestCase
         return new Connection(
             $this->oLogger, $oTcp, 'server', 'secret', [1],
             static function (BridgePacket $p) {},
+            static function (BridgePacket $p) {},
             $aVersions,
         );
     }
@@ -48,6 +49,7 @@ class RemoteBridgeVersionTest extends TestCase
     {
         return new Connection(
             $this->oLogger, $oTcp, 'client', 'secret', [2],
+            static function (BridgePacket $p) {},
             static function (BridgePacket $p) {},
             $aVersions,
         );
@@ -301,10 +303,24 @@ class RemoteBridgeVersionTest extends TestCase
         $this->assertSame($oServer->getProtocolVersion(), $oClient->getProtocolVersion());
     }
 
-    public function testFullHandshakeDefaultsTo1_0(): void
+    public function testFullHandshakeDefaultsToHighestSupportedVersion(): void
     {
-        // No custom versions — both sides use SUPPORTED_VERSIONS (['1.0'])
+        // No custom versions — both sides use SUPPORTED_VERSIONS, so they
+        // negotiate up to the highest version both understand (1.1, since
+        // that added the ACK message — see docs/protocols/remote-bridge.md).
         [$oServer, $oClient] = $this->doHandshake();
+        $this->assertTrue($oServer->isAuthenticated());
+        $this->assertTrue($oClient->isAuthenticated());
+        $this->assertSame('1.1', $oServer->getProtocolVersion());
+        $this->assertSame('1.1', $oClient->getProtocolVersion());
+    }
+
+    public function testFullHandshakeStillWorksWithA1_0OnlyPeer(): void
+    {
+        // A peer that has not been upgraded (only knows 1.0) must still be
+        // able to complete a handshake against a 1.1-capable peer, and both
+        // sides fall back to the version they actually share.
+        [$oServer, $oClient] = $this->doHandshake(null, ['1.0']);
         $this->assertTrue($oServer->isAuthenticated());
         $this->assertTrue($oClient->isAuthenticated());
         $this->assertSame('1.0', $oServer->getProtocolVersion());
@@ -335,6 +351,11 @@ class RemoteBridgeVersionTest extends TestCase
     public function testSupportedVersionsConstantContains1_0(): void
     {
         $this->assertContains('1.0', Connection::SUPPORTED_VERSIONS);
+    }
+
+    public function testSupportedVersionsConstantContains1_1(): void
+    {
+        $this->assertContains('1.1', Connection::SUPPORTED_VERSIONS);
     }
 
     public function testSupportedVersionsConstantIsNonEmpty(): void

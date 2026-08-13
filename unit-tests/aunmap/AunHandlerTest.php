@@ -450,6 +450,66 @@ class AunHandlerTest extends TestCase
     }
 
     // =========================================================================
+    // Ack — dispatch to services (bug 1 fix: a genuinely-expected ack must
+    // reach ServiceDispatcher::inboundPacket() so addAckEvent() callbacks —
+    // e.g. FileServer's block-by-block load/save continuation — actually fire)
+    // =========================================================================
+
+    public function testAckWithMatchingSeqDispatchesToServices(): void
+    {
+        $oPacket = $this->makeEconetPacket();
+        $this->oSocket->method('send');
+        $this->oServices->method('getReplies')->willReturn([]);
+
+        $this->oHandler->send($oPacket);
+        $this->oHandler->timer();
+        $iSeq = $oPacket->getSequence();
+
+        $this->oServices->expects($this->once())->method('inboundPacket');
+
+        $sAck = $this->makeAunWire(3, 0, 0, $iSeq, '');
+        $this->oHandler->receive($sAck, self::DST_HOST, '127.0.0.1:32768');
+    }
+
+    public function testAckWithMatchingSeqForwardsResultingReplies(): void
+    {
+        $oPacket = $this->makeEconetPacket();
+        $this->oSocket->method('send');
+
+        $oReplyPacket = $this->makeEconetPacket();
+        $this->oServices->method('getReplies')->willReturn([$oReplyPacket]);
+        $this->oPacketDispatcher->expects($this->once())->method('sendPacket')->with($oReplyPacket);
+
+        $this->oHandler->send($oPacket);
+        $this->oHandler->timer();
+        $iSeq = $oPacket->getSequence();
+
+        $sAck = $this->makeAunWire(3, 0, 0, $iSeq, '');
+        $this->oHandler->receive($sAck, self::DST_HOST, '127.0.0.1:32768');
+    }
+
+    public function testAckWithWrongSeqDoesNotDispatchToServices(): void
+    {
+        $oPacket = $this->makeEconetPacket();
+        $this->oSocket->method('send');
+
+        $this->oHandler->send($oPacket);
+        $this->oHandler->timer();
+        $iSeq = $oPacket->getSequence();
+
+        $this->oServices->expects($this->never())->method('inboundPacket');
+
+        // Wrong sequence, retries still remain — a stray ack, not the one expected.
+        $sAck = $this->makeAunWire(3, 0, 0, $iSeq + 4, '');
+        $this->oHandler->receive($sAck, self::DST_HOST, '127.0.0.1:32768');
+    }
+
+    // Note: an ack for a completely untracked host not dispatching to
+    // services is already covered by testReceiveAckDoesNotDispatchToServices
+    // above (nothing was ever sent to that host, so _unQueue() has neither a
+    // matching queue entry nor a last-chance entry to match against).
+
+    // =========================================================================
     // Last-chance / clearAckEvent
     // =========================================================================
 
@@ -474,6 +534,7 @@ class AunHandlerTest extends TestCase
     {
         $oPacket = $this->makeEconetPacket(self::DST_NET, self::DST_STN);
         $this->oSocket->method('send');
+        $this->oServices->method('getReplies')->willReturn([]);
 
         $this->oHandler->send($oPacket, 0);
         $this->oHandler->timer(); // seq=4 registered in lastChance
@@ -484,6 +545,42 @@ class AunHandlerTest extends TestCase
         $sAck = $this->makeAunWire(3, 0, 0, $iSeq, '');
         $this->oServices->expects($this->never())->method('clearAckEvent');
 
+        $this->oHandler->receive($sAck, self::DST_HOST, '127.0.0.1:32768');
+    }
+
+    public function testLastChanceAckWithMatchingSeqDispatchesToServices(): void
+    {
+        // The final retry's own ack — arriving late, after retries were
+        // exhausted and the packet moved into aLastChance — must still
+        // notify the waiting service, not just be silently absorbed.
+        $oPacket = $this->makeEconetPacket(self::DST_NET, self::DST_STN);
+        $this->oSocket->method('send');
+        $this->oServices->method('getReplies')->willReturn([]);
+
+        $this->oHandler->send($oPacket, 0);
+        $this->oHandler->timer(); // seq=4 registered in lastChance
+        $iSeq = $oPacket->getSequence();
+
+        $this->oServices->expects($this->once())->method('inboundPacket');
+
+        $sAck = $this->makeAunWire(3, 0, 0, $iSeq, '');
+        $this->oHandler->receive($sAck, self::DST_HOST, '127.0.0.1:32768');
+    }
+
+    public function testLastChanceAckWithMismatchedSeqDoesNotDispatchToServices(): void
+    {
+        // The wrong ack arrives after retries were exhausted — clearAckEvent
+        // handles giving up on it (see testClearAckEventCalledWhenLastChance...
+        // above); it must not *also* be treated as the expected ack.
+        $oPacket = $this->makeEconetPacket(self::DST_NET, self::DST_STN);
+        $this->oSocket->method('send');
+
+        $this->oHandler->send($oPacket, 0);
+        $this->oHandler->timer(); // last chance registered (seq=4)
+
+        $this->oServices->expects($this->never())->method('inboundPacket');
+
+        $sAck = $this->makeAunWire(3, 0, 0, 999, '');
         $this->oHandler->receive($sAck, self::DST_HOST, '127.0.0.1:32768');
     }
 
@@ -592,5 +689,48 @@ class AunHandlerTest extends TestCase
     {
         $this->oHandler->onClose();
         $this->assertTrue(true);
+    }
+
+    // =========================================================================
+    // End-to-end regression test for bug 1: a real ServiceDispatcher::
+    // addAckEvent() callback (as used by FileServer's block-by-block
+    // load/save protocol) must actually fire when the client's real ack for
+    // that block arrives — not just have inboundPacket() invoked on a mock.
+    // Uses a real ServiceDispatcher rather than the mocked one from setUp().
+    // =========================================================================
+
+    public function testRealAckEventCallbackFiresWhenExpectedAckArrives(): void
+    {
+        $rp = new \ReflectionProperty(ServiceDispatcher::class, 'oSingleton');
+        $rp->setAccessible(true);
+        $rp->setValue(null, null);
+
+        $oRealServices = ServiceDispatcher::create($this->oLogger, []);
+
+        $bFired = false;
+        $oReceivedAck = null;
+        $oRealServices->addAckEvent(self::DST_NET, self::DST_STN, function ($oAckPacket) use (&$bFired, &$oReceivedAck) {
+            $bFired = true;
+            $oReceivedAck = $oAckPacket;
+        });
+
+        $oPacketDispatcher = $this->createMock(PacketDispatcher::class);
+        $oHandler = new Handler($this->oLogger, $oRealServices, $oPacketDispatcher);
+        $oSocket = $this->createMock(DatagramSocket::class);
+        $oSocket->method('send');
+        $oHandler->setSocket($oSocket);
+
+        $oPacket = $this->makeEconetPacket();
+        $oHandler->send($oPacket);
+        $oHandler->timer(); // transmits, assigns sequence
+        $iSeq = $oPacket->getSequence();
+
+        $sAck = $this->makeAunWire(3, 0, 0, $iSeq, '');
+        $oHandler->receive($sAck, self::DST_HOST, '127.0.0.1:32768');
+
+        $rp->setValue(null, null);
+
+        $this->assertTrue($bFired, 'addAckEvent callback must fire for the real, expected ack');
+        $this->assertNotNull($oReceivedAck);
     }
 }

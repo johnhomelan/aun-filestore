@@ -25,6 +25,8 @@ use HomeLan\FileStore\Services\ServiceDispatcher;
 use HomeLan\FileStore\Services\ProviderInterface;
 use HomeLan\FileStore\Encapsulation\EncapsulationInterface;
 use HomeLan\FileStore\Messages\EconetPacket;
+use HomeLan\FileStore\RemoteBridge\Map as RemoteBridgeMap;
+use HomeLan\FileStore\RemoteBridge\Connection as RemoteBridgeConnection;
 
 // =============================================================================
 // MockServiceProvider
@@ -122,6 +124,12 @@ class ServiceDispatcherTest extends TestCase
     {
         $this->oLogger = new Logger('test');
         $this->oLogger->pushHandler(new NullHandler());
+        RemoteBridgeMap::reset();
+    }
+
+    protected function tearDown(): void
+    {
+        RemoteBridgeMap::reset();
     }
 
     // -------------------------------------------------------------------------
@@ -482,6 +490,58 @@ class ServiceDispatcherTest extends TestCase
         $this->assertTrue(true);
     }
 
+    // -------------------------------------------------------------------------
+    // ackEvents() also relays to a RemoteBridge peer, if known — see
+    // docs/protocols/remote-bridge.md and RemoteBridge\Map::relayAckIfKnown()
+    // -------------------------------------------------------------------------
+
+    public function testAckEventsRelaysToRemoteBridgeWhenStationKnownViaBridge(): void
+    {
+        RemoteBridgeMap::init($this->oLogger, '');
+        $oConn = $this->createMock(RemoteBridgeConnection::class);
+        $oConn->expects($this->once())->method('sendAck')->with(2, 10);
+        // Deliberately NOT registerPeerNetworks() — that table is for outbound SEND
+        // routing to networks the peer serves, unrelated to ack relay. A relayed
+        // SEND targets a network *this* instance serves, so relay eligibility is
+        // recorded per-station via rememberAckRelay(), exactly as
+        // Connection::handleAuthenticated()'s SEND case does for a real bridged
+        // delivery. See RemoteBridge\Map::relayAckIfKnown()'s docblock.
+        RemoteBridgeMap::rememberAckRelay(2, 10, $oConn);
+
+        $oDispatcher = $this->make([]);
+        $oDispatcher->ackEvents($this->packet('Ack', 0x99, iSrcNet: 2, iSrcStn: 10));
+    }
+
+    public function testAckEventsDoesNotRelayForStationNotKnownViaBridge(): void
+    {
+        RemoteBridgeMap::init($this->oLogger, '');
+        // No pending relay remembered — relayAckIfKnown() must be a no-op.
+
+        $oDispatcher = $this->make([]);
+        $bFired = false;
+        $oDispatcher->addAckEvent(1, 5, function() use (&$bFired) { $bFired = true; });
+        $oDispatcher->ackEvents($this->packet('Ack', 0x99, iSrcNet: 1, iSrcStn: 5));
+
+        $this->assertTrue($bFired);
+    }
+
+    public function testAckEventsFiresBothLocalCallbackAndBridgeRelayWhenApplicable(): void
+    {
+        // In practice a station is either local-only or bridge-relayed, never both, but
+        // ackEvents() doesn't special-case that — confirm both paths run independently.
+        RemoteBridgeMap::init($this->oLogger, '');
+        $oConn = $this->createMock(RemoteBridgeConnection::class);
+        $oConn->expects($this->once())->method('sendAck')->with(2, 10);
+        RemoteBridgeMap::rememberAckRelay(2, 10, $oConn);
+
+        $oDispatcher = $this->make([]);
+        $bFired = false;
+        $oDispatcher->addAckEvent(2, 10, function() use (&$bFired) { $bFired = true; });
+        $oDispatcher->ackEvents($this->packet('Ack', 0x99, iSrcNet: 2, iSrcStn: 10));
+
+        $this->assertTrue($bFired);
+    }
+
     // =========================================================================
     // disableService() / enableService()
     // =========================================================================
@@ -640,5 +700,52 @@ class ServiceDispatcherTest extends TestCase
         // Now a fresh claim must succeed
         $iPort = $oDispatcher->claimStreamPort($oA, 60);
         $this->assertGreaterThanOrEqual(20, $iPort);
+    }
+
+    public function testHouseKeepingDoesNotUnregisterAServiceUsingAPortInTheStreamRange(): void
+    {
+        // Regression test: a service registered the normal way (not via
+        // claimStreamPort()) on a port that happens to fall inside the
+        // stream-port block (iStreamPortStart..+MAX_STREAMS, i.e. 20-39)
+        // has no aPortTimeLimits entry. houseKeeping()'s expiry sweep must
+        // leave it alone rather than treating the missing timeout as
+        // "already expired" and unregistering it.
+        $oA = new MockServiceProvider([25]);
+        $oDispatcher = $this->make([$oA]);
+
+        $oDispatcher->houseKeeping();
+
+        $this->assertNotNull($oDispatcher->getServiceByPort(25));
+        $oDispatcher->inboundPacket($this->packet('Unicast', 25));
+        $this->assertSame(1, $oA->iUnicastCalls);
+    }
+
+    public function testHouseKeepingRunTwiceStillDoesNotUnregisterALowNumberedServicePort(): void
+    {
+        $oA = new MockServiceProvider([25, 26, 30]);
+        $oDispatcher = $this->make([$oA]);
+
+        $oDispatcher->houseKeeping();
+        $oDispatcher->houseKeeping();
+
+        $this->assertNotNull($oDispatcher->getServiceByPort(25));
+        $this->assertNotNull($oDispatcher->getServiceByPort(26));
+        $this->assertNotNull($oDispatcher->getServiceByPort(30));
+    }
+
+    public function testHouseKeepingStreamPortExpiryStillWorksAlongsideALowNumberedServicePort(): void
+    {
+        // The fix must not weaken real stream-port expiry — claimed ports
+        // still time out even when another, normally-registered service
+        // shares the same numeric range.
+        $oA = new MockServiceProvider([25]);
+        $oB = new MockServiceProvider([0x99]);
+        $oDispatcher = $this->make([$oA, $oB]);
+
+        $iStreamPort = $oDispatcher->claimStreamPort($oB, -1);
+        $oDispatcher->houseKeeping();
+
+        $this->assertNotNull($oDispatcher->getServiceByPort(25));
+        $this->assertNull($oDispatcher->getServiceByPort($iStreamPort));
     }
 }

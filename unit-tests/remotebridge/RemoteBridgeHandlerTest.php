@@ -87,14 +87,18 @@ class RemoteBridgeHandlerTest extends TestCase
     private function authenticatedServer(
         MockTcpConnection $oServerTcp,
         \Closure $fOnPacket,
-        string $sSecret = 'secret'
+        string $sSecret = 'secret',
+        ?\Closure $fOnAck = null
     ): Connection {
         $oClientTcp = new MockTcpConnection();
         $oServer = new Connection(
-            $this->oLogger, $oServerTcp, 'server', $sSecret, [1, 2], $fOnPacket
+            $this->oLogger, $oServerTcp, 'server', $sSecret, [1, 2], $fOnPacket,
+            $fOnAck ?? static function (BridgePacket $p) {},
         );
         $oClient = new Connection(
-            $this->oLogger, $oClientTcp, 'client', $sSecret, [3], static function (BridgePacket $p) {}
+            $this->oLogger, $oClientTcp, 'client', $sSecret, [3],
+            static function (BridgePacket $p) {},
+            static function (BridgePacket $p) {},
         );
 
         // Relay four messages to complete the handshake.
@@ -309,6 +313,145 @@ class RemoteBridgeHandlerTest extends TestCase
         );
 
         $oServer->onData($this->makeSendLine(1, 5));
+    }
+
+    // -----------------------------------------------------------------------
+    // ACK (protocol 1.1+) — see docs/protocols/remote-bridge.md
+    // -----------------------------------------------------------------------
+
+    public function testSendAckWritesLineWhenAuthenticatedAndVersion1_1(): void
+    {
+        $oServices        = $this->createMock(ServiceDispatcher::class);
+        $oPacketDispatcher = $this->createMock(PacketDispatcher::class);
+        $oServices->method('getReplies')->willReturn([]);
+
+        $oServerTcp = new MockTcpConnection();
+        $oServer    = $this->authenticatedServer(
+            $oServerTcp,
+            $this->makeDispatchClosure($oServices, $oPacketDispatcher)
+        );
+        $oServerTcp->aWritten = [];
+
+        $oServer->sendAck(2, 254);
+
+        $this->assertSame(['ACK 2 254'], $oServerTcp->writtenLines());
+    }
+
+    public function testSendAckWritesNothingWhenNotAuthenticated(): void
+    {
+        $oServerTcp = new MockTcpConnection();
+        $oServer = new Connection(
+            $this->oLogger, $oServerTcp, 'server', 'secret', [1, 2],
+            static function (BridgePacket $p) {},
+            static function (BridgePacket $p) {},
+        );
+
+        $oServer->sendAck(2, 254);
+
+        $this->assertSame([], $oServerTcp->writtenLines());
+    }
+
+    public function testSendAckWritesNothingWhenPeerIsVersion1_0(): void
+    {
+        $oServices        = $this->createMock(ServiceDispatcher::class);
+        $oPacketDispatcher = $this->createMock(PacketDispatcher::class);
+        $oServices->method('getReplies')->willReturn([]);
+
+        $oClientTcp = new MockTcpConnection();
+        $oServerTcp = new MockTcpConnection();
+        $oServer = new Connection(
+            $this->oLogger, $oServerTcp, 'server', 'secret', [1, 2],
+            $this->makeDispatchClosure($oServices, $oPacketDispatcher),
+            static function (BridgePacket $p) {},
+        );
+        $oClient = new Connection(
+            $this->oLogger, $oClientTcp, 'client', 'secret', [3],
+            static function (BridgePacket $p) {},
+            static function (BridgePacket $p) {},
+            ['1.0'],
+        );
+
+        $oServer->onData($oClientTcp->allWritten()); $oClientTcp->aWritten = [];
+        $oClient->onData($oServerTcp->allWritten()); $oServerTcp->aWritten = [];
+        $oServer->onData($oClientTcp->allWritten()); $oClientTcp->aWritten = [];
+        $oClient->onData($oServerTcp->allWritten()); $oServerTcp->aWritten = [];
+
+        $this->assertSame('1.0', $oServer->getProtocolVersion());
+
+        $oServerTcp->aWritten = [];
+        $oServer->sendAck(2, 254);
+
+        $this->assertSame([], $oServerTcp->writtenLines());
+    }
+
+    public function testWellFormedAckLineTriggersOnAckCallback(): void
+    {
+        $oServices        = $this->createMock(ServiceDispatcher::class);
+        $oPacketDispatcher = $this->createMock(PacketDispatcher::class);
+        $oServices->method('getReplies')->willReturn([]);
+
+        $oReceivedAck = null;
+        $fOnAck = function (BridgePacket $oPkt) use (&$oReceivedAck) {
+            $oReceivedAck = $oPkt;
+        };
+
+        $oServerTcp = new MockTcpConnection();
+        $oServer    = $this->authenticatedServer(
+            $oServerTcp,
+            $this->makeDispatchClosure($oServices, $oPacketDispatcher),
+            'secret',
+            $fOnAck
+        );
+
+        $oServer->onData("ACK 2 254\n");
+
+        $this->assertNotNull($oReceivedAck);
+        $this->assertSame('Ack', $oReceivedAck->getPacketType());
+        $oEco = $oReceivedAck->buildEconetPacket();
+        $this->assertSame(2, $oEco->getSourceNetwork());
+        $this->assertSame(254, $oEco->getSourceStation());
+    }
+
+    public function testMalformedAckLineDoesNotTriggerOnAckCallback(): void
+    {
+        $oServices        = $this->createMock(ServiceDispatcher::class);
+        $oPacketDispatcher = $this->createMock(PacketDispatcher::class);
+        $oServices->method('getReplies')->willReturn([]);
+
+        $bCalled = false;
+        $fOnAck = function (BridgePacket $oPkt) use (&$bCalled) {
+            $bCalled = true;
+        };
+
+        $oServerTcp = new MockTcpConnection();
+        $oServer    = $this->authenticatedServer(
+            $oServerTcp,
+            $this->makeDispatchClosure($oServices, $oPacketDispatcher),
+            'secret',
+            $fOnAck
+        );
+
+        // Missing the station field
+        $oServer->onData("ACK 2\n");
+
+        $this->assertFalse($bCalled);
+    }
+
+    public function testAckLineDoesNotInvokeFOnPacket(): void
+    {
+        $oServices        = $this->createMock(ServiceDispatcher::class);
+        $oPacketDispatcher = $this->createMock(PacketDispatcher::class);
+        $oServices->method('getReplies')->willReturn([]);
+        $oServices->expects($this->never())->method('inboundPacket');
+        $oPacketDispatcher->expects($this->never())->method('sendPacket');
+
+        $oServerTcp = new MockTcpConnection();
+        $oServer    = $this->authenticatedServer(
+            $oServerTcp,
+            $this->makeDispatchClosure($oServices, $oPacketDispatcher)
+        );
+
+        $oServer->onData("ACK 2 254\n");
     }
 }
 

@@ -173,6 +173,23 @@ class PacketDispatcherTest extends TestCase
         $oDispatcher->sendPacket($this->makePacket(9, 10));
     }
 
+    public function testSendPacketBuffersInsteadOfDroppingWhenConnectionDown(): void
+    {
+        // Network 9 was served by a connection that has since been unregistered (closed),
+        // but is still within its grace window so getType() still says 'RemoteBridge'.
+        $oOldConn = $this->createMock(\HomeLan\FileStore\RemoteBridge\Connection::class);
+        RemoteBridgeMap::registerPeerNetworks($oOldConn, [9]);
+        RemoteBridgeMap::unregisterConnection($oOldConn);
+
+        [$oDispatcher] = $this->makeDispatcher('RemoteBridge');
+        $oDispatcher->sendPacket($this->makePacket(9, 10));
+
+        // A fresh connection re-announces network 9 — the buffered packet must be flushed to it.
+        $oNewConn = $this->createMock(\HomeLan\FileStore\RemoteBridge\Connection::class);
+        $oNewConn->expects($this->once())->method('send');
+        RemoteBridgeMap::registerPeerNetworks($oNewConn, [9]);
+    }
+
     // -----------------------------------------------------------------------
     // sendPacket — AUN path
     // -----------------------------------------------------------------------

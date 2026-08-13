@@ -66,3 +66,15 @@ safe_define('CONFIG_beeb_term_services_file','beebterm.txt');
 safe_define('CONFIG_remote_bridge_enabled', false);
 safe_define('CONFIG_remote_bridge_map_file', 'remotebridge.txt');
 safe_define('CONFIG_remote_bridge_server_address', '0.0.0.0');
+
+safe_define('CONFIG_macemail_store_dir', '/var/lib/aun-filestore-macemail');
+safe_define('CONFIG_macemail_usergroup', 'MAIL');
+safe_define('CONFIG_macemail_max_slots', 32);
+
+safe_define('CONFIG_teletext_store_dir', '/var/lib/aun-filestore-teletext');
+safe_define('CONFIG_teletext_server_name', '');
+safe_define('CONFIG_teletext_max_users', 99);
+safe_define('CONFIG_teletext_carousel_interval', 4);
+safe_define('CONFIG_teletext_teefax_channel', '6');
+safe_define('CONFIG_teletext_teefax_source', 'https://github.com/opless/teefax-mirror/archive/refs/heads/master.tar.gz');
+safe_define('CONFIG_teletext_teefax_refresh_interval', 86400);

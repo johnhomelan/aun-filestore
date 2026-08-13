@@ -89,7 +89,20 @@ class Handler Implements HandleInterface {
 			case 'Ack':
 				//Got an Ack use
 				$this->oLogger->debug("Aun Handler: Ack");
-				$this->_unQueue($oAunPacket);
+				if ($this->_unQueue($oAunPacket)) {
+					//This was the ack a service was actually waiting on (matched
+					//the head of this host's retry queue, or the pending "last
+					//chance" sequence) — dispatch it so ServiceDispatcher::ackEvents()
+					//can fire any addAckEvent() callback registered for it (e.g.
+					//FileServer's block-by-block load/save continuation). A stray
+					//or unmatched ack (_unQueue() returning false) is intentionally
+					//not dispatched.
+					$this->oServices->inboundPacket($oAunPacket);
+					$aReplies = $this->oServices->getReplies();
+					foreach($aReplies as $oReply){
+						$this->oPacketDispatcher->sendPacket($oReply);
+					}
+				}
 				break;
 			default:
 				// Drop duplicate packets (retransmissions where our ACK was lost in transit)
@@ -177,18 +190,27 @@ class Handler Implements HandleInterface {
 			//$this->oLogger->debug("Aun Handler: No packets in Queue");
 		}
 	}
-	private function _unQueue(AunPacket $oAck):void
+	/**
+	 * @return bool True if $oAck was the ack a service is actually waiting
+	 *              on — either it matched the head of this host's retry
+	 *              queue, or it matched the pending "last chance" sequence.
+	 *              False for a stray/unmatched ack, or one for a host with
+	 *              nothing tracked at all.
+	*/
+	private function _unQueue(AunPacket $oAck):bool
 	{
 		$sHost = $oAck->getSourceIP().":".$oAck->getSourceUdpPort();
-		$this->_unHostQueue($sHost, $oAck);
+		return $this->_unHostQueue($sHost, $oAck);
 	}
 
-	private function _unHostQueue(string $sHost, AunPacket $oAck):void
+	private function _unHostQueue(string $sHost, AunPacket $oAck):bool
 	{
 		$this->oLogger->debug("Aun Handler: Dequeuing packet due to scout ack");
+		$bExpected = false;
 		if(array_key_exists($sHost,$this->aQueue) AND is_array($this->aQueue[$sHost]) AND count($this->aQueue[$sHost])>0){
 			$aQueueEntry = array_shift($this->aQueue[$sHost]);
 			if($oAck->getSequence() == $aQueueEntry['packet']->getSequence()){
+				$bExpected = true;
 				//If the packet is nolonger in the queue (because the packet at the head of the queue has had no
 				//atempts to ack, but it back at the head of the queue, and run the queue
 				if($aQueueEntry['attempts']==0){
@@ -208,10 +230,14 @@ class Handler Implements HandleInterface {
 				$oPacket = $oAck->buildEconetPacket();
 				$this->oServices->clearAckEvent($oPacket->getSourceNetwork(),$oPacket->getSourceStation());
 				$this->oLogger->debug("Aun Handler: Cleared ack event for ".$oPacket->getSourceNetwork().".".$oPacket->getSourceStation());
+			}else{
+				//This was the final-retry ack a service was waiting on.
+				$bExpected = true;
 			}
 			//Clear the waiting final ack
 			unset($this->aLastChance[$sHost]);
 		}
+		return $bExpected;
 	}
 
 	private function _writeOutPkt(EconetPacket $oPacket):void

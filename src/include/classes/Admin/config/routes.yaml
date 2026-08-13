@@ -40,6 +40,21 @@ users_delete:
 users_setpassword:
     path: /users/setpassword
     defaults: { _controller: 'HomeLan\FileStore\Admin\Controller\UserController::setPassword' }
+macemail_slots_assign:
+    path: /service/macemail/slots/assign
+    defaults: { _controller: 'HomeLan\FileStore\Admin\Controller\MaceMailController::assignSlot' }
+macemail_slots_unassign:
+    path: /service/macemail/slots/unassign
+    defaults: { _controller: 'HomeLan\FileStore\Admin\Controller\MaceMailController::unassignSlot' }
+macemail_logoff:
+    path: /service/macemail/logoff
+    defaults: { _controller: 'HomeLan\FileStore\Admin\Controller\MaceMailController::forceLogoff' }
+macemail_broadcast:
+    path: /service/macemail/broadcast
+    defaults: { _controller: 'HomeLan\FileStore\Admin\Controller\MaceMailController::broadcast' }
+teletext_teefax_refresh:
+    path: /service/teletext/teefax-refresh
+    defaults: { _controller: 'HomeLan\FileStore\Admin\Controller\TeletextController::teefaxRefresh' }
 live:
     path: /kube/live
     defaults: { _controller: 'HomeLan\FileStore\Admin\Controller\IndexController::kube' }

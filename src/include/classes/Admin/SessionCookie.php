@@ -25,7 +25,7 @@ final readonly class SessionCookie implements EventSubscriberInterface{
 		$oRequest = $oRequestEvent->getRequest();
 
 		$sSessionName = session_name();
-		if(is_null($sSessionName)){
+		if($sSessionName==false){
 			$sSessionName = self::SESSION_NAME;
 			session_name($sSessionName);
 		}

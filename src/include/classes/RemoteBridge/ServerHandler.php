@@ -46,7 +46,7 @@ class ServerHandler
 			return;
 		}
 
-		$oSocket->on('connection', function (ConnectionInterface $oTcpConn) use ($aEntry) {
+		$oSocket->on('connection', function (ConnectionInterface $oTcpConn) use ($aEntry, $oLoop) {
 			$sPeer = $oTcpConn->getRemoteAddress() ?? 'unknown';
 			$this->oLogger->info("RemoteBridge: incoming connection from {$sPeer}");
 
@@ -80,6 +80,18 @@ class ServerHandler
 						$oPacketDispatcher->sendPacket($oReply);
 					}
 				},
+				function (BridgePacket $oAckPkt) use ($oServices, $oPacketDispatcher) {
+					// An ACK <net> <stn> line (protocol 1.1+) is always for our own
+					// ServiceDispatcher — never forwarded, never gated by
+					// aLocalNetworks, unlike a SEND. See Connection::handleAuthenticated().
+					$oServices->inboundPacket($oAckPkt);
+					$aReplies = $oServices->getReplies();
+					foreach ($aReplies as $oReply) {
+						$oPacketDispatcher->sendPacket($oReply);
+					}
+				},
+				null,
+				$oLoop,
 			);
 
 			$oTcpConn->on('data', [$oConn, 'onData']);

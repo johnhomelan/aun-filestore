@@ -15,6 +15,13 @@ use HomeLan\FileStore\Encapsulation\EncapsulationInterface;
  *
  * Wire format: SEND <dst_net> <dst_stn> <src_net> <src_stn> <port> <flags> <base64_data>\n
  *
+ * As of protocol version 1.1, a second, unrelated wire message is also
+ * represented by this class — ACK <net> <stn>\n (see makeAck()) — used to
+ * relay a real Econet-level ack for a station back across the bridge to
+ * whichever side originated the packet being acked. See
+ * docs/protocols/remote-bridge.md for the full wire format and the
+ * conformance requirements this places on third-party bridge clients.
+ *
  * @package core
 */
 class BridgePacket implements EncapsulationInterface
@@ -26,6 +33,7 @@ class BridgePacket implements EncapsulationInterface
 	private int $iPort = 0;
 	private int $iFlags = 0;
 	private string $sData = '';
+	private bool $bIsAck = false;
 
 	public function getPort(): int { return $this->iPort; }
 	public function getData(): string { return $this->sData; }
@@ -37,7 +45,32 @@ class BridgePacket implements EncapsulationInterface
 
 	public function getPacketType(): string
 	{
+		if ($this->bIsAck) {
+			return 'Ack';
+		}
 		return ($this->iDstStation === 255) ? 'Broadcast' : 'Unicast';
+	}
+
+	/**
+	 * Turns this instance into a representation of an incoming ACK <net>
+	 * <stn> line — a real Econet-level ack relayed back across the bridge
+	 * for a station whose ack-worthy packet originated from the other side.
+	 * $iNet/$iStn go into the *source* fields, matching how
+	 * ServiceDispatcher::ackEvents() reads a real ack (by the acking
+	 * station's own network/station, via getSourceNetwork()/
+	 * getSourceStation() on the built EconetPacket) — mirrors
+	 * PiconetPacket::makeAck()'s equivalent field mapping.
+	*/
+	public function makeAck(int $iNet, int $iStn): void
+	{
+		$this->bIsAck      = true;
+		$this->iSrcNetwork = $iNet;
+		$this->iSrcStation = $iStn;
+		$this->iDstNetwork = 0;
+		$this->iDstStation = 0;
+		$this->iPort       = 0;
+		$this->iFlags      = 0;
+		$this->sData       = '';
 	}
 
 	public function decode(string $sBinaryString): void
@@ -99,6 +132,31 @@ class BridgePacket implements EncapsulationInterface
 			$oPacket->getFlags(),
 			base64_encode((string) $oPacket->getData())
 		);
+	}
+
+	/**
+	 * Parses an ACK <net> <stn> line (protocol version 1.1+) into a
+	 * BridgePacket. Returns null if the line is malformed.
+	*/
+	public static function fromAckLine(string $sLine): ?self
+	{
+		$aParts = explode(' ', trim($sLine));
+		if (count($aParts) !== 3 || $aParts[0] !== 'ACK') {
+			return null;
+		}
+		$oPkt = new self();
+		$oPkt->makeAck((int) $aParts[1], (int) $aParts[2]);
+		return $oPkt;
+	}
+
+	/**
+	 * Encodes an ack for (net, stn) as an ACK line ready for writing to the
+	 * TCP stream. Only meaningful to send once both sides have negotiated
+	 * protocol version 1.1 or later — see Connection::sendAck().
+	*/
+	public static function encodeAck(int $iNet, int $iStn): string
+	{
+		return sprintf("ACK %d %d\n", $iNet, $iStn);
 	}
 
 	public function buildEconetPacket(): EconetPacket

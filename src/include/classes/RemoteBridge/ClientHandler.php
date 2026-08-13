@@ -11,6 +11,7 @@ use React\Socket\ConnectionInterface;
 use React\EventLoop\LoopInterface;
 use HomeLan\FileStore\Services\ServiceDispatcher;
 use HomeLan\FileStore\Encapsulation\PacketDispatcher;
+use config;
 
 /**
  * Initiates outgoing remote bridge TCP connections for all CLIENT entries in the map file.
@@ -87,6 +88,18 @@ class ClientHandler
 							$oPacketDispatcher->sendPacket($oReply);
 						}
 					},
+					function (BridgePacket $oAckPkt) use ($oServices, $oPacketDispatcher) {
+						// An ACK <net> <stn> line (protocol 1.1+) is always for our own
+						// ServiceDispatcher — never forwarded, never gated by
+						// aLocalNetworks, unlike a SEND. See Connection::handleAuthenticated().
+						$oServices->inboundPacket($oAckPkt);
+						$aReplies = $oServices->getReplies();
+						foreach ($aReplies as $oReply) {
+							$oPacketDispatcher->sendPacket($oReply);
+						}
+					},
+					null,
+					$this->oLoop,
 				);
 
 				$oTcpConn->on('data', [$oConn, 'onData']);

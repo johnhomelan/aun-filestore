@@ -8,6 +8,8 @@
 namespace HomeLan\FileStore\RemoteBridge;
 
 use React\Socket\ConnectionInterface;
+use React\EventLoop\LoopInterface;
+use React\EventLoop\TimerInterface;
 use HomeLan\FileStore\Messages\EconetPacket;
 
 /**
@@ -26,13 +28,29 @@ use HomeLan\FileStore\Messages\EconetPacket;
  *
  * After authentication, both directions accept:
  *   SEND <dst_net> <dst_stn> <src_net> <src_stn> <port> <flags> <base64_data>
+ *   ACK <net> <stn>                                          (protocol 1.1+)
+ *   PING / PONG                                              (protocol 1.1+, see startHeartbeat())
  *
  * @package core
 */
 class Connection
 {
-	/** Protocol versions this implementation supports, in ascending order. */
-	public const SUPPORTED_VERSIONS = ['1.0'];
+	/**
+	 * Protocol versions this implementation supports, in ascending order.
+	 *
+	 * 1.1 adds the ACK <net> <stn> message (see sendAck()/handleAuthenticated())
+	 * and the PING/PONG heartbeat (see startHeartbeat()) — see
+	 * docs/protocols/remote-bridge.md for the full spec and the conformance
+	 * requirements it places on third-party bridge clients. 1.0 peers are
+	 * still fully supported; ACK and PING/PONG are simply never sent to them.
+	*/
+	public const SUPPORTED_VERSIONS = ['1.0', '1.1'];
+
+	/** Seconds between PING sends once authenticated on a 1.1+ connection. */
+	private const PING_INTERVAL_SECONDS = 3;
+
+	/** Seconds of total silence (any line, not just PING/PONG) before a 1.1+ connection is considered dead. */
+	private const IDLE_TIMEOUT_SECONDS = 10;
 
 	private const STATE_WAITING_HELLO    = 'WAITING_HELLO';
 	private const STATE_CHALLENGING      = 'CHALLENGING';
@@ -48,13 +66,24 @@ class Connection
 	private array $aPeerNetworks = [];
 	private string $sProtocolVersion = '';
 	private array $aSupportedVersions;
+	private float $fLastRxTime;
+	private ?TimerInterface $oPingTimer = null;
+	private ?TimerInterface $oIdleTimer = null;
 
 	/**
 	 * @param string    $sRole              'server' or 'client'
 	 * @param string    $sSecret            Shared HMAC secret
 	 * @param int[]     $aLocalNetworks     Networks this side serves locally (announced after auth)
 	 * @param \Closure  $fOnPacket          Called with BridgePacket when an authenticated SEND arrives
+	 * @param \Closure  $fOnAck             Called with a BridgePacket built via makeAck() when an
+	 *                                      authenticated ACK <net> <stn> arrives (protocol 1.1+) —
+	 *                                      always local dispatch, never forwarded (see
+	 *                                      handleAuthenticated()'s ACK case for why)
 	 * @param string[]|null $aSupportedVersions Protocol versions to advertise (null = SUPPORTED_VERSIONS)
+	 * @param LoopInterface|null $oLoop         Event loop used to schedule the protocol 1.1+ PING
+	 *                                          heartbeat and idle-timeout check (see startHeartbeat()).
+	 *                                          Null disables the heartbeat entirely — used by unit
+	 *                                          tests that drive the connection without a real loop.
 	*/
 	public function __construct(
 		private readonly \Psr\Log\LoggerInterface $oLogger,
@@ -63,9 +92,12 @@ class Connection
 		private readonly string $sSecret,
 		private readonly array $aLocalNetworks,
 		private readonly \Closure $fOnPacket,
+		private readonly \Closure $fOnAck,
 		?array $aSupportedVersions = null,
+		private readonly ?LoopInterface $oLoop = null,
 	) {
 		$this->aSupportedVersions = $aSupportedVersions ?? self::SUPPORTED_VERSIONS;
+		$this->fLastRxTime = microtime(true);
 
 		if ($this->sRole === 'client') {
 			$this->sState = self::STATE_HELLO_SENT;
@@ -92,6 +124,7 @@ class Connection
 
 	private function handleLine(string $sLine): void
 	{
+		$this->fLastRxTime = microtime(true);
 		$this->oLogger->debug("RemoteBridge[{$this->sRole}] rx: {$sLine}");
 		$iSpace = strpos($sLine, ' ');
 		$sCmd = strtoupper($iSpace !== false ? substr($sLine, 0, $iSpace) : $sLine);
@@ -146,8 +179,66 @@ class Connection
 				);
 				return;
 			}
+			// Remember that this connection asked for delivery to this station, so that
+			// when our own local encapsulation observes the real hardware ack it provokes,
+			// relayAckIfKnown() knows to relay it back across this same connection — see
+			// RemoteBridge\Map::rememberAckRelay().
+			Map::rememberAckRelay($oPkt->getDstNetwork(), $oPkt->getDstStation(), $this);
 			($this->fOnPacket)($oPkt);
+			return;
 		}
+
+		if ($sCmd === 'ACK') {
+			// ACK <net> <stn> — a real Econet-level ack for a station, relayed
+			// back across the bridge (protocol 1.1+). Unlike SEND, this is
+			// never forwarded on or gated by aLocalNetworks: it always means
+			// "dispatch this to my own ServiceDispatcher", since the whole
+			// point is to reach whichever local addAckEvent() registration
+			// on *this* instance is waiting for it — see
+			// docs/protocols/remote-bridge.md.
+			$oAck = BridgePacket::fromAckLine($sLine);
+			if ($oAck === null) {
+				$this->oLogger->warning("RemoteBridge: malformed ACK line");
+				return;
+			}
+			($this->fOnAck)($oAck);
+			return;
+		}
+
+		if ($sCmd === 'PING') {
+			// No-payload liveness probe (protocol 1.1+) — reply in kind. $sArgs is
+			// ignored rather than validated: an unexpected trailing field on PING
+			// is tolerated like any other malformed 1.1 line, never a reason to
+			// drop the connection. See docs/protocols/remote-bridge.md#heartbeat-protocol-11.
+			$this->oTcpConn->write("PONG\n");
+			return;
+		}
+
+		if ($sCmd === 'PONG') {
+			// Nothing to do beyond the rx-watermark bump already applied above —
+			// PONG exists purely as proof of liveness.
+			return;
+		}
+	}
+
+	/**
+	 * Relays a real Econet-level ack for (net, stn) back across the bridge —
+	 * called by RemoteBridgeMap::relayAckIfKnown() when a locally-received
+	 * ack turns out to be for a station whose network is only reachable via
+	 * this connection. A no-op pre-1.1 peer, silently: sending ACK to a peer
+	 * that never advertised 1.1 support would just be ignored by a
+	 * conformant implementation, but not sending it at all avoids relying on
+	 * that.
+	*/
+	public function sendAck(int $iNet, int $iStn): void
+	{
+		if ($this->sState !== self::STATE_AUTHENTICATED) {
+			return;
+		}
+		if (version_compare($this->sProtocolVersion, '1.1', '<')) {
+			return;
+		}
+		$this->oTcpConn->write(BridgePacket::encodeAck($iNet, $iStn));
 	}
 
 	private function handleHello(string $sCmd, string $sArgs): void
@@ -205,6 +296,7 @@ class Connection
 		$this->sState = self::STATE_AUTHENTICATED;
 		$this->oTcpConn->write("AUTH_OK\n");
 		$this->announceNetworks();
+		$this->startHeartbeat();
 		$this->oLogger->info("RemoteBridge: client authenticated successfully");
 	}
 
@@ -246,7 +338,55 @@ class Connection
 		}
 		$this->sState = self::STATE_AUTHENTICATED;
 		$this->announceNetworks();
+		$this->startHeartbeat();
 		$this->oLogger->info("RemoteBridge: authenticated with server");
+	}
+
+	/**
+	 * Starts the protocol 1.1+ PING heartbeat and idle-timeout check, once authenticated.
+	 * A no-op on a 1.0 connection (no loop reference is needed there — a 1.0 peer has no
+	 * obligation to generate periodic traffic, so silence is not itself a fault) and a
+	 * no-op when constructed without a loop (unit tests exercising the protocol directly).
+	*/
+	private function startHeartbeat(): void
+	{
+		if ($this->oLoop === null || version_compare($this->sProtocolVersion, '1.1', '<')) {
+			return;
+		}
+
+		$this->oPingTimer = $this->oLoop->addPeriodicTimer(self::PING_INTERVAL_SECONDS, function (): void {
+			if ($this->sState !== self::STATE_AUTHENTICATED) {
+				return;
+			}
+			$this->oTcpConn->write("PING\n");
+		});
+
+		$this->oIdleTimer = $this->oLoop->addPeriodicTimer(1, function (): void {
+			if ($this->sState !== self::STATE_AUTHENTICATED) {
+				return;
+			}
+			if ((microtime(true) - $this->fLastRxTime) > self::IDLE_TIMEOUT_SECONDS) {
+				$this->oLogger->warning(
+					"RemoteBridge[{$this->sRole}]: no traffic for over " . self::IDLE_TIMEOUT_SECONDS . "s, closing connection as dead"
+				);
+				$this->oTcpConn->close();
+			}
+		});
+	}
+
+	private function stopHeartbeat(): void
+	{
+		if ($this->oLoop === null) {
+			return;
+		}
+		if ($this->oPingTimer !== null) {
+			$this->oLoop->cancelTimer($this->oPingTimer);
+			$this->oPingTimer = null;
+		}
+		if ($this->oIdleTimer !== null) {
+			$this->oLoop->cancelTimer($this->oIdleTimer);
+			$this->oIdleTimer = null;
+		}
 	}
 
 	private function announceNetworks(): void
@@ -270,6 +410,7 @@ class Connection
 			return;
 		}
 		$this->sState = self::STATE_CLOSED;
+		$this->stopHeartbeat();
 		Map::unregisterConnection($this);
 		$this->oLogger->info("RemoteBridge[{$this->sRole}]: connection closed");
 	}

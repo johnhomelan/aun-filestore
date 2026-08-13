@@ -16,6 +16,7 @@ use HomeLan\FileStore\Encapsulation\PacketDispatcher;
 use HomeLan\FileStore\Encapsulation\EncapsulationTypeMap;
 use HomeLan\FileStore\Encapsulation\EncapsulationInterface;
 use HomeLan\FileStore\Piconet\Handler as PiconetHandler;
+use HomeLan\FileStore\RemoteBridge\Map as RemoteBridgeMap;
 use config;
 
 /**
@@ -250,11 +251,22 @@ class ServiceDispatcher {
 	public function ackEvents(EncapsulationInterface $oPacket): void
 	{
 		$oEconetPacket = $oPacket->buildEconetPacket();
-		if(array_key_exists($oEconetPacket->getSourceNetwork(),$this->aAckEvents) AND array_key_exists($oEconetPacket->getSourceStation(),$this->aAckEvents[$oEconetPacket->getSourceNetwork()])){
-			$fCallable = $this->aAckEvents[$oEconetPacket->getSourceNetwork()][$oEconetPacket->getSourceStation()];
-			unset($this->aAckEvents[$oEconetPacket->getSourceNetwork()][$oEconetPacket->getSourceStation()]);
+		$iNetwork = $oEconetPacket->getSourceNetwork();
+		$iStation = $oEconetPacket->getSourceStation();
+
+		if(array_key_exists($iNetwork,$this->aAckEvents) AND array_key_exists($iStation,$this->aAckEvents[$iNetwork])){
+			$fCallable = $this->aAckEvents[$iNetwork][$iStation];
+			unset($this->aAckEvents[$iNetwork][$iStation]);
 			($fCallable)($oPacket);
 		}
+
+		//Also relay this ack to a remote bridge peer, if this station's network
+		//is one we know is reachable only via a bridge connection — that peer
+		//may have its own pending addAckEvent() for a transfer it originated
+		//through us (see docs/protocols/remote-bridge.md). A network is either
+		//local to us or bridge-relayed, never both, so this and the local match
+		//above are not expected to both apply to the same ack.
+		RemoteBridgeMap::relayAckIfKnown($iNetwork, $iStation);
 	}
 
 	public function clearAckEvent($iNetwork, $iStation):void
@@ -307,9 +319,14 @@ class ServiceDispatcher {
 		}
 
 		//Free up timed out streaming ports by building a new list without timed out ports
+		//
+		//Only ports actually allocated via claimStreamPort() have an aPortTimeLimits
+		//entry. A port in this numeric range that a service registered the normal way
+		//(via addService()/registerService(), not claimStreamPort()) has no such entry —
+		//it must be left alone here, not treated as an expired stream and unregistered.
 		$aPortTimeLimits = [];
 		for($i=$this->iStreamPortStart;$i<($this->iStreamPortStart+self::MAX_STREAMS);$i++){
-			if(array_key_exists($i,$this->aPorts)){
+			if(array_key_exists($i,$this->aPorts) AND array_key_exists($i,$this->aPortTimeLimits)){
 				if($this->aPortTimeLimits[$i]>=time()){
 					//The stream port has NOT timed out
 					$aPortTimeLimits[$i]=$this->aPortTimeLimits[$i];

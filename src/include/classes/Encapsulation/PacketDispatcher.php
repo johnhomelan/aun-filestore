@@ -83,6 +83,9 @@ class PacketDispatcher {
 				$oRemoteConn = RemoteBridgeMap::networkToConnection($oPacket->getDestinationNetwork());
 				if ($oRemoteConn !== null) {
 					$oRemoteConn->send($oPacket);
+				} else {
+					//Connection is briefly down (e.g. remote end restarting); buffer instead of dropping.
+					RemoteBridgeMap::bufferPacket($oPacket->getDestinationNetwork(), $oPacket);
 				}
 				break;
 			case 'AUN':

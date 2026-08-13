@@ -17,16 +17,27 @@ use Exception;
 class Reply {
 
 	protected $sPkt = NULL;
-	
+
 	protected $oRequest = NULL;
 
 	protected $iFlags = NULL;
 
+	protected $iReplyPort = NULL;
+
 	public function __construct($oRequest)
 	{
-		if(is_object($oRequest) AND ($oRequest::class=='HomeLan\FileStore\Messages\FsRequest' or $oRequest::class=='HomeLan\FileStore\Messages\PrintServerEnquiry' OR $oRequest::class=='HomeLan\FileStore\Messages\PrintServerData' OR $oRequest::class=='HomeLan\FileStore\Messages\ArpRequest' OR $oRequest::class=='HomeLan\FileStore\Messages\Dci4ArpRequest' OR $oRequest::class=='HomeLan\FileStore\Messages\BeebTermRequest' OR $oRequest::class=='HomeLan\FileStore\Messages\TorchnetRequest' OR $oRequest::class=='HomeLan\FileStore\Messages\BridgeRequest')){
+		if(is_object($oRequest) AND ($oRequest::class=='HomeLan\FileStore\Messages\FsRequest' or $oRequest::class=='HomeLan\FileStore\Messages\PrintServerEnquiry' OR $oRequest::class=='HomeLan\FileStore\Messages\PrintServerData' OR $oRequest::class=='HomeLan\FileStore\Messages\ArpRequest' OR $oRequest::class=='HomeLan\FileStore\Messages\Dci4ArpRequest' OR $oRequest::class=='HomeLan\FileStore\Messages\BeebTermRequest' OR $oRequest::class=='HomeLan\FileStore\Messages\TorchnetRequest' OR $oRequest::class=='HomeLan\FileStore\Messages\BridgeRequest' OR $oRequest::class=='HomeLan\FileStore\Messages\MaceMailRequest' OR $oRequest::class=='HomeLan\FileStore\Messages\TeletextRequest')){
 			$this->oRequest = $oRequest;
 			$this->iFlags = $oRequest->getFlags();
+			//Snapshotted now rather than re-read from $oRequest in
+			//buildEconetpacket(): some request classes (e.g. MaceMailRequest,
+			//TeletextRequest) support a mutable reply port via setReplyPort(),
+			//used to build several differently-addressed replies off one
+			//shared request object in turn. Reading it lazily meant every
+			//already-built Reply would silently pick up whatever the port
+			//was set to *last*, rather than what it was when that Reply was
+			//actually built.
+			$this->iReplyPort = $oRequest->getReplyPort();
 		}else{
 			throw new Exception("An fsreply object was created with out suppling an fsrequest object");
 		}
@@ -95,7 +106,7 @@ class Reply {
 	public function buildEconetpacket(): \HomeLan\FileStore\Messages\EconetPacket
 	{
 		$oEconetPacket = new EconetPacket();
-		$oEconetPacket->setPort($this->oRequest->getReplyPort());
+		$oEconetPacket->setPort($this->iReplyPort);
 		$oEconetPacket->setFlags($this->iFlags);
 		$oEconetPacket->setDestinationStation($this->oRequest->getSourceStation());
 		$oEconetPacket->setDestinationNetwork($this->oRequest->getSourceNetwork());

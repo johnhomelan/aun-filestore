@@ -5,10 +5,10 @@ MAINTAINER john@home-lan.co.uk
 RUN apk update
 RUN apk add --no-cache rsync make bash curl openjdk8-jre postgresql-client autoconf automake gcc g++ make libc-dev
 RUN apk add --no-cache postgresql-dev mysql-dev libxml2-dev libpng-dev gpgme-dev libmemcached-dev openldap-dev curl-dev gnu-libiconv openssl-dev gnu-libiconv-dev freetype libpng libjpeg-turbo freetype-dev libpng-dev libjpeg-turbo-dev libmcrypt libmcrypt-dev libzip-dev zlib-dev oniguruma
-RUN docker-php-ext-install pdo_pgsql pdo_mysql soap gd dba pcntl ldap curl zip phar exif bcmath ctype 
+RUN docker-php-ext-install pdo_pgsql pdo_mysql soap gd dba pcntl ldap curl zip exif bcmath ctype
 
 ##Install composer (the composer pkg for alpine comes with its own php82 pkg which defies the point of build a given version of php into the image)
-RUN php -r "copy('https://getcomposer.org/installer', 'composer-setup.php');"; php -r "if (hash_file('sha384', 'composer-setup.php') === 'dac665fdc30fdd8ec78b38b9800061b4150413ff2e3b6f88543c636f7cd84f6db9189d43a81e5503cda447da73c7e5b6') { echo 'Installer verified'; } else { echo 'Installer corrupt'; unlink('composer-setup.php'); } echo PHP_EOL;"; php composer-setup.php; php -r "unlink('composer-setup.php');"; mv composer.phar /usr/local/bin/composer
+RUN php -r "copy('https://getcomposer.org/installer', 'composer-setup.php');"; php -r "if (hash_file('sha384', 'composer-setup.php') === file_get_contents('https://composer.github.io/installer.sig')) { echo 'Installer verified'; } else { echo 'Installer corrupt'; unlink('composer-setup.php'); } echo PHP_EOL;"; php composer-setup.php; php -r "unlink('composer-setup.php');"; mv composer.phar /usr/local/bin/composer
 
 RUN mkdir -p /etc/aun-filestored-default-config
 RUN mkdir -p /etc/aun-filestored ; chmod 777 -R /etc/aun-filestored
@@ -32,7 +32,6 @@ RUN adduser -G audio  -u 1000 -S aund
 
 RUN cd /usr/share/aun-filestored; composer install --no-dev
 RUN chmod u+x /usr/sbin/filestored; chmod u+x /entrypoint.sh; cd /usr/bin/; ln -s /usr/local/bin/php
-RUN adduser -G audio  -u 1000 -S aund
 
 COPY ext-bin/esc2ps /usr/bin/
 RUN chmod u+x /usr/bin/esc2ps

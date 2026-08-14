@@ -1,4 +1,4 @@
-FROM php:8.3-cli-alpine3.22
+FROM php:8.5-alpine
 
 MAINTAINER john@home-lan.co.uk
 

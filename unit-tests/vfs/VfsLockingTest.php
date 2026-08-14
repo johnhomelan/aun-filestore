@@ -25,6 +25,7 @@ use Monolog\Logger;
 use Monolog\Handler\NullHandler;
 use HomeLan\FileStore\Vfs\Vfs;
 use HomeLan\FileStore\Vfs\FileDescriptor;
+use HomeLan\FileStore\Vfs\DirectoryEntry;
 use HomeLan\FileStore\Vfs\Exception as VfsException;
 use HomeLan\FileStore\Vfs\Plugin\PluginInterface;
 use HomeLan\FileStore\Vfs\FilePath;
@@ -37,10 +38,16 @@ use HomeLan\FileStore\Authentication\User;
 // ---------------------------------------------------------------------------
 class MockVfsPlugin implements PluginInterface
 {
-    /** Each entry: ['fHandle' => mixed, 'bExclusive' => bool] */
+    /**
+     * Each entry: ['fHandle' => mixed, 'bExclusive' => bool]
+     * @var array<int,array{fHandle:mixed,bExclusive:bool}>
+     */
     static public array $aFsLockCalls = [];
 
-    /** Each entry: ['fHandle' => mixed] */
+    /**
+     * Each entry: ['fHandle' => mixed]
+     * @var array<int,array{fHandle:mixed}>
+     */
     static public array $aFsUnlockCalls = [];
 
     static public function reset(): void
@@ -54,45 +61,50 @@ class MockVfsPlugin implements PluginInterface
     static public function init(\Psr\Log\LoggerInterface $oLogger, bool $bMultiuser = false): void {}
     static public function houseKeeping(): void {}
 
-    static public function _buildFiledescriptorFromEconetPath($oUser, FilePath $oEconetPath, $bMustExist, $bReadOnly): ?FileDescriptor
+    static public function _buildFiledescriptorFromEconetPath(User $oUser, FilePath $oEconetPath, bool $bMustExist, bool $bReadOnly): ?FileDescriptor
     {
         return null;
     }
 
-    static public function _getAccessMode($iGid, $iUid, $iMode): int { return 0; }
+    static public function _getAccessMode(int $iGid, int $iUid, int $iMode): string { return ''; }
 
+    /**
+     * @param array<string,DirectoryEntry> $aDirectoryListing
+     * @return array<string,DirectoryEntry>
+     */
     static public function getDirectoryListing(string $sEconetPath, array $aDirectoryListing): array
     {
         return $aDirectoryListing;
     }
 
-    static public function createDirectory($oUser, FilePath $oPath): bool  { return false; }
-    static public function deleteFile($oUser, FilePath $oEconetPath): bool  { return false; }
-    static public function moveFile($oUser, FilePath $oFrom, FilePath $oTo): bool { return false; }
-    static public function saveFile($oUser, FilePath $oPath, string $sData, int $iLoadAddr, int $iExecAddr): bool { return false; }
-    static public function createFile($oUser, FilePath $oPath, int $iSize, int $iLoadAddr, int $iExecAddr): bool { return false; }
-    static public function getFile($oUser, FilePath $oEconetPath): string { return ''; }
-    static public function setMeta(string $sEconetPath, int $iLoad, int $iExec, int $iAccess): void {}
+    static public function createDirectory(User $oUser, FilePath $oPath): bool  { return false; }
+    static public function deleteFile(User $oUser, FilePath $oEconetPath): bool  { return false; }
+    static public function moveFile(User $oUser, FilePath $oFrom, FilePath $oTo): bool { return false; }
+    static public function saveFile(User $oUser, FilePath $oPath, string $sData, int $iLoadAddr, int $iExecAddr): bool { return false; }
+    static public function createFile(User $oUser, FilePath $oPath, int $iSize, int $iLoadAddr, int $iExecAddr): bool { return false; }
+    static public function getFile(User $oUser, FilePath $oEconetPath): string { return ''; }
+    static public function setMeta(string $sEconetPath, ?int $iLoad, ?int $iExec, int $iAccess): void {}
 
-    static public function fsFtell($oUser, $fLocalHandle): int  { return 0; }
-    static public function fsFStat($oUser, $fLocalHandle): array { return []; }
-    static public function isEof($oUser, $fLocalHandle): bool    { return true; }
-    static public function setPos($oUser, $fLocalHandle, $iPos): void {}
-    static public function setExt($oUser, $fLocalHandle, int $iExt): void {}
-    static public function read($oUser, $fLocalHandle, $iLength): string { return ''; }
-    static public function write($oUser, $fLocalHandle, $sData): int     { return 0; }
+    static public function fsFtell(User $oUser, mixed $fLocalHandle): int  { return 0; }
+    /** @return array<mixed> */
+    static public function fsFStat(User $oUser, mixed $fLocalHandle): array { return []; }
+    static public function isEof(User $oUser, mixed $fLocalHandle): bool    { return true; }
+    static public function setPos(User $oUser, mixed $fLocalHandle, int $iPos): void {}
+    static public function setExt(User $oUser, mixed $fLocalHandle, int $iExt): void {}
+    static public function read(User $oUser, mixed $fLocalHandle, int $iLength): string { return ''; }
+    static public function write(User $oUser, mixed $fLocalHandle, string $sData): int     { return 0; }
 
-    static public function fsLock($oUser, $fLocalHandle, bool $bExclusive): void
+    static public function fsLock(User $oUser, mixed $fLocalHandle, bool $bExclusive): void
     {
         self::$aFsLockCalls[] = ['fHandle' => $fLocalHandle, 'bExclusive' => $bExclusive];
     }
 
-    static public function fsUnlock($oUser, $fLocalHandle): void
+    static public function fsUnlock(User $oUser, mixed $fLocalHandle): void
     {
         self::$aFsUnlockCalls[] = ['fHandle' => $fLocalHandle];
     }
 
-    static public function fsClose($oUser, $fLocalHandle): void {}
+    static public function fsClose(User $oUser, mixed $fLocalHandle): void {}
 }
 
 // ---------------------------------------------------------------------------

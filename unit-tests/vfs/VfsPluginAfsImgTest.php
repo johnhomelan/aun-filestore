@@ -14,14 +14,15 @@
  * image with a requested sub-path that does not exist inside it — without
  * needing to synthesise a valid on-disk L3/AFS image format.
  *
- * Two pre-existing, unrelated bugs are documented (not fixed) below, matching
+ * One pre-existing, unrelated bug is documented (not fixed) below, matching
  * this file's existing precedent of pinning known-buggy behaviour rather than
  * silently changing it:
  *   - getDirectoryListing()'s root-level directory scan looks for ".adl" files
  *     (a copy-paste artefact) instead of ".img".
- *   - Both DirectoryEntry construction sites in getDirectoryListing() pass
- *     constructor arguments in the wrong order, so isDir() ends up returning
- *     the access-mode string instead of a boolean.
+ *
+ * (A second bug formerly documented here — both DirectoryEntry construction
+ * sites in getDirectoryListing() passing constructor arguments in the wrong
+ * order — has since been fixed.)
  */
 
 if (!defined('CONFIG_security_mode')) {
@@ -340,13 +341,8 @@ class VfsPluginAfsImgTest extends TestCase
     /**
      * AfsImg::getDirectoryListing() scans for ".adl" files (a known copy-paste
      * artefact — the plugin was adapted from AdfsAdl). Placing an .adl file in
-     * the root therefore causes it to appear as a virtual directory.
-     *
-     * Note: AfsImg also has a parameter-ordering bug when constructing the
-     * DirectoryEntry for files found via scandir. The $bDir argument receives
-     * the mode string '-r/-r' (a truthy value) instead of a boolean.
-     * isDir() therefore returns '-r/-r' rather than true. This test documents
-     * the actual (buggy) behaviour.
+     * the root therefore causes it to appear as a virtual directory. This test
+     * documents that still-open bug.
      */
     public function testGetDirectoryListingPicksUpAdlFilesInsteadOfImg(): void
     {
@@ -357,9 +353,7 @@ class VfsPluginAfsImgTest extends TestCase
 
         // The plugin finds 'fakeDisk.adl' (looks for .adl, not .img).
         $this->assertArrayHasKey('fakeDisk.adl', $aListing);
-        // isDir() returns a truthy value (actually '-r/-r' string due to parameter
-        // ordering bug) — cast to bool for a stable assertion.
-        $this->assertTrue((bool) $aListing['fakeDisk.adl']->isDir());
+        $this->assertTrue($aListing['fakeDisk.adl']->isDir());
     }
 
     public function testGetDirectoryListingDoesNotPickUpImgFiles(): void
@@ -381,7 +375,7 @@ class VfsPluginAfsImgTest extends TestCase
      * (buggy) behaviour rather than silently changing it, matching this file's
      * existing precedent for the root-scan variant of the same bug.
      */
-    public function testGetDirectoryListingCatalogueEntriesHaveShiftedConstructorArgs(): void
+    public function testGetDirectoryListingCatalogueEntriesHaveCorrectConstructorArgs(): void
     {
         $oMock = Mockery::mock(L3fsReader::class);
         $oMock->shouldReceive('getCatalogue')->andReturn($this->_sampleCatalogue());
@@ -390,10 +384,8 @@ class VfsPluginAfsImgTest extends TestCase
         $aListing = AfsImg::getDirectoryListing('$.myimage', []);
 
         $this->assertArrayHasKey('FILE1', $aListing);
-        // isDir() actually returns the access-mode string '-r/-r' (wrong slot),
-        // not the boolean the interface documents — same shift as the root-scan
-        // branch above, just cast to bool for a stable assertion.
-        $this->assertTrue((bool) $aListing['FILE1']->isDir());
+        // FILE1 is a 'file' entry in the catalogue, so isDir() must be false.
+        $this->assertFalse($aListing['FILE1']->isDir());
     }
 
     // -------------------------------------------------------------------------

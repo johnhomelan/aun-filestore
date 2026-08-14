@@ -48,7 +48,9 @@ class SpyVfsPlugin implements PluginInterface
     static public mixed $fnFsClose          = null;
     static public mixed $fnHouseKeeping     = null;
 
-    /** Every call is recorded: ['method' => string, 'args' => array] */
+    /** Every call is recorded: ['method' => string, 'args' => array]
+     * @var array<int,array{method:string,args:array<mixed>}>
+     */
     static public array $aCallLog = [];
 
     static public function reset(): void
@@ -83,7 +85,7 @@ class SpyVfsPlugin implements PluginInterface
         }
     }
 
-    static public function _buildFiledescriptorFromEconetPath($oUser, FilePath $oEconetPath, $bMustExist, $bReadOnly): ?FileDescriptor
+    static public function _buildFiledescriptorFromEconetPath(User $oUser, FilePath $oEconetPath, bool $bMustExist, bool $bReadOnly): ?FileDescriptor
     {
         self::$aCallLog[] = ['method' => '_buildFiledescriptorFromEconetPath', 'args' => [$oEconetPath->getFilePath(), $bMustExist, $bReadOnly]];
         if (self::$fnBuildFd !== null) {
@@ -92,7 +94,7 @@ class SpyVfsPlugin implements PluginInterface
         return null;
     }
 
-    static public function _getAccessMode($iGid, $iUid, $iMode): int { return 0; }
+    static public function _getAccessMode(int $iGid, int $iUid, int $iMode): string { return ''; }
 
     static public function getDirectoryListing(string $sEconetPath, array $aDirectoryListing): array
     {
@@ -103,7 +105,7 @@ class SpyVfsPlugin implements PluginInterface
         return $aDirectoryListing;
     }
 
-    static public function createDirectory($oUser, FilePath $oPath): bool
+    static public function createDirectory(User $oUser, FilePath $oPath): bool
     {
         self::$aCallLog[] = ['method' => 'createDirectory', 'args' => [$oPath->getFilePath()]];
         if (self::$fnCreateDirectory !== null) {
@@ -112,7 +114,7 @@ class SpyVfsPlugin implements PluginInterface
         return false;
     }
 
-    static public function deleteFile($oUser, FilePath $oEconetPath): bool
+    static public function deleteFile(User $oUser, FilePath $oEconetPath): bool
     {
         self::$aCallLog[] = ['method' => 'deleteFile', 'args' => [$oEconetPath->getFilePath()]];
         if (self::$fnDeleteFile !== null) {
@@ -121,7 +123,7 @@ class SpyVfsPlugin implements PluginInterface
         return false;
     }
 
-    static public function moveFile($oUser, FilePath $oFrom, FilePath $oTo): bool
+    static public function moveFile(User $oUser, FilePath $oFrom, FilePath $oTo): bool
     {
         self::$aCallLog[] = ['method' => 'moveFile', 'args' => [$oFrom->getFilePath(), $oTo->getFilePath()]];
         if (self::$fnMoveFile !== null) {
@@ -130,7 +132,7 @@ class SpyVfsPlugin implements PluginInterface
         return false;
     }
 
-    static public function saveFile($oUser, FilePath $oPath, string $sData, int $iLoadAddr, int $iExecAddr): bool
+    static public function saveFile(User $oUser, FilePath $oPath, string $sData, int $iLoadAddr, int $iExecAddr): bool
     {
         self::$aCallLog[] = ['method' => 'saveFile', 'args' => [$oPath->getFilePath(), $sData, $iLoadAddr, $iExecAddr]];
         if (self::$fnSaveFile !== null) {
@@ -139,7 +141,7 @@ class SpyVfsPlugin implements PluginInterface
         return false;
     }
 
-    static public function createFile($oUser, FilePath $oPath, int $iSize, int $iLoadAddr, int $iExecAddr): bool
+    static public function createFile(User $oUser, FilePath $oPath, int $iSize, int $iLoadAddr, int $iExecAddr): bool
     {
         self::$aCallLog[] = ['method' => 'createFile', 'args' => [$oPath->getFilePath(), $iSize, $iLoadAddr, $iExecAddr]];
         if (self::$fnCreateFile !== null) {
@@ -148,7 +150,7 @@ class SpyVfsPlugin implements PluginInterface
         return false;
     }
 
-    static public function getFile($oUser, FilePath $oEconetPath): string
+    static public function getFile(User $oUser, FilePath $oEconetPath): string
     {
         self::$aCallLog[] = ['method' => 'getFile', 'args' => [$oEconetPath->getFilePath()]];
         if (self::$fnGetFile !== null) {
@@ -157,7 +159,7 @@ class SpyVfsPlugin implements PluginInterface
         return '';
     }
 
-    static public function setMeta(string $sEconetPath, int $iLoad, int $iExec, int $iAccess): void
+    static public function setMeta(string $sEconetPath, ?int $iLoad, ?int $iExec, int $iAccess): void
     {
         self::$aCallLog[] = ['method' => 'setMeta', 'args' => [$sEconetPath, $iLoad, $iExec, $iAccess]];
         if (self::$fnSetMeta !== null) {
@@ -165,7 +167,7 @@ class SpyVfsPlugin implements PluginInterface
         }
     }
 
-    static public function fsFtell($oUser, $fLocalHandle): int
+    static public function fsFtell(User $oUser, mixed $fLocalHandle): int
     {
         self::$aCallLog[] = ['method' => 'fsFtell', 'args' => []];
         if (self::$fnFsFtell !== null) {
@@ -174,7 +176,8 @@ class SpyVfsPlugin implements PluginInterface
         return 0;
     }
 
-    static public function fsFStat($oUser, $fLocalHandle): array
+    /** @return array<mixed> */
+    static public function fsFStat(User $oUser, mixed $fLocalHandle): array
     {
         self::$aCallLog[] = ['method' => 'fsFStat', 'args' => []];
         if (self::$fnFsFStat !== null) {
@@ -183,7 +186,7 @@ class SpyVfsPlugin implements PluginInterface
         return [];
     }
 
-    static public function isEof($oUser, $fLocalHandle): bool
+    static public function isEof(User $oUser, mixed $fLocalHandle): bool
     {
         self::$aCallLog[] = ['method' => 'isEof', 'args' => []];
         if (self::$fnIsEof !== null) {
@@ -192,7 +195,7 @@ class SpyVfsPlugin implements PluginInterface
         return false;
     }
 
-    static public function setPos($oUser, $fLocalHandle, $iPos): void
+    static public function setPos(User $oUser, mixed $fLocalHandle, int $iPos): void
     {
         self::$aCallLog[] = ['method' => 'setPos', 'args' => [$iPos]];
         if (self::$fnSetPos !== null) {
@@ -200,9 +203,9 @@ class SpyVfsPlugin implements PluginInterface
         }
     }
 
-    static public function setExt($oUser, $fLocalHandle, int $iExt): void {}
+    static public function setExt(User $oUser, mixed $fLocalHandle, int $iExt): void {}
 
-    static public function read($oUser, $fLocalHandle, $iLength): string
+    static public function read(User $oUser, mixed $fLocalHandle, int $iLength): string
     {
         self::$aCallLog[] = ['method' => 'read', 'args' => [$iLength]];
         if (self::$fnRead !== null) {
@@ -211,19 +214,19 @@ class SpyVfsPlugin implements PluginInterface
         return '';
     }
 
-    static public function write($oUser, $fLocalHandle, $sData): int
+    static public function write(User $oUser, mixed $fLocalHandle, string $sData): int
     {
         self::$aCallLog[] = ['method' => 'write', 'args' => [$sData]];
         if (self::$fnWrite !== null) {
             return (self::$fnWrite)($oUser, $fLocalHandle, $sData);
         }
-        return strlen((string) $sData);
+        return strlen($sData);
     }
 
-    static public function fsLock($oUser, $fLocalHandle, bool $bExclusive): void {}
-    static public function fsUnlock($oUser, $fLocalHandle): void {}
+    static public function fsLock(User $oUser, mixed $fLocalHandle, bool $bExclusive): void {}
+    static public function fsUnlock(User $oUser, mixed $fLocalHandle): void {}
 
-    static public function fsClose($oUser, $fLocalHandle): void
+    static public function fsClose(User $oUser, mixed $fLocalHandle): void
     {
         self::$aCallLog[] = ['method' => 'fsClose', 'args' => [$fLocalHandle]];
         if (self::$fnFsClose !== null) {
@@ -248,6 +251,7 @@ class SpyVfsPlugin2 implements PluginInterface
     static public mixed $fnGetFile         = null;
     static public mixed $fnSetMeta         = null;
 
+    /** @var array<int,array{method:string,args:array<mixed>}> */
     static public array $aCallLog = [];
 
     static public function reset(): void
@@ -270,7 +274,7 @@ class SpyVfsPlugin2 implements PluginInterface
         self::$aCallLog[] = ['method' => 'houseKeeping', 'args' => []];
     }
 
-    static public function _buildFiledescriptorFromEconetPath($oUser, FilePath $oEconetPath, $bMustExist, $bReadOnly): ?FileDescriptor
+    static public function _buildFiledescriptorFromEconetPath(User $oUser, FilePath $oEconetPath, bool $bMustExist, bool $bReadOnly): ?FileDescriptor
     {
         self::$aCallLog[] = ['method' => '_buildFiledescriptorFromEconetPath', 'args' => [$oEconetPath->getFilePath()]];
         if (self::$fnBuildFd !== null) {
@@ -279,7 +283,7 @@ class SpyVfsPlugin2 implements PluginInterface
         return null;
     }
 
-    static public function _getAccessMode($iGid, $iUid, $iMode): int { return 0; }
+    static public function _getAccessMode(int $iGid, int $iUid, int $iMode): string { return ''; }
 
     static public function getDirectoryListing(string $sEconetPath, array $aDirectoryListing): array
     {
@@ -290,7 +294,7 @@ class SpyVfsPlugin2 implements PluginInterface
         return $aDirectoryListing;
     }
 
-    static public function createDirectory($oUser, FilePath $oPath): bool
+    static public function createDirectory(User $oUser, FilePath $oPath): bool
     {
         self::$aCallLog[] = ['method' => 'createDirectory', 'args' => [$oPath->getFilePath()]];
         if (self::$fnCreateDirectory !== null) {
@@ -299,7 +303,7 @@ class SpyVfsPlugin2 implements PluginInterface
         return false;
     }
 
-    static public function deleteFile($oUser, FilePath $oEconetPath): bool
+    static public function deleteFile(User $oUser, FilePath $oEconetPath): bool
     {
         self::$aCallLog[] = ['method' => 'deleteFile', 'args' => [$oEconetPath->getFilePath()]];
         if (self::$fnDeleteFile !== null) {
@@ -308,7 +312,7 @@ class SpyVfsPlugin2 implements PluginInterface
         return false;
     }
 
-    static public function moveFile($oUser, FilePath $oFrom, FilePath $oTo): bool
+    static public function moveFile(User $oUser, FilePath $oFrom, FilePath $oTo): bool
     {
         self::$aCallLog[] = ['method' => 'moveFile', 'args' => [$oFrom->getFilePath(), $oTo->getFilePath()]];
         if (self::$fnMoveFile !== null) {
@@ -317,7 +321,7 @@ class SpyVfsPlugin2 implements PluginInterface
         return false;
     }
 
-    static public function saveFile($oUser, FilePath $oPath, string $sData, int $iLoadAddr, int $iExecAddr): bool
+    static public function saveFile(User $oUser, FilePath $oPath, string $sData, int $iLoadAddr, int $iExecAddr): bool
     {
         self::$aCallLog[] = ['method' => 'saveFile', 'args' => [$oPath->getFilePath()]];
         if (self::$fnSaveFile !== null) {
@@ -326,7 +330,7 @@ class SpyVfsPlugin2 implements PluginInterface
         return false;
     }
 
-    static public function createFile($oUser, FilePath $oPath, int $iSize, int $iLoadAddr, int $iExecAddr): bool
+    static public function createFile(User $oUser, FilePath $oPath, int $iSize, int $iLoadAddr, int $iExecAddr): bool
     {
         self::$aCallLog[] = ['method' => 'createFile', 'args' => [$oPath->getFilePath()]];
         if (self::$fnCreateFile !== null) {
@@ -335,7 +339,7 @@ class SpyVfsPlugin2 implements PluginInterface
         return false;
     }
 
-    static public function getFile($oUser, FilePath $oEconetPath): string
+    static public function getFile(User $oUser, FilePath $oEconetPath): string
     {
         self::$aCallLog[] = ['method' => 'getFile', 'args' => [$oEconetPath->getFilePath()]];
         if (self::$fnGetFile !== null) {
@@ -344,7 +348,7 @@ class SpyVfsPlugin2 implements PluginInterface
         return '';
     }
 
-    static public function setMeta(string $sEconetPath, int $iLoad, int $iExec, int $iAccess): void
+    static public function setMeta(string $sEconetPath, ?int $iLoad, ?int $iExec, int $iAccess): void
     {
         self::$aCallLog[] = ['method' => 'setMeta', 'args' => [$sEconetPath]];
         if (self::$fnSetMeta !== null) {
@@ -352,16 +356,17 @@ class SpyVfsPlugin2 implements PluginInterface
         }
     }
 
-    static public function fsFtell($oUser, $fLocalHandle): int    { return 0; }
-    static public function fsFStat($oUser, $fLocalHandle): array  { return []; }
-    static public function isEof($oUser, $fLocalHandle): bool     { return false; }
-    static public function setPos($oUser, $fLocalHandle, $iPos): void {}
-    static public function setExt($oUser, $fLocalHandle, int $iExt): void {}
-    static public function read($oUser, $fLocalHandle, $iLength): string { return ''; }
-    static public function write($oUser, $fLocalHandle, $sData): int     { return 0; }
-    static public function fsLock($oUser, $fLocalHandle, bool $bExclusive): void {}
-    static public function fsUnlock($oUser, $fLocalHandle): void {}
-    static public function fsClose($oUser, $fLocalHandle): void
+    static public function fsFtell(User $oUser, mixed $fLocalHandle): int    { return 0; }
+    /** @return array<mixed> */
+    static public function fsFStat(User $oUser, mixed $fLocalHandle): array  { return []; }
+    static public function isEof(User $oUser, mixed $fLocalHandle): bool     { return false; }
+    static public function setPos(User $oUser, mixed $fLocalHandle, int $iPos): void {}
+    static public function setExt(User $oUser, mixed $fLocalHandle, int $iExt): void {}
+    static public function read(User $oUser, mixed $fLocalHandle, int $iLength): string { return ''; }
+    static public function write(User $oUser, mixed $fLocalHandle, string $sData): int     { return 0; }
+    static public function fsLock(User $oUser, mixed $fLocalHandle, bool $bExclusive): void {}
+    static public function fsUnlock(User $oUser, mixed $fLocalHandle): void {}
+    static public function fsClose(User $oUser, mixed $fLocalHandle): void
     {
         self::$aCallLog[] = ['method' => 'fsClose', 'args' => []];
     }

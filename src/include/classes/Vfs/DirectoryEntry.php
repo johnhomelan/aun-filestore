@@ -5,92 +5,92 @@
  * @author John Brown <john@home-lan.co.uk>
  * @package corevfs
 */
-namespace HomeLan\FileStore\Vfs; 
+namespace HomeLan\FileStore\Vfs;
 
-/** 
+/**
  * This class is used to prepresent a files entry in the directory catalogue
  *
  * @package corevfs
 */
 class DirectoryEntry {
 
-	protected $iAccess = 15;
+	protected int $iAccess = 15;
 
-	public function __construct(protected $sEconetName,protected $sUnixName,protected $sVfsPlugin,protected $iLoadAddr,protected $iExecAddr,protected $iSize,protected $sEconetFullFilePath,protected $iCTime,$sMode, protected $bDir=FALSE)
+	public function __construct(protected string $sEconetName,protected string $sUnixName,protected string $sVfsPlugin,protected ?int $iLoadAddr,protected ?int $iExecAddr,protected int $iSize,protected string $sEconetFullFilePath,protected int $iCTime,string $sMode, protected bool $bDir=FALSE)
 	{
 		$this->setAccessByStr($sMode);
 	}
 
-	public function getVfsPlugin()
+	public function getVfsPlugin(): string
 	{
 		return $this->sVfsPlugin;
 	}
 
-	public function getEconetName()
+	public function getEconetName(): string
 	{
 		return $this->sEconetName;
 	}
 
-	public function getUnixName()
+	public function getUnixName(): string
 	{
 		return $this->sUnixName;
 	}
 
-	public function setLoadAddr($iLoadAddr): void
+	public function setLoadAddr(?int $iLoadAddr): void
 	{
 		$this->iLoadAddr = $iLoadAddr;
 	}
 
-	public function getLoadAddr()
+	public function getLoadAddr(): ?int
 	{
 		return $this->iLoadAddr;
 	}
 
-	public function setExecAddr($iExecAddr): void
+	public function setExecAddr(?int $iExecAddr): void
 	{
 		$this->iExecAddr = $iExecAddr;
 	}
 
-	public function getExecAddr()
+	public function getExecAddr(): ?int
 	{
 		return $this->iExecAddr;
 	}
 
-	public function getSize()
+	public function getSize(): int
 	{
 		return $this->iSize;
 	}
 
-	public function setAccessByStr($sAccess): void
+	public function setAccessByStr(string $sAccess): void
 	{
 		$iMode = 0;
-		if(str_starts_with((string) $sAccess, 'w')){
+		if(str_starts_with($sAccess, 'w')){
 			$iMode = $iMode+8;
 		}else{
 			//Mark unwriteable files as Locked
 			$iMode = $iMode+16;
 		}
-		if(substr((string) $sAccess,1,1)=='r'){
+		if(substr($sAccess,1,1)=='r'){
 			$iMode = $iMode+4;
 		}
-		if(substr((string) $sAccess,3,1)=='w'){
+		if(substr($sAccess,3,1)=='w'){
 			$iMode = $iMode+2;
 		}
-		if(substr((string) $sAccess,4,1)=='r'){
+		if(substr($sAccess,4,1)=='r'){
 			$iMode = $iMode+1;
 		}
 		if($this->isDir()){
 			$iMode = $iMode+32;
 		}
-		$this->iAccess = $iMode;	
+		$this->iAccess = $iMode;
 	}
 
-	public function setAccess($iAccess): void
+	public function setAccess(int $iAccess): void
 	{
 		$this->iAccess = $iAccess;
 	}
 
-	public function getAccess()
+	public function getAccess(): int
 	{
 		return $this->iAccess;
 	}
@@ -108,7 +108,7 @@ class DirectoryEntry {
 		return $sDate;
 	}
 
-	public function setCTime($iDataTime): void
+	public function setCTime(int $iDataTime): void
 	{
 		$this->iCTime = $iDataTime;
 	}
@@ -128,7 +128,7 @@ class DirectoryEntry {
 		return date('y',$this->iCTime);
 	}
 
-	public function isDir()
+	public function isDir(): bool
 	{
 		return $this->bDir;
 	}

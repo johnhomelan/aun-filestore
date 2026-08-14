@@ -8,6 +8,7 @@ use HomeLan\FileStore\Vfs\FileDescriptor;
 use HomeLan\FileStore\Vfs\FilePath;
 use Aws\S3\S3Client;
 use Aws\S3\Exception\S3Exception;
+use HomeLan\FileStore\Authentication\User;
 use config;
 
 /**
@@ -32,15 +33,21 @@ class S3 implements PluginInterface {
 
     protected static \Psr\Log\LoggerInterface $oLogger;
     protected static bool $bMultiuser = false;
+
+    /** @var array<int,array<string,mixed>> */
     protected static array $aMappings = [];
+
+    /** @var array<int,array{data:string,pos:int,key:string,bucket:string,mapping:array<string,mixed>,dirty:bool,readonly:bool}> */
     protected static array $aFileHandles = [];
     protected static int $iNextHandle = 1;
     protected static string $sCacheDir = '/var/lib/cache/aun/s3/';
 
     // Keys with open write handles: "{bucket}:{s3key}" => open-handle count
+    /** @var array<string,int> */
     protected static array $aOpenWriteKeys = [];
 
     // Injected S3 clients for testing (keyed by mapping econet_path)
+    /** @var array<string,mixed> */
     protected static array $aOverrideClients = [];
 
     public static function init(\Psr\Log\LoggerInterface $oLogger, bool $bMultiuser = false): void
@@ -82,11 +89,13 @@ class S3 implements PluginInterface {
     // Write-access guard
     // -------------------------------------------------------------------------
 
+    /** @param array<string,mixed> $aMapping */
     protected static function _isMappingWritable(array $aMapping): bool
     {
         return !empty($aMapping['write_enabled']);
     }
 
+    /** @param array<string,mixed> $aMapping */
     protected static function _assertMappingWritable(array $aMapping): void
     {
         if (!self::_isMappingWritable($aMapping)) {
@@ -98,6 +107,7 @@ class S3 implements PluginInterface {
     // Path helpers
     // -------------------------------------------------------------------------
 
+    /** @return ?array<string,mixed> */
     protected static function _findMapping(string $sEconetPath): ?array
     {
         foreach (self::$aMappings as $aMapping) {
@@ -109,6 +119,7 @@ class S3 implements PluginInterface {
         return null;
     }
 
+    /** @param array<string,mixed> $aMapping */
     protected static function _econetToS3Key(string $sEconetPath, array $aMapping): string
     {
         $sMappingPath = rtrim($aMapping['econet_path'], '.');
@@ -122,6 +133,7 @@ class S3 implements PluginInterface {
         return ($sPrefix !== '' ? $sPrefix . '/' : '') . $sS3Relative;
     }
 
+    /** @param array<string,mixed> $aMapping */
     protected static function _econetDirToS3Prefix(string $sEconetPath, array $aMapping): string
     {
         $sKey = self::_econetToS3Key($sEconetPath, $aMapping);
@@ -135,6 +147,7 @@ class S3 implements PluginInterface {
     // S3 client factory
     // -------------------------------------------------------------------------
 
+    /** @param array<string,mixed> $aMapping */
     protected static function _getS3Client(array $aMapping): object
     {
         if (isset(self::$aOverrideClients[$aMapping['econet_path']])) {
@@ -240,7 +253,7 @@ class S3 implements PluginInterface {
     // PluginInterface implementation
     // -------------------------------------------------------------------------
 
-    public static function _buildFiledescriptorFromEconetPath($oUser, FilePath $oEconetPath, $bMustExist, $bReadOnly): FileDescriptor
+    public static function _buildFiledescriptorFromEconetPath(User $oUser, FilePath $oEconetPath, bool $bMustExist, bool $bReadOnly): FileDescriptor
     {
         $sFullPath = $oEconetPath->getFilePath();
         $aMapping = self::_findMapping($sFullPath);
@@ -314,11 +327,15 @@ class S3 implements PluginInterface {
         );
     }
 
-    public static function _getAccessMode($iGid, $iUid, $iMode): string
+    public static function _getAccessMode(int $iGid, int $iUid, int $iMode): string
     {
         return 'wr/wr';
     }
 
+    /**
+     * @param array<string,DirectoryEntry> $aDirectoryListing
+     * @return array<string,DirectoryEntry>
+     */
     public static function getDirectoryListing(string $sEconetPath, array $aDirectoryListing): array
     {
         $aMapping = self::_findMapping($sEconetPath);
@@ -396,7 +413,7 @@ class S3 implements PluginInterface {
         return $aDirectoryListing;
     }
 
-    public static function createDirectory($oUser, FilePath $oPath): bool
+    public static function createDirectory(User $oUser, FilePath $oPath): bool
     {
         $sFullPath = $oPath->getFilePath();
         $aMapping  = self::_findMapping($sFullPath);
@@ -416,7 +433,7 @@ class S3 implements PluginInterface {
         }
     }
 
-    public static function deleteFile($oUser, FilePath $oEconetPath): bool
+    public static function deleteFile(User $oUser, FilePath $oEconetPath): bool
     {
         $sFullPath = $oEconetPath->getFilePath();
         $aMapping  = self::_findMapping($sFullPath);
@@ -443,7 +460,7 @@ class S3 implements PluginInterface {
         }
     }
 
-    public static function moveFile($oUser, FilePath $oEconetPathFrom, FilePath $oEconetPathTo): bool
+    public static function moveFile(User $oUser, FilePath $oEconetPathFrom, FilePath $oEconetPathTo): bool
     {
         $sFromPath  = $oEconetPathFrom->getFilePath();
         $sToPath    = $oEconetPathTo->getFilePath();
@@ -483,7 +500,7 @@ class S3 implements PluginInterface {
         }
     }
 
-    public static function saveFile($oUser, FilePath $oEconetPath, string $sData, int $iLoadAddr, int $iExecAddr): bool
+    public static function saveFile(User $oUser, FilePath $oEconetPath, string $sData, int $iLoadAddr, int $iExecAddr): bool
     {
         $sFullPath = $oEconetPath->getFilePath();
         $aMapping  = self::_findMapping($sFullPath);
@@ -506,7 +523,7 @@ class S3 implements PluginInterface {
         }
     }
 
-    public static function createFile($oUser, FilePath $oEconetPath, int $iSize, int $iLoadAddr, int $iExecAddr): bool
+    public static function createFile(User $oUser, FilePath $oEconetPath, int $iSize, int $iLoadAddr, int $iExecAddr): bool
     {
         $sFullPath = $oEconetPath->getFilePath();
         $aMapping  = self::_findMapping($sFullPath);
@@ -529,7 +546,7 @@ class S3 implements PluginInterface {
         }
     }
 
-    public static function getFile($oUser, FilePath $oEconetPath): string
+    public static function getFile(User $oUser, FilePath $oEconetPath): string
     {
         $sFullPath = $oEconetPath->getFilePath();
         $aMapping  = self::_findMapping($sFullPath);
@@ -605,7 +622,7 @@ class S3 implements PluginInterface {
     // Handle-based I/O (in-memory buffer, flushed on close)
     // -------------------------------------------------------------------------
 
-    public static function fsFtell($oUser, $fLocalHandle): int
+    public static function fsFtell(User $oUser, mixed $fLocalHandle): int
     {
         if (!isset(self::$aFileHandles[$fLocalHandle])) {
             throw new VfsException("Invalid file handle");
@@ -613,7 +630,7 @@ class S3 implements PluginInterface {
         return self::$aFileHandles[$fLocalHandle]['pos'];
     }
 
-    public static function fsFStat($oUser, $fLocalHandle): array
+    public static function fsFStat(User $oUser, mixed $fLocalHandle): array
     {
         if (!isset(self::$aFileHandles[$fLocalHandle])) {
             throw new VfsException("Invalid file handle");
@@ -625,7 +642,7 @@ class S3 implements PluginInterface {
         ];
     }
 
-    public static function isEof($oUser, $fLocalHandle): bool
+    public static function isEof(User $oUser, mixed $fLocalHandle): bool
     {
         if (!isset(self::$aFileHandles[$fLocalHandle])) {
             return true;
@@ -634,7 +651,7 @@ class S3 implements PluginInterface {
         return $oHandle['pos'] >= strlen($oHandle['data']);
     }
 
-    public static function setPos($oUser, $fLocalHandle, $iPos): int
+    public static function setPos(User $oUser, mixed $fLocalHandle, int $iPos): int
     {
         if (!isset(self::$aFileHandles[$fLocalHandle])) {
             throw new VfsException("Invalid file handle");
@@ -643,7 +660,7 @@ class S3 implements PluginInterface {
         return 0;
     }
 
-    public static function read($oUser, $fLocalHandle, $iLength): string
+    public static function read(User $oUser, mixed $fLocalHandle, int $iLength): string
     {
         if (!isset(self::$aFileHandles[$fLocalHandle])) {
             throw new VfsException("Invalid file handle");
@@ -654,7 +671,7 @@ class S3 implements PluginInterface {
         return $sChunk;
     }
 
-    public static function write($oUser, $fLocalHandle, $sData): int
+    public static function write(User $oUser, mixed $fLocalHandle, string $sData): int
     {
         if (!isset(self::$aFileHandles[$fLocalHandle])) {
             throw new VfsException("Invalid file handle");
@@ -675,7 +692,7 @@ class S3 implements PluginInterface {
         return $iDataLen;
     }
 
-    public static function setExt($oUser, $fLocalHandle, int $iExt): void
+    public static function setExt(User $oUser, mixed $fLocalHandle, int $iExt): void
     {
         if (!isset(self::$aFileHandles[$fLocalHandle])) {
             throw new VfsException("Invalid file handle");
@@ -691,11 +708,11 @@ class S3 implements PluginInterface {
         $oHandle['dirty'] = true;
     }
 
-    public static function fsLock($oUser, $fLocalHandle, bool $bExclusive): void {}
+    public static function fsLock(User $oUser, mixed $fLocalHandle, bool $bExclusive): void {}
 
-    public static function fsUnlock($oUser, $fLocalHandle): void {}
+    public static function fsUnlock(User $oUser, mixed $fLocalHandle): void {}
 
-    public static function fsClose($oUser, $fLocalHandle): bool
+    public static function fsClose(User $oUser, mixed $fLocalHandle): bool
     {
         if (!isset(self::$aFileHandles[$fLocalHandle])) {
             return false;

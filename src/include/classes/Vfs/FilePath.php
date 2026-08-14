@@ -4,8 +4,8 @@ namespace HomeLan\FileStore\Vfs;
 
 class FilePath
 {
-	public $sFile;
-	public $sDir;
+	public string $sFile;
+	public string $sDir;
 
 	public function __construct(string $sDir, string $sFile)
 	{

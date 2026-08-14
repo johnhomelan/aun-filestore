@@ -11,8 +11,9 @@ use HomeLan\FileStore\Vfs\Vfs;
 use HomeLan\FileStore\Vfs\DirectoryEntry;
 use HomeLan\FileStore\Vfs\FileDescriptor;
 use HomeLan\FileStore\Vfs\FilePath;
+use HomeLan\FileStore\Authentication\User;
 use HomeLan\Retro\Acorn\Disk\DfsReader;
-use config; 
+use config;
 
 /**
  * The DfsSsd class acts as a vfs plugin to provide access to files stored in a dfs ssd image.
@@ -23,15 +24,17 @@ use config;
 */
 class DfsSsd implements PluginInterface {
 
-	protected static $aImageReaders = [];
+	/** @var array<string,object> */
+	protected static array $aImageReaders = [];
 
-	protected static $aFileHandles = [];
+	/** @var array<int,array{'image-file':string,'path-inside-image':string,'pos':int}> */
+	protected static array $aFileHandles = [];
 
-	protected static $iFileHandle = 0;
+	protected static int $iFileHandle = 0;
 
-	protected static $oLogger;
+	protected static \Psr\Log\LoggerInterface $oLogger;
 
-	protected static $bMultiuser;
+	protected static bool $bMultiuser;
 
 	public static function init(\Psr\Log\LoggerInterface $oLogger, bool $bMultiuser = false): void
 	{
@@ -44,7 +47,7 @@ class DfsSsd implements PluginInterface {
 
 	}
 
-	protected  static function _setUid($oUser): void
+	protected  static function _setUid(User $oUser): void
 	{
 		if(self::$bMultiuser){
 			posix_seteuid($oUser->getUnixUid());
@@ -77,7 +80,7 @@ class DfsSsd implements PluginInterface {
 		self::$iFileHandle = 0;
 	}
 
-	protected static function _getImageReader($sImageFile)
+	protected static function _getImageReader(string $sImageFile): object
 	{
 		if(!array_key_exists($sImageFile,DfsSsd::$aImageReaders)){
 			DfsSsd::$aImageReaders[$sImageFile] = new DfsReader($sImageFile);
@@ -85,7 +88,7 @@ class DfsSsd implements PluginInterface {
 		return DfsSsd::$aImageReaders[$sImageFile];
 	}
 
-	protected static function _econetToUnix($sEconetPath): string
+	protected static function _econetToUnix(string $sEconetPath): string
 	{
 		//Trim leading $.
 		$sEconetPath = substr((string) $sEconetPath,2);
@@ -145,7 +148,7 @@ class DfsSsd implements PluginInterface {
 		return $sUnixPath;
 	}
 
-	protected static function _getImageFile($sEconetPath): string
+	protected static function _getImageFile(string $sEconetPath): string
 	{
 		$sUnixPath = self::_econetToUnix($sEconetPath);
 		$aUnixPath = explode(DIRECTORY_SEPARATOR,$sUnixPath);
@@ -161,7 +164,7 @@ class DfsSsd implements PluginInterface {
 		return "";
 	}
 
-	protected static function _getPathInsideImage($sEconetPath,$sImageFile): string
+	protected static function _getPathInsideImage(string $sEconetPath,string $sImageFile): string
 	{
 		self::$oLogger->debug("Called _getPathInsideImage(".$sEconetPath.",".$sImageFile.")");
 		//Trim leading $.
@@ -173,7 +176,7 @@ class DfsSsd implements PluginInterface {
 		return ltrim(str_ireplace($sPathPreFix,'',$sEconetPath),'.');
 	} 
 
-	protected static function _checkImageFileExists($sImageFile,$sPathInsideImage): bool
+	protected static function _checkImageFileExists(string $sImageFile,string $sPathInsideImage): bool
 	{
 		$oDfs = DfsSsd::_getImageReader($sImageFile);
 		$aCat = $oDfs->getCatalogue();
@@ -201,7 +204,7 @@ class DfsSsd implements PluginInterface {
 		return $bFound;
 	}
 
-	public static function _buildFiledescriptorFromEconetPath($oUser,FilePath $oEconetPath,$bMustExist,$bReadOnly): \HomeLan\FileStore\Vfs\FileDescriptor
+	public static function _buildFiledescriptorFromEconetPath(User $oUser,FilePath $oEconetPath,bool $bMustExist,bool $bReadOnly): \HomeLan\FileStore\Vfs\FileDescriptor
 	{
 		$sImageFile = DfsSsd::_getImageFile($oEconetPath->getFilePath());
 		if(strlen($sImageFile)>0){
@@ -228,6 +231,10 @@ class DfsSsd implements PluginInterface {
 	}
 
 
+	/**
+	 * @param array<string,DirectoryEntry> $aDirectoryListing
+	 * @return array<string,DirectoryEntry>
+	*/
 	public static function getDirectoryListing(string $sEconetPath,array $aDirectoryListing): array
 	{
 		$sImageFile = DfsSsd::_getImageFile($sEconetPath);
@@ -283,26 +290,26 @@ class DfsSsd implements PluginInterface {
 		return $aReturn;
 	}
 
-	public static function createDirectory($oUser,FilePath $oPath): bool
+	public static function createDirectory(User $oUser,FilePath $oPath): bool
 	{
 		return FALSE;
 	}
 
-	public static function deleteFile($oUser,FilePath $oEconetPath): bool
+	public static function deleteFile(User $oUser,FilePath $oEconetPath): bool
 	{
 		return FALSE;
 	}
 
-	public static function moveFile($oUser,FilePath $oEconetPathFrom,FilePath $oEconetPathTo): bool
+	public static function moveFile(User $oUser,FilePath $oEconetPathFrom,FilePath $oEconetPathTo): bool
 	{
 		return FALSE;
 	}
 
-	public static function saveFile($oUser,FilePath $oEconetPath,string $sData,int $iLoadAddr,int $iExecAddr): void
+	public static function saveFile(User $oUser,FilePath $oEconetPath,string $sData,int $iLoadAddr,int $iExecAddr): void
 	{
 	}
 
-	public static function createFile($oUser,FilePath $oEconetPath,int $iSize,int $iLoadAddr,int $iExecAddr): void
+	public static function createFile(User $oUser,FilePath $oEconetPath,int $iSize,int $iLoadAddr,int $iExecAddr): void
 	{
 
 	}
@@ -312,7 +319,7 @@ class DfsSsd implements PluginInterface {
 	 *
 	 * @throws VfsException if the file does not exist
 	*/
-	public static function getFile($oUser,FilePath $oEconetPath): string
+	public static function getFile(User $oUser,FilePath $oEconetPath): string
 	{
 		$sImageFile = DfsSsd::_getImageFile($oEconetPath->getFilePath());
 		if(strlen($sImageFile)>0){
@@ -326,11 +333,11 @@ class DfsSsd implements PluginInterface {
 		throw new VfsException("No such file");
 	}
 
-	public static function setMeta(string $sEconetPath,$iLoad,$iExec,int $iAccess): void
+	public static function setMeta(string $sEconetPath,?int $iLoad,?int $iExec,int $iAccess): void
 	{
 	}
 
-	public static function fsFtell($oUser,$fLocalHandle)
+	public static function fsFtell(User $oUser,mixed $fLocalHandle): int
 	{
 		if(array_key_exists($fLocalHandle,DfsSsd::$aFileHandles)){
 			return DfsSsd::$aFileHandles[$fLocalHandle]['pos'];
@@ -338,7 +345,8 @@ class DfsSsd implements PluginInterface {
 		throw new VfsException("Invalid handle");
 	}
 
-	public static function fsFStat($oUser,$fLocalHandle): array
+	/** @return array<string,mixed> */
+	public static function fsFStat(User $oUser,mixed $fLocalHandle): array
 	{
 		if(array_key_exists($fLocalHandle,DfsSsd::$aFileHandles)){
 			$oDfs = DfsSsd::_getImageReader(DfsSsd::$aFileHandles[$fLocalHandle]['image-file']);
@@ -348,7 +356,7 @@ class DfsSsd implements PluginInterface {
 		throw new VfsException("Invalid handle");
 	}
 
-	public static function isEof($oUser,$fLocalHandle): bool
+	public static function isEof(User $oUser,mixed $fLocalHandle): bool
 	{
 		if(array_key_exists($fLocalHandle,DfsSsd::$aFileHandles)){
 			$oDfs = DfsSsd::_getImageReader(DfsSsd::$aFileHandles[$fLocalHandle]['image-file']);
@@ -361,7 +369,7 @@ class DfsSsd implements PluginInterface {
 		throw new VfsException("Invalid handle");
 	}
 
-	public static function setPos($oUser,$fLocalHandle,$iPos): bool
+	public static function setPos(User $oUser,mixed $fLocalHandle,int $iPos): bool
 	{
 		if(array_key_exists($fLocalHandle,DfsSsd::$aFileHandles)){
 			DfsSsd::$aFileHandles[$fLocalHandle]['pos']=$iPos;
@@ -369,8 +377,8 @@ class DfsSsd implements PluginInterface {
 		}
 		throw new VfsException("Invalid handle");
 	}
-	
-	public static function read($oUser,$fLocalHandle,$iLength): string
+
+	public static function read(User $oUser,mixed $fLocalHandle,int $iLength): string
 	{
 		if(array_key_exists($fLocalHandle,DfsSsd::$aFileHandles)){
 			$oDfs = DfsSsd::_getImageReader(DfsSsd::$aFileHandles[$fLocalHandle]['image-file']);
@@ -380,28 +388,28 @@ class DfsSsd implements PluginInterface {
 		throw new VfsException("Invalid handle");
 	}
 
-	public static function write($oUser,$fLocalHandle,$sData): void
+	public static function write(User $oUser,mixed $fLocalHandle,string $sData): void
 	{
 		self::$oLogger->debug("DfsSsd: Write bytes to file handle ".$fLocalHandle);
 	}
 
-	public static function setExt($oUser,$fLocalHandle,int $iExt): void
+	public static function setExt(User $oUser,mixed $fLocalHandle,int $iExt): void
 	{
 		self::$oLogger->debug("DfsSsd: setExt not supported on disk image");
 	}
 
-	public static function fsLock($oUser,$fLocalHandle,bool $bExclusive): void {}
+	public static function fsLock(User $oUser,mixed $fLocalHandle,bool $bExclusive): void {}
 
-	public static function fsUnlock($oUser,$fLocalHandle): void {}
+	public static function fsUnlock(User $oUser,mixed $fLocalHandle): void {}
 
-	public static function fsClose($oUser,$fLocalHandle): void
+	public static function fsClose(User $oUser,mixed $fLocalHandle): void
 	{
 		if(array_key_exists($fLocalHandle,DfsSsd::$aFileHandles)){
 			unset(DfsSsd::$aFileHandles[$fLocalHandle]);
 		}
 	}
 
-	public static function _getAccessMode($iGid,$iUid,$iMode): string
+	public static function _getAccessMode(int $iGid,int $iUid,int $iMode): string
 	{
 		return "-r/-r";
 	}

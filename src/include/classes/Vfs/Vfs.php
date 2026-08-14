@@ -23,31 +23,36 @@ use HomeLan\FileStore\Vfs\FilePath;
 */
 class Vfs {
 
-	static protected $aHandles = [];
+	/** @var array<int,array<int,array<int,FileDescriptor>>> */
+	static protected array $aHandles = [];
 
-	static protected $aFileHandleIDs = [];
+	/** @var array<string,int> */
+	static protected array $aFileHandleIDs = [];
 
-	static protected $aSinMapping = [];
+	/** @var array<string,int> */
+	static protected array $aSinMapping = [];
 
-	static protected $iSin = 1;
+	static protected int $iSin = 1;
 
-	static protected $oLogger;
+	static protected \Psr\Log\LoggerInterface $oLogger;
 
-	static protected $sVfsPlugins;
+	static protected string $sVfsPlugins;
 
-	protected static $bMultiuser;
+	protected static bool $bMultiuser;
 
 	/**
 	 * File-level lock counts, keyed by econet path.
 	 * $aLocks['$.HOME.FILE'] = ['readers' => int, 'writers' => int]
+	 * @var array<string,array{readers:int,writers:int}>
 	 */
-	static protected $aLocks = [];
+	static protected array $aLocks = [];
 
 	/**
 	 * Per-handle lock type, keyed by network/station/handle-id.
 	 * Value is 'read', 'write', or absent (directory / unlocked handle).
+	 * @var array<int,array<int,array<int,string>>>
 	 */
-	static protected $aHandleLocks = [];
+	static protected array $aHandleLocks = [];
 
 	public static function init(\Psr\Log\LoggerInterface $oLogger,string $sVfsPlugins, bool $bMultiuser = false): void
 	{
@@ -234,6 +239,7 @@ class Vfs {
 	 *
 	 * It also calls the init method of each one when the class is loaded for the first time
 	 *
+	 * @return list<class-string>
 	**/
 	public static function getVfsPlugins(): array
 	{
@@ -262,9 +268,8 @@ class Vfs {
 	 * @param FilePath $oEconetPath The econet file path
 	 * @param boolean $bMustExist The path must exist
 	 * @param boolean $bReadOnly If the file descriptor should be read-only
-	 * @return object 
-	*/	
-	static protected function _buildFiledescriptorFromEconetPath(\HomeLan\FileStore\Authentication\User  $oUser,FilePath $oEconetPath,bool $bMustExist,bool $bReadOnly): object
+	*/
+	static protected function _buildFiledescriptorFromEconetPath(\HomeLan\FileStore\Authentication\User  $oUser,FilePath $oEconetPath,bool $bMustExist,bool $bReadOnly): FileDescriptor
 	{
 		$aPlugins = Vfs::getVfsPlugins();
 		$oHandle=NULL;
@@ -290,9 +295,9 @@ class Vfs {
 	/**
 	  * Get the directory catalogue from the supplied file-descriptor
 	  *
-	  * @return array
+	  * @return array<string,DirectoryEntry>
 	 */
-	static public function getDirectoryListing(object $oFd): array
+	static public function getDirectoryListing(FileDescriptor $oFd): array
 	{
 		$sPath = $oFd->getEconetPath();
 		$aDirectoryListing = [];
@@ -481,7 +486,7 @@ class Vfs {
 	/**
   * Gets the contents of a file
   */
- static public function getFile(int $iNetwork,int $iStation,string $sEconetPath)
+ static public function getFile(int $iNetwork,int $iStation,string $sEconetPath): string
 	{
 		if(!Security::isLoggedIn($iNetwork,$iStation)){
 			self::$oLogger->debug("vfs: Un-able to create a handle for a station that is not logged in (Who are you?)");
@@ -508,8 +513,8 @@ class Vfs {
 	/**
   * Gets the meta data for a given file	
   */
- static public function getMeta(int $iNetwork,int $iStation,string $sEconetPath)
-	{	
+ static public function getMeta(int $iNetwork,int $iStation,string $sEconetPath): DirectoryEntry
+	{
 		if(!Security::isLoggedIn($iNetwork,$iStation)){
 			self::$oLogger->debug("vfs: Un-able to create a handle for a station that is not logged in (Who are you?)");
 			throw new Exception("vfs: Un-able to create a handle for a station that is not logged in (Who are you?)");
@@ -584,7 +589,7 @@ class Vfs {
 	 * @param boolean $bMustExist
 	 * @param boolean $bReadOnly
 	*/
-	static public function createFsHandle(int $iNetwork,int $iStation,string $sEconetPath,bool $bMustExist=TRUE,bool $bReadOnly=TRUE)
+	static public function createFsHandle(int $iNetwork,int $iStation,string $sEconetPath,bool $bMustExist=TRUE,bool $bReadOnly=TRUE): FileDescriptor
 	{
 		if(!Security::isLoggedIn($iNetwork,$iStation)){
 			self::$oLogger->debug("vfs: Un-able to create a handle for a station that is not logged in (Who are you?)");
@@ -618,7 +623,7 @@ class Vfs {
 	 *
 	 *
 	*/
-	static public function replaceFsHandle(int $iNetwork,int $iStation, $iHandleToReplace, $iNewHandle)
+	static public function replaceFsHandle(int $iNetwork,int $iStation, int $iHandleToReplace, int $iNewHandle): void
 	{
 		if(array_key_exists($iNetwork,Vfs::$aHandles) AND array_key_exists($iStation,Vfs::$aHandles[$iNetwork]) AND array_key_exists($iHandleToReplace,Vfs::$aHandles[$iNetwork][$iStation])){
 			//Found the handle to replace
@@ -634,7 +639,7 @@ class Vfs {
 	  *
 	  * @param int $iHandle The filehandel used by the client
 	*/
-	static public function getFsHandle(int $iNetwork,int $iStation, $iHandle)
+	static public function getFsHandle(int $iNetwork,int $iStation, int $iHandle): FileDescriptor
 	{
 		if(array_key_exists($iNetwork,Vfs::$aHandles) AND array_key_exists($iStation,Vfs::$aHandles[$iNetwork]) AND array_key_exists($iHandle,Vfs::$aHandles[$iNetwork][$iStation])){
 			return Vfs::$aHandles[$iNetwork][$iStation][$iHandle];
@@ -744,7 +749,7 @@ class Vfs {
 	 * Decrements the appropriate counter, calls the plugin's fsUnlock(),
 	 * and cleans up the per-handle tracking entry.
 	 */
-	static private function _releaseLock(int $iNetwork, int $iStation, $iHandleId, \HomeLan\FileStore\Vfs\FileDescriptor $oHandle): void
+	static private function _releaseLock(int $iNetwork, int $iStation, int $iHandleId, \HomeLan\FileStore\Vfs\FileDescriptor $oHandle): void
 	{
 		$sLockType = self::$aHandleLocks[$iNetwork][$iStation][$iHandleId] ?? null;
 		if($sLockType === null){

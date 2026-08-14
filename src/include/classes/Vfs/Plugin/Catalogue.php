@@ -6,6 +6,7 @@ use HomeLan\FileStore\Vfs\Vfs;
 use HomeLan\FileStore\Vfs\DirectoryEntry;
 use HomeLan\FileStore\Vfs\FileDescriptor;
 use HomeLan\FileStore\Vfs\FilePath;
+use HomeLan\FileStore\Authentication\User;
 use config;
 
 /**
@@ -53,16 +54,26 @@ class Catalogue implements PluginInterface {
 
     protected static \Psr\Log\LoggerInterface $oLogger;
     protected static bool $bMultiuser = false;
+
+    /** @var array<int,array<string,mixed>> */
     protected static array $aMappings = [];
 
-    /** Catalogue entries keyed by mapping index then relative file path. */
+    /**
+     * Catalogue entries keyed by mapping index then relative file path.
+     * @var array<int,array<string,array<string,mixed>>>
+     */
     protected static array $aCatalogues = [];
 
-    /** Unix timestamp of last successful catalogue reload, keyed by mapping index. */
+    /**
+     * Unix timestamp of last successful catalogue reload, keyed by mapping index.
+     * @var array<int,int>
+     */
     protected static array $aLastReloaded = [];
 
     protected static string $sCacheDir = '/var/lib/cache/aun/catalogue/';
     protected static int $iReloadInterval = 3600;
+
+    /** @var array<int,array{data:string,pos:int}> */
     protected static array $aFileHandles = [];
     protected static int $iNextHandle = 1;
 
@@ -159,6 +170,7 @@ class Catalogue implements PluginInterface {
         return ($sData !== false) ? $sData : null;
     }
 
+    /** @param array<string,mixed> $aMapping */
     protected static function _loadCatalogue(array $aMapping): void
     {
         $iIdx          = $aMapping['_idx'];
@@ -193,6 +205,7 @@ class Catalogue implements PluginInterface {
     /**
      * Invalidate cached files whose on-disk version tag differs from the freshly-loaded catalogue.
      */
+    /** @param array<string,mixed> $aMapping */
     protected static function _checkVersionUpdates(array $aMapping): void
     {
         $iIdx    = $aMapping['_idx'];
@@ -214,6 +227,7 @@ class Catalogue implements PluginInterface {
     // Path helpers
     // -------------------------------------------------------------------------
 
+    /** @return ?array<string,mixed> */
     protected static function _findMapping(string $sEconetPath): ?array
     {
         foreach (self::$aMappings as $aMapping) {
@@ -225,6 +239,7 @@ class Catalogue implements PluginInterface {
         return null;
     }
 
+    /** @param array<string,mixed> $aMapping */
     protected static function _econetToRelative(string $sEconetPath, array $aMapping): string
     {
         $sMappingPath = rtrim($aMapping['econet_path'], '.');
@@ -234,6 +249,10 @@ class Catalogue implements PluginInterface {
         return substr($sEconetPath, strlen($sMappingPath) + 1);
     }
 
+    /**
+     * @param array<string,mixed> $aMapping
+     * @return ?array<string,mixed>
+     */
     protected static function _getCatalogueEntry(array $aMapping, string $sRelPath): ?array
     {
         $aFiles = self::$aCatalogues[$aMapping['_idx']] ?? [];
@@ -244,21 +263,25 @@ class Catalogue implements PluginInterface {
     // Local disk cache helpers
     // -------------------------------------------------------------------------
 
+    /** @param array<string,mixed> $aMapping */
     protected static function _getCacheSlug(array $aMapping): string
     {
         return md5($aMapping['catalogue_url'] ?? $aMapping['econet_path']);
     }
 
+    /** @param array<string,mixed> $aMapping */
     protected static function _getCacheFilePath(array $aMapping, string $sRelPath): string
     {
         return self::$sCacheDir . self::_getCacheSlug($aMapping) . '/' . str_replace('.', '/', $sRelPath);
     }
 
+    /** @param array<string,mixed> $aMapping */
     protected static function _getCacheVersionPath(array $aMapping, string $sRelPath): string
     {
         return self::_getCacheFilePath($aMapping, $sRelPath) . '.ver';
     }
 
+    /** @param array<string,mixed> $aMapping */
     protected static function _loadFromCache(array $aMapping, string $sRelPath): ?string
     {
         $sCachePath = self::_getCacheFilePath($aMapping, $sRelPath);
@@ -288,6 +311,7 @@ class Catalogue implements PluginInterface {
         return $sData;
     }
 
+    /** @param array<string,mixed> $aMapping */
     protected static function _saveToCache(array $aMapping, string $sRelPath, string $sData, string $sVersion): void
     {
         $sCachePath = self::_getCacheFilePath($aMapping, $sRelPath);
@@ -306,6 +330,7 @@ class Catalogue implements PluginInterface {
         self::$oLogger->debug("Catalogue: cached " . $sRelPath . " version " . $sVersion);
     }
 
+    /** @param array<string,mixed> $aMapping */
     protected static function _invalidateCache(array $aMapping, string $sRelPath): void
     {
         $sCachePath = self::_getCacheFilePath($aMapping, $sRelPath);
@@ -321,7 +346,7 @@ class Catalogue implements PluginInterface {
     // PluginInterface — file handle operations
     // -------------------------------------------------------------------------
 
-    public static function _buildFiledescriptorFromEconetPath($oUser, FilePath $oEconetPath, $bMustExist, $bReadOnly): FileDescriptor
+    public static function _buildFiledescriptorFromEconetPath(User $oUser, FilePath $oEconetPath, bool $bMustExist, bool $bReadOnly): FileDescriptor
     {
         $sFullPath = $oEconetPath->getFilePath();
         $aMapping  = self::_findMapping($sFullPath);
@@ -377,7 +402,7 @@ class Catalogue implements PluginInterface {
         );
     }
 
-    public static function _getAccessMode($iGid, $iUid, $iMode): string
+    public static function _getAccessMode(int $iGid, int $iUid, int $iMode): string
     {
         return 'r/r';
     }
@@ -386,6 +411,10 @@ class Catalogue implements PluginInterface {
     // PluginInterface — directory listing
     // -------------------------------------------------------------------------
 
+    /**
+     * @param array<string,DirectoryEntry> $aDirectoryListing
+     * @return array<string,DirectoryEntry>
+     */
     public static function getDirectoryListing(string $sEconetPath, array $aDirectoryListing): array
     {
         $aMapping = self::_findMapping($sEconetPath);
@@ -443,7 +472,7 @@ class Catalogue implements PluginInterface {
     // PluginInterface — write operations (all refused with hard exceptions)
     // -------------------------------------------------------------------------
 
-    public static function createDirectory($oUser, FilePath $oPath): bool
+    public static function createDirectory(User $oUser, FilePath $oPath): bool
     {
         if (self::_findMapping($oPath->getFilePath()) === null) {
             return false;
@@ -451,7 +480,7 @@ class Catalogue implements PluginInterface {
         throw new VfsException("Catalogue plugin is read-only", true);
     }
 
-    public static function deleteFile($oUser, FilePath $oEconetPath): bool
+    public static function deleteFile(User $oUser, FilePath $oEconetPath): bool
     {
         if (self::_findMapping($oEconetPath->getFilePath()) === null) {
             return false;
@@ -459,7 +488,7 @@ class Catalogue implements PluginInterface {
         throw new VfsException("Catalogue plugin is read-only", true);
     }
 
-    public static function moveFile($oUser, FilePath $oEconetPathFrom, FilePath $oEconetPathTo): bool
+    public static function moveFile(User $oUser, FilePath $oEconetPathFrom, FilePath $oEconetPathTo): bool
     {
         if (self::_findMapping($oEconetPathFrom->getFilePath()) === null) {
             return false;
@@ -467,7 +496,7 @@ class Catalogue implements PluginInterface {
         throw new VfsException("Catalogue plugin is read-only", true);
     }
 
-    public static function saveFile($oUser, FilePath $oEconetPath, string $sData, int $iLoadAddr, int $iExecAddr): bool
+    public static function saveFile(User $oUser, FilePath $oEconetPath, string $sData, int $iLoadAddr, int $iExecAddr): bool
     {
         if (self::_findMapping($oEconetPath->getFilePath()) === null) {
             return false;
@@ -475,7 +504,7 @@ class Catalogue implements PluginInterface {
         throw new VfsException("Catalogue plugin is read-only", true);
     }
 
-    public static function createFile($oUser, FilePath $oEconetPath, int $iSize, int $iLoadAddr, int $iExecAddr): bool
+    public static function createFile(User $oUser, FilePath $oEconetPath, int $iSize, int $iLoadAddr, int $iExecAddr): bool
     {
         if (self::_findMapping($oEconetPath->getFilePath()) === null) {
             return false;
@@ -487,7 +516,7 @@ class Catalogue implements PluginInterface {
     // PluginInterface — getFile / setMeta
     // -------------------------------------------------------------------------
 
-    public static function getFile($oUser, FilePath $oEconetPath): string
+    public static function getFile(User $oUser, FilePath $oEconetPath): string
     {
         $sFullPath = $oEconetPath->getFilePath();
         $aMapping  = self::_findMapping($sFullPath);
@@ -528,7 +557,7 @@ class Catalogue implements PluginInterface {
     // PluginInterface — handle-based I/O
     // -------------------------------------------------------------------------
 
-    public static function fsFtell($oUser, $fLocalHandle): int
+    public static function fsFtell(User $oUser, mixed $fLocalHandle): int
     {
         if (!isset(self::$aFileHandles[$fLocalHandle])) {
             throw new VfsException("Invalid file handle");
@@ -536,7 +565,8 @@ class Catalogue implements PluginInterface {
         return self::$aFileHandles[$fLocalHandle]['pos'];
     }
 
-    public static function fsFStat($oUser, $fLocalHandle): array
+    /** @return array<int|string,int> */
+    public static function fsFStat(User $oUser, mixed $fLocalHandle): array
     {
         if (!isset(self::$aFileHandles[$fLocalHandle])) {
             throw new VfsException("Invalid file handle");
@@ -545,7 +575,7 @@ class Catalogue implements PluginInterface {
         return ['size' => $iSize, 7 => $iSize];
     }
 
-    public static function isEof($oUser, $fLocalHandle): bool
+    public static function isEof(User $oUser, mixed $fLocalHandle): bool
     {
         if (!isset(self::$aFileHandles[$fLocalHandle])) {
             return true;
@@ -554,16 +584,16 @@ class Catalogue implements PluginInterface {
         return $oHandle['pos'] >= strlen($oHandle['data']);
     }
 
-    public static function setPos($oUser, $fLocalHandle, $iPos): int
+    public static function setPos(User $oUser, mixed $fLocalHandle, int $iPos): int
     {
         if (!isset(self::$aFileHandles[$fLocalHandle])) {
             throw new VfsException("Invalid file handle");
         }
-        self::$aFileHandles[$fLocalHandle]['pos'] = (int) $iPos;
+        self::$aFileHandles[$fLocalHandle]['pos'] = $iPos;
         return 0;
     }
 
-    public static function read($oUser, $fLocalHandle, $iLength): string
+    public static function read(User $oUser, mixed $fLocalHandle, int $iLength): string
     {
         if (!isset(self::$aFileHandles[$fLocalHandle])) {
             throw new VfsException("Invalid file handle");
@@ -574,7 +604,7 @@ class Catalogue implements PluginInterface {
         return $sChunk;
     }
 
-    public static function write($oUser, $fLocalHandle, $sData): int
+    public static function write(User $oUser, mixed $fLocalHandle, string $sData): int
     {
         if (!isset(self::$aFileHandles[$fLocalHandle])) {
             throw new VfsException("Invalid file handle");
@@ -582,16 +612,16 @@ class Catalogue implements PluginInterface {
         throw new VfsException("Catalogue plugin is read-only", true);
     }
 
-    public static function setExt($oUser, $fLocalHandle, int $iExt): void
+    public static function setExt(User $oUser, mixed $fLocalHandle, int $iExt): void
     {
         throw new VfsException("Catalogue plugin is read-only", true);
     }
 
-    public static function fsLock($oUser, $fLocalHandle, bool $bExclusive): void {}
+    public static function fsLock(User $oUser, mixed $fLocalHandle, bool $bExclusive): void {}
 
-    public static function fsUnlock($oUser, $fLocalHandle): void {}
+    public static function fsUnlock(User $oUser, mixed $fLocalHandle): void {}
 
-    public static function fsClose($oUser, $fLocalHandle): bool
+    public static function fsClose(User $oUser, mixed $fLocalHandle): bool
     {
         if (!isset(self::$aFileHandles[$fLocalHandle])) {
             return false;

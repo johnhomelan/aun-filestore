@@ -140,12 +140,12 @@ class CpmVfs extends Vfs
         parent::createFile($iNetwork, $iStation, self::toAcornPath($sEconetPath), $iSize, $iLoadAddr, $iExecAddr);
     }
 
-    public static function getFile(int $iNetwork, int $iStation, string $sEconetPath)
+    public static function getFile(int $iNetwork, int $iStation, string $sEconetPath): string
     {
         return parent::getFile($iNetwork, $iStation, self::toAcornPath($sEconetPath));
     }
 
-    public static function getMeta(int $iNetwork, int $iStation, string $sEconetPath)
+    public static function getMeta(int $iNetwork, int $iStation, string $sEconetPath): DirectoryEntry
     {
         return parent::getMeta($iNetwork, $iStation, self::toAcornPath($sEconetPath));
     }
@@ -155,7 +155,7 @@ class CpmVfs extends Vfs
         parent::setMeta($iNetwork, $iStation, self::toAcornPath($sEconetPath), $iLoad, $iExec, $iAccess);
     }
 
-    public static function createFsHandle(int $iNetwork, int $iStation, string $sEconetPath, bool $bMustExist = true, bool $bReadOnly = true)
+    public static function createFsHandle(int $iNetwork, int $iStation, string $sEconetPath, bool $bMustExist = true, bool $bReadOnly = true): FileDescriptor
     {
         return parent::createFsHandle($iNetwork, $iStation, self::toAcornPath($sEconetPath), $bMustExist, $bReadOnly);
     }
@@ -166,7 +166,7 @@ class CpmVfs extends Vfs
      * delegating to Vfs::createFsHandle(), preserving the '\' extension
      * separator in the stored Acorn filename.
      */
-    public static function createFsHandleForFile(int $iNetwork, int $iStation, string $sCpmFilePath, bool $bMustExist = true, bool $bReadOnly = true)
+    public static function createFsHandleForFile(int $iNetwork, int $iStation, string $sCpmFilePath, bool $bMustExist = true, bool $bReadOnly = true): FileDescriptor
     {
         return parent::createFsHandle($iNetwork, $iStation, self::toAcornFilePath($sCpmFilePath), $bMustExist, $bReadOnly);
     }

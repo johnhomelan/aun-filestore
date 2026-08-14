@@ -5,40 +5,39 @@
  * @author John Brown <john@home-lan.co.uk>
  * @package corevfs
 */
-namespace HomeLan\FileStore\Vfs; 
+namespace HomeLan\FileStore\Vfs;
 
 use HomeLan\FileStore\Vfs\Exception as VfsException;
 use HomeLan\FileStore\Authentication\User;
-/** 
- * Econet NetFs uses filedecriptor ids with its client for all file operations.  The file handles 
- * identitier is a single byte.  This class represents a single file description for the server 
+/**
+ * Econet NetFs uses filedecriptor ids with its client for all file operations.  The file handles
+ * identitier is a single byte.  This class represents a single file description for the server
  * and maps to a local file handle and remote user.
  *
  * @package corevfs
 */
 class FileDescriptor {
 
-	protected $iHandle = NULL;
+	protected int $iHandle;
 
-	protected $oUser = NULL;
+	protected User $oUser;
 
-	protected $sFilePath = NULL;
+	protected string $sVfsPlugin;
 
-	protected $sVfsPlugin = NULL;
+	/** @var mixed The plugin-local handle: int for image/array-backed plugins, resource for stream-backed plugins, or a string in test doubles. */
+	protected mixed $iVfsHandle = NULL;
 
-	protected $iVfsHandle = NULL;
-	
-	protected $sUnixFilePath = NULL;
+	protected string $sUnixFilePath;
 
-	protected $sEconetFilePath = NULL;
+	protected string $sEconetFilePath;
 
-	protected $bFile = NULL;
+	protected bool $bFile;
 
-	protected $bDir = NULL;
+	protected bool $bDir;
 
-	protected $oLogger;
+	protected \Psr\Log\LoggerInterface $oLogger;
 
-	public function __construct(\Psr\Log\LoggerInterface $oLogger,string $sVfsPlugin, User $oUser, string $sUnixFilePath, string $sEconetFilePath, $iVfsHandle, int $iEconetHandle, bool $bFile=FALSE, bool $bDir=FALSE)
+	public function __construct(\Psr\Log\LoggerInterface $oLogger,string $sVfsPlugin, User $oUser, string $sUnixFilePath, string $sEconetFilePath, mixed $iVfsHandle, int $iEconetHandle, bool $bFile=FALSE, bool $bDir=FALSE)
 	{
 		$this->oLogger = $oLogger;
 		$this->sVfsPlugin = $sVfsPlugin;
@@ -51,17 +50,17 @@ class FileDescriptor {
 		$this->bDir = $bDir;
 	}
 
-	public function getEconetPath()
+	public function getEconetPath(): string
 	{
 		return $this->sEconetFilePath;
 	}
 
 	public function getEconetDirName(): ?string
 	{
-		if(str_contains((string) $this->sEconetFilePath,'.')){
-			$aParts = explode('.',(string) $this->sEconetFilePath);
+		if(str_contains($this->sEconetFilePath,'.')){
+			$aParts = explode('.',$this->sEconetFilePath);
 			return array_pop($aParts);
-		}elseif(strlen((string) $this->sEconetFilePath)>0){
+		}elseif(strlen($this->sEconetFilePath)>0){
 			return $this->sEconetFilePath;
 		}else{
 			return '$';
@@ -71,7 +70,7 @@ class FileDescriptor {
 	public function getEconetParentPath(): string
 	{
 		//Build the path with out the last dir
-		$aPathParts = explode('.',(string) $this->sEconetFilePath);
+		$aPathParts = explode('.',$this->sEconetFilePath);
 		$sParentPath = "";
 		for($i=0;$i<(count($aPathParts)-1);$i++){
 			$sParentPath = $sParentPath.$aPathParts[$i].".";
@@ -98,24 +97,24 @@ class FileDescriptor {
 
 			$this->sVfsPlugin = $sPlugin;
 			$sUnixPath = $sPlugin::_getUnixPathFromEconetPath($this->sEconetFilePath);
-				
+
 			if(strlen((string) $sUnixPath)<1){
 				//This vfs module can't process the econetpath try the next
 				$this->changeVfs();
 			}
 			$this->sUnixFilePath=$sUnixPath;
 			$this->iVfsHandle = $sPlugin::_getHandleFromEconetPath($this->sEconetFilePath);
-			
+
 		}
 	}
 
 
-	public function getID()
+	public function getID(): int
 	{
 		return $this->iHandle;
 	}
-	
-	public function isDir()
+
+	public function isDir(): bool
 	{
 		return $this->bDir;
 	}
@@ -125,7 +124,7 @@ class FileDescriptor {
 		return (bool) $this->bFile;
 	}
 
-	public function fsFTell()
+	public function fsFTell(): mixed
 	{
 		if(!is_null($this->iVfsHandle)){
 			$sPlugin = $this->sVfsPlugin;
@@ -139,10 +138,10 @@ class FileDescriptor {
 				return $this->fsFTell();
 			}
 		}
-		
+		return null;
 	}
 
-	public function fsFStat()
+	public function fsFStat(): mixed
 	{
 		if(!is_null($this->iVfsHandle)){
 	//		try {
@@ -156,9 +155,10 @@ class FileDescriptor {
 	//			return $this->fsTell();
 	//		}
 		}
+		return null;
 	}
 
-	public function isEof()
+	public function isEof(): mixed
 	{
 		if(!is_null($this->iVfsHandle)){
 			try {
@@ -172,10 +172,10 @@ class FileDescriptor {
 				return $this->isEof();
 			}
 		}
-
+		return null;
 	}
 
-	public function setPos($iPos)
+	public function setPos(int $iPos): mixed
 	{
 		if(!is_null($this->iVfsHandle)){
 			try {
@@ -189,7 +189,7 @@ class FileDescriptor {
 				return $this->setPos($iPos);
 			}
 		}
-
+		return null;
 	}
 
 	public function setExt(int $iExt): void
@@ -208,7 +208,7 @@ class FileDescriptor {
 		}
 	}
 
-	public function read($iLength)
+	public function read(int $iLength): mixed
 	{
 		if(!is_null($this->iVfsHandle)){
 			try {
@@ -222,10 +222,10 @@ class FileDescriptor {
 				return $this->read($iLength);
 			}
 		}
-
+		return null;
 	}
 
-	public function write($sData)
+	public function write(string $sData): mixed
 	{
 		if(!is_null($this->iVfsHandle)){
 			try {
@@ -239,7 +239,7 @@ class FileDescriptor {
 				return $this->write($sData);
 			}
 		}
-
+		return null;
 	}
 
 	public function fsLock(bool $bExclusive): void
@@ -258,11 +258,12 @@ class FileDescriptor {
 		}
 	}
 
-	public function close()
+	public function close(): mixed
 	{
 		if(!is_null($this->iVfsHandle)){
 			$sPlugin = $this->sVfsPlugin;
 			return $sPlugin::fsClose($this->oUser,$this->iVfsHandle);
 		}
+		return null;
 	}
 }

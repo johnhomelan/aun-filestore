@@ -20,7 +20,7 @@ test-coverage: deps
 	XDEBUG_MODE=coverage $(PHPUNIT) --coverage-html coverage/ --log-junit junit.xml --colors=never
 
 phpstan: deps
-	$(PHPSTAN) analyse -n --no-ansi --no-progress src/include src/filestored --level 6 --memory-limit 512M
+	$(PHPSTAN) analyse -n --no-ansi --no-progress src/include src/filestored --level 10 --memory-limit 512M
 
 clean:
 	rm -f junit.xml

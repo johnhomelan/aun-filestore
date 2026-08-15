@@ -162,7 +162,18 @@ class MaceMail implements ProviderInterface {
 
 	public function __construct(protected readonly \Psr\Log\LoggerInterface $oLogger, ?Storage $oStorage = null)
 	{
-		$this->oStorage = $oStorage ?? new Storage((string) config::getValue('macemail_store_dir'));
+		$this->oStorage = $oStorage ?? new Storage(config::getValueAsString('macemail_store_dir'));
+	}
+
+	/** Storage's mail-index/mail-item entries are typed `array<string,mixed>`. */
+	private function _asInt(mixed $mValue): int
+	{
+		return is_scalar($mValue) ? (int) $mValue : 0;
+	}
+
+	private function _asString(mixed $mValue): string
+	{
+		return is_scalar($mValue) ? (string) $mValue : '';
 	}
 
 	public function getName(): string
@@ -213,6 +224,10 @@ class MaceMail implements ProviderInterface {
 	*/
 	public function broadcastPacketIn(EconetPacket $oPacket): void
 	{
+		if ($oPacket->getSourceNetwork() === null || $oPacket->getSourceStation() === null) {
+			$this->oLogger->warning("MaceMail: dropping broadcast packet with no resolvable source network/station");
+			return;
+		}
 		if ($oPacket->getPort() === self::PORT_REQUEST) {
 			$this->handleQuickCommand(new MaceMailRequest($oPacket, $this->oLogger));
 		}
@@ -220,6 +235,10 @@ class MaceMail implements ProviderInterface {
 
 	public function unicastPacketIn(EconetPacket $oPacket): void
 	{
+		if ($oPacket->getSourceNetwork() === null || $oPacket->getSourceStation() === null) {
+			$this->oLogger->warning("MaceMail: dropping packet with no resolvable source network/station");
+			return;
+		}
 		$oRequest = new MaceMailRequest($oPacket, $this->oLogger);
 		switch ($oPacket->getPort()) {
 			case self::PORT_REQUEST:
@@ -396,6 +415,9 @@ class MaceMail implements ProviderInterface {
 			$aEntries = [];
 			foreach ($this->secGetUsersOnline() as $aStations) {
 				foreach ($aStations as $aSession) {
+					if (!($aSession['user'] instanceof User)) {
+						continue;
+					}
 					$sUsername = (string) $aSession['user']->getUsername();
 					if (strtoupper($sUsername) === strtoupper($sRequester)) {
 						continue;
@@ -655,7 +677,7 @@ class MaceMail implements ProviderInterface {
 		$iMaxEntries = (int) floor((512 - 5) / 2);
 		$aIndex      = array_slice($this->oStorage->getMailIndex($sUsername), 0, $iMaxEntries);
 		foreach ($aIndex as $aEntry) {
-			$oReply->appendByte((int) ($aEntry['id'] ?? 0));
+			$oReply->appendByte($this->_asInt($aEntry['id'] ?? 0));
 			$iFlags = 0;
 			if (!empty($aEntry['read'])) {
 				$iFlags |= 0x80;
@@ -682,7 +704,7 @@ class MaceMail implements ProviderInterface {
 		$oRequest->setReplyPort(self::PORT_MAIL_ITEM_REPLY);
 		$oReply = $oRequest->buildReply();
 
-		if ($aEntry === null) {
+		if ($aEntry === null || $sUsername === null) {
 			// Matches the original's `!H%=-1` access-denied sentinel: a
 			// short, 4-byte, all-0xFF reply instead of the full record.
 			for ($i = 0; $i < 4; $i++) {
@@ -701,7 +723,7 @@ class MaceMail implements ProviderInterface {
 			$oReply->appendByte(0);
 		}
 		// 440-467: subject
-		$oReply->appendString(str_pad(substr((string) ($aEntry['subject'] ?? ''), 0, 28), 28, ' '));
+		$oReply->appendString(str_pad(substr($this->_asString($aEntry['subject'] ?? ''), 0, 28), 28, ' '));
 		// 468: padding
 		$oReply->appendByte(0);
 		// 469: action-flags byte — matches SERV.bas's own DIR?469 write:
@@ -743,7 +765,7 @@ class MaceMail implements ProviderInterface {
 		for ($i = 0; $i < $iSenderPad; $i++) {
 			$oReply->appendByte(0);
 		}
-		$oReply->appendByte((int) ($aEntry['sender_slot'] ?? 64));
+		$oReply->appendByte($this->_asInt($aEntry['sender_slot'] ?? 64));
 		for ($i = 0, $iRemaining = 226 - $iSenderPad; $i < $iRemaining; $i++) {
 			$oReply->appendByte(0);
 		}
@@ -871,7 +893,7 @@ class MaceMail implements ProviderInterface {
 			return;
 		}
 
-		$aIds = array_map(fn($aEntry) => (int) ($aEntry['id'] ?? 0), $this->oStorage->getMailIndex($sUsername));
+		$aIds = array_map(fn($aEntry) => $this->_asInt($aEntry['id'] ?? 0), $this->oStorage->getMailIndex($sUsername));
 
 		$oRequest->setReplyPort(self::PORT_MAILBOX_SCAN_REPLY);
 		$oReply = $oRequest->buildReply();
@@ -913,17 +935,17 @@ class MaceMail implements ProviderInterface {
 			}
 
 			$oReply->appendByte($iId);
-			$oReply->appendByte((int) ($aEntry['sender_slot'] ?? 64));
+			$oReply->appendByte($this->_asInt($aEntry['sender_slot'] ?? 64));
 			$iFlags = (!empty($aEntry['read']) ? 1 : 0)
 				| (!empty($aEntry['express']) ? 2 : 0)
 				| (!empty($aEntry['ack_requested']) ? 4 : 0)
 				| (!empty($aEntry['reply_requested']) ? 8 : 0);
 			$oReply->appendByte($iFlags);
-			$aDate = $aEntry['date'] ?? [0, 0, 0];
-			$oReply->appendByte((int) ($aDate[0] ?? 0));
-			$oReply->appendByte((int) ($aDate[1] ?? 0));
-			$oReply->appendByte((int) ($aDate[2] ?? 0));
-			$sSubject = (string) ($aEntry['subject'] ?? '');
+			$aDate = is_array($aEntry['date'] ?? null) ? array_values($aEntry['date']) : [0, 0, 0];
+			$oReply->appendByte($this->_asInt($aDate[0] ?? 0));
+			$oReply->appendByte($this->_asInt($aDate[1] ?? 0));
+			$oReply->appendByte($this->_asInt($aDate[2] ?? 0));
+			$sSubject = $this->_asString($aEntry['subject'] ?? '');
 			$oReply->appendString(str_pad(substr($sSubject, 0, self::LOOK_RECORD_SIZE - 6), self::LOOK_RECORD_SIZE - 6, ' '));
 		}
 
@@ -1023,7 +1045,7 @@ class MaceMail implements ProviderInterface {
 	*/
 	public function adminAssignSlot(int $iSlot, string $sUsername): void
 	{
-		$iMaxSlots = (int) config::getValue('macemail_max_slots');
+		$iMaxSlots = config::getValueAsInt('macemail_max_slots');
 		if ($iSlot < 0 || $iSlot >= $iMaxSlots) {
 			throw new \InvalidArgumentException("Slot must be between 0 and " . ($iMaxSlots - 1) . ".");
 		}
@@ -1078,7 +1100,7 @@ class MaceMail implements ProviderInterface {
 
 	protected function getUsergroup(): string
 	{
-		return (string) config::getValue('macemail_usergroup');
+		return config::getValueAsString('macemail_usergroup');
 	}
 
 	/**

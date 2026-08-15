@@ -16,16 +16,16 @@ use Exception;
 */
 class Reply {
 
-	protected ?string $sPkt = NULL;
+	protected string $sPkt = '';
 
-	protected object $oRequest;
+	protected RequestInterface $oRequest;
 
 	protected int $iFlags = 0;
 
 	protected ?int $iReplyPort = NULL;
 
-	/** @param object $oRequest One of the concrete Request subclasses (or PrintServerData) accepted below. */
-	public function __construct(object $oRequest)
+	/** @param RequestInterface $oRequest One of the concrete Request subclasses (or PrintServerData) accepted below. */
+	public function __construct(RequestInterface $oRequest)
 	{
 		if($oRequest::class=='HomeLan\FileStore\Messages\FsRequest' or $oRequest::class=='HomeLan\FileStore\Messages\PrintServerEnquiry' OR $oRequest::class=='HomeLan\FileStore\Messages\PrintServerData' OR $oRequest::class=='HomeLan\FileStore\Messages\ArpRequest' OR $oRequest::class=='HomeLan\FileStore\Messages\Dci4ArpRequest' OR $oRequest::class=='HomeLan\FileStore\Messages\BeebTermRequest' OR $oRequest::class=='HomeLan\FileStore\Messages\TorchnetRequest' OR $oRequest::class=='HomeLan\FileStore\Messages\BridgeRequest' OR $oRequest::class=='HomeLan\FileStore\Messages\MaceMailRequest' OR $oRequest::class=='HomeLan\FileStore\Messages\TeletextRequest'){
 			$this->oRequest = $oRequest;
@@ -106,11 +106,17 @@ class Reply {
 
 	public function buildEconetpacket(): \HomeLan\FileStore\Messages\EconetPacket
 	{
+		$iDestinationStation = $this->oRequest->getSourceStation();
+		$iDestinationNetwork = $this->oRequest->getSourceNetwork();
+		if($iDestinationStation === null OR $iDestinationNetwork === null OR $this->iReplyPort === null){
+			throw new Exception("Reply cannot be addressed: the request it was built from has no source network/station/reply port");
+		}
+
 		$oEconetPacket = new EconetPacket();
 		$oEconetPacket->setPort($this->iReplyPort);
 		$oEconetPacket->setFlags($this->iFlags);
-		$oEconetPacket->setDestinationStation($this->oRequest->getSourceStation());
-		$oEconetPacket->setDestinationNetwork($this->oRequest->getSourceNetwork());
+		$oEconetPacket->setDestinationStation($iDestinationStation);
+		$oEconetPacket->setDestinationNetwork($iDestinationNetwork);
 		$oEconetPacket->setData($this->sPkt);
 		return $oEconetPacket;
 	}

@@ -10,6 +10,7 @@ use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Output\OutputInterface;
 use Aws\S3\S3Client;
 use Aws\S3\Exception\S3Exception;
+use HomeLan\FileStore\Vfs\Plugin\S3;
 use config;
 
 /**
@@ -26,6 +27,8 @@ use config;
  *
  * Usage:
  *   s3upload --mapping=$.s3files --config=/etc/aun-filestored /local/path
+ *
+ * @phpstan-import-type S3Mapping from S3
 */
 class S3Upload extends Command
 {
@@ -44,12 +47,13 @@ class S3Upload extends Command
 
     protected function execute(InputInterface $oInput, OutputInterface $oOutput): int
     {
-        if ($oInput->getOption('config') !== null) {
-            safe_define('CONFIG_CONF_FILE_PATH', $oInput->getOption('config'));
+        $mConfigDir = $oInput->getOption('config');
+        if ($mConfigDir !== null) {
+            safe_define('CONFIG_CONF_FILE_PATH', self::_asString($mConfigDir));
         }
 
-        $sMappingPath = $oInput->getOption('mapping');
-        $sSource      = $oInput->getArgument('source');
+        $sMappingPath = self::_asString($oInput->getOption('mapping'));
+        $sSource      = self::_asString($oInput->getArgument('source'));
         $bDryRun      = (bool) $oInput->getOption('dry-run');
 
         if (empty($sMappingPath)) {
@@ -57,13 +61,13 @@ class S3Upload extends Command
             return Command::FAILURE;
         }
 
-        $sMappingsJson = config::getValue('vfs_plugin_s3_mappings');
+        $sMappingsJson = config::getValueAsString('vfs_plugin_s3_mappings');
         if (empty($sMappingsJson)) {
             $oOutput->writeln('<error>vfs_plugin_s3_mappings is not configured</error>');
             return Command::FAILURE;
         }
 
-        $aMappings = json_decode($sMappingsJson, true) ?? [];
+        $aMappings = S3::decodeMappingsJson($sMappingsJson);
         $aMapping  = null;
         foreach ($aMappings as $aM) {
             if (rtrim($aM['econet_path'], '.') === rtrim($sMappingPath, '.')) {
@@ -79,7 +83,7 @@ class S3Upload extends Command
 
         $oClient = $this->_buildClient($aMapping);
         $sBucket = $aMapping['bucket'];
-        $sPrefix = rtrim($aMapping['prefix'] ?? '', '/');
+        $sPrefix = rtrim($aMapping['prefix'], '/');
 
         if (!file_exists($sSource)) {
             $oOutput->writeln('<error>Source path does not exist: ' . $sSource . '</error>');
@@ -141,13 +145,19 @@ class S3Upload extends Command
         return Command::SUCCESS;
     }
 
+    /** Symfony's InputInterface getOption()/getArgument() are typed `mixed`. */
+    private static function _asString(mixed $mValue): string
+    {
+        return is_scalar($mValue) ? (string) $mValue : '';
+    }
+
     /**
-     * @param array<string, mixed> $aMapping
+     * @param S3Mapping $aMapping
      */
     protected function _buildClient(array $aMapping): S3Client
     {
         $aConfig = [
-            'region'  => $aMapping['region'] ?? 'us-east-1',
+            'region'  => $aMapping['region'],
             'version' => 'latest',
         ];
         if (!empty($aMapping['key']) && !empty($aMapping['secret'])) {

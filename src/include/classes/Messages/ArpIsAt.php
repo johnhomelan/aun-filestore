@@ -24,10 +24,10 @@ class ArpIsAt extends Request {
 	public function __construct(EconetPacket  $oEconetPacket, \Psr\Log\LoggerInterface $oLogger)
 	{
 		parent:: __construct($oEconetPacket, $oLogger);
-		$this->decode($oEconetPacket->getData());
+		$this->decode($oEconetPacket->getData() ?? '');
 		$this->iSourceStation = $oEconetPacket->getSourceStation();
 		$this->iSourceNetwork = $oEconetPacket->getSourceNetwork();
-	}	
+	}
 
 	/**
 	  * Decodes an arp request
@@ -57,22 +57,28 @@ class ArpIsAt extends Request {
 
 	public function getSourceIP():string
 	{
-		return $this->sSourceIP;
+		return $this->sSourceIP ?? '';
 	}
 
 	public function getSourceStation():int
 	{
+		if($this->iSourceStation === null){
+			throw new Exception("ArpIsAt has no source station");
+		}
 		return $this->iSourceStation;
 	}
 
 	public function getSourceNetwork():int
 	{
+		if($this->iSourceNetwork === null){
+			throw new Exception("ArpIsAt has no source network");
+		}
 		return $this->iSourceNetwork;
 	}
 
 	public function getDestinationIp():string
 	{
-		return $this->sRespodingToIP;
+		return $this->sRespodingToIP ?? '';
 	}
 
 }

@@ -27,7 +27,7 @@ class ReactSessionStorage extends NativeSessionStorage implements SessionStorage
 
     /** @var array<string,array<string,mixed>> */
     static  array $SESSION = [];
-    private Request $oRequest;
+    private ?Request $oRequest = null;
     private string $sessionId = "setme";
 
     public function start(): bool
@@ -36,11 +36,19 @@ class ReactSessionStorage extends NativeSessionStorage implements SessionStorage
             return true;
         }
 
+        if ($this->oRequest === null) {
+            throw new \Exception("ReactSessionStorage::start() called before setRequest()");
+        }
+
         $sSessionName = session_name();
         if($sSessionName === false){
             $sSessionName = 'PHPSESSID';
         }
-        $this->sessionId = $this->oRequest->cookies->get($sSessionName);
+        $sCookieSessionId = $this->oRequest->cookies->get($sSessionName);
+        if ($sCookieSessionId === null) {
+            $sCookieSessionId = session_create_id();
+        }
+        $this->sessionId = ($sCookieSessionId === false) ? uniqid('sess-', true) : $sCookieSessionId;
 	if(array_key_exists($this->sessionId,self::$SESSION)){
 		self::$SESSION[$this->sessionId]=[];
 	}
@@ -61,7 +69,14 @@ class ReactSessionStorage extends NativeSessionStorage implements SessionStorage
 	if(file_exists('/tmp/session-'.$this->sessionId.'.dat')){
 		$sSessionData = file_get_contents('/tmp/session-'.$this->sessionId.'.dat');
 		if($sSessionData !== false){
-			self::$SESSION[$this->sessionId] = unserialize($sSessionData);
+			$mUnserialized = unserialize($sSessionData);
+			$aSession = [];
+			if(is_array($mUnserialized)){
+				foreach($mUnserialized as $mKey=>$mValue){
+					$aSession[(string) $mKey] = $mValue;
+				}
+			}
+			self::$SESSION[$this->sessionId] = $aSession;
 		}
 	}
         if (null === $session) {

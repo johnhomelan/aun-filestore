@@ -114,7 +114,7 @@ interface PluginInterface {
 	 * @param ?int $iExec  The execute address for the file, null leaves it unchanged
 	 * @param int $iAccess The access mode
 	*/
-	public static function setMeta(string $sEconetPath,?int $iLoad,?int $iExec,int $iAccess): void;
+	public static function setMeta(string $sEconetPath,?int $iLoad,?int $iExec,?int $iAccess): void;
 
 	/**
 	 * @param mixed $fLocalHandle The plugin-local handle (int for image/array-backed plugins, resource for stream-backed plugins)

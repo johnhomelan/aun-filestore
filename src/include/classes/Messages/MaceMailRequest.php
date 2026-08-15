@@ -34,6 +34,27 @@ class MaceMailRequest extends Request
 		return $this->iPort;
 	}
 
+	/**
+	 * MaceMail rejects any packet without a resolvable source network/station
+	 * before ever constructing a MaceMailRequest (see MaceMail::unicastPacketIn()/
+	 * broadcastPacketIn()), so both are guaranteed present here.
+	 */
+	public function getSourceNetwork(): int
+	{
+		if ($this->iSourceNetwork === null) {
+			throw new \Exception("MaceMailRequest has no source network");
+		}
+		return $this->iSourceNetwork;
+	}
+
+	public function getSourceStation(): int
+	{
+		if ($this->iSourceStation === null) {
+			throw new \Exception("MaceMailRequest has no source station");
+		}
+		return $this->iSourceStation;
+	}
+
 	public function setReplyPort(int $iPort): void
 	{
 		$this->iReplyPort = $iPort;

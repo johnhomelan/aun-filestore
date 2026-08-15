@@ -30,6 +30,49 @@ class Storage
 	{
 	}
 
+	/** Decoded JSON gives back `mixed`; safely narrow to scalar. */
+	private function _asInt(mixed $mValue): int
+	{
+		return is_scalar($mValue) ? (int) $mValue : 0;
+	}
+
+	private function _asString(mixed $mValue): string
+	{
+		return is_scalar($mValue) ? (string) $mValue : '';
+	}
+
+	/**
+	 * Narrows a decoded mail-index entry to array<string,mixed>, or null if
+	 * it isn't array-shaped (corrupt/foreign JSON).
+	 *
+	 * @return array<string,mixed>|null
+	 */
+	private function _asIndexEntry(mixed $mEntry): ?array
+	{
+		if (!is_array($mEntry)) {
+			return null;
+		}
+		$aResult = [];
+		foreach ($mEntry as $mKey => $mValue) {
+			$aResult[(string) $mKey] = $mValue;
+		}
+		return $aResult;
+	}
+
+	/**
+	 * Narrows a decoded [day,month,year] triple to array{int,int,int}.
+	 *
+	 * @return array{int,int,int}
+	 */
+	private function _asDateTriple(mixed $mValue): array
+	{
+		if (!is_array($mValue) || count($mValue) !== 3) {
+			return [0, 0, 0];
+		}
+		$aValues = array_values($mValue);
+		return [$this->_asInt($aValues[0]), $this->_asInt($aValues[1]), $this->_asInt($aValues[2])];
+	}
+
 	// -------------------------------------------------------------------------
 	// Slot registry
 	// -------------------------------------------------------------------------
@@ -97,7 +140,7 @@ class Storage
 		$aSlots = $this->_readJson($this->sBaseDir . '/slots.json') ?? [];
 		$aReturn = [];
 		foreach ($aSlots as $sSlot => $sUsername) {
-			$aReturn[(int) $sSlot] = (string) $sUsername;
+			$aReturn[(int) $sSlot] = $this->_asString($sUsername);
 		}
 		return $aReturn;
 	}
@@ -128,9 +171,9 @@ class Storage
 			return ['registered' => $aToday, 'last_used' => $aToday, 'store_mask' => 0];
 		}
 		return [
-			'registered' => $aMeta['registered'] ?? [0, 0, 0],
-			'last_used'  => $aMeta['last_used'] ?? [0, 0, 0],
-			'store_mask' => (int) ($aMeta['store_mask'] ?? 0),
+			'registered' => $this->_asDateTriple($aMeta['registered'] ?? null),
+			'last_used'  => $this->_asDateTriple($aMeta['last_used'] ?? null),
+			'store_mask' => $this->_asInt($aMeta['store_mask'] ?? 0),
 		];
 	}
 
@@ -169,7 +212,11 @@ class Storage
 	{
 		$aIndex = $this->_readJson($this->_userDir($sUsername) . '/mail/index.json') ?? [];
 		$aCounts = ['unread_normal' => 0, 'unread_express' => 0, 'read_normal' => 0, 'read_express' => 0];
-		foreach ($aIndex as $aEntry) {
+		foreach ($aIndex as $mEntry) {
+			$aEntry = $this->_asIndexEntry($mEntry);
+			if ($aEntry === null) {
+				continue;
+			}
 			$bExpress = !empty($aEntry['express']);
 			$bRead    = !empty($aEntry['read']);
 			$sKey     = ($bRead ? 'read' : 'unread') . '_' . ($bExpress ? 'express' : 'normal');
@@ -194,8 +241,12 @@ class Storage
 		$aIndex = $this->_readJson($sDir . '/index.json') ?? [];
 
 		$iId = 1;
-		foreach ($aIndex as $aEntry) {
-			$iId = max($iId, ((int) ($aEntry['id'] ?? 0)) + 1);
+		foreach ($aIndex as $mEntry) {
+			$aEntry = $this->_asIndexEntry($mEntry);
+			if ($aEntry === null) {
+				continue;
+			}
+			$iId = max($iId, $this->_asInt($aEntry['id'] ?? 0) + 1);
 		}
 
 		$aHeader['id']   = $iId;
@@ -218,8 +269,9 @@ class Storage
 	{
 		$aIndex = $this->_readJson($this->_userDir($sUsername) . '/mail/index.json') ?? [];
 		$aReturn = [];
-		foreach ($aIndex as $aEntry) {
-			if (is_array($aEntry)) {
+		foreach ($aIndex as $mEntry) {
+			$aEntry = $this->_asIndexEntry($mEntry);
+			if ($aEntry !== null) {
 				$aReturn[] = $aEntry;
 			}
 		}
@@ -235,7 +287,7 @@ class Storage
 	public function getMailItem(string $sUsername, int $iId): ?array
 	{
 		foreach ($this->getMailIndex($sUsername) as $aEntry) {
-			if ((int) ($aEntry['id'] ?? 0) === $iId) {
+			if ($this->_asInt($aEntry['id'] ?? 0) === $iId) {
 				return $aEntry;
 			}
 		}
@@ -259,12 +311,15 @@ class Storage
 	{
 		$sDir   = $this->_userDir($sUsername) . '/mail';
 		$aIndex = $this->_readJson($sDir . '/index.json') ?? [];
-		foreach ($aIndex as &$aEntry) {
-			if ((int) ($aEntry['id'] ?? 0) === $iId) {
-				$aEntry['read'] = true;
+		foreach ($aIndex as &$mEntry) {
+			if (!is_array($mEntry)) {
+				continue;
+			}
+			if ($this->_asInt($mEntry['id'] ?? 0) === $iId) {
+				$mEntry['read'] = true;
 			}
 		}
-		unset($aEntry);
+		unset($mEntry);
 		$this->_writeJson($sDir . '/index.json', $aIndex);
 	}
 
@@ -275,7 +330,7 @@ class Storage
 	{
 		$sDir   = $this->_userDir($sUsername) . '/mail';
 		$aIndex = $this->_readJson($sDir . '/index.json') ?? [];
-		$aIndex = array_values(array_filter($aIndex, fn($aEntry) => (int) ($aEntry['id'] ?? 0) !== $iId));
+		$aIndex = array_values(array_filter($aIndex, fn($mEntry) => !is_array($mEntry) || $this->_asInt($mEntry['id'] ?? 0) !== $iId));
 		$this->_writeJson($sDir . '/index.json', $aIndex);
 
 		$sMsgPath = $sDir . '/' . $iId . '.msg';

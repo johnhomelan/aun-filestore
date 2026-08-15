@@ -43,6 +43,10 @@ class ArpReply extends Reply {
 
 	public function buildEconetpacket(): \HomeLan\FileStore\Messages\EconetPacket
 	{
+		if(!$this->oRequest instanceof ArpRequest){
+			throw new Exception("An ArpReply object was created with out suppling an ArpRequest object");
+		}
+
 		$this->iFlags = $this->getArpReplyFlags();
 		$this->sPkt .= inet_pton($this->oRequest->getRequestedIP());
 		$this->sPkt .= inet_pton($this->oRequest->getSourceIP());

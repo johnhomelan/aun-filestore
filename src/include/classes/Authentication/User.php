@@ -15,7 +15,7 @@ use config;
  * @package coreauth
  * @author John Brown <john@home-lan.co.uk>
 */
-class User {
+class User implements HasUsername {
 
 	protected ?string $sUsername = NULL;
 	
@@ -122,7 +122,7 @@ class User {
 	public function getLib():?string
 	{
 		if(is_null($this->sLib)){
-			$this->sLib = config::getValue('library_path');
+			$this->sLib = config::getValueAsString('library_path');
 		}
 		return $this->sLib;
 	}

@@ -11,16 +11,18 @@ use Exception;
 /**
  * This class controls security with in the fileserver, perform login/out and
  * all other security functions
- * 
+ *
  * @package coreauth
  * @author John Brown <john@home-lan.co.uk>
+ *
+ * @phpstan-type SecuritySession array{idle:int,datetime:int,provider:class-string<\HomeLan\FileStore\Authentication\Plugins\AuthPluginInterface>,user:\HomeLan\FileStore\Authentication\User}
 */
 
 class Security {
 
 	/**
- 	 * @var array<int, array<int, array<mixed>>>
- 	*/  	
+ 	 * @var array<int, array<int, SecuritySession>>
+ 	*/
 	protected static array $aSessions = [];
 
 	protected static \Psr\Log\LoggerInterface $oLogger;
@@ -40,7 +42,7 @@ class Security {
 		$iTime = time();
 		foreach(Security::$aSessions as $iNetwork=>$aStations){
 			foreach($aStations as $iStation=>$aData){
-				if($aData['idle']<time()-config::getValue('security_max_session_idle')){
+				if($aData['idle']<time()-config::getValueAsInt('security_max_session_idle')){
 					Security::logout($iNetwork,$iStation);
 				}
 			}
@@ -52,23 +54,26 @@ class Security {
 	 * Get a list of all the authplugs we should be using 
 	 *
 	 * It also calls the init method of each one
-	 * @return array<int, string>
+	 * @return array<int, class-string<\HomeLan\FileStore\Authentication\Plugins\AuthPluginInterface>>
 	**/
 	protected static function _getAuthPlugins(): array
 	{
 		$aReturn = [];
-		$aAuthPlugis = explode(',',(string) config::getValue('security_auth_plugins'));
+		$aAuthPlugis = explode(',',config::getValueAsString('security_auth_plugins'));
 		foreach($aAuthPlugis as $sPlugin){
 			$sClassname = "\HomeLan\FileStore\Authentication\Plugins\AuthPlugin".ucfirst($sPlugin);
 			if(!class_exists($sClassname,FALSE)){
 				try{
 					$sClassname::init(self::$oLogger);
-					$aReturn[]=$sClassname;
 				}catch(Exception){
 					self::$oLogger->info("Security: Unable to load authplugin ".$sClassname);
+					continue;
 				}
-			}else{
+			}
+			if(is_a($sClassname, \HomeLan\FileStore\Authentication\Plugins\AuthPluginInterface::class, true)){
 				$aReturn[]=$sClassname;
+			}else{
+				self::$oLogger->info("Security: Authplugin ".$sClassname." does not implement AuthPluginInterface");
 			}
 		}
 		return $aReturn;
@@ -125,6 +130,9 @@ class Security {
 	{
 		if(Security::isLoggedIn($iNetwork,$iStation)){
 			$oUser = Security::getUser($iNetwork,$iStation);
+			if($oUser === null){
+				throw new Exception("Security: No user logged in on ".$iNetwork.".".$iStation);
+			}
 			self::$oLogger->info("Security: Logout for ".$oUser->getUsername()." on ".$iNetwork.".".$iStation."");
 			//Drop the login from the session array
 			unset(Security::$aSessions[$iNetwork][$iStation]);
@@ -167,16 +175,17 @@ class Security {
 	public static function setConnectedUsersPassword(int $iNetwork,int $iStation,?string $sOldPassword,?string $sPassword): void
 	{
 		if(array_key_exists($iNetwork,Security::$aSessions) AND array_key_exists($iStation,Security::$aSessions[$iNetwork])){
-			self::$oLogger->info("Security: Changing password for ".Security::$aSessions[$iNetwork][$iStation]['user']->getUsername()." using authplugin ".Security::$aSessions[$iNetwork][$iStation]['provider']);
-			$sPlugin = Security::$aSessions[$iNetwork][$iStation]['provider'];
-			$sPlugin::setPassword(Security::$aSessions[$iNetwork][$iStation]['user']->getUsername(),$sOldPassword,$sPassword);
+			$aSession = Security::$aSessions[$iNetwork][$iStation];
+			self::$oLogger->info("Security: Changing password for ".$aSession['user']->getUsername()." using authplugin ".$aSession['provider']);
+			$sPlugin = $aSession['provider'];
+			$sPlugin::setPassword($aSession['user']->getUsername() ?? '',$sOldPassword ?? '',$sPassword ?? '');
 		}
 	}
 
 	/**
 	 * Get an error of the users logged in
 	 *
-	 * @return array<int, array<int, array<mixed>>>
+	 * @return array<int, array<int, SecuritySession>>
 	*/
 	public static function getUsersOnline(): array
 	{
@@ -204,7 +213,7 @@ class Security {
 	/**
  	  * Gets the list of all the users logged in and the plugin providing that user
  	  *
- 	  * @return array<int, array{'plugin':string, 'user':mixed}>
+ 	  * @return array<int, array{plugin:string, user:\HomeLan\FileStore\Authentication\User}>
  	*/
 	public static function getAllUsers(): array
 	{
@@ -235,7 +244,7 @@ class Security {
 		}
 
 		$oLoggedInUser = Security::getUser($iNetwork,$iStation);
-		if(!$oLoggedInUser->isAdmin()){
+		if($oLoggedInUser === null OR !$oLoggedInUser->isAdmin()){
 			throw new Exception("Security:  Unable to createUser, the user logged in on ".$iNetwork.".".$iStation." (".$oUser->getUsername().") does not have admin rights.");
 		}
 
@@ -269,7 +278,7 @@ class Security {
 		}
 
 		$oLoggedInUser = Security::getUser($iNetwork,$iStation);
-		if(!$oLoggedInUser->isAdmin()){
+		if($oLoggedInUser === null OR !$oLoggedInUser->isAdmin()){
 			throw new Exception("Security:  Unable to remove a user, the user logged in on ".$iNetwork.".".$iStation." does not have admin rights.");
 		}
 
@@ -298,6 +307,9 @@ class Security {
 		}
 
 		$oLoggedInUser = Security::getUser($iNetwork,$iStation);
+		if($oLoggedInUser === null){
+			throw new Exception("Security:  Unable to setPriv, no user is logged in on ".$iNetwork.".".$iStation);
+		}
 		if(!$oLoggedInUser->isAdmin()){
 			throw new Exception("Security:  Unable to setPriv, the user logged in on ".$iNetwork.".".$iStation." (".$oLoggedInUser->getUsername().") does not have admin rights.");
 		}
@@ -347,6 +359,9 @@ class Security {
 		}
 
 		$oLoggedInUser = Security::getUser($iNetwork,$iStation);
+		if($oLoggedInUser === null){
+			throw new Exception("Security: Unable to setUserQuota, no user is logged in on ".$iNetwork.".".$iStation);
+		}
 		if(!$oLoggedInUser->isAdmin()){
 			throw new Exception("Security: Unable to setUserQuota, the user logged in on ".$iNetwork.".".$iStation." (".$oLoggedInUser->getUsername().") does not have admin rights.");
 		}
@@ -374,6 +389,9 @@ class Security {
 		}
 
 		$oLoggedInUser = Security::getUser($iNetwork,$iStation);
+		if($oLoggedInUser === null){
+			throw new Exception("Security: Unable to setAdminPassword, no user is logged in on ".$iNetwork.".".$iStation);
+		}
 		if(!$oLoggedInUser->isAdmin()){
 			throw new Exception("Security: Unable to setAdminPassword, the user logged in on ".$iNetwork.".".$iStation." (".$oLoggedInUser->getUsername().") does not have admin rights.");
 		}
@@ -518,13 +536,15 @@ class Security {
 		}
 
 		$oLoggedInUser = Security::getUser($iNetwork,$iStation);
-
+		if($oLoggedInUser === null){
+			throw new Exception("Security:  Unable to setPriv, no user is logged in on ".$iNetwork.".".$iStation);
+		}
 
 		$aPlugins = Security::_getAuthPlugins();
 		self::$oLogger->info("Security: Setting opt for ".$oLoggedInUser->getUsername()." to ".$sOpt);
 		foreach($aPlugins as $sPlugin){
 			try {
-				$sPlugin::setOpt($oLoggedInUser->getUsername(),$sOpt);
+				$sPlugin::setOpt($oLoggedInUser->getUsername() ?? '',$sOpt);
 				break;
 			}catch(Exception $oException){
 				self::$oLogger->debug("Security: Exception thrown by plugin ".$sPlugin." when attempting to set opt for ".$oLoggedInUser->getUsername()." to ".$sOpt." (".$oException->getMessage().")");

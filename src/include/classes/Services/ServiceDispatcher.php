@@ -52,6 +52,9 @@ class ServiceDispatcher {
 	public static function create(?\Psr\Log\LoggerInterface $oLogger = null, ?array $aServices = null): self
 	{
 		if(!is_object(ServiceDispatcher::$oSingleton)){
+			if($oLogger === null OR $aServices === null){
+				throw new \Exception("ServiceDispatcher::create() must first be called with a logger and services array to create the singleton");
+			}
 			$oLogger->debug("Creating the singleton of ServiceDispatcher");
 			ServiceDispatcher::$oSingleton = new ServiceDispatcher($oLogger, $aServices);
 		}
@@ -234,6 +237,9 @@ class ServiceDispatcher {
 	*/
 	public function sendPackets(ProviderInterface $oService): void
 	{
+		if($this->oEncapsulationTypeMap === null OR $this->oLoop === null){
+			throw new \Exception("ServiceDispatcher::sendPackets() called before start()");
+		}
 		$oPacketDispatcher = PacketDispatcher::create($this->oEncapsulationTypeMap, $this->oLoop);
 		$aReplys = $oService->getReplies();
 		foreach($aReplys as $oPacket){
@@ -262,6 +268,10 @@ class ServiceDispatcher {
 		$oEconetPacket = $oPacket->buildEconetPacket();
 		$iNetwork = $oEconetPacket->getSourceNetwork();
 		$iStation = $oEconetPacket->getSourceStation();
+
+		if($iNetwork === null OR $iStation === null){
+			return;
+		}
 
 		if(array_key_exists($iNetwork,$this->aAckEvents) AND array_key_exists($iStation,$this->aAckEvents[$iNetwork])){
 			$fCallable = $this->aAckEvents[$iNetwork][$iStation];

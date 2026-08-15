@@ -21,6 +21,8 @@ use React\ChildProcess\Process;
  * This class implements the econet bridge
  *
  * @package core
+ *
+ * @phpstan-type BeebTermClient array{process:Process,net:int,station:int,request:BeebTermRequest,lastactivity:int,rxseq:int,txseq:int}
 */
 class BeebTerm implements ProviderInterface {
 
@@ -32,7 +34,7 @@ class BeebTerm implements ProviderInterface {
 	/** @var array<string,string> */
 	protected array $aServices = [];
 
-	/** @var array<string,array<string,mixed>> */
+	/** @var array<string,BeebTermClient> */
 	protected array $aClients = [];
 
 	private ServiceDispatcher $oServiceDispatcher;
@@ -47,12 +49,12 @@ class BeebTerm implements ProviderInterface {
 	{
 		$this->oLogger = $oLogger;
 		if(is_null($sServices)){
-			if(!file_exists(config::getValue('beeb_term_services_file'))){
+			if(!file_exists(config::getValueAsString('beeb_term_services_file'))){
 				return;
 			}
-			$sServices = file_get_contents(config::getValue('beeb_term_services_file'));
+			$sServices = file_get_contents(config::getValueAsString('beeb_term_services_file'));
 			if($sServices === false){
-				$this->oLogger->warning("Unable to read beeb term services file ".config::getValue('beeb_term_services_file'));
+				$this->oLogger->warning("Unable to read beeb term services file ".config::getValueAsString('beeb_term_services_file'));
 				return;
 			}
 		}
@@ -113,7 +115,7 @@ class BeebTerm implements ProviderInterface {
 	{
 		$aReturn = [];
 		foreach($this->aClients as $sKey=>$aClient ){
-			$aReturn[] = ['network'=>$aClient['net'], 'station'=>$aClient['station'], 'command'=>$aClient['process']->getCommand(),'pid'=>$aClient['process']->getPid()];
+			$aReturn[] = ['network'=>$aClient['net'], 'station'=>$aClient['station'], 'command'=>$aClient['process']->getCommand(),'pid'=>$aClient['process']->getPid() ?? 0];
 		}
 		return $aReturn;
 	}
@@ -216,7 +218,13 @@ class BeebTerm implements ProviderInterface {
 	*/   	
 	public function login(BeebTermRequest $oRequest): void
 	{
-		$sKey = $oRequest->getSourceNetwork().'-'.$oRequest->getSourceStation();
+		$iNetwork = $oRequest->getSourceNetwork();
+		$iStation = $oRequest->getSourceStation();
+		if($iNetwork === null || $iStation === null){
+			$this->oLogger->warning("BeebTerm: Login request with no source network/station, ignoring");
+			return;
+		}
+		$sKey = $iNetwork.'-'.$iStation;
 
 		if(array_key_exists($sKey, $this->aClients)){
 			//Session already exists, client must have died and restarted
@@ -227,19 +235,23 @@ class BeebTerm implements ProviderInterface {
 		$oReply = $oRequest->buildReply();
 		$this->oLogger->debug("BeebTerm: Logging into server with service ".$oRequest->getService());
 
-		if(array_key_exists($oRequest->getService(),$this->aServices)){
-			//Create a new  session 
-			//Creates a process, and links to the main loop so it output can be handled 
+		if(array_key_exists($oRequest->getService() ?? '',$this->aServices)){
+			//Create a new  session
+			//Creates a process, and links to the main loop so it output can be handled
 			$oProcess = $this->createProcess($this->aServices[$oRequest->getService()]);
 			$oProcess->start($this->oServiceDispatcher->getLoop());
 
-			//Store the proces object linked to the service name and the net/station 
-			$this->aClients[$sKey] = ['process'=>$oProcess,'net'=>$oRequest->getSourceNetwork(),'station'=>$oRequest->getSourceStation(),'request'=>$oRequest,'lastactivity'=>time(),'rxseq'=>0,'txseq'=>0];
+			//Store the proces object linked to the service name and the net/station
+			$this->aClients[$sKey] = ['process'=>$oProcess,'net'=>$iNetwork,'station'=>$iStation,'request'=>$oRequest,'lastactivity'=>time(),'rxseq'=>0,'txseq'=>0];
 			$_this = $this;
 
+			if($oProcess->stdout === null){
+				$this->oLogger->error("BeebTerm: process has no stdout stream after start()");
+				return;
+			}
 
-			//Setup the handling of output from the process 
-			$oProcess->stdout->on('data',function($sData) use($_this,$sKey){
+			//Setup the handling of output from the process
+			$oProcess->stdout->on('data',function(string $sData) use($_this,$sKey){
 				$_this->processDataOut($sKey,$sData);
 			});
 			$oProcess->stdout->on('end',function(){
@@ -253,7 +265,7 @@ class BeebTerm implements ProviderInterface {
 
 			$this->oLogger->debug("BeebTerm: Login OK");
 			//Set the flag to login ok
-			$oReply->appendString($oRequest->getService());
+			$oReply->appendString($oRequest->getService() ?? '');
 			$oReply->setFlags(0x82);
 
 		}else{
@@ -280,8 +292,13 @@ class BeebTerm implements ProviderInterface {
 			$this->aClients[$sKey]['lastactivity']=time();
 			if((($oRequest->getRxSeq() - $this->aClients[$sKey]['rxseq']) & 0xFF) > 0){
 				//Its new data as the RxSeq is greater than the last value
-				$this->aClients[$sKey]['rxseq']=$oRequest->getRxSeq();	
-				$this->aClients[$sKey]['process']->stdin->write($oRequest->getData()); //Send the data to the process 
+				$this->aClients[$sKey]['rxseq']=$oRequest->getRxSeq();
+				$oProcess = $this->aClients[$sKey]['process'];
+				if(!$oProcess->stdin instanceof \React\Stream\WritableStreamInterface){
+					$this->oLogger->error("BeebTerm: process has no writable stdin stream");
+				}else{
+					$oProcess->stdin->write($oRequest->getData()); //Send the data to the process
+				}
 
 				//Craft a reply to ack the data 
 				$oReply = $oRequest->buildReply();
@@ -346,7 +363,7 @@ class BeebTerm implements ProviderInterface {
 		return [];
 	}
 
-	protected function createProcess(string $sCommand): object
+	protected function createProcess(string $sCommand): Process
 	{
 		return new Process($sCommand);
 	}

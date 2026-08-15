@@ -39,11 +39,11 @@ class Map {
 		self::$oLogger = $oLogger;
 		self::$oPiconetHandler = $oPiconetHandler;
 		if(is_null($sMap)){
-			if(!file_exists(config::getValue('piconetmap_file'))){
+			if(!file_exists(config::getValueAsString('piconetmap_file'))){
 				self::$oLogger->info("piconetmapper: The configuration files for the piconet map does not exist.");
 				return;
 			}
-			$sMap = file_get_contents(config::getValue('piconetmap_file'));
+			$sMap = file_get_contents(config::getValueAsString('piconetmap_file'));
 			if($sMap === false){
 				self::$oLogger->info("piconetmapper: Failed to read the configuration file for the piconet map.");
 				return;

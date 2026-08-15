@@ -29,7 +29,13 @@ class Kernel extends BaseKernel
     public function registerBundles(): iterable
     {
         $contents = require $this->getProjectDir().'/config/bundles.php';
+        if (!is_array($contents)) {
+            return;
+        }
         foreach ($contents as $class => $envs) {
+            if (!is_string($class) || !is_array($envs)) {
+                continue;
+            }
             if ($envs[$this->environment] ?? $envs['all'] ?? false) {
                 $oBundle = new $class();
                 if (!($oBundle instanceof BundleInterface)) {

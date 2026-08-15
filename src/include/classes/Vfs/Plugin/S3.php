@@ -28,16 +28,18 @@ use config;
  *
  * @package corevfs
  * @author John Brown <john@home-lan.co.uk>
+ *
+ * @phpstan-type S3Mapping array{econet_path:string,bucket:string,prefix:string,region:string,key:string,secret:string,endpoint:string,write_enabled:bool}
 */
 class S3 implements PluginInterface {
 
     protected static \Psr\Log\LoggerInterface $oLogger;
     protected static bool $bMultiuser = false;
 
-    /** @var array<int,array<string,mixed>> */
+    /** @var array<int,S3Mapping> */
     protected static array $aMappings = [];
 
-    /** @var array<int,array{data:string,pos:int,key:string,bucket:string,mapping:array<string,mixed>,dirty:bool,readonly:bool}> */
+    /** @var array<int,array{data:string,pos:int,key:string,bucket:string,mapping:S3Mapping,dirty:bool,readonly:bool}> */
     protected static array $aFileHandles = [];
     protected static int $iNextHandle = 1;
     protected static string $sCacheDir = '/var/lib/cache/aun/s3/';
@@ -47,27 +49,93 @@ class S3 implements PluginInterface {
     protected static array $aOpenWriteKeys = [];
 
     // Injected S3 clients for testing (keyed by mapping econet_path)
-    /** @var array<string,mixed> */
+    /** @var array<string,S3Client|S3ClientContract> */
     protected static array $aOverrideClients = [];
 
     public static function init(\Psr\Log\LoggerInterface $oLogger, bool $bMultiuser = false): void
     {
         self::$oLogger = $oLogger;
         self::$bMultiuser = $bMultiuser;
-        $sMappings = config::getValue('vfs_plugin_s3_mappings');
+        $sMappings = config::getValueAsString('vfs_plugin_s3_mappings');
         if (!empty($sMappings)) {
-            self::$aMappings = json_decode($sMappings, true) ?? [];
+            self::$aMappings = self::decodeMappingsJson($sMappings);
         }
-        $sCacheDir = config::getValue('vfs_plugin_s3_cache_dir');
+        $sCacheDir = config::getValueAsString('vfs_plugin_s3_cache_dir');
         self::$sCacheDir = !empty($sCacheDir) ? rtrim($sCacheDir, '/') . '/' : '/var/lib/cache/aun/s3/';
+    }
+
+    /**
+     * Decodes and validates a vfs_plugin_s3_mappings-style JSON string, e.g.
+     * for tools (like S3Upload) that need the same mappings outside of a
+     * running VFS instance.
+     *
+     * @return array<int,S3Mapping>
+     */
+    public static function decodeMappingsJson(string $sJson): array
+    {
+        return self::_normalizeMappings(json_decode($sJson, true));
+    }
+
+    /**
+     * Validates and normalizes the decoded vfs_plugin_s3_mappings JSON into a
+     * uniformly-shaped list — entries missing the required econet_path/bucket
+     * fields are dropped, and every optional field is given its default so
+     * the rest of the class never has to guess at a mapping's shape.
+     *
+     * @return array<int,S3Mapping>
+     */
+    private static function _normalizeMappings(mixed $mDecoded): array
+    {
+        $aResult = [];
+        if (!is_array($mDecoded)) {
+            return $aResult;
+        }
+        foreach ($mDecoded as $mEntry) {
+            if (!is_array($mEntry) || !isset($mEntry['econet_path'], $mEntry['bucket'])) {
+                continue;
+            }
+            $aResult[] = [
+                'econet_path'   => self::_asString($mEntry['econet_path']),
+                'bucket'        => self::_asString($mEntry['bucket']),
+                'prefix'        => isset($mEntry['prefix']) ? self::_asString($mEntry['prefix']) : '',
+                'region'        => isset($mEntry['region']) ? self::_asString($mEntry['region']) : 'us-east-1',
+                'key'           => isset($mEntry['key']) ? self::_asString($mEntry['key']) : '',
+                'secret'        => isset($mEntry['secret']) ? self::_asString($mEntry['secret']) : '',
+                'endpoint'      => isset($mEntry['endpoint']) ? self::_asString($mEntry['endpoint']) : '',
+                'write_enabled' => !empty($mEntry['write_enabled']),
+            ];
+        }
+        return $aResult;
     }
 
     public static function houseKeeping(): void {}
 
     /**
+     * Safely stringifies a value read from an AWS Result/StubS3Client array
+     * (S3 SDK response fields are typed `mixed` since \Aws\Result is a
+     * generic ArrayAccess). A Stringable object (e.g. the SDK's stream Body)
+     * is cast via __toString(); anything else non-scalar becomes ''.
+     */
+    private static function _asString(mixed $mValue): string
+    {
+        if (is_scalar($mValue)) {
+            return (string) $mValue;
+        }
+        if (is_object($mValue) && method_exists($mValue, '__toString')) {
+            return (string) $mValue;
+        }
+        return '';
+    }
+
+    private static function _asInt(mixed $mValue): int
+    {
+        return is_scalar($mValue) ? (int) $mValue : 0;
+    }
+
+    /**
      * Inject a mock/stub S3Client for a specific mapping (used in tests).
      */
-    public static function setS3Client(string $sEconetPath, mixed $oClient): void
+    public static function setS3Client(string $sEconetPath, S3Client|S3ClientContract $oClient): void
     {
         self::$aOverrideClients[$sEconetPath] = $oClient;
     }
@@ -89,13 +157,13 @@ class S3 implements PluginInterface {
     // Write-access guard
     // -------------------------------------------------------------------------
 
-    /** @param array<string,mixed> $aMapping */
+    /** @param S3Mapping $aMapping */
     protected static function _isMappingWritable(array $aMapping): bool
     {
         return !empty($aMapping['write_enabled']);
     }
 
-    /** @param array<string,mixed> $aMapping */
+    /** @param S3Mapping $aMapping */
     protected static function _assertMappingWritable(array $aMapping): void
     {
         if (!self::_isMappingWritable($aMapping)) {
@@ -107,7 +175,7 @@ class S3 implements PluginInterface {
     // Path helpers
     // -------------------------------------------------------------------------
 
-    /** @return ?array<string,mixed> */
+    /** @return ?S3Mapping */
     protected static function _findMapping(string $sEconetPath): ?array
     {
         foreach (self::$aMappings as $aMapping) {
@@ -119,21 +187,21 @@ class S3 implements PluginInterface {
         return null;
     }
 
-    /** @param array<string,mixed> $aMapping */
+    /** @param S3Mapping $aMapping */
     protected static function _econetToS3Key(string $sEconetPath, array $aMapping): string
     {
         $sMappingPath = rtrim($aMapping['econet_path'], '.');
         $sRelative = substr($sEconetPath, strlen($sMappingPath));
         $sRelative = ltrim($sRelative, '.');
         $sS3Relative = str_replace('.', '/', $sRelative);
-        $sPrefix = rtrim($aMapping['prefix'] ?? '', '/');
+        $sPrefix = rtrim($aMapping['prefix'], '/');
         if ($sS3Relative === '') {
             return $sPrefix;
         }
         return ($sPrefix !== '' ? $sPrefix . '/' : '') . $sS3Relative;
     }
 
-    /** @param array<string,mixed> $aMapping */
+    /** @param S3Mapping $aMapping */
     protected static function _econetDirToS3Prefix(string $sEconetPath, array $aMapping): string
     {
         $sKey = self::_econetToS3Key($sEconetPath, $aMapping);
@@ -147,14 +215,14 @@ class S3 implements PluginInterface {
     // S3 client factory
     // -------------------------------------------------------------------------
 
-    /** @param array<string,mixed> $aMapping */
-    protected static function _getS3Client(array $aMapping): object
+    /** @param S3Mapping $aMapping */
+    protected static function _getS3Client(array $aMapping): S3Client|S3ClientContract
     {
         if (isset(self::$aOverrideClients[$aMapping['econet_path']])) {
             return self::$aOverrideClients[$aMapping['econet_path']];
         }
         $aConfig = [
-            'region'  => $aMapping['region'] ?? 'us-east-1',
+            'region'  => $aMapping['region'],
             'version' => 'latest',
         ];
         if (!empty($aMapping['key']) && !empty($aMapping['secret'])) {
@@ -285,14 +353,14 @@ class S3 implements PluginInterface {
                     $sData = $sCached;
                 } else {
                     $oResult = $oClient->getObject(['Bucket' => $sBucket, 'Key' => $sKey]);
-                    $sData   = (string) $oResult['Body'];
+                    $sData   = self::_asString($oResult['Body']);
                     self::_saveToCache($sBucket, $sKey, $sData);
                 }
             } else {
                 // Write handle, or a read handle while a write handle is live:
                 // bypass cache and fetch directly from S3.
                 $oResult = $oClient->getObject(['Bucket' => $sBucket, 'Key' => $sKey]);
-                $sData   = (string) $oResult['Body'];
+                $sData   = self::_asString($oResult['Body']);
             }
         }
 
@@ -323,7 +391,9 @@ class S3 implements PluginInterface {
             $iHandle,
             $iEconetHandle,
             $bExists,
-            false
+            false,
+            $bMustExist,
+            $bReadOnly
         );
     }
 
@@ -360,8 +430,12 @@ class S3 implements PluginInterface {
 
         $sAccess = self::_isMappingWritable($aMapping) ? 'wr/wr' : 'r/r';
 
-        foreach ($oResult['CommonPrefixes'] ?? [] as $aCommonPrefix) {
-            $sDirKey  = rtrim($aCommonPrefix['Prefix'], '/');
+        $mCommonPrefixes = $oResult['CommonPrefixes'] ?? [];
+        foreach (is_array($mCommonPrefixes) ? $mCommonPrefixes : [] as $mCommonPrefix) {
+            if (!is_array($mCommonPrefix) || !isset($mCommonPrefix['Prefix'])) {
+                continue;
+            }
+            $sDirKey  = rtrim(self::_asString($mCommonPrefix['Prefix']), '/');
             $sDirName = basename($sDirKey);
             if (!array_key_exists($sDirName, $aDirectoryListing)) {
                 $aDirectoryListing[$sDirName] = new DirectoryEntry(
@@ -374,8 +448,12 @@ class S3 implements PluginInterface {
             }
         }
 
-        foreach ($oResult['Contents'] ?? [] as $aObject) {
-            $sObjKey  = $aObject['Key'];
+        $mContents = $oResult['Contents'] ?? [];
+        foreach (is_array($mContents) ? $mContents : [] as $mObject) {
+            if (!is_array($mObject) || !isset($mObject['Key'])) {
+                continue;
+            }
+            $sObjKey  = self::_asString($mObject['Key']);
             if ($sObjKey === $sPrefix) {
                 continue;
             }
@@ -384,8 +462,8 @@ class S3 implements PluginInterface {
                 continue;
             }
             if (!array_key_exists($sFileName, $aDirectoryListing)) {
-                $iSize  = (int) ($aObject['Size'] ?? 0);
-                $iCTime = isset($aObject['LastModified']) ? $aObject['LastModified']->getTimestamp() : time();
+                $iSize  = self::_asInt($mObject['Size'] ?? 0);
+                $iCTime = ($mObject['LastModified'] ?? null) instanceof \DateTimeInterface ? $mObject['LastModified']->getTimestamp() : time();
                 $aDirectoryListing[$sFileName] = new DirectoryEntry(
                     str_replace('.', '/', $sFileName),
                     $sFileName,
@@ -400,7 +478,7 @@ class S3 implements PluginInterface {
                 try {
                     $oInf = $oClient->getObject(['Bucket' => $sBucket, 'Key' => $sObjKey . '.inf']);
                     $aMatches = [];
-                    if (preg_match('/^TAPE file ([0-9a-fA-F]+) ([0-9a-fA-F]+)/', (string) $oInf['Body'], $aMatches) > 0) {
+                    if (preg_match('/^TAPE file ([0-9a-fA-F]+) ([0-9a-fA-F]+)/', self::_asString($oInf['Body']), $aMatches) > 0) {
                         $aDirectoryListing[$sFileName]->setLoadAddr((int) hexdec($aMatches[1]));
                         $aDirectoryListing[$sFileName]->setExecAddr((int) hexdec($aMatches[2]));
                     }
@@ -566,7 +644,7 @@ class S3 implements PluginInterface {
 
         try {
             $oResult = $oClient->getObject(['Bucket' => $sBucket, 'Key' => $sKey]);
-            $sData   = (string) $oResult['Body'];
+            $sData   = self::_asString($oResult['Body']);
             if (!self::_hasOpenWriteHandle($sBucket, $sKey)) {
                 self::_saveToCache($sBucket, $sKey, $sData);
             }
@@ -576,7 +654,7 @@ class S3 implements PluginInterface {
         }
     }
 
-    public static function setMeta(string $sEconetPath, ?int $iLoad, ?int $iExec, int $iAccess): void
+    public static function setMeta(string $sEconetPath, ?int $iLoad, ?int $iExec, ?int $iAccess): void
     {
         $aMapping = self::_findMapping($sEconetPath);
         if ($aMapping === null) {
@@ -592,7 +670,7 @@ class S3 implements PluginInterface {
             if ($oClient->doesObjectExist($sBucket, $sKey . '.inf')) {
                 $oResult = $oClient->getObject(['Bucket' => $sBucket, 'Key' => $sKey . '.inf']);
                 $aMatches = [];
-                if (preg_match('/^TAPE file ([0-9a-fA-F]+) ([0-9a-fA-F]+)/', (string) $oResult['Body'], $aMatches) > 0) {
+                if (preg_match('/^TAPE file ([0-9a-fA-F]+) ([0-9a-fA-F]+)/', self::_asString($oResult['Body']), $aMatches) > 0) {
                     $aMeta = ['load' => $aMatches[1], 'exec' => $aMatches[2]];
                 }
             }
@@ -624,7 +702,7 @@ class S3 implements PluginInterface {
 
     public static function fsFtell(User $oUser, mixed $fLocalHandle): int
     {
-        if (!isset(self::$aFileHandles[$fLocalHandle])) {
+        if (!is_int($fLocalHandle) || !isset(self::$aFileHandles[$fLocalHandle])) {
             throw new VfsException("Invalid file handle");
         }
         return self::$aFileHandles[$fLocalHandle]['pos'];
@@ -632,7 +710,7 @@ class S3 implements PluginInterface {
 
     public static function fsFStat(User $oUser, mixed $fLocalHandle): array
     {
-        if (!isset(self::$aFileHandles[$fLocalHandle])) {
+        if (!is_int($fLocalHandle) || !isset(self::$aFileHandles[$fLocalHandle])) {
             throw new VfsException("Invalid file handle");
         }
         $iSize = strlen(self::$aFileHandles[$fLocalHandle]['data']);
@@ -644,7 +722,7 @@ class S3 implements PluginInterface {
 
     public static function isEof(User $oUser, mixed $fLocalHandle): bool
     {
-        if (!isset(self::$aFileHandles[$fLocalHandle])) {
+        if (!is_int($fLocalHandle) || !isset(self::$aFileHandles[$fLocalHandle])) {
             return true;
         }
         $oHandle = self::$aFileHandles[$fLocalHandle];
@@ -653,7 +731,7 @@ class S3 implements PluginInterface {
 
     public static function setPos(User $oUser, mixed $fLocalHandle, int $iPos): int
     {
-        if (!isset(self::$aFileHandles[$fLocalHandle])) {
+        if (!is_int($fLocalHandle) || !isset(self::$aFileHandles[$fLocalHandle])) {
             throw new VfsException("Invalid file handle");
         }
         self::$aFileHandles[$fLocalHandle]['pos'] = (int) $iPos;
@@ -662,7 +740,7 @@ class S3 implements PluginInterface {
 
     public static function read(User $oUser, mixed $fLocalHandle, int $iLength): string
     {
-        if (!isset(self::$aFileHandles[$fLocalHandle])) {
+        if (!is_int($fLocalHandle) || !isset(self::$aFileHandles[$fLocalHandle])) {
             throw new VfsException("Invalid file handle");
         }
         $oHandle =& self::$aFileHandles[$fLocalHandle];
@@ -673,7 +751,7 @@ class S3 implements PluginInterface {
 
     public static function write(User $oUser, mixed $fLocalHandle, string $sData): int
     {
-        if (!isset(self::$aFileHandles[$fLocalHandle])) {
+        if (!is_int($fLocalHandle) || !isset(self::$aFileHandles[$fLocalHandle])) {
             throw new VfsException("Invalid file handle");
         }
         $oHandle =& self::$aFileHandles[$fLocalHandle];
@@ -694,7 +772,7 @@ class S3 implements PluginInterface {
 
     public static function setExt(User $oUser, mixed $fLocalHandle, int $iExt): void
     {
-        if (!isset(self::$aFileHandles[$fLocalHandle])) {
+        if (!is_int($fLocalHandle) || !isset(self::$aFileHandles[$fLocalHandle])) {
             throw new VfsException("Invalid file handle");
         }
         $oHandle =& self::$aFileHandles[$fLocalHandle];
@@ -714,7 +792,7 @@ class S3 implements PluginInterface {
 
     public static function fsClose(User $oUser, mixed $fLocalHandle): bool
     {
-        if (!isset(self::$aFileHandles[$fLocalHandle])) {
+        if (!is_int($fLocalHandle) || !isset(self::$aFileHandles[$fLocalHandle])) {
             return false;
         }
         $oHandle = self::$aFileHandles[$fLocalHandle];

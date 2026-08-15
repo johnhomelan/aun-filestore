@@ -47,8 +47,8 @@ class IcmpRequest extends Request
         $this->sDstIP  = $oIPv4->getDstIP();
         $this->sData   = $oIPv4->getData(); // full ICMP segment
 
-        $this->iType     = $this->getByte(1);
-        $this->iCode     = $this->getByte(2);
+        $this->iType     = $this->getByte(1) ?? 0;
+        $this->iCode     = $this->getByte(2) ?? 0;
         $this->iChecksum = $this->get16bitIntBigEndian(3);
 
         if ($this->iType === self::TYPE_ECHO_REQUEST || $this->iType === self::TYPE_ECHO_REPLY) {

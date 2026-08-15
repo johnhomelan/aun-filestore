@@ -13,6 +13,7 @@ use HomeLan\FileStore\Services\Provider\PrintServer\Admin;
 use HomeLan\FileStore\Services\Provider\PrintServer\PrinterRegistry;
 use HomeLan\FileStore\Services\ServiceDispatcher;
 use HomeLan\FileStore\Authentication\Security;
+use HomeLan\FileStore\Authentication\User;
 use HomeLan\FileStore\Messages\PrintServerEnquiry;
 use HomeLan\FileStore\Messages\PrintServerData;
 use HomeLan\FileStore\Messages\EconetPacket;
@@ -24,13 +25,15 @@ use HomeLan\FileStore\Messages\Reply;
  * This class implements the econet printserver
  *
  * @package core
+ *
+ * @phpstan-type PrintJobBuffer array{data:string,began:int,printer:string}
 */
 class PrintServer implements ProviderInterface {
 
 	/** @var array<int,Reply> */
 	protected array $aReplyBuffer = [];
 
-	/** @var array<int,array<int,array<string,mixed>>> */
+	/** @var array<int,array<int,PrintJobBuffer>> */
 	protected array $aPrintBuffer = [];
 
 	/** [net][stn] => printer name last successfully enquired for by that station
@@ -240,7 +243,9 @@ class PrintServer implements ProviderInterface {
 				$this->aPrintBuffer[$iNet][$iStn] = ['data' => '', 'began' => time(), 'printer' => $sPrinterName];
 			}
 
-			$this->aPrintBuffer[$iNet][$iStn]['data'] .= $oPrintData->getString(1, $oPrintData->getLen());
+			$aBuffer = $this->aPrintBuffer[$iNet][$iStn];
+			$aBuffer['data'] .= $oPrintData->getString(1, $oPrintData->getLen());
+			$this->aPrintBuffer[$iNet][$iStn] = $aBuffer;
 
 			if ($oPrintData->getByte($oPrintData->getLen()) == 3) {
 				// ETX — print job complete
@@ -312,12 +317,12 @@ class PrintServer implements ProviderInterface {
 
 	protected function getSpoolDir(): string
 	{
-		return config::getValue('print_server_spool_dir');
+		return config::getValueAsString('print_server_spool_dir');
 	}
 
 	protected function getConvertorScript(): ?string
 	{
-		return config::getValue('print_server_conversion_script');
+		return config::getValueAsString('print_server_conversion_script');
 	}
 
 	protected function isDir(string $sPath): bool
@@ -325,7 +330,7 @@ class PrintServer implements ProviderInterface {
 		return is_dir($sPath);
 	}
 
-	protected function getUser(int $iNet, int $iStn): ?object
+	protected function getUser(int $iNet, int $iStn): ?User
 	{
 		return Security::getUser($iNet, $iStn);
 	}
@@ -352,8 +357,8 @@ class PrintServer implements ProviderInterface {
 					'network' => $iNetwork,
 					'station' => $iStation,
 					'began'   => $aBufferInfo['began'],
-					'size'    => strlen((string) $aBufferInfo['data']),
-					'printer' => $aBufferInfo['printer'] ?? '',
+					'size'    => strlen($aBufferInfo['data']),
+					'printer' => $aBufferInfo['printer'],
 				];
 			}
 		}

@@ -19,8 +19,8 @@ class PrintServerEnquiry extends Request{
 	public function __construct(EconetPacket $oEconetPacket, \Psr\Log\LoggerInterface $oLogger)
 	{
 		parent::__construct($oEconetPacket, $oLogger);
-		$this->decode($oEconetPacket->getData());
-	}	
+		$this->decode($oEconetPacket->getData() ?? '');
+	}
 
 	public function getReplyPort(): int
 	{

@@ -17,14 +17,16 @@ use config;
 
 /**
  * The DfsSsd class acts as a vfs plugin to provide access to files stored in a dfs ssd image.
- * 
+ *
  *
  * @package corevfs
  * @authour John Brown <john@home-lan.co.uk>
+ *
+ * @phpstan-type DfsCatalogueFileEntry array{loadaddr:int,execaddr:int,size:int,startsector:int}
 */
 class DfsSsd implements PluginInterface {
 
-	/** @var array<string,object> */
+	/** @var array<string,DfsReader> */
 	protected static array $aImageReaders = [];
 
 	/** @var array<int,array{'image-file':string,'path-inside-image':string,'pos':int}> */
@@ -50,14 +52,15 @@ class DfsSsd implements PluginInterface {
 	protected  static function _setUid(User $oUser): void
 	{
 		if(self::$bMultiuser){
-			posix_seteuid($oUser->getUnixUid());
+			$iUnixUid = $oUser->getUnixUid();
+			posix_seteuid($iUnixUid ?? config::getValueAsInt('system_user_id'));
 		}
 	}
 	
 	protected static function _returnUid(): void
 	{
 		if(self::$bMultiuser){
-			 posix_seteuid(config::getValue('system_user_id'));
+			 posix_seteuid(config::getValueAsInt('system_user_id'));
 		}
 	}
 
@@ -65,7 +68,7 @@ class DfsSsd implements PluginInterface {
 	 * Injects a reader instance for a given image file, bypassing the normal
 	 * DfsReader construction. Used by unit tests to mock out the acorn-disk class.
 	 */
-	public static function setImageReader(string $sImageFile, object $oReader): void
+	public static function setImageReader(string $sImageFile, DfsReader $oReader): void
 	{
 		self::$aImageReaders[$sImageFile] = $oReader;
 	}
@@ -80,12 +83,49 @@ class DfsSsd implements PluginInterface {
 		self::$iFileHandle = 0;
 	}
 
-	protected static function _getImageReader(string $sImageFile): object
+	protected static function _getImageReader(string $sImageFile): DfsReader
 	{
 		if(!array_key_exists($sImageFile,DfsSsd::$aImageReaders)){
 			DfsSsd::$aImageReaders[$sImageFile] = new DfsReader($sImageFile);
 		}
 		return DfsSsd::$aImageReaders[$sImageFile];
+	}
+
+	/**
+	 * Normalizes the mixed-typed catalogue from the underlying DfsReader in to a known shape
+	 *
+	 * @return array<string,array<string,DfsCatalogueFileEntry>>
+	*/
+	protected static function _normalizeCatalogue(mixed $mCat): array
+	{
+		$aReturn = [];
+		if(!is_array($mCat)){
+			return $aReturn;
+		}
+		foreach($mCat as $mDir=>$mFiles){
+			if(!is_array($mFiles)){
+				continue;
+			}
+			$aDir = [];
+			foreach($mFiles as $mFile=>$mMeta){
+				if(!is_array($mMeta)){
+					continue;
+				}
+				$aDir[(string) $mFile] = [
+					'loadaddr'=>self::_asInt($mMeta['loadaddr'] ?? 0),
+					'execaddr'=>self::_asInt($mMeta['execaddr'] ?? 0),
+					'size'=>self::_asInt($mMeta['size'] ?? 0),
+					'startsector'=>self::_asInt($mMeta['startsector'] ?? 0),
+				];
+			}
+			$aReturn[(string) $mDir] = $aDir;
+		}
+		return $aReturn;
+	}
+
+	protected static function _asInt(mixed $mValue): int
+	{
+		return is_scalar($mValue) ? (int) $mValue : 0;
 	}
 
 	protected static function _econetToUnix(string $sEconetPath): string
@@ -98,7 +138,7 @@ class DfsSsd implements PluginInterface {
 			$sUnixPath = $sUnixPath.str_replace(DIRECTORY_SEPARATOR ,'.',$sPart).DIRECTORY_SEPARATOR;
 		}
 		$sUnixPath = trim($sUnixPath,DIRECTORY_SEPARATOR);
-		$sUnixPath = config::getValue('vfs_plugin_localdfsssd_root').DIRECTORY_SEPARATOR.$sUnixPath;
+		$sUnixPath = config::getValueAsString('vfs_plugin_localdfsssd_root').DIRECTORY_SEPARATOR.$sUnixPath;
 
 		
 		if(!file_exists($sUnixPath)){
@@ -156,7 +196,7 @@ class DfsSsd implements PluginInterface {
 			$sUnixPath = implode(DIRECTORY_SEPARATOR,$aUnixPath);
 			if(is_file($sUnixPath.".ssd")){
 				return $sUnixPath.".ssd";
-			}elseif($sUnixPath==config::getValue('vfs_plugin_localdfsssd_root')){
+			}elseif($sUnixPath==config::getValueAsString('vfs_plugin_localdfsssd_root')){
 				return "";
 			}
 			$sFilePathPart = array_pop($aUnixPath);
@@ -171,7 +211,7 @@ class DfsSsd implements PluginInterface {
 		$sEconetPath = substr((string) $sEconetPath,2);
 
 		$sPathPreFix = substr((string) $sImageFile,0,strlen((string) $sImageFile)-4);
-		$sPathPreFix = str_ireplace((string) config::getValue('vfs_plugin_localdfsssd_root'),'',$sPathPreFix);
+		$sPathPreFix = str_ireplace(config::getValueAsString('vfs_plugin_localdfsssd_root'),'',$sPathPreFix);
 		$sPathPreFix = str_ireplace(DIRECTORY_SEPARATOR,'.',ltrim($sPathPreFix,'/'));
 		return ltrim(str_ireplace($sPathPreFix,'',$sEconetPath),'.');
 	} 
@@ -179,7 +219,7 @@ class DfsSsd implements PluginInterface {
 	protected static function _checkImageFileExists(string $sImageFile,string $sPathInsideImage): bool
 	{
 		$oDfs = DfsSsd::_getImageReader($sImageFile);
-		$aCat = $oDfs->getCatalogue();
+		$aCat = self::_normalizeCatalogue($oDfs->getCatalogue());
 		$aPathInsideImage = explode('.',(string) $sPathInsideImage);
 		$bFound = FALSE;
 		// @phpstan-ignore-next-line Needed to support php 7, where explode can also return false
@@ -192,13 +232,11 @@ class DfsSsd implements PluginInterface {
 		}
 		// @phpstan-ignore-next-line Needed to support php 7, where explode can also return false
 		if((is_countable($aPathInsideImage) ? count($aPathInsideImage) : 0)==1){
-			if(is_array($aCat)){
-				if(array_key_exists($aPathInsideImage[0],$aCat['$'])){
-					$bFound = TRUE;
-				}
-				if(array_key_exists($aPathInsideImage[0],$aCat)){
-					$bFound = TRUE;
-				}
+			if(array_key_exists($aPathInsideImage[0],$aCat['$'])){
+				$bFound = TRUE;
+			}
+			if(array_key_exists($aPathInsideImage[0],$aCat)){
+				$bFound = TRUE;
 			}
 		}
 		return $bFound;
@@ -215,7 +253,7 @@ class DfsSsd implements PluginInterface {
 				$iEconetHandle = Vfs::getFreeFileHandleID($oUser);
 				$iVfsHandle = DfsSsd::$iFileHandle++;
 				DfsSsd::$aFileHandles[$iVfsHandle]=['image-file'=>$sImageFile, 'path-inside-image'=>'', 'pos'=>0];
-				return new FileDescriptor(self::$oLogger,'HomeLan\FileStore\Vfs\Plugin\DfsSsd',$oUser,$sImageFile,$oEconetPath->getFilePath(),$iVfsHandle,$iEconetHandle,FALSE,TRUE);
+				return new FileDescriptor(self::$oLogger,'HomeLan\FileStore\Vfs\Plugin\DfsSsd',$oUser,$sImageFile,$oEconetPath->getFilePath(),$iVfsHandle,$iEconetHandle,FALSE,TRUE,$bMustExist,$bReadOnly);
 			}
 
 			if(DfsSsd::_checkImageFileExists($sImageFile,$sPathInsideImage)){
@@ -223,7 +261,7 @@ class DfsSsd implements PluginInterface {
 				$iVfsHandle = DfsSsd::$iFileHandle++;
 				DfsSsd::$aFileHandles[$iVfsHandle]=['image-file'=>$sImageFile, 'path-inside-image'=>$sPathInsideImage, 'pos'=>0];
 				$oDfs =  DfsSsd::_getImageReader($sImageFile);
-				return new FileDescriptor(self::$oLogger,'HomeLan\FileStore\Vfs\Plugin\DfsSsd',$oUser,$sImageFile,$oEconetPath->getFilePath(),$iVfsHandle,$iEconetHandle,$oDfs->isFile($sPathInsideImage),$oDfs->isDir($sPathInsideImage));
+				return new FileDescriptor(self::$oLogger,'HomeLan\FileStore\Vfs\Plugin\DfsSsd',$oUser,$sImageFile,$oEconetPath->getFilePath(),$iVfsHandle,$iEconetHandle,$oDfs->isFile($sPathInsideImage),$oDfs->isDir($sPathInsideImage),$bMustExist,$bReadOnly);
 			}
 		}
 
@@ -243,7 +281,7 @@ class DfsSsd implements PluginInterface {
 		if(strlen($sImageFile)>0){
 			$sPathInsideImage = DfsSsd::_getPathInsideImage($sEconetPath,$sImageFile);
 			$oDfs = DfsSsd::_getImageReader($sImageFile);
-			$aCat = $oDfs->getCatalogue();
+			$aCat = self::_normalizeCatalogue($oDfs->getCatalogue());
 			if(strlen($sPathInsideImage)>0){
 				if(array_key_exists($sPathInsideImage,$aCat)){
 					$aImageStat = stat($sImageFile);
@@ -342,13 +380,13 @@ class DfsSsd implements PluginInterface {
 		throw new VfsException("No such file");
 	}
 
-	public static function setMeta(string $sEconetPath,?int $iLoad,?int $iExec,int $iAccess): void
+	public static function setMeta(string $sEconetPath,?int $iLoad,?int $iExec,?int $iAccess): void
 	{
 	}
 
 	public static function fsFtell(User $oUser,mixed $fLocalHandle): int
 	{
-		if(array_key_exists($fLocalHandle,DfsSsd::$aFileHandles)){
+		if(is_int($fLocalHandle) && array_key_exists($fLocalHandle,DfsSsd::$aFileHandles)){
 			return DfsSsd::$aFileHandles[$fLocalHandle]['pos'];
 		}
 		throw new VfsException("Invalid handle");
@@ -357,7 +395,7 @@ class DfsSsd implements PluginInterface {
 	/** @return array<string,mixed> */
 	public static function fsFStat(User $oUser,mixed $fLocalHandle): array
 	{
-		if(array_key_exists($fLocalHandle,DfsSsd::$aFileHandles)){
+		if(is_int($fLocalHandle) && array_key_exists($fLocalHandle,DfsSsd::$aFileHandles)){
 			$oDfs = DfsSsd::_getImageReader(DfsSsd::$aFileHandles[$fLocalHandle]['image-file']);
 			$aStat = $oDfs->getStat(DfsSsd::$aFileHandles[$fLocalHandle]['path-inside-image']);
 			return ['dev'=>null, 'ino'=>$aStat['sector'], 'size'=>$aStat['size'], 'nlink'=>1];
@@ -367,7 +405,7 @@ class DfsSsd implements PluginInterface {
 
 	public static function isEof(User $oUser,mixed $fLocalHandle): bool
 	{
-		if(array_key_exists($fLocalHandle,DfsSsd::$aFileHandles)){
+		if(is_int($fLocalHandle) && array_key_exists($fLocalHandle,DfsSsd::$aFileHandles)){
 			$oDfs = DfsSsd::_getImageReader(DfsSsd::$aFileHandles[$fLocalHandle]['image-file']);
 			$aStat = $oDfs->getStat(DfsSsd::$aFileHandles[$fLocalHandle]['path-inside-image']);
 			if(DfsSsd::$aFileHandles[$fLocalHandle]['pos']>=$aStat['size']){
@@ -380,7 +418,7 @@ class DfsSsd implements PluginInterface {
 
 	public static function setPos(User $oUser,mixed $fLocalHandle,int $iPos): bool
 	{
-		if(array_key_exists($fLocalHandle,DfsSsd::$aFileHandles)){
+		if(is_int($fLocalHandle) && array_key_exists($fLocalHandle,DfsSsd::$aFileHandles)){
 			DfsSsd::$aFileHandles[$fLocalHandle]['pos']=$iPos;
 			return TRUE;
 		}
@@ -389,7 +427,7 @@ class DfsSsd implements PluginInterface {
 
 	public static function read(User $oUser,mixed $fLocalHandle,int $iLength): string
 	{
-		if(array_key_exists($fLocalHandle,DfsSsd::$aFileHandles)){
+		if(is_int($fLocalHandle) && array_key_exists($fLocalHandle,DfsSsd::$aFileHandles)){
 			$oDfs = DfsSsd::_getImageReader(DfsSsd::$aFileHandles[$fLocalHandle]['image-file']);
 			$sFileData = $oDfs->getFile(DfsSsd::$aFileHandles[$fLocalHandle]['path-inside-image']);
 			return substr((string) $sFileData,DfsSsd::$aFileHandles[$fLocalHandle]['pos'],$iLength);
@@ -399,7 +437,7 @@ class DfsSsd implements PluginInterface {
 
 	public static function write(User $oUser,mixed $fLocalHandle,string $sData): void
 	{
-		self::$oLogger->debug("DfsSsd: Write bytes to file handle ".$fLocalHandle);
+		self::$oLogger->debug("DfsSsd: Write bytes to file handle ".(is_scalar($fLocalHandle) ? (string) $fLocalHandle : gettype($fLocalHandle)));
 	}
 
 	public static function setExt(User $oUser,mixed $fLocalHandle,int $iExt): void
@@ -413,7 +451,7 @@ class DfsSsd implements PluginInterface {
 
 	public static function fsClose(User $oUser,mixed $fLocalHandle): void
 	{
-		if(array_key_exists($fLocalHandle,DfsSsd::$aFileHandles)){
+		if(is_int($fLocalHandle) && array_key_exists($fLocalHandle,DfsSsd::$aFileHandles)){
 			unset(DfsSsd::$aFileHandles[$fLocalHandle]);
 		}
 	}

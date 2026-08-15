@@ -18,7 +18,7 @@ use Exception;
 class FsRequest extends Request {
 
 
-	protected ?int $iReplyPort = NULL;
+	protected int $iReplyPort = 0;
 	
 	protected ?int $iFunction = NULL;
 
@@ -36,12 +36,33 @@ class FsRequest extends Request {
 	public function __construct(EconetPacket $oEconetPacket, \Psr\Log\LoggerInterface $oLogger)
 	{
 		parent:: __construct($oEconetPacket, $oLogger);
-		$this->decode($oEconetPacket->getData());
+		$this->decode($oEconetPacket->getData() ?? '');
 	}	
 
 	public function getReplyPort():int
 	{
 		return $this->iReplyPort;
+	}
+
+	/**
+	 * FileServer rejects any packet without a resolvable source network/station
+	 * before ever constructing an FsRequest (see FileServer::unicastPacketIn()/
+	 * broadcastPacketIn()), so both are guaranteed present here.
+	 */
+	public function getSourceNetwork(): int
+	{
+		if ($this->iSourceNetwork === null) {
+			throw new Exception("FsRequest has no source network");
+		}
+		return $this->iSourceNetwork;
+	}
+
+	public function getSourceStation(): int
+	{
+		if ($this->iSourceStation === null) {
+			throw new Exception("FsRequest has no source station");
+		}
+		return $this->iSourceStation;
 	}
 
 	public function getUrd():?int
@@ -84,7 +105,7 @@ class FsRequest extends Request {
 			$this->iReplyPort = 0;
 			return;
 		}
-		$this->iReplyPort = $aHeader[1];
+		$this->iReplyPort = self::_asInt($aHeader[1]);
 		$sBinaryString = substr($sBinaryString,1);
 
 		//Read the function code 1 byte unsigned int
@@ -92,7 +113,7 @@ class FsRequest extends Request {
 		if($aHeader === false){
 			return;
 		}
-		$this->iFunction = $aHeader[1];
+		$this->iFunction = self::_asInt($aHeader[1]);
 		$sBinaryString = substr($sBinaryString,1);
 
 		//Read the urd code 1 byte unsigned int
@@ -100,7 +121,7 @@ class FsRequest extends Request {
 		if($aHeader === false){
 			return;
 		}
-		$this->iUrd = $aHeader[1];
+		$this->iUrd = self::_asInt($aHeader[1]);
 		$sBinaryString = substr($sBinaryString,1);
 
 		//Read the csd code 1 byte unsigned int
@@ -108,7 +129,7 @@ class FsRequest extends Request {
 		if($aHeader === false){
 			return;
 		}
-		$this->iCsd = $aHeader[1];
+		$this->iCsd = self::_asInt($aHeader[1]);
 		$sBinaryString = substr($sBinaryString,1);
 
 		//Read the lib code 1 byte unsigned int
@@ -117,7 +138,7 @@ class FsRequest extends Request {
 			if($aHeader === false){
 				return;
 			}
-			$this->iLib = $aHeader[1];
+			$this->iLib = self::_asInt($aHeader[1]);
 			$sBinaryString = substr($sBinaryString,1);
 		}
 	
@@ -139,8 +160,8 @@ class FsRequest extends Request {
 		$sStr = '';
 		$i = $iStart;
 		$iCount = is_countable($aBytes) ? count($aBytes) : 0;
-		while($i <= $iCount && isset($aBytes[$i]) && chr($aBytes[$i]) !== "\r" && chr($aBytes[$i]) !== "\n"){
-			$sStr .= chr($aBytes[$i]);
+		while($i <= $iCount && isset($aBytes[$i]) && chr(self::_asInt($aBytes[$i])) !== "\r" && chr(self::_asInt($aBytes[$i])) !== "\n"){
+			$sStr .= chr(self::_asInt($aBytes[$i]));
 			$i++;
 		}
 		return [$sStr, $i + 1]; // $i+1 skips the CR

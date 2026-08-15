@@ -75,7 +75,7 @@ class Admin implements AdminInterface
 	public function getEntities(string $sType): array
 	{
 		return match ($sType) {
-			'channels' => AdminEntity::createCollection($sType, $this->getEntityFields($sType), $this->oProvider->getChannelSummaries(), fn($aRow) => $aRow['channel']),
+			'channels' => AdminEntity::createCollection($sType, $this->getEntityFields($sType), $this->oProvider->getChannelSummaries(), fn(array $aRow): mixed => $aRow['channel']),
 			default    => [],
 		};
 	}

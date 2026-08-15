@@ -41,13 +41,16 @@ class TeefaxImport extends Command
 
     protected function execute(InputInterface $oInput, OutputInterface $oOutput): int
     {
-        if ($oInput->getOption('config') !== null) {
-            safe_define('CONFIG_CONF_FILE_PATH', $oInput->getOption('config'));
+        $mConfigOption = $oInput->getOption('config');
+        if ($mConfigOption !== null) {
+            safe_define('CONFIG_CONF_FILE_PATH', is_scalar($mConfigOption) ? (string) $mConfigOption : '');
         }
 
-        $sChannel  = (string) ($oInput->getOption('channel') ?? config::getValue('teletext_teefax_channel'));
-        $sSource   = (string) ($oInput->getOption('source') ?? config::getValue('teletext_teefax_source'));
-        $sStoreDir = (string) config::getValue('teletext_store_dir');
+        $mChannel  = $oInput->getOption('channel');
+        $mSource   = $oInput->getOption('source');
+        $sChannel  = is_scalar($mChannel) ? (string) $mChannel : config::getValueAsString('teletext_teefax_channel');
+        $sSource   = is_scalar($mSource) ? (string) $mSource : config::getValueAsString('teletext_teefax_source');
+        $sStoreDir = config::getValueAsString('teletext_store_dir');
         $bDryRun   = (bool) $oInput->getOption('dry-run');
 
         if (!preg_match('/^[0-9]$/', $sChannel)) {

@@ -43,11 +43,11 @@ class ServiceController extends AbstractController
 			return new Response('Service does not support file downloads', 400);
 		}
 		$sFile = (string) $oRequest->query->get('file', '');
-		$sPath = $oService->getSpooledFilePath($sFile);
-		if ($sPath === null) {
+		$mPath = $oService->getSpooledFilePath($sFile);
+		if (!is_string($mPath)) {
 			return new Response('File not found', 404);
 		}
-		return new \Symfony\Component\HttpFoundation\BinaryFileResponse($sPath);
+		return new \Symfony\Component\HttpFoundation\BinaryFileResponse($mPath);
 	}
 
 }

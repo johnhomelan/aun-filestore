@@ -41,7 +41,7 @@ class IPv4Request extends Request {
 	public function __construct(EconetPacket $oEconetPacket, \Psr\Log\LoggerInterface $oLogger)
 	{
 		parent:: __construct($oEconetPacket, $oLogger);
-		$this->decode($oEconetPacket->getData());
+		$this->decode($oEconetPacket->getData() ?? '');
 		$this->iSourceStation = $oEconetPacket->getSourceStation();
 		$this->iSourceNetwork = $oEconetPacket->getSourceNetwork();
 		$oLogger->debug("IP ver ".$this->iVersion." packet, from: ".$this->sSrcIP." to: ".$this->sDstIP." id: ".$this->iPtkId." protocol: ".$this->aProtocols[$this->iProtocol]);
@@ -72,7 +72,7 @@ class IPv4Request extends Request {
 				
 				//@TODO parse out the ip flags, and offset properly so we can deal with fragmenation properly at some point.				
 				
-				$this->iVerLength = $this->getByte(1);
+				$this->iVerLength = $this->getByte(1) ?? 0;
 
 				$this->iIpHeaderLength = (int) ((($this->iVerLength&15)*32)/8);  //Mask out the highest order bits by doing a bitwise and with 00001111
 				if($this->iIpHeaderLength<20){
@@ -86,12 +86,12 @@ class IPv4Request extends Request {
 				}
 
 				//So far the header is vaild read out the other fields
-				$this->iTos = $this->getByte(2);
+				$this->iTos = $this->getByte(2) ?? 0;
 				$this->iLength = $this->get16bitIntBigEndian(3);
 				$this->iPtkId = $this->get16bitIntBigEndian(5);
 				$this->iFlagOffset = $this->get16bitIntBigEndian(7);
-				$this->iTtl = $this->getByte(9);
-				$this->iProtocol = $this->getByte(10);
+				$this->iTtl = $this->getByte(9) ?? 0;
+				$this->iProtocol = $this->getByte(10) ?? 0;
 				$this->iChecksum = $this->get16bitIntBigEndian(11);
 
 
@@ -118,12 +118,12 @@ class IPv4Request extends Request {
 
 	public function getSrcIP():string
 	{
-		return $this->sSrcIP;
+		return $this->sSrcIP ?? '';
 	}
 
 	public function getDstIP():string
 	{
-		return $this->sDstIP;
+		return $this->sDstIP ?? '';
 	}
 
 
@@ -169,11 +169,17 @@ class IPv4Request extends Request {
 
 	public function getSourceStation():int
 	{
+		if($this->iSourceStation === null){
+			throw new Exception("IPv4Request has no source station");
+		}
 		return $this->iSourceStation;
 	}
 
 	public function getSourceNetwork():int
 	{
+		if($this->iSourceNetwork === null){
+			throw new Exception("IPv4Request has no source network");
+		}
 		return $this->iSourceNetwork;
 	}
 

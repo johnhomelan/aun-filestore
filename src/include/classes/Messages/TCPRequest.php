@@ -209,7 +209,7 @@ class TCPRequest extends Request {
 
 	public function toString():string
 	{
-		return "TCP:  Src Port| ".$this->iSrcPort." Dst Port| ".$this->iDstPort."  Seq| ".$this->iSeq." Ack| ".$this->iAck." Syn| ".$this->bSyn." Ack| ".$this->bAck." Fin| ".$this->bFin." Reset|".$this->bReset." Data Len|".strlen($this->sData)." Data|".$this->sData;
+		return "TCP:  Src Port| ".$this->iSrcPort." Dst Port| ".$this->iDstPort."  Seq| ".$this->iSeq." Ack| ".$this->iAck." Syn| ".$this->bSyn." Ack| ".$this->bAck." Fin| ".$this->bFin." Reset|".$this->bReset." Data Len|".strlen((string) $this->sData)." Data|".$this->sData;
 	}
 
 }

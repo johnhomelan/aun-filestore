@@ -40,14 +40,15 @@ class LocalFile implements PluginInterface {
 	protected  static function _setUid(User $oUser): void
 	{
 		if(self::$bMultiuser){
-			posix_seteuid($oUser->getUnixUid());
+			$iUnixUid = $oUser->getUnixUid();
+			posix_seteuid($iUnixUid ?? config::getValueAsInt('system_user_id'));
 		}
 	}
 	
 	protected static function _returnUid(): void
 	{
 		if(self::$bMultiuser){
-			 posix_seteuid(config::getValue('system_user_id'));
+			 posix_seteuid(config::getValueAsInt('system_user_id'));
 		}
 	}
 
@@ -61,7 +62,7 @@ class LocalFile implements PluginInterface {
 			$sUnixPath = $sUnixPath.str_replace(DIRECTORY_SEPARATOR ,'.',$sPart).DIRECTORY_SEPARATOR;
 		}
 		$sUnixPath = trim($sUnixPath,DIRECTORY_SEPARATOR);
-		$sUnixPath = config::getValue('vfs_plugin_localfile_root').DIRECTORY_SEPARATOR.$sUnixPath;
+		$sUnixPath = config::getValueAsString('vfs_plugin_localfile_root').DIRECTORY_SEPARATOR.$sUnixPath;
 		if(file_exists($sUnixPath)){
 			self::$oLogger->debug("LocalFile: Converted econet path ".$sEconetPath. " to ".$sUnixPath);
 		}else{
@@ -126,7 +127,7 @@ class LocalFile implements PluginInterface {
 				$iVfsHandle = NULL;
 			}
 			$iEconetHandle = vfs::getFreeFileHandleID($oUser);
-			return new FileDescriptor(self::$oLogger,'HomeLan\FileStore\Vfs\Plugin\LocalFile',$oUser,$sUnixPath,$oEconetPath->getFilePath(),$iVfsHandle,$iEconetHandle,is_file($sUnixPath),is_dir($sUnixPath));
+			return new FileDescriptor(self::$oLogger,'HomeLan\FileStore\Vfs\Plugin\LocalFile',$oUser,$sUnixPath,$oEconetPath->getFilePath(),$iVfsHandle,$iEconetHandle,is_file($sUnixPath),is_dir($sUnixPath),$bMustExist,$bReadOnly);
 		}
 		throw new VfsException("No such file");
 	}
@@ -287,7 +288,7 @@ class LocalFile implements PluginInterface {
 		throw new VfsException("No such file");
 	}
 
-	public static function setMeta(string $sEconetPath,?int $iLoad,?int $iExec,int $iAccess): void
+	public static function setMeta(string $sEconetPath,?int $iLoad,?int $iExec,?int $iAccess): void
 	{
 		$sUnixPath = LocalFile::_econetToUnix($sEconetPath);
 		if(file_exists($sUnixPath) AND file_exists($sUnixPath.'.inf')){
@@ -318,6 +319,9 @@ class LocalFile implements PluginInterface {
 
 	public static function fsFtell(User $oUser,mixed $fLocalHandle): int|false
 	{
+		if(!is_resource($fLocalHandle)){
+			return false;
+		}
 		LocalFile::_setUid($oUser);
 		$mReturn =  ftell($fLocalHandle);
 		LocalFile::_returnUid();
@@ -327,7 +331,10 @@ class LocalFile implements PluginInterface {
 	/** @return array<mixed>|false */
 	public static function fsFStat(User $oUser,mixed $fLocalHandle): array|false
 	{
-		self::$oLogger->debug("LocalFile: Get fstat on ".$fLocalHandle);
+		self::$oLogger->debug("LocalFile: Get fstat on handle");
+		if(!is_resource($fLocalHandle)){
+			return false;
+		}
 		LocalFile::_setUid($oUser);
 		$mReturn =  fstat($fLocalHandle);
 		LocalFile::_returnUid();
@@ -335,6 +342,9 @@ class LocalFile implements PluginInterface {
 	}
 	public static function isEof(User $oUser,mixed $fLocalHandle): bool
 	{
+		if(!is_resource($fLocalHandle)){
+			return true;
+		}
 		LocalFile::_setUid($oUser);
 		$mReturn =  feof($fLocalHandle);
 		LocalFile::_returnUid();
@@ -343,7 +353,10 @@ class LocalFile implements PluginInterface {
 
 	public static function setPos(User $oUser,mixed $fLocalHandle,int $iPos): int
 	{
-		self::$oLogger->debug("LocalFile: Moving file off-set to ".$iPos." bytes for file handle ".$fLocalHandle);
+		self::$oLogger->debug("LocalFile: Moving file off-set to ".$iPos." bytes for file handle");
+		if(!is_resource($fLocalHandle)){
+			return -1;
+		}
 		LocalFile::_setUid($oUser);
 		$mReturn =  fseek($fLocalHandle,$iPos,SEEK_SET);
 		LocalFile::_returnUid();
@@ -352,9 +365,12 @@ class LocalFile implements PluginInterface {
 
 	public static function read(User $oUser,mixed $fLocalHandle,int $iLength): string|false
 	{
-		self::$oLogger->debug("LocalFile: Reading ".$iLength." bytes from file handle ".$fLocalHandle);
+		self::$oLogger->debug("LocalFile: Reading ".$iLength." bytes from file handle");
 		if($iLength<1){
 			return '';
+		}
+		if(!is_resource($fLocalHandle)){
+			return false;
 		}
 		LocalFile::_setUid($oUser);
 		$mReturn =  fread($fLocalHandle,$iLength);
@@ -364,7 +380,10 @@ class LocalFile implements PluginInterface {
 
 	public static function write(User $oUser,mixed $fLocalHandle,string $sData): int|false
 	{
-		self::$oLogger->debug("LocalFile: Write bytes to file handle ".$fLocalHandle);
+		self::$oLogger->debug("LocalFile: Write bytes to file handle");
+		if(!is_resource($fLocalHandle)){
+			return false;
+		}
 		LocalFile::_setUid($oUser);
 		$mReturn =  fwrite($fLocalHandle,$sData);
 		LocalFile::_returnUid();
@@ -374,6 +393,9 @@ class LocalFile implements PluginInterface {
 	public static function setExt(User $oUser,mixed $fLocalHandle,int $iExt): void
 	{
 		self::$oLogger->debug("LocalFile: Truncating file to ".$iExt." bytes");
+		if(!is_resource($fLocalHandle)){
+			return;
+		}
 		LocalFile::_setUid($oUser);
 		ftruncate($fLocalHandle,max(0,$iExt));
 		LocalFile::_returnUid();
@@ -403,6 +425,9 @@ class LocalFile implements PluginInterface {
 
 	public static function fsClose(User $oUser,mixed $fLocalHandle): bool
 	{
+		if(!is_resource($fLocalHandle)){
+			return false;
+		}
 		LocalFile::_setUid($oUser);
 		$mReturn = fclose($fLocalHandle);
 		LocalFile::_returnUid();

@@ -21,13 +21,13 @@ use config;
 class AunPacket implements EncapsulationInterface {
 
 	//Single byte (unsigned int) Aun Packet Type 1=>BroadCast =
-	protected ?int $iPktType = NULL;
+	protected int $iPktType = 0;
 
 	//Single byte (unsigned int) Control/flag
-	protected ?int $iCb = NULL;
+	protected int $iCb = 0;
 
 	//Single byte (unsigned int) Padding
-	protected ?int $iPadding = NULL;
+	protected int $iPadding = 0;
 
 	//Single byte (unsigned int) Port number
 	protected int $iPort = 0;
@@ -38,11 +38,11 @@ class AunPacket implements EncapsulationInterface {
 	//Binary Data String
 	protected string $sData = '';
 
-	protected ?string $sSoruceIP = NULL;
+	protected string $sSoruceIP = '';
 
-	protected ?string $sSourceUdpPort = NULL;
+	protected string $sSourceUdpPort = '';
 
-	protected ?string $sDestinationIP = NULL;
+	protected string $sDestinationIP = '';
 
 	/**
  	 * @var array<int, string>
@@ -83,8 +83,13 @@ class AunPacket implements EncapsulationInterface {
 		return $this->sData;
 	}
 
+	private static function _asInt(mixed $mValue): int
+	{
+		return is_int($mValue) ? $mValue : 0;
+	}
+
 	/**
-	 * Decodes an AUN packet 
+	 * Decodes an AUN packet
 	 *
 	 * @param string $sBinaryString
 	*/
@@ -101,7 +106,7 @@ class AunPacket implements EncapsulationInterface {
 		if($aHeader === false){
 			throw new Exception("Failed to unpack AUN packet type byte");
 		}
-		$this->iPktType = $aHeader[1];
+		$this->iPktType = self::_asInt($aHeader[1]);
 		$sBinaryString = substr($sBinaryString,1);
 
 		//Read the dst port 1 byte unsigned int
@@ -109,7 +114,7 @@ class AunPacket implements EncapsulationInterface {
 		if($aHeader === false){
 			throw new Exception("Failed to unpack AUN packet port byte");
 		}
-		$this->iPort = $aHeader[1];
+		$this->iPort = self::_asInt($aHeader[1]);
 		$sBinaryString = substr($sBinaryString,1);
 
 		//Read the flag 1 byte unsigned int
@@ -117,7 +122,7 @@ class AunPacket implements EncapsulationInterface {
 		if($aHeader === false){
 			throw new Exception("Failed to unpack AUN packet flag byte");
 		}
-		$this->iCb = $aHeader[1];
+		$this->iCb = self::_asInt($aHeader[1]);
 		$sBinaryString = substr($sBinaryString,1);
 
 		//Retrans 1 byte unsigned int
@@ -125,7 +130,7 @@ class AunPacket implements EncapsulationInterface {
 		if($aHeader === false){
 			throw new Exception("Failed to unpack AUN packet retrans byte");
 		}
-		$this->iPadding = $aHeader[1];
+		$this->iPadding = self::_asInt($aHeader[1]);
 		$sBinaryString = substr($sBinaryString,1);
 
 		//Sequence 4 bytes little-endian
@@ -133,14 +138,14 @@ class AunPacket implements EncapsulationInterface {
 		if($aHeader === false){
 			throw new Exception("Failed to unpack AUN packet sequence number");
 		}
-		$this->iSeq = $aHeader[1];
+		$this->iSeq = self::_asInt($aHeader[1]);
 		$sBinaryString = substr($sBinaryString,4);
 
 		//The reset is data
 		$this->sData = $sBinaryString;
 
 		//Set the aun counter (only if setSourceIP has already been called)
-		if(!is_null($this->sSoruceIP)){
+		if($this->sSoruceIP !== ''){
 			Map::setAunCounter($this->sSoruceIP,$this->iSeq);
 		}
 	}
@@ -148,7 +153,7 @@ class AunPacket implements EncapsulationInterface {
 	public function buildAck(): ?string
 	{
 		//No decoded packet to to Ack
-		if(!is_numeric($this->iPktType) OR !array_key_exists($this->iPktType,$this->aTypeMap)){
+		if(!array_key_exists($this->iPktType,$this->aTypeMap)){
 			return null;
 		}
 		$sPtk = NULL;
@@ -183,8 +188,8 @@ class AunPacket implements EncapsulationInterface {
 			$sPtk .= pack('C',0);
 			$sPtk .= pack('C',0);
 			$sPtk .= pack('V',$this->iSeq);
-			$sPtk .= pack('C',config::getValue('version_major'));
-			$sPtk .= pack('C',config::getValue('version_minor'));
+			$sPtk .= pack('C',config::getValueAsInt('version_major'));
+			$sPtk .= pack('C',config::getValueAsInt('version_minor'));
 			$sPtk .= pack('C',0x00);
 			$sPtk .= pack('C',0x00);
 		}
@@ -205,8 +210,8 @@ class AunPacket implements EncapsulationInterface {
 			$sPtk = $sPtk.pack('C',0x40);
 			//Peek Hi
 			$sPtk = $sPtk.pack('C',0x66);
-			$sPtk = $sPtk.pack('C',config::getValue('version_minor'));
-			$sPtk = $sPtk.pack('C',config::getValue('version_major'));
+			$sPtk = $sPtk.pack('C',config::getValueAsInt('version_minor'));
+			$sPtk = $sPtk.pack('C',config::getValueAsInt('version_major'));
 		}
 		return $sPtk;
 
@@ -217,7 +222,7 @@ class AunPacket implements EncapsulationInterface {
 		return $this->iSeq;
 	}
 
-	public function getCb(): ?int
+	public function getCb(): int
 	{
 		return $this->iCb;
 	}
@@ -275,7 +280,7 @@ class AunPacket implements EncapsulationInterface {
 		$oEconetPacket->setPort($this->iPort);
 		$oEconetPacket->setFlags($this->iCb);
 
-		if (is_null($this->sSoruceIP)) {
+		if ($this->sSoruceIP === '') {
 			return $oEconetPacket;
 		}
 
@@ -300,7 +305,8 @@ class AunPacket implements EncapsulationInterface {
 		if($aPkt === false){
 			$aPkt = [];
 		}
-		$sReturn = "Header | Type : ".$this->getPacketType()." Port : ".$this->getPort()." Control : ".$this->iCb." Pad : ".$this->iPadding." Seq : ".$this->iSeq." | Body |".implode(":",$aPkt)." |";
+		$aPktStrings = array_map(fn(mixed $mByte): string => is_scalar($mByte) ? (string) $mByte : '', $aPkt);
+		$sReturn = "Header | Type : ".$this->getPacketType()." Port : ".$this->getPort()." Control : ".$this->iCb." Pad : ".$this->iPadding." Seq : ".$this->iSeq." | Body |".implode(":",$aPktStrings)." |";
 		return $sReturn;
 	}
 

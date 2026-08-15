@@ -23,13 +23,13 @@ class Map {
 
 
 	/**
- 	 * @var array<int, mixed[]>
- 	*/	
+ 	 * @var array<int, array<int, ConnectionInterface>>
+ 	*/
 	static array $aDynamicNetworks = [];
 
-	
+
 	/**
- 	 * @var array<int, mixed[]>
+ 	 * @var array<int, array{network:int, station:int, socket:ConnectionInterface}>
  	*/
 	static array $aSocketList= [];
 
@@ -44,11 +44,11 @@ class Map {
 	{
 		self::$oLogger = $oLogger;
 		if(is_null($sMap)){
-			if(!file_exists(config::getValue('websocketmap_dynamic_network_range_file'))){
+			if(!file_exists(config::getValueAsString('websocketmap_dynamic_network_range_file'))){
 				self::$oLogger->info("websocketmapper: The configuration files for the websocket map does not exist.");
 				return;
 			}
-			$sMap = file_get_contents(config::getValue('websocketmap_dynamic_network_range_file'));
+			$sMap = file_get_contents(config::getValueAsString('websocketmap_dynamic_network_range_file'));
 			if($sMap === false){
 				self::$oLogger->info("websocketmapper: Failed to read the configuration file for the websocket map.");
 				return;
@@ -89,8 +89,7 @@ class Map {
  	public static function ecoAddrToSocket(int $iNetworkNumber,int $iStationNumber):?ConnectionInterface
 	{
 		if(array_key_exists($iNetworkNumber,self::$aDynamicNetworks) AND
-			array_key_exists($iStationNumber,self::$aDynamicNetworks[$iNetworkNumber]) AND
-			self::$aDynamicNetworks[$iNetworkNumber][$iStationNumber] instanceof ConnectionInterface){
+			array_key_exists($iStationNumber,self::$aDynamicNetworks[$iNetworkNumber])){
 			return self::$aDynamicNetworks[$iNetworkNumber][$iStationNumber];
 		}
 		return null;

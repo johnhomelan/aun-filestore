@@ -111,6 +111,9 @@ class Vfs {
 	private static function buildFullPath(int $iNetwork,int $iStation,string $sEconetPath): FilePath
 	{
 		$oUser = security::getUser($iNetwork,$iStation);
+		if($oUser === null){
+			throw new Exception("vfs: Un-able to create a handle for a station that is not logged in (Who are you?)");
+		}
 		if(str_starts_with($sEconetPath, '&')){
 			$sEconetPath = str_replace('&','$',$sEconetPath);
 		}
@@ -128,7 +131,7 @@ class Vfs {
 		}else{
 			//No path
 			$sFile = $sEconetPath;
-			$sDir = $oUser->getCsd();
+			$sDir = $oUser->getCsd() ?? '';
 		}
 		if($oUser->getRoot()!='$'){
 			echo "Dir is ".$sDir."\n";
@@ -183,7 +186,10 @@ class Vfs {
 		if(strlen($sPath)<1){
 			//We are only expanding a filename in the Csd (there was no path before the file
 			$oUser = security::getUser($iNetwork,$iStation);
-			$sPath = $oUser->getCsd();
+			if($oUser === null){
+				throw new Exception("vfs: Un-able to create a handle for a station that is not logged in (Who are you?)");
+			}
+			$sPath = $oUser->getCsd() ?? '';
 		}
 
 		echo  "path is ".$sPath." expandpoint is ".$iExpandPoint." last path is ".$iLastPathSeporator." search is ".$sSearch." \n";
@@ -242,7 +248,7 @@ class Vfs {
 	 *
 	 * It also calls the init method of each one when the class is loaded for the first time
 	 *
-	 * @return list<class-string>
+	 * @return list<class-string<\HomeLan\FileStore\Vfs\Plugin\PluginInterface>>
 	**/
 	public static function getVfsPlugins(): array
 	{
@@ -253,15 +259,16 @@ class Vfs {
 			if(!class_exists($sClassname,FALSE)){
 				try{
 					$sClassname::init(self::$oLogger, self::$bMultiuser);
-					if(class_exists($sClassname)){
-						$aReturn[]=$sClassname;
-					}
-				}catch(Exception){
+				}catch(\Throwable){
 					self::$oLogger->debug("VFS: Unable to load vfs plugin ".$sClassname);
+					continue;
 				}
-			}else{
-				$aReturn[]=$sClassname;
 			}
+			if(!is_a($sClassname, \HomeLan\FileStore\Vfs\Plugin\PluginInterface::class, true)){
+				self::$oLogger->debug("VFS: ".$sClassname." does not implement PluginInterface");
+				continue;
+			}
+			$aReturn[]=$sClassname;
 		}
 		return $aReturn;
 	}
@@ -279,9 +286,6 @@ class Vfs {
 		$aPlugins = Vfs::getVfsPlugins();
 		$oHandle=NULL;
 		foreach($aPlugins as $sPlugin){
-			if(!is_a($sPlugin, \HomeLan\FileStore\Vfs\Plugin\PluginInterface::class, true)){
-				continue;
-			}
 			try {
 				$oHandle = $sPlugin::_buildFiledescriptorFromEconetPath($oUser,$oEconetPath,$bMustExist,$bReadOnly);
 				if(is_object($oHandle)){
@@ -333,14 +337,15 @@ class Vfs {
 	*/
 	static public function getFreeFileHandleID(\HomeLan\FileStore\Authentication\User $oUser): int
 	{
-		if(!array_key_exists($oUser->getUserName(),Vfs::$aFileHandleIDs)){
-			Vfs::$aFileHandleIDs[$oUser->getUserName()]=0;
+		$sUsername = $oUser->getUserName() ?? '';
+		if(!array_key_exists($sUsername,Vfs::$aFileHandleIDs)){
+			Vfs::$aFileHandleIDs[$sUsername]=0;
 		}
-		Vfs::$aFileHandleIDs[$oUser->getUserName()]++;
-		if(Vfs::$aFileHandleIDs[$oUser->getUserName()]>254){
-			Vfs::$aFileHandleIDs[$oUser->getUserName()]=1;
+		Vfs::$aFileHandleIDs[$sUsername]++;
+		if(Vfs::$aFileHandleIDs[$sUsername]>254){
+			Vfs::$aFileHandleIDs[$sUsername]=1;
 		}
-		return Vfs::$aFileHandleIDs[$oUser->getUserName()];
+		return Vfs::$aFileHandleIDs[$sUsername];
 	}		
 
 	/**
@@ -354,6 +359,9 @@ class Vfs {
 		}
 
 		$oUser = Security::getUser($iNetwork,$iStation);
+		if($oUser === null){
+			throw new Exception("vfs: Un-able to create a handle for a station that is not logged in (Who are you?)");
+		}
 		$aPlugins = Vfs::getVfsPlugins();
 		$oHandle=NULL;
 		$oPath = Vfs::buildFullPath($iNetwork,$iStation,$sEconetPath);
@@ -383,6 +391,9 @@ class Vfs {
 		}
 
 		$oUser = Security::getUser($iNetwork,$iStation);
+		if($oUser === null){
+			throw new Exception("vfs: Un-able to create a handle for a station that is not logged in (Who are you?)");
+		}
 		$oPath = Vfs::buildFullPath($iNetwork,$iStation,$sEconetPath);
 		$aPlugins = Vfs::getVfsPlugins();
 		$oHandle=NULL;
@@ -412,6 +423,9 @@ class Vfs {
 			throw new Exception("vfs: Un-able to create a handle for a station that is not logged in (Who are you?)");
 		}
 		$oUser = Security::getUser($iNetwork,$iStation);
+		if($oUser === null){
+			throw new Exception("vfs: Un-able to create a handle for a station that is not logged in (Who are you?)");
+		}
 		$oPathFrom = Vfs::buildFullPath($iNetwork,$iStation,$sEconetPathFrom);
 		$oPathTo = Vfs::buildFullPath($iNetwork,$iStation,$sEconetPathTo);
 
@@ -445,6 +459,9 @@ class Vfs {
 			throw new Exception("vfs: Un-able to create a handle for a station that is not logged in (Who are you?)");
 		}
 		$oUser = Security::getUser($iNetwork,$iStation);
+		if($oUser === null){
+			throw new Exception("vfs: Un-able to create a handle for a station that is not logged in (Who are you?)");
+		}
 		$oPath = Vfs::buildFullPath($iNetwork,$iStation,$sEconetPath);
 		$aPlugins = Vfs::getVfsPlugins();
 		$oHandle=NULL;
@@ -473,6 +490,9 @@ class Vfs {
 			throw new Exception("vfs: Un-able to create a handle for a station that is not logged in (Who are you?)");
 		}
 		$oUser = Security::getUser($iNetwork,$iStation);
+		if($oUser === null){
+			throw new Exception("vfs: Un-able to create a handle for a station that is not logged in (Who are you?)");
+		}
 		$oPath = Vfs::buildFullPath($iNetwork,$iStation,$sEconetPath);
 		$aPlugins = Vfs::getVfsPlugins();
 		$oHandle=NULL;
@@ -501,6 +521,9 @@ class Vfs {
 			throw new Exception("vfs: Un-able to create a handle for a station that is not logged in (Who are you?)");
 		}
 		$oUser = Security::getUser($iNetwork,$iStation);
+		if($oUser === null){
+			throw new Exception("vfs: Un-able to create a handle for a station that is not logged in (Who are you?)");
+		}
 		$oPath = Vfs::buildFullPath($iNetwork,$iStation,$sEconetPath);
 		$aPlugins = Vfs::getVfsPlugins();
 		$oHandle=NULL;
@@ -605,6 +628,9 @@ class Vfs {
 		}
 
 		$oUser = Security::getUser($iNetwork,$iStation);
+		if($oUser === null){
+			throw new Exception("vfs: Un-able to create a handle for a station that is not logged in (Who are you?)");
+		}
 		$oPath = Vfs::buildFullPath($iNetwork,$iStation,$sEconetPath);
 		$oHandle = Vfs::_buildFiledescriptorFromEconetPath($oUser,$oPath,$bMustExist,$bReadOnly);
 

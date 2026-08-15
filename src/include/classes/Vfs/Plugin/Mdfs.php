@@ -29,12 +29,14 @@ use config;
  *
  * @package corevfs
  * @author John Brown <john@home-lan.co.uk>
+ *
+ * @phpstan-type MdfsCatalogueEntry array{load:int,exec:int,size:int,access:int,type:string,dir:array<int|string,mixed>}
 */
 class Mdfs implements PluginInterface {
 
 	protected const EXTENSIONS = ['mdfs', 'hdfs'];
 
-	/** @var array<string,object> */
+	/** @var array<string,MdfsReader> */
 	protected static array $aImageReaders = [];
 
 	/** @var array<int,array{image-file:string,path-inside-image:string,pos:int,data:string,dirty:bool,readonly:bool,load:int,exec:int,access:int}> */
@@ -46,13 +48,45 @@ class Mdfs implements PluginInterface {
 
 	protected static bool $bMultiuser;
 
+	private static function _asInt(mixed $mValue): int
+	{
+		return is_scalar($mValue) ? (int) $mValue : 0;
+	}
+
+	/**
+	 * Normalizes the mixed-typed catalogue (or a 'dir' sub-tree of it) from the underlying MdfsReader in to a known shape
+	 *
+	 * @return array<string,MdfsCatalogueEntry>
+	*/
+	protected static function _normalizeCatalogue(mixed $mCat): array
+	{
+		$aReturn = [];
+		if(!is_array($mCat)){
+			return $aReturn;
+		}
+		foreach($mCat as $mName=>$mEntry){
+			if(!is_array($mEntry)){
+				continue;
+			}
+			$aReturn[(string) $mName] = [
+				'load'=>self::_asInt($mEntry['load'] ?? 0),
+				'exec'=>self::_asInt($mEntry['exec'] ?? 0),
+				'size'=>self::_asInt($mEntry['size'] ?? 0),
+				'access'=>self::_asInt($mEntry['access'] ?? 0x0C),
+				'type'=>is_string($mEntry['type'] ?? null) ? $mEntry['type'] : 'file',
+				'dir'=>is_array($mEntry['dir'] ?? null) ? $mEntry['dir'] : [],
+			];
+		}
+		return $aReturn;
+	}
+
 	protected static bool $bWriteEnabled = false;
 
 	public static function init(\Psr\Log\LoggerInterface $oLogger, bool $bMultiuser = false): void
 	{
 		self::$oLogger = $oLogger;
 		self::$bMultiuser = $bMultiuser;
-		self::$bWriteEnabled = (bool) config::getValue('vfs_plugin_mdfs_write_enabled');
+		self::$bWriteEnabled = config::getValueAsBool('vfs_plugin_mdfs_write_enabled');
 	}
 
 	public static function houseKeeping(): void
@@ -62,14 +96,15 @@ class Mdfs implements PluginInterface {
 	protected  static function _setUid(User $oUser): void
 	{
 		if(self::$bMultiuser){
-			posix_seteuid($oUser->getUnixUid());
+			$iUnixUid = $oUser->getUnixUid();
+			posix_seteuid($iUnixUid ?? config::getValueAsInt('system_user_id'));
 		}
 	}
 
 	protected static function _returnUid(): void
 	{
 		if(self::$bMultiuser){
-			 posix_seteuid(config::getValue('system_user_id'));
+			 posix_seteuid(config::getValueAsInt('system_user_id'));
 		}
 	}
 
@@ -78,7 +113,7 @@ class Mdfs implements PluginInterface {
 	 * MdfsReader/MdfsWriter construction. Used by unit tests to mock out the
 	 * homelan/mdfs-disk-reader classes.
 	 */
-	public static function setImageReader(string $sImageFile, object $oReader): void
+	public static function setImageReader(string $sImageFile, MdfsReader $oReader): void
 	{
 		self::$aImageReaders[$sImageFile] = $oReader;
 	}
@@ -99,7 +134,7 @@ class Mdfs implements PluginInterface {
 		return strtolower(substr($sImageFile,-5))==='.hdfs';
 	}
 
-	protected static function _getImageReader(string $sImageFile): object
+	protected static function _getImageReader(string $sImageFile): MdfsReader
 	{
 		if(array_key_exists($sImageFile,self::$aImageReaders)){
 			return self::$aImageReaders[$sImageFile];
@@ -123,7 +158,7 @@ class Mdfs implements PluginInterface {
 			$sUnixPath = $sUnixPath.str_replace(DIRECTORY_SEPARATOR ,'.',$sPart).DIRECTORY_SEPARATOR;
 		}
 		$sUnixPath = trim($sUnixPath,DIRECTORY_SEPARATOR);
-		$sUnixPath = config::getValue('vfs_plugin_mdfs_root').DIRECTORY_SEPARATOR.$sUnixPath;
+		$sUnixPath = config::getValueAsString('vfs_plugin_mdfs_root').DIRECTORY_SEPARATOR.$sUnixPath;
 
 
 		if(!file_exists($sUnixPath)){
@@ -197,7 +232,7 @@ class Mdfs implements PluginInterface {
 					return $sUnixPath.'.'.$sExt;
 				}
 			}
-			if($sUnixPath==config::getValue('vfs_plugin_mdfs_root')){
+			if($sUnixPath==config::getValueAsString('vfs_plugin_mdfs_root')){
 				return '';
 			}
 			$sFilePathPart = array_pop($aUnixPath);
@@ -212,7 +247,7 @@ class Mdfs implements PluginInterface {
 
 		//Both supported extensions (.mdfs / .hdfs) are 5 characters including the dot
 		$sPathPreFix = substr((string) $sImageFile,0,strlen((string) $sImageFile)-5);
-		$sPathPreFix = str_ireplace((string) config::getValue('vfs_plugin_mdfs_root'),'',$sPathPreFix);
+		$sPathPreFix = str_ireplace(config::getValueAsString('vfs_plugin_mdfs_root'),'',$sPathPreFix);
 		$sPathPreFix = str_ireplace(DIRECTORY_SEPARATOR,'.',ltrim($sPathPreFix,'/'));
 		return ltrim(str_ireplace($sPathPreFix,'',$sEconetPath),'.');
 	}
@@ -221,20 +256,20 @@ class Mdfs implements PluginInterface {
 	 * Walks the image catalogue for the given dot-separated path, returning the
 	 * matching entry (as returned by MdfsReader::getCatalogue()) or null.
 	 *
-	 * @return ?array<string,mixed>
+	 * @return ?MdfsCatalogueEntry
 	 */
-	protected static function _findCatalogueEntry(object $oMdfs,string $sPathInsideImage): ?array
+	protected static function _findCatalogueEntry(MdfsReader $oMdfs,string $sPathInsideImage): ?array
 	{
 		if($sPathInsideImage===''){
 			return null;
 		}
-		$aCat = $oMdfs->getCatalogue();
+		$aCat = self::_normalizeCatalogue($oMdfs->getCatalogue());
 		$aPathInsideImage = explode('.',$sPathInsideImage);
 		$aEntry = null;
 		foreach($aPathInsideImage as $sPathPart){
 			$sFoundKey = null;
 			foreach(array_keys($aCat) as $sKey){
-				if(strtoupper((string) $sKey)==strtoupper($sPathPart)){
+				if(strtoupper($sKey)==strtoupper($sPathPart)){
 					$sFoundKey = $sKey;
 					break;
 				}
@@ -244,7 +279,7 @@ class Mdfs implements PluginInterface {
 			}
 			$aEntry = $aCat[$sFoundKey];
 			if($aEntry['type']=='dir'){
-				$aCat = $aEntry['dir'] ?? [];
+				$aCat = self::_normalizeCatalogue($aEntry['dir']);
 			}
 		}
 		return $aEntry;
@@ -271,7 +306,7 @@ class Mdfs implements PluginInterface {
 					'exec'=>0,
 					'access'=>0x0C,
 				];
-				return new FileDescriptor(self::$oLogger,'HomeLan\FileStore\Vfs\Plugin\Mdfs',$oUser,$sImageFile,$oEconetPath->getFilePath(),$iVfsHandle,$iEconetHandle,FALSE,TRUE);
+				return new FileDescriptor(self::$oLogger,'HomeLan\FileStore\Vfs\Plugin\Mdfs',$oUser,$sImageFile,$oEconetPath->getFilePath(),$iVfsHandle,$iEconetHandle,FALSE,TRUE,$bMustExist,$bReadOnly);
 			}
 
 			$oMdfs = self::_getImageReader($sImageFile);
@@ -289,11 +324,11 @@ class Mdfs implements PluginInterface {
 					'data'=>$bIsFile ? $oMdfs->getFile($sPathInsideImage) : '',
 					'dirty'=>FALSE,
 					'readonly'=>$bReadOnly || !self::$bWriteEnabled,
-					'load'=>$aEntry['load'] ?? 0,
-					'exec'=>$aEntry['exec'] ?? 0,
-					'access'=>$aEntry['access'] ?? 0x0C,
+					'load'=>$aEntry['load'],
+					'exec'=>$aEntry['exec'],
+					'access'=>$aEntry['access'],
 				];
-				return new FileDescriptor(self::$oLogger,'HomeLan\FileStore\Vfs\Plugin\Mdfs',$oUser,$sImageFile,$oEconetPath->getFilePath(),$iVfsHandle,$iEconetHandle,$bIsFile,$bIsDir);
+				return new FileDescriptor(self::$oLogger,'HomeLan\FileStore\Vfs\Plugin\Mdfs',$oUser,$sImageFile,$oEconetPath->getFilePath(),$iVfsHandle,$iEconetHandle,$bIsFile,$bIsDir,$bMustExist,$bReadOnly);
 			}
 
 			//The entry does not exist yet. If we are writable and the caller does not require
@@ -312,7 +347,7 @@ class Mdfs implements PluginInterface {
 					'exec'=>0,
 					'access'=>0x0C,
 				];
-				return new FileDescriptor(self::$oLogger,'HomeLan\FileStore\Vfs\Plugin\Mdfs',$oUser,$sImageFile,$oEconetPath->getFilePath(),$iVfsHandle,$iEconetHandle,FALSE,FALSE);
+				return new FileDescriptor(self::$oLogger,'HomeLan\FileStore\Vfs\Plugin\Mdfs',$oUser,$sImageFile,$oEconetPath->getFilePath(),$iVfsHandle,$iEconetHandle,FALSE,FALSE,$bMustExist,$bReadOnly);
 			}
 		}
 
@@ -336,14 +371,14 @@ class Mdfs implements PluginInterface {
 			if($aImageStat === false){
 				return $aDirectoryListing;
 			}
-			$aCat = $oMdfs->getCatalogue();
+			$aCat = self::_normalizeCatalogue($oMdfs->getCatalogue());
 
 			if(strlen($sPathInsideImage)>0){
 				$aPathParts = explode('.',$sPathInsideImage);
 				foreach($aPathParts as $sPart){
 					$sFoundKey = null;
 					foreach(array_keys($aCat) as $sKey){
-						if(strtoupper((string) $sKey)==strtoupper($sPart)){
+						if(strtoupper($sKey)==strtoupper($sPart)){
 							$sFoundKey = $sKey;
 							break;
 						}
@@ -351,13 +386,13 @@ class Mdfs implements PluginInterface {
 					if(is_null($sFoundKey)){
 						return $aDirectoryListing;
 					}
-					$aCat = $aCat[$sFoundKey]['dir'] ?? [];
+					$aCat = self::_normalizeCatalogue($aCat[$sFoundKey]['dir']);
 				}
 			}
 
 			$sAccess = self::$bWriteEnabled ? 'wr/wr' : '-r/-r';
 			foreach($aCat as $sFile=>$aMeta){
-				$aDirectoryListing[$sFile] = new DirectoryEntry($sFile,$sImageFile,'HomeLan\FileStore\Vfs\Plugin\Mdfs',$aMeta['load'] ?? null,$aMeta['exec'] ?? null,$aMeta['size'] ?? 0,$sEconetPath.'.'.$sFile,$aImageStat['ctime'],$sAccess, $aMeta['type']=='dir' ? TRUE : FALSE);
+				$aDirectoryListing[$sFile] = new DirectoryEntry($sFile,$sImageFile,'HomeLan\FileStore\Vfs\Plugin\Mdfs',$aMeta['load'],$aMeta['exec'],$aMeta['size'],$sEconetPath.'.'.$sFile,$aImageStat['ctime'],$sAccess, $aMeta['type']=='dir' ? TRUE : FALSE);
 			}
 		}
 
@@ -483,7 +518,7 @@ class Mdfs implements PluginInterface {
 			}
 			$aEntry = self::_findCatalogueEntry($oWriter,$sPathFrom);
 			$sData = $oWriter->getFile($sPathFrom);
-			$oWriter->writeFile($sPathTo,$sData,$aEntry['load'] ?? 0,$aEntry['exec'] ?? 0,$aEntry['access'] ?? 0x0C);
+			$oWriter->writeFile($sPathTo,$sData,self::_asInt($aEntry['load'] ?? 0),self::_asInt($aEntry['exec'] ?? 0),self::_asInt($aEntry['access'] ?? 0x0C));
 			$oWriter->deleteFile($sPathFrom);
 			return TRUE;
 		}catch(\Exception $oException){
@@ -543,7 +578,7 @@ class Mdfs implements PluginInterface {
 		throw new VfsException("No such file");
 	}
 
-	public static function setMeta(string $sEconetPath,?int $iLoad,?int $iExec,int $iAccess): void
+	public static function setMeta(string $sEconetPath,?int $iLoad,?int $iExec,?int $iAccess): void
 	{
 		if(!self::$bWriteEnabled){
 			return;
@@ -565,10 +600,11 @@ class Mdfs implements PluginInterface {
 			if(is_null($aEntry)){
 				return;
 			}
-			$iNewLoad = is_null($iLoad) ? ($aEntry['load'] ?? 0) : $iLoad;
-			$iNewExec = is_null($iExec) ? ($aEntry['exec'] ?? 0) : $iExec;
+			$iNewLoad = is_null($iLoad) ? $aEntry['load'] : $iLoad;
+			$iNewExec = is_null($iExec) ? $aEntry['exec'] : $iExec;
+			$iNewAccess = is_null($iAccess) ? $aEntry['access'] : $iAccess;
 			$oWriter->setLoadExec($sPathInsideImage,$iNewLoad,$iNewExec);
-			$oWriter->setAccess($sPathInsideImage,$iAccess);
+			$oWriter->setAccess($sPathInsideImage,$iNewAccess);
 		}catch(\Exception $oException){
 			self::$oLogger->debug("Mdfs: setMeta failed: ".$oException->getMessage());
 		}
@@ -576,7 +612,7 @@ class Mdfs implements PluginInterface {
 
 	public static function fsFtell(User $oUser,mixed $fLocalHandle): int
 	{
-		if(array_key_exists($fLocalHandle,self::$aFileHandles)){
+		if(is_int($fLocalHandle) && array_key_exists($fLocalHandle,self::$aFileHandles)){
 			return self::$aFileHandles[$fLocalHandle]['pos'];
 		}
 		throw new VfsException("Invalid handle");
@@ -585,7 +621,7 @@ class Mdfs implements PluginInterface {
 	/** @return array<string,mixed> */
 	public static function fsFStat(User $oUser,mixed $fLocalHandle): array
 	{
-		if(array_key_exists($fLocalHandle,self::$aFileHandles)){
+		if(is_int($fLocalHandle) && array_key_exists($fLocalHandle,self::$aFileHandles)){
 			$iSize = strlen(self::$aFileHandles[$fLocalHandle]['data']);
 			return ['dev'=>null,'ino'=>null,'size'=>$iSize,'nlink'=>1];
 		}
@@ -594,7 +630,7 @@ class Mdfs implements PluginInterface {
 
 	public static function isEof(User $oUser,mixed $fLocalHandle): bool
 	{
-		if(array_key_exists($fLocalHandle,self::$aFileHandles)){
+		if(is_int($fLocalHandle) && array_key_exists($fLocalHandle,self::$aFileHandles)){
 			$oHandle = self::$aFileHandles[$fLocalHandle];
 			return $oHandle['pos']>=strlen($oHandle['data']);
 		}
@@ -603,7 +639,7 @@ class Mdfs implements PluginInterface {
 
 	public static function setPos(User $oUser,mixed $fLocalHandle,int $iPos): bool
 	{
-		if(array_key_exists($fLocalHandle,self::$aFileHandles)){
+		if(is_int($fLocalHandle) && array_key_exists($fLocalHandle,self::$aFileHandles)){
 			self::$aFileHandles[$fLocalHandle]['pos']=$iPos;
 			return TRUE;
 		}
@@ -612,7 +648,7 @@ class Mdfs implements PluginInterface {
 
 	public static function read(User $oUser,mixed $fLocalHandle,int $iLength): string
 	{
-		if(array_key_exists($fLocalHandle,self::$aFileHandles)){
+		if(is_int($fLocalHandle) && array_key_exists($fLocalHandle,self::$aFileHandles)){
 			$oHandle =& self::$aFileHandles[$fLocalHandle];
 			$sChunk = substr($oHandle['data'],$oHandle['pos'],$iLength);
 			$oHandle['pos'] += strlen($sChunk);
@@ -623,7 +659,7 @@ class Mdfs implements PluginInterface {
 
 	public static function write(User $oUser,mixed $fLocalHandle,string $sData): void
 	{
-		if(!array_key_exists($fLocalHandle,self::$aFileHandles)){
+		if(!is_int($fLocalHandle) || !array_key_exists($fLocalHandle,self::$aFileHandles)){
 			throw new VfsException("Invalid handle");
 		}
 		$oHandle =& self::$aFileHandles[$fLocalHandle];
@@ -643,7 +679,7 @@ class Mdfs implements PluginInterface {
 
 	public static function setExt(User $oUser,mixed $fLocalHandle,int $iExt): void
 	{
-		if(!array_key_exists($fLocalHandle,self::$aFileHandles)){
+		if(!is_int($fLocalHandle) || !array_key_exists($fLocalHandle,self::$aFileHandles)){
 			throw new VfsException("Invalid handle");
 		}
 		$oHandle =& self::$aFileHandles[$fLocalHandle];
@@ -663,7 +699,7 @@ class Mdfs implements PluginInterface {
 
 	public static function fsClose(User $oUser,mixed $fLocalHandle): void
 	{
-		if(!array_key_exists($fLocalHandle,self::$aFileHandles)){
+		if(!is_int($fLocalHandle) || !array_key_exists($fLocalHandle,self::$aFileHandles)){
 			return;
 		}
 		$oHandle = self::$aFileHandles[$fLocalHandle];

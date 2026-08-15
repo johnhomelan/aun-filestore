@@ -15,7 +15,7 @@ class SingleCommandApplication extends Application {
         public function __construct(Command $oCommand)
         {
                 $this->oCommand = $oCommand;
-                $this->sCommandName = $oCommand->getName();
+                $this->sCommandName = $oCommand->getName() ?? '';
                 parent::__construct();
         }
 
@@ -48,6 +48,6 @@ class SingleCommandApplication extends Application {
          */
         protected function getCommandName(InputInterface $input): string
         {
-                return $this->oCommand->getName();
+                return $this->oCommand->getName() ?? '';
         }
 }

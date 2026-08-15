@@ -84,16 +84,21 @@ class Admin implements AdminInterface
                 $sType,
                 $this->getEntityFields($sType),
                 $this->oProvider->getConnectedStations(),
-                fn($aRow) => $aRow['network'] . '_' . $aRow['station']
+                fn(array $aRow): string => self::_asString($aRow['network']) . '_' . self::_asString($aRow['station'])
             ),
             'handle' => AdminEntity::createCollection(
                 $sType,
                 $this->getEntityFields($sType),
                 $this->oProvider->getOpenFileHandles(),
-                fn($aRow) => $aRow['network'] . '_' . $aRow['station'] . '_' . $aRow['handle']
+                fn(array $aRow): string => self::_asString($aRow['network']) . '_' . self::_asString($aRow['station']) . '_' . self::_asString($aRow['handle'])
             ),
             default => [],
         };
+    }
+
+    private static function _asString(mixed $mValue): string
+    {
+        return is_scalar($mValue) ? (string) $mValue : '';
     }
 
     /**

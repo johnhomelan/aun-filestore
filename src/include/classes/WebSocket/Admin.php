@@ -11,6 +11,11 @@ use HomeLan\FileStore\Services\Provider\AdminEntity;
 
 class Admin implements EncapsulationAdminInterface
 {
+    private static function _asString(mixed $mValue): string
+    {
+        return is_scalar($mValue) ? (string) $mValue : '';
+    }
+
     public function getId(): string
     {
         return 'websocket';
@@ -61,7 +66,7 @@ class Admin implements EncapsulationAdminInterface
                 $sType,
                 $this->getEntityFields($sType),
                 Map::getConnectedClients(),
-                fn($aRow) => $aRow['network'] . '.' . $aRow['station']
+                fn(array $aRow): string => self::_asString($aRow['network']) . '.' . self::_asString($aRow['station'])
             ),
             'range' => AdminEntity::createCollection(
                 $sType,

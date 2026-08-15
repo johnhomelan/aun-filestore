@@ -71,7 +71,9 @@ class PacketDispatcher {
 		switch($this->oEncapsulationTypeMap->getType($oPacket)){
 			case 'WebSocket':
 				$oWebsocket = WebsocketMap::ecoAddrToSocket($oPacket->getDestinationNetwork(),$oPacket->getDestinationStation());
-				$oWebsocket->send($oPacket->getWebSocketFrame());
+				if(!is_null($oWebsocket)){
+					$oWebsocket->send($oPacket->getWebSocketFrame());
+				}
 				break;
 			case 'Piconet':
 				$oPiconet = PiconetMap::ecoAddrToHandler($oPacket->getDestinationNetwork(),$oPacket->getDestinationStation());

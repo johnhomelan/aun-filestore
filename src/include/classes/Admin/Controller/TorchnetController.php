@@ -110,7 +110,7 @@ class TorchnetController extends AbstractController
             }
         }
 
-        if ($sDriveLetter === null) {
+        if ($sDriveLetter === null || $sDriveRoot === null) {
             return $aBreadcrumbs;
         }
 

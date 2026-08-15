@@ -36,7 +36,7 @@ class ServerHandler
 	*/
 	public function start(array $aEntry, LoopInterface $oLoop): void
 	{
-		$sListenAddress = (string) config::getValue('remote_bridge_server_address');
+		$sListenAddress = config::getValueAsString('remote_bridge_server_address');
 		$sBindAddress = "{$sListenAddress}:{$aEntry['port']}";
 
 		try {
@@ -63,8 +63,8 @@ class ServerHandler
 					// Only forward to the local interface if not addressed to our own virtual
 					// service station — packets for that station are handled exclusively by
 					// ServiceDispatcher below (no physical Piconet device to deliver to).
-					$iLocalNet = (int) config::getValue('piconet_local_network');
-					$iOurStn   = (int) config::getValue('piconet_station');
+					$iLocalNet = config::getValueAsInt('piconet_local_network');
+					$iOurStn   = config::getValueAsInt('piconet_station');
 					$bForLocalService = $iOurStn > 0
 						&& $oPkt->getDstStation() === $iOurStn
 						&& ($oPkt->getDstNetwork() === $iLocalNet || $oPkt->getDstNetwork() === 0);

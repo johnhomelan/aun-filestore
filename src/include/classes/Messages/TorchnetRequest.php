@@ -92,7 +92,7 @@ class TorchnetRequest extends Request
         if ($aHdr === false) {
             return;
         }
-        $this->iCommand = $aHdr[1];
+        $this->iCommand = self::_asInt($aHdr[1]);
         $this->sData    = substr($sBinaryData, 1);
     }
 }

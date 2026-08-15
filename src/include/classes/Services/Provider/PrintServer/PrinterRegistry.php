@@ -28,10 +28,15 @@ class PrinterRegistry
 	/** @var Printer[] keyed by uppercase printer name */
 	private array $aPrinters = [];
 
+	private static function _asString(mixed $mValue): string
+	{
+		return is_scalar($mValue) ? (string) $mValue : '';
+	}
+
 	public function __construct(?string $sContent = null)
 	{
 		if (is_null($sContent)) {
-			$sFile = config::getValue('print_server_printers_file');
+			$sFile = config::getValueAsString('print_server_printers_file');
 			if (!file_exists($sFile)) {
 				$this->addDefaultPrinter();
 				return;
@@ -51,12 +56,15 @@ class PrinterRegistry
 		}
 
 		foreach ($aSections as $sName => $aFields) {
+			if (!is_array($aFields)) {
+				continue;
+			}
 			$sName        = strtoupper(substr(trim((string) $sName), 0, 6));
-			$bEnabled     = strtolower((string) ($aFields['enabled']       ?? 'yes'))   === 'yes';
-			$sBehavior    = strtolower((string) ($aFields['behavior']      ?? 'spool'));
-			$sScript      = trim((string) ($aFields['script']              ?? ''));
-			$sDescription = trim((string) ($aFields['description']         ?? ''));
-			$sAllowed     = trim((string) ($aFields['allowed_users']       ?? ''));
+			$bEnabled     = strtolower(self::_asString($aFields['enabled'] ?? 'yes'))   === 'yes';
+			$sBehavior    = strtolower(self::_asString($aFields['behavior'] ?? 'spool'));
+			$sScript      = trim(self::_asString($aFields['script'] ?? ''));
+			$sDescription = trim(self::_asString($aFields['description'] ?? ''));
+			$sAllowed     = trim(self::_asString($aFields['allowed_users'] ?? ''));
 			$aAllowed     = $sAllowed !== '' ? array_map('trim', explode(',', $sAllowed)) : [];
 			$this->aPrinters[$sName] = new Printer(
 				$sName, $sDescription, $bEnabled, $sBehavior, $sScript, $aAllowed

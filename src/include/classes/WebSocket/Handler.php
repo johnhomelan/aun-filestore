@@ -90,7 +90,9 @@ class Handler implements MessageComponentInterface {
 
 				//ACK the sender immediately regardless of destination (store-and-forward semantics)
 				$sAck = $oJsonMessage->buildAck();
-				$oConnection->send($sAck);
+				if($sAck !== null){
+					$oConnection->send($sAck);
+				}
 
 				//Duplicate retransmission — re-ack was sufficient, discard
 				if ($this->isDuplicate($iConnId, $iSeq)) {
@@ -100,8 +102,8 @@ class Handler implements MessageComponentInterface {
 				$this->recordSeq($iConnId, $iSeq);
 
 				if (
-					$oJsonMessage->getDstNetwork()==config::getValue('websocket_network_address') AND
-					$oJsonMessage->getDstStation()==config::getValue('websocket_station_address')
+					$oJsonMessage->getDstNetwork()==config::getValueAsInt('websocket_network_address') AND
+					$oJsonMessage->getDstStation()==config::getValueAsInt('websocket_station_address')
 				){
 					//We are the target — dispatch to local services
 					$this->oLogger->debug("websocket: Sending Ack packet for pkt message");
@@ -121,8 +123,10 @@ class Handler implements MessageComponentInterface {
 			case 'ctrl':
 				//Build the response to the control message
 				$sAck = $oJsonMessage->buildAck();
-				$this->oLogger->debug("websocket: Sending Ack packet for ctrl message");
-				$oConnection->send($sAck);
+				if($sAck !== null){
+					$this->oLogger->debug("websocket: Sending Ack packet for ctrl message");
+					$oConnection->send($sAck);
+				}
 				break;
 			default:
 				$this->oLogger->warning("websocket: Ignoring unknown message type: " . $oJsonMessage->getType());

@@ -24,6 +24,11 @@ class Admin implements AdminInterface
  	{
 	 }
 
+	private static function _asString(mixed $mValue): string
+	{
+		return is_scalar($mValue) ? (string) $mValue : '';
+	}
+
 	/**
 	 * Gets the human readable name of the service provider
 	 *
@@ -121,18 +126,19 @@ class Admin implements AdminInterface
 		switch ($sType) {
 			case 'printers':
 				$aPrinters = $this->oProvider->getConfiguredPrinters();
-				return AdminEntity::createCollection($sType, $this->getEntityFields($sType), $aPrinters, fn($aRow) => $aRow['name']);
+				return AdminEntity::createCollection($sType, $this->getEntityFields($sType), $aPrinters, fn(array $aRow): mixed => $aRow['name']);
 			case 'jobs':
 				$aJobs = $this->oProvider->getJobs();
-				return AdminEntity::createCollection($sType, $this->getEntityFields($sType), $aJobs, fn($aRow) => $aRow['network'] . '_' . $aRow['station']);
+				return AdminEntity::createCollection($sType, $this->getEntityFields($sType), $aJobs, fn(array $aRow): string => self::_asString($aRow['network']) . '_' . self::_asString($aRow['station']));
 			case 'spooled':
 				$aFiles = $this->oProvider->getSpooledFiles();
 				$iPort  = $this->oProvider->getServicePorts()[0];
 				foreach ($aFiles as &$aFile) {
-					$aFile['download'] = '/service/download?port=' . $iPort . '&file=' . urlencode($aFile['path']);
+					$sPath = $aFile['path'] ?? null;
+					$aFile['download'] = '/service/download?port=' . $iPort . '&file=' . urlencode(is_scalar($sPath) ? (string) $sPath : '');
 				}
 				unset($aFile);
-				return AdminEntity::createCollection($sType, $this->getEntityFields($sType), $aFiles, fn($aRow) => $aRow['path']);
+				return AdminEntity::createCollection($sType, $this->getEntityFields($sType), $aFiles, fn(array $aRow): mixed => $aRow['path']);
 		}
 		return [];
 	}

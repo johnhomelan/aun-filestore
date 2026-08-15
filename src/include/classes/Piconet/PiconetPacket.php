@@ -25,8 +25,8 @@ class PiconetPacket implements EncapsulationInterface {
 	//Single byte (unsigned int) Aun Packet Type 1=>BroadCast =
 	protected ?string $sMessageType = NULL;
 	
-	//Single byte (unsigned int) Control/flag 
-	protected ?int $iCb = NULL;
+	//Single byte (unsigned int) Control/flag
+	protected int $iCb = 0;
 
 	//Single byte (unsigned int) Port number
 	protected int $iPort = 0;
@@ -34,13 +34,13 @@ class PiconetPacket implements EncapsulationInterface {
 	//Binary Data String
 	protected string $sData = '';
 
-	protected ?int $iNetworkNumber = NULL;
+	protected int $iNetworkNumber = 0;
 
-	protected ?int $iStationNumber = NULL;
+	protected int $iStationNumber = 0;
 
-	protected ?int $iDstNetworkNumber = NULL;
+	protected int $iDstNetworkNumber = 0;
 
-	protected ?int $iDstStationNumber = NULL;
+	protected int $iDstStationNumber = 0;
 
 	/**
 	 * @var array<string, string>
@@ -87,6 +87,11 @@ class PiconetPacket implements EncapsulationInterface {
 	public function getData(): string
 	{
 		return $this->sData;
+	}
+
+	private static function _asInt(mixed $mValue): int
+	{
+		return is_int($mValue) ? $mValue : 0;
 	}
 
 	/**
@@ -137,46 +142,46 @@ class PiconetPacket implements EncapsulationInterface {
 			throw new Exception("Failed to unpack piconet scout destination station byte");
 		}
 		$sRawScout = substr($sRawScout, 1);
-		$this->iDstStationNumber = (int) $aScout[1];
+		$this->iDstStationNumber = self::_asInt($aScout[1]);
 
 		$aScout = unpack('C', (string) $sRawScout);
 		if ($aScout === false) {
 			throw new Exception("Failed to unpack piconet scout destination network byte");
 		}
 		$sRawScout = substr($sRawScout, 1);
-		$this->iDstNetworkNumber = (int) $aScout[1];
+		$this->iDstNetworkNumber = self::_asInt($aScout[1]);
 
 		$aScout = unpack('C', (string) $sRawScout);
 		if ($aScout === false) {
 			throw new Exception("Failed to unpack piconet scout source station byte");
 		}
 		$sRawScout = substr($sRawScout, 1);
-		$this->iStationNumber = (int) $aScout[1];
+		$this->iStationNumber = self::_asInt($aScout[1]);
 
 		$aScout = unpack('C', (string) $sRawScout);
 		if ($aScout === false) {
 			throw new Exception("Failed to unpack piconet scout source network byte");
 		}
 		$sRawScout = substr($sRawScout, 1);
-		$this->iNetworkNumber = (int) $aScout[1];
+		$this->iNetworkNumber = self::_asInt($aScout[1]);
 
 		$aScout = unpack('C', (string) $sRawScout);
 		if ($aScout === false) {
 			throw new Exception("Failed to unpack piconet scout control byte");
 		}
 		$sRawScout = substr($sRawScout, 1);
-		$this->iCb = (int) $aScout[1];
+		$this->iCb = self::_asInt($aScout[1]);
 
 		$aScout = unpack('C', (string) $sRawScout);
 		if ($aScout === false) {
 			throw new Exception("Failed to unpack piconet scout port byte");
 		}
 		$sRawScout = substr($sRawScout, 1);
-		$this->iPort = (int) $aScout[1];
+		$this->iPort = self::_asInt($aScout[1]);
 
 		//The packets on the local network always have a network number of 0, so update the network number to the correct global number
 		if ($this->iNetworkNumber == 0) {
-			$this->iNetworkNumber = config::getValue('piconet_local_network');
+			$this->iNetworkNumber = config::getValueAsInt('piconet_local_network');
 		}
 
 		switch ($aPacket[0]) {
@@ -245,7 +250,8 @@ class PiconetPacket implements EncapsulationInterface {
 		if($aPkt === false){
 			$aPkt = [];
 		}
-		$sReturn = "Header | Type : ".$this->getPacketType()." Port : ".$this->getPort()." Control : ".$this->iCb." | Body |".implode(":",$aPkt)." |";
+		$aPktStrings = array_map(fn(mixed $mByte): string => is_scalar($mByte) ? (string) $mByte : '', $aPkt);
+		$sReturn = "Header | Type : ".$this->getPacketType()." Port : ".$this->getPort()." Control : ".$this->iCb." | Body |".implode(":",$aPktStrings)." |";
 		return $sReturn;
 	}
 

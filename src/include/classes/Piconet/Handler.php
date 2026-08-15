@@ -24,6 +24,9 @@ use config;
  * This class deals with taking to the piconet device
  *
  * @package core
+ *
+ * @phpstan-type QueueEntry array{packet:EconetPacket,retries:int,attempts:int}
+ * @phpstan-type AwaitingAckEntry array{dst_station:int,dst_network:int,port:int,flags:int}
 */
 class Handler {
 
@@ -52,12 +55,12 @@ class Handler {
 	private int $iReconnectDelay = self::RECONNECT_DELAY_MIN;
 
 	/**
-	 * @var array<int, array<string, mixed>>
+	 * @var array<int, QueueEntry>
 	*/
 	private array $aQueue = [];
 
 	/**
-	 * @var array<int, array<string, mixed>>
+	 * @var array<int, AwaitingAckEntry>
 	*/
 	private array $aAwaitingAck = [];
 
@@ -112,7 +115,7 @@ class Handler {
 		fwrite($this->oConnection->stream,"STATUS\r\r"); //@phpstan-ignore-line
 		fflush($this->oConnection->stream); //@phpstan-ignore-line
 
-		if (config::getValue('remote_bridge_enabled')) {
+		if (config::getValueAsBool('remote_bridge_enabled')) {
 			// Defer bringing up the interface until the STATUS reply has been checked
 			// against REQUIRED_FIRMWARE_VERSION — see decodeMessage()'s STATUS case.
 			$this->oLogger->debug("Piconet handler: remote bridge enabled, awaiting STATUS to check firmware version before bringing up interface");
@@ -125,11 +128,11 @@ class Handler {
 	public function bringupInterface(): void
 	{
 		$this->oLogger->debug("Piconet handler: Bringing up the interface");
-		$this->oLogger->debug("Piconet handler: Set station to ".config::getValue('piconet_station'));
-		fwrite($this->oConnection->stream,"SET_STATION ".config::getValue('piconet_station')."\r\r"); //@phpstan-ignore-line
+		$this->oLogger->debug("Piconet handler: Set station to ".config::getValueAsString('piconet_station'));
+		fwrite($this->oConnection->stream,"SET_STATION ".config::getValueAsString('piconet_station')."\r\r"); //@phpstan-ignore-line
 		fflush($this->oConnection->stream); //@phpstan-ignore-line
 
-		if (config::getValue('remote_bridge_enabled')) {
+		if (config::getValueAsBool('remote_bridge_enabled')) {
 			$this->oLogger->debug("Piconet handler: Set to monitor mode (remote bridge enabled)");
 			fwrite($this->oConnection->stream,"SET_MODE MONITOR\r\r"); //@phpstan-ignore-line
 		} else {
@@ -256,10 +259,10 @@ class Handler {
 
 				// In monitor mode (when remote bridge is enabled) filter local-network unicast
 				// packets not addressed to our station, and forward inter-network packets via bridge.
-				if (config::getValue('remote_bridge_enabled') && trim($aMessageParts[0]) === 'RX_TRANSMIT') {
+				if (config::getValueAsBool('remote_bridge_enabled') && trim($aMessageParts[0]) === 'RX_TRANSMIT') {
 					$iDstNet = (int) $oPacket->getDstNetwork();
 					$iDstStn = (int) $oPacket->getDstStation();
-					$iOurStn = (int) config::getValue('piconet_station');
+					$iOurStn = config::getValueAsInt('piconet_station');
 
 					if ($iDstNet === 0) {
 						// Local network — ignore unicasts not addressed to our station
@@ -410,20 +413,21 @@ class Handler {
 		}
 		$iDstNetwork = $oPacket->getDestinationNetwork();
 		//The local network is
-		if($iDstNetwork == config::getValue('piconet_local_network')){
+		if($iDstNetwork == config::getValueAsInt('piconet_local_network')){
 			$iDstNetwork = 0;
 		}
+		$sData = $oPacket->getData() ?? '';
 		switch($oPacket->getDestinationStation()){
 			case 255:
-				$this->oLogger->debug("Piconet Handler: Sending broadcast packet (".base64_encode($oPacket->getData()).")");
-				fwrite($this->oConnection->stream,"BCAST ".base64_encode($oPacket->getData())."\r\r"); //@phpstan-ignore-line
+				$this->oLogger->debug("Piconet Handler: Sending broadcast packet (".base64_encode($sData).")");
+				fwrite($this->oConnection->stream,"BCAST ".base64_encode($sData)."\r\r"); //@phpstan-ignore-line
 				fflush($this->oConnection->stream); //@phpstan-ignore-line
 				break;
 			default:
-				$this->oLogger->debug("Piconet Handler: Sending unicast packet to station ".$oPacket->getDestinationStation()." network ".$iDstNetwork." port ".$oPacket->getPort()." packet ".base64_encode($oPacket->getData()));
+				$this->oLogger->debug("Piconet Handler: Sending unicast packet to station ".$oPacket->getDestinationStation()." network ".$iDstNetwork." port ".$oPacket->getPort()." packet ".base64_encode($sData));
 				$this->aAwaitingAck[] = ['dst_station'=>$oPacket->getDestinationStation(),'dst_network'=>$oPacket->getDestinationNetwork(),'port'=>$oPacket->getPort(),'flags'=>$oPacket->getFlags()];
 
-				$sTxCommand = "TX ".$oPacket->getDestinationStation()." ".$iDstNetwork." ".$oPacket->getFlags()." ".$oPacket->getPort()." ".base64_encode($oPacket->getData());
+				$sTxCommand = "TX ".$oPacket->getDestinationStation()." ".$iDstNetwork." ".$oPacket->getFlags()." ".$oPacket->getPort()." ".base64_encode($sData);
 
 				// When remote bridge mode is enabled, use the updated TX form and override
 				// the source station/network on this transmission so a packet relayed from
@@ -435,7 +439,7 @@ class Handler {
 				// its own configured station, exactly as before this feature existed.
 				$iSrcStation = $oPacket->getSourceStation();
 				$iSrcNetwork = $oPacket->getSourceNetwork();
-				if (config::getValue('remote_bridge_enabled') && $iSrcStation !== null && $iSrcNetwork !== null) {
+				if (config::getValueAsBool('remote_bridge_enabled') && $iSrcStation !== null && $iSrcNetwork !== null) {
 					$sTxCommand .= " ".$iSrcStation." ".$iSrcNetwork;
 				}
 

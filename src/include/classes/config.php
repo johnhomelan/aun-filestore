@@ -55,6 +55,56 @@ class config {
 		return $mReturn;
 	}
 
+	/**
+	 * Gets a config variable as a string
+	 *
+	 * A non-scalar config entry (e.g. an INI section, or an unset key) has
+	 * no sensible string form and is treated as an empty string.
+	*/
+	static public function getValueAsString(string $sKey): string
+	{
+		$mValue = config::getValue($sKey);
+		return is_scalar($mValue) ? (string) $mValue : '';
+	}
+
+	/**
+	 * Gets a config variable as an int
+	*/
+	static public function getValueAsInt(string $sKey): int
+	{
+		$mValue = config::getValue($sKey);
+		return is_scalar($mValue) ? (int) $mValue : 0;
+	}
+
+	/**
+	 * Gets a config variable as a float
+	*/
+	static public function getValueAsFloat(string $sKey): float
+	{
+		$mValue = config::getValue($sKey);
+		return is_scalar($mValue) ? (float) $mValue : 0.0;
+	}
+
+	/**
+	 * Gets a config variable as a bool
+	*/
+	static public function getValueAsBool(string $sKey): bool
+	{
+		return (bool) config::getValue($sKey);
+	}
+
+	/**
+	 * Gets a config variable as an array (e.g. an INI section); a
+	 * non-array value (or an unset key) is treated as an empty array.
+	 *
+	 * @return array<mixed>
+	*/
+	static public function getValueAsArray(string $sKey): array
+	{
+		$mValue = config::getValue($sKey);
+		return is_array($mValue) ? $mValue : [];
+	}
+
 	static public function overrideValue(string $sKey,string|int $sValue): void
 	{
 		config::$_aConfigCache[$sKey] = $sValue;
@@ -102,13 +152,14 @@ class config {
 			return NULL;
 		}
 
-		//If we know where our config is stored load it 
+		//If we know where our config is stored load it
 		if(defined('CONFIG_CONF_FILE_PATH')){
-			if(!file_exists(CONFIG_CONF_FILE_PATH)){
+			$sConfDirPath = is_scalar(CONFIG_CONF_FILE_PATH) ? (string) CONFIG_CONF_FILE_PATH : '';
+			if(!file_exists($sConfDirPath)){
 				return NULL;
 			}
 
-			$aFiles=scandir(CONFIG_CONF_FILE_PATH);
+			$aFiles=scandir($sConfDirPath);
 			if($aFiles === false){
 				return NULL;
 			}
@@ -127,15 +178,17 @@ class config {
 
 			//Parse Each conf file
 			$aSettings=[];
-			foreach($aFiles as $sFile){
-				$sFile=CONFIG_CONF_FILE_PATH.DIRECTORY_SEPARATOR.$sFile;
+			foreach($aFiles as $sConfFile){
+				$sFile=$sConfDirPath.DIRECTORY_SEPARATOR.(is_scalar($sConfFile) ? (string) $sConfFile : '');
 				$aParsedFile = parse_ini_file($sFile, true);
 				if($aParsedFile === false){
 					continue;
 				}
-				$aSettings = array_merge($aSettings,$aParsedFile);
+				foreach($aParsedFile as $sSettingKey=>$mSettingValue){
+					$aSettings[(string) $sSettingKey] = is_scalar($mSettingValue) ? (string) $mSettingValue : '';
+				}
 			}
-			//Cache our config for later use 
+			//Cache our config for later use
 			config::$aFileSettings=$aSettings;
 			if(array_key_exists($sKey,$aSettings)){
 				return $aSettings[$sKey];

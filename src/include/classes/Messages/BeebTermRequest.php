@@ -26,8 +26,8 @@ class BeebTermRequest extends Request{
 	public function __construct(EconetPacket $oEconetPacket, \Psr\Log\LoggerInterface $oLogger)
 	{
 		parent::__construct($oEconetPacket, $oLogger);
-		$this->decode($oEconetPacket->getData());
-	}	
+		$this->decode($oEconetPacket->getData() ?? '');
+	}
 
 	public function getReplyPort(): int
 	{
@@ -46,8 +46,8 @@ class BeebTermRequest extends Request{
 			case 0x80:
 				//Data
 				$this->sData = $sBinaryString;
-				$this->iRxSeq = $this->getByte(1);
-				$this->iTxSeq = $this->getByte(2);
+				$this->iRxSeq = $this->getByte(1) ?? 0;
+				$this->iTxSeq = $this->getByte(2) ?? 0;
 				$this->sData = substr($sBinaryString,2);
 				$this->sType = 'DATA' ;
 				break;

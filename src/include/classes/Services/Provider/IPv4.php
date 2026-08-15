@@ -37,6 +37,8 @@ use Exception;
  * This class implements the econet bridge
  *
  * @package core
+ *
+ * @phpstan-type IPv4PacketQueueEntry array{packets:array<int,EconetPacket>,timeout:int}
 */
 class IPv4 implements ProviderInterface {
 
@@ -45,7 +47,7 @@ class IPv4 implements ProviderInterface {
 
 	protected \Psr\Log\LoggerInterface $oLogger;
 
-	/** @var array<string,array<string,mixed>> */
+	/** @var array<string,IPv4PacketQueueEntry> */
 	private array $aPacketQueue = [];
 	private Arpcache $oArpTable;
 	private Interfaces $oInterfaceTable;
@@ -170,6 +172,11 @@ class IPv4 implements ProviderInterface {
 				//Regular IPv4 Frame
 				$this->oLogger->debug("IPv4 packet received.");
 
+				if($oPacket->getSourceNetwork() === null || $oPacket->getSourceStation() === null){
+					$this->oLogger->debug("IPv4: dropping packet with no resolvable source network/station");
+					return;
+				}
+
 				try {
 					$oIPv4 = new IPv4Request($oPacket,$this->oLogger);
 				}catch(\Exception $oException){
@@ -177,7 +184,7 @@ class IPv4 implements ProviderInterface {
 					$this->oLogger->debug($oException->getMessage());
 					return;
 				}
-				$this->oArpTable->addEntry($oPacket->getSourceNetwork(),$oPacket->getSourceStation(),$oIPv4->getSrcIP()); //Adds an entry to the arp cache 
+				$this->oArpTable->addEntry($oPacket->getSourceNetwork(),$oPacket->getSourceStation(),$oIPv4->getSrcIP()); //Adds an entry to the arp cache
 
 				//If the IP is for this machine respond
 				if($this->oInterfaceTable->isInterfaceIP($oIPv4->getDstIP())){
@@ -284,6 +291,10 @@ class IPv4 implements ProviderInterface {
 
 	private function handleIcmpForInterface(IPv4Request $oIPv4, EconetPacket $oPacket): void
 	{
+		if($oPacket->getSourceNetwork() === null || $oPacket->getSourceStation() === null){
+			return;
+		}
+
 		$oIcmp = new IcmpRequest($oPacket, $this->oLogger);
 		if (!$oIcmp->isEchoRequest()) {
 			return;
@@ -306,6 +317,10 @@ class IPv4 implements ProviderInterface {
 
 	private function sendNetworkUnreachable(IPv4Request $oIPv4, EconetPacket $oPacket): void
 	{
+		if($oPacket->getSourceNetwork() === null || $oPacket->getSourceStation() === null){
+			return;
+		}
+
 		try {
 			$aIface = $this->oInterfaceTable->getInterfaceFor($oIPv4->getSrcIP());
 		} catch (InterfaceNotFound $e) {
@@ -319,7 +334,7 @@ class IPv4 implements ProviderInterface {
 		$oReply->setSrcNetwork($aIface['network']);
 		$oReply->setDstStation($oPacket->getSourceStation());
 		$oReply->setDstNetwork($oPacket->getSourceNetwork());
-		$oReply->setOriginalPacket($oPacket->getData());
+		$oReply->setOriginalPacket($oPacket->getData() ?? '');
 		$this->addReplyToBuffer($oReply->buildEconetpacket());
 	}
 
@@ -370,13 +385,13 @@ class IPv4 implements ProviderInterface {
 	public function queuePacketWaitingOnArp(string $sIP, EconetPacket $oPacket):void
 	{
 		if(array_key_exists($sIP,$this->aPacketQueue)){
-			$this->aPacketQueue[$sIP]['packets'][] = $oPacket;
+			$aEntry = $this->aPacketQueue[$sIP];
+			$aEntry['packets'][] = $oPacket;
 		}else{
-			$this->aPacketQueue[$sIP] = [];
-			$this->aPacketQueue[$sIP]['packets'] = [$oPacket];
+			$aEntry = ['packets'=>[$oPacket],'timeout'=>0];
 		}
-			
-		$this->aPacketQueue[$sIP]['timeout'] = time()+ self::DEFAULT_ARP_WAIT_TIMEOUT;
+		$aEntry['timeout'] = time()+ self::DEFAULT_ARP_WAIT_TIMEOUT;
+		$this->aPacketQueue[$sIP] = $aEntry;
 	}
 
 	/**

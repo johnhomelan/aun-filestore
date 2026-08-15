@@ -19,6 +19,7 @@ class AdminEntity {
 	/**
 	 * @param array<string,string> $aFields
 	 * @param array<int|string,array<string,mixed>> $aRows
+	 * @param null|callable(array<string,mixed>):mixed $fComputeId
 	 * @return array<int,AdminEntity>
 	*/
 	static function createCollection(string $sType, array $aFields, array $aRows, ?callable $fComputeId=null, ?string $sIdField=null): array

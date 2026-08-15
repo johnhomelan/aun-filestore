@@ -22,10 +22,12 @@ use config;
  *
  * @package corevfs
  * @authour John Brown <john@home-lan.co.uk>
+ *
+ * @phpstan-type AdfsAdlCatalogueEntry array{load:int,exec:int,size:int,type:string,dir:array<int|string,mixed>}
 */
 class AdfsAdl implements PluginInterface {
 
-	/** @var array<string,object> */
+	/** @var array<string,AdfsReader> */
 	protected static array $aImageReaders = [];
 
 	/** @var array<int,array{image-file:string,path-inside-image:string,pos:int}> */
@@ -50,14 +52,15 @@ class AdfsAdl implements PluginInterface {
 	protected  static function _setUid(User $oUser): void
 	{
 		if(self::$bMultiuser){
-			posix_seteuid($oUser->getUnixUid());
+			$iUnixUid = $oUser->getUnixUid();
+			posix_seteuid($iUnixUid ?? config::getValueAsInt('system_user_id'));
 		}
 	}
 	
 	protected static function _returnUid(): void
 	{
 		if(self::$bMultiuser){
-			 posix_seteuid(config::getValue('system_user_id'));
+			 posix_seteuid(config::getValueAsInt('system_user_id'));
 		}
 	}
 
@@ -65,7 +68,7 @@ class AdfsAdl implements PluginInterface {
 	 * Injects a reader instance for a given image file, bypassing the normal
 	 * AdfsReader construction. Used by unit tests to mock out the acorn-disk class.
 	 */
-	public static function setImageReader(string $sImageFile, object $oReader): void
+	public static function setImageReader(string $sImageFile, AdfsReader $oReader): void
 	{
 		self::$aImageReaders[$sImageFile] = $oReader;
 	}
@@ -80,12 +83,43 @@ class AdfsAdl implements PluginInterface {
 		self::$iFileHandle = 0;
 	}
 
-	protected static function _getImageReader(string $sImageFile): object
+	protected static function _getImageReader(string $sImageFile): AdfsReader
 	{
 		if(!array_key_exists($sImageFile,AdfsAdl::$aImageReaders)){
 			AdfsAdl::$aImageReaders[$sImageFile] = new AdfsReader($sImageFile);
 		}
 		return AdfsAdl::$aImageReaders[$sImageFile];
+	}
+
+	/**
+	 * Normalizes the mixed-typed catalogue (or a 'dir' sub-tree of it) from the underlying AdfsReader in to a known shape
+	 *
+	 * @return array<string,AdfsAdlCatalogueEntry>
+	*/
+	protected static function _normalizeCatalogue(mixed $mCat): array
+	{
+		$aReturn = [];
+		if(!is_array($mCat)){
+			return $aReturn;
+		}
+		foreach($mCat as $mName=>$mEntry){
+			if(!is_array($mEntry)){
+				continue;
+			}
+			$aReturn[(string) $mName] = [
+				'load'=>self::_asInt($mEntry['load'] ?? 0),
+				'exec'=>self::_asInt($mEntry['exec'] ?? 0),
+				'size'=>self::_asInt($mEntry['size'] ?? 0),
+				'type'=>is_string($mEntry['type'] ?? null) ? $mEntry['type'] : 'file',
+				'dir'=>is_array($mEntry['dir'] ?? null) ? $mEntry['dir'] : [],
+			];
+		}
+		return $aReturn;
+	}
+
+	protected static function _asInt(mixed $mValue): int
+	{
+		return is_scalar($mValue) ? (int) $mValue : 0;
 	}
 
 	protected static function _econetToUnix(string $sEconetPath): string
@@ -98,7 +132,7 @@ class AdfsAdl implements PluginInterface {
 			$sUnixPath = $sUnixPath.str_replace(DIRECTORY_SEPARATOR ,'.',$sPart).DIRECTORY_SEPARATOR;
 		}
 		$sUnixPath = trim($sUnixPath,DIRECTORY_SEPARATOR);
-		$sUnixPath = config::getValue('vfs_plugin_localadfsadl_root').DIRECTORY_SEPARATOR.$sUnixPath;
+		$sUnixPath = config::getValueAsString('vfs_plugin_localadfsadl_root').DIRECTORY_SEPARATOR.$sUnixPath;
 
 		
 		if(!file_exists($sUnixPath)){
@@ -156,7 +190,7 @@ class AdfsAdl implements PluginInterface {
 			$sUnixPath = implode(DIRECTORY_SEPARATOR,$aUnixPath);
 			if(is_file($sUnixPath.".adl")){
 				return $sUnixPath.".adl";
-			}elseif($sUnixPath==config::getValue('vfs_plugin_localadfsadl_root')){
+			}elseif($sUnixPath==config::getValueAsString('vfs_plugin_localadfsadl_root')){
 				return '';
 			}
 			$sFilePathPart = array_pop($aUnixPath);
@@ -170,7 +204,7 @@ class AdfsAdl implements PluginInterface {
 		$sEconetPath = substr((string) $sEconetPath,2);
 
 		$sPathPreFix = substr((string) $sImageFile,0,strlen((string) $sImageFile)-4);
-		$sPathPreFix = str_ireplace((string) config::getValue('vfs_plugin_localadfsadl_root'),'',$sPathPreFix);
+		$sPathPreFix = str_ireplace(config::getValueAsString('vfs_plugin_localadfsadl_root'),'',$sPathPreFix);
 		$sPathPreFix = str_ireplace(DIRECTORY_SEPARATOR,'.',ltrim($sPathPreFix,'/'));
 		return ltrim(str_ireplace($sPathPreFix,'',$sEconetPath),'.');
 	} 
@@ -178,17 +212,17 @@ class AdfsAdl implements PluginInterface {
 	protected static function _checkImageFileExists(string $sImageFile,string $sPathInsideImage): bool
 	{
 		$oAdfs = AdfsAdl::_getImageReader($sImageFile);
-		$aCat = $oAdfs->getCatalogue();
+		$aCat = self::_normalizeCatalogue($oAdfs->getCatalogue());
 		$aPathInsideImage = explode('.',(string) $sPathInsideImage);
 		$bFound = FALSE;
 		$iCount = 0;
 		foreach($aPathInsideImage as $sPathPart){
 			$aKeys = array_keys($aCat);
 			foreach($aKeys as $sKey){
-				if(strtoupper((string) $sKey)==strtoupper($sPathPart)){
+				if(strtoupper($sKey)==strtoupper($sPathPart)){
 					$iCount++;
 					if($aCat[$sKey]['type']=='dir'){
-						$aCat=$aCat[$sKey]['dir'];
+						$aCat=self::_normalizeCatalogue($aCat[$sKey]['dir']);
 					}
 					break;
 				}
@@ -211,7 +245,7 @@ class AdfsAdl implements PluginInterface {
 				$iEconetHandle = Vfs::getFreeFileHandleID($oUser);
 				$iVfsHandle = AdfsAdl::$iFileHandle++;
 				AdfsAdl::$aFileHandles[$iVfsHandle]=['image-file'=>$sImageFile, 'path-inside-image'=>'', 'pos'=>0];
-				return new FileDescriptor(self::$oLogger,'HomeLan\FileStore\Vfs\Plugin\AdfsAdl',$oUser,$sImageFile,$oEconetPath->getFilePath(),$iVfsHandle,$iEconetHandle,FALSE,TRUE);
+				return new FileDescriptor(self::$oLogger,'HomeLan\FileStore\Vfs\Plugin\AdfsAdl',$oUser,$sImageFile,$oEconetPath->getFilePath(),$iVfsHandle,$iEconetHandle,FALSE,TRUE,$bMustExist,$bReadOnly);
 			}
 
 			if(AdfsAdl::_checkImageFileExists($sImageFile,$sPathInsideImage)){
@@ -219,7 +253,7 @@ class AdfsAdl implements PluginInterface {
 				$iVfsHandle = AdfsAdl::$iFileHandle++;
 				AdfsAdl::$aFileHandles[$iVfsHandle]=['image-file'=>$sImageFile, 'path-inside-image'=>$sPathInsideImage, 'pos'=>0];
 				$oAdfs =  AdfsAdl::_getImageReader($sImageFile);
-				return new FileDescriptor(self::$oLogger,'HomeLan\FileStore\Vfs\Plugin\AdfsAdl',$oUser,$sImageFile,$oEconetPath->getFilePath(),$iVfsHandle,$iEconetHandle,$oAdfs->isFile($sPathInsideImage),$oAdfs->isDir($sPathInsideImage));
+				return new FileDescriptor(self::$oLogger,'HomeLan\FileStore\Vfs\Plugin\AdfsAdl',$oUser,$sImageFile,$oEconetPath->getFilePath(),$iVfsHandle,$iEconetHandle,$oAdfs->isFile($sPathInsideImage),$oAdfs->isDir($sPathInsideImage),$bMustExist,$bReadOnly);
 			}
 		}
 
@@ -243,13 +277,13 @@ class AdfsAdl implements PluginInterface {
 			if($aImageStat === false){
 				return $aDirectoryListing;
 			}
-			$aCat = $oAdfs->getCatalogue();
+			$aCat = self::_normalizeCatalogue($oAdfs->getCatalogue());
 
 			if(strlen($sPathInsideImage)>0){
 				$aPathParts = explode('.',$sPathInsideImage);
 				foreach($aPathParts as $sPart){
 					if(array_key_exists($sPart,$aCat)){
-						$aCat = $aCat[$sPart]['dir'];
+						$aCat = self::_normalizeCatalogue($aCat[$sPart]['dir']);
 					}else{
 						return $aDirectoryListing;
 					}
@@ -257,7 +291,7 @@ class AdfsAdl implements PluginInterface {
 			}
 
 			foreach($aCat as $sFile=>$aMeta){
-				$aDirectoryListing[$sFile] = new DirectoryEntry($sFile,$sImageFile,'HomeLan\FileStore\Vfs\Plugin\AdfsAdl',$aMeta['load'],$aMeta['exec'],$aMeta['size'] ?? 0,$sEconetPath.'.'.$sFile,$aImageStat['ctime'],'-r/-r', $aMeta['type']=='dir' ? TRUE : FALSE);
+				$aDirectoryListing[$sFile] = new DirectoryEntry($sFile,$sImageFile,'HomeLan\FileStore\Vfs\Plugin\AdfsAdl',$aMeta['load'],$aMeta['exec'],$aMeta['size'],$sEconetPath.'.'.$sFile,$aImageStat['ctime'],'-r/-r', $aMeta['type']=='dir' ? TRUE : FALSE);
 			}
 		}
 		
@@ -332,13 +366,13 @@ class AdfsAdl implements PluginInterface {
 		throw new VfsException("No such file");
 	}
 
-	public static function setMeta(string $sEconetPath,?int $iLoad,?int $iExec,int $iAccess): void
+	public static function setMeta(string $sEconetPath,?int $iLoad,?int $iExec,?int $iAccess): void
 	{
 	}
 
 	public static function fsFtell(User $oUser,mixed $fLocalHandle): int
 	{
-		if(array_key_exists($fLocalHandle,AdfsAdl::$aFileHandles)){
+		if(is_int($fLocalHandle) && array_key_exists($fLocalHandle,AdfsAdl::$aFileHandles)){
 			return AdfsAdl::$aFileHandles[$fLocalHandle]['pos'];
 		}
 		throw new VfsException("Invalid handle");
@@ -347,7 +381,7 @@ class AdfsAdl implements PluginInterface {
 	/** @return array<string,mixed> */
 	public static function fsFStat(User $oUser,mixed $fLocalHandle): array
 	{
-		if(array_key_exists($fLocalHandle,AdfsAdl::$aFileHandles)){
+		if(is_int($fLocalHandle) && array_key_exists($fLocalHandle,AdfsAdl::$aFileHandles)){
 			$oAdfs = AdfsAdl::_getImageReader(AdfsAdl::$aFileHandles[$fLocalHandle]['image-file']);
 			$aStat = $oAdfs->getStat(AdfsAdl::$aFileHandles[$fLocalHandle]['path-inside-image']);
 			return ['dev'=>null, 'ino'=>$aStat['sector'], 'size'=>$aStat['size'], 'nlink'=>1];
@@ -357,7 +391,7 @@ class AdfsAdl implements PluginInterface {
 
 	public static function isEof(User $oUser,mixed $fLocalHandle): bool
 	{
-		if(array_key_exists($fLocalHandle,AdfsAdl::$aFileHandles)){
+		if(is_int($fLocalHandle) && array_key_exists($fLocalHandle,AdfsAdl::$aFileHandles)){
 			$oAdfs = AdfsAdl::_getImageReader(AdfsAdl::$aFileHandles[$fLocalHandle]['image-file']);
 			$aStat = $oAdfs->getStat(AdfsAdl::$aFileHandles[$fLocalHandle]['path-inside-image']);
 			if(AdfsAdl::$aFileHandles[$fLocalHandle]['pos']>=$aStat['size']){
@@ -370,7 +404,7 @@ class AdfsAdl implements PluginInterface {
 
 	public static function setPos(User $oUser,mixed $fLocalHandle,int $iPos): bool
 	{
-		if(array_key_exists($fLocalHandle,AdfsAdl::$aFileHandles)){
+		if(is_int($fLocalHandle) && array_key_exists($fLocalHandle,AdfsAdl::$aFileHandles)){
 			AdfsAdl::$aFileHandles[$fLocalHandle]['pos']=$iPos;
 			return TRUE;
 		}
@@ -379,7 +413,7 @@ class AdfsAdl implements PluginInterface {
 	
 	public static function read(User $oUser,mixed $fLocalHandle,int $iLength): string
 	{
-		if(array_key_exists($fLocalHandle,AdfsAdl::$aFileHandles)){
+		if(is_int($fLocalHandle) && array_key_exists($fLocalHandle,AdfsAdl::$aFileHandles)){
 			$oAdfs = AdfsAdl::_getImageReader(AdfsAdl::$aFileHandles[$fLocalHandle]['image-file']);
 			$sFileData = $oAdfs->getFile(AdfsAdl::$aFileHandles[$fLocalHandle]['path-inside-image']);
 			return substr((string) $sFileData,AdfsAdl::$aFileHandles[$fLocalHandle]['pos'],$iLength);
@@ -389,7 +423,7 @@ class AdfsAdl implements PluginInterface {
 
 	public static function write(User $oUser,mixed $fLocalHandle,string $sData): never
 	{
-		self::$oLogger->debug("AdfsAdl: Write bytes to file handle ".$fLocalHandle);
+		self::$oLogger->debug("AdfsAdl: Write bytes to file handle ".(is_scalar($fLocalHandle) ? (string) $fLocalHandle : gettype($fLocalHandle)));
 		throw new VfsException("Read Only FS");
 	}
 
@@ -404,7 +438,7 @@ class AdfsAdl implements PluginInterface {
 
 	public static function fsClose(User $oUser,mixed $fLocalHandle): void
 	{
-		if(array_key_exists($fLocalHandle,AdfsAdl::$aFileHandles)){
+		if(is_int($fLocalHandle) && array_key_exists($fLocalHandle,AdfsAdl::$aFileHandles)){
 			unset(AdfsAdl::$aFileHandles[$fLocalHandle]);
 		}
 	}

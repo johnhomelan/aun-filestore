@@ -40,12 +40,33 @@ class BridgeRequest extends Request {
 	{
 		parent:: __construct($oEconetPacket,$oLogger);
 		$this->oEconetPacket = $oEconetPacket;
-		$this->decode($oEconetPacket->getData());
-	}	
+		$this->decode($oEconetPacket->getData() ?? '');
+	}
 
 	public function getReplyPort():?int
 	{
 		return $this->iReplyPort;
+	}
+
+	/**
+	 * Bridge rejects any packet without a resolvable source network/station
+	 * before ever constructing a BridgeRequest (see Bridge::broadcastPacketIn()),
+	 * so both are guaranteed present here.
+	 */
+	public function getSourceNetwork(): int
+	{
+		if ($this->iSourceNetwork === null) {
+			throw new Exception("BridgeRequest has no source network");
+		}
+		return $this->iSourceNetwork;
+	}
+
+	public function getSourceStation(): int
+	{
+		if ($this->iSourceStation === null) {
+			throw new Exception("BridgeRequest has no source station");
+		}
+		return $this->iSourceStation;
 	}
 
 
@@ -71,7 +92,7 @@ class BridgeRequest extends Request {
 		if($aHeader === false){
 			return;
 		}
-		$this->iFunction = $aHeader[1];
+		$this->iFunction = self::_asInt($aHeader[1]);
 		$sBinaryString = substr($sBinaryString,1);
 
 		//All bridge requests contain the 6-byte ASCII string "Bridge"
@@ -87,12 +108,12 @@ class BridgeRequest extends Request {
 		if($aHeader === false){
 			return;
 		}
-		$this->iReplyPort = $aHeader[1];
+		$this->iReplyPort = self::_asInt($aHeader[1]);
 		$sBinaryString = substr($sBinaryString,1);
-	
+
 		//The reset is data
 		$this->sData = $sBinaryString;
-		
+
 	}
 
 	public function getNetwork():int
@@ -102,7 +123,7 @@ class BridgeRequest extends Request {
 		if($aData === false){
 			return 0;
 		}
-		return (int) $aData[1];
+		return self::_asInt($aData[1]);
 	}
 
 	/** @return array<int,int> */
@@ -115,7 +136,7 @@ class BridgeRequest extends Request {
 		if($aBytes === false){
 			return [];
 		}
-		return array_values($aBytes);
+		return array_values(array_map(self::_asInt(...), $aBytes));
 	}
 
 	public function buildReply(): \HomeLan\FileStore\Messages\Reply

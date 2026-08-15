@@ -70,7 +70,7 @@ class TeefaxTtiParser
 			$sRest = substr($sLine, $iComma + 1);
 
 			if ($sTag === 'PN') {
-				if ($sPage !== null) {
+				if ($sPage !== null && $iMagazine !== null && $iSubpage !== null) {
 					$aResults[] = $this->_buildPage($iMagazine, $sPage, $iSubpage, $aRows);
 				}
 				if (preg_match('/^([1-8])([0-9A-Fa-f]{2})([0-9]{2})/', $sRest, $aMatches)) {
@@ -101,7 +101,7 @@ class TeefaxTtiParser
 			// that doesn't affect the raw screen buffer — ignored.
 		}
 
-		if ($sPage !== null) {
+		if ($sPage !== null && $iMagazine !== null && $iSubpage !== null) {
 			$aResults[] = $this->_buildPage($iMagazine, $sPage, $iSubpage, $aRows);
 		}
 

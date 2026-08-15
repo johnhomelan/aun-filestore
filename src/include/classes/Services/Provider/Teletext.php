@@ -102,7 +102,7 @@ class Teletext implements ProviderInterface {
 
 	public function __construct(protected readonly \Psr\Log\LoggerInterface $oLogger, ?Storage $oStorage = null)
 	{
-		$this->oStorage = $oStorage ?? new Storage((string) config::getValue('teletext_store_dir'));
+		$this->oStorage = $oStorage ?? new Storage(config::getValueAsString('teletext_store_dir'));
 	}
 
 	public function getName(): string
@@ -142,7 +142,7 @@ class Teletext implements ProviderInterface {
 		$_this = $this;
 		$oLoop = $oServiceDispatcher->getLoop();
 		if ($oLoop !== null) {
-			$oLoop->addPeriodicTimer((float) config::getValue('teletext_carousel_interval'), function () use ($_this, $oServiceDispatcher) {
+			$oLoop->addPeriodicTimer(config::getValueAsFloat('teletext_carousel_interval'), function () use ($_this, $oServiceDispatcher) {
 				$_this->broadcastCurrentPage();
 				$oServiceDispatcher->sendPackets($_this);
 			});
@@ -223,7 +223,7 @@ class Teletext implements ProviderInterface {
 		$oReply->appendByte(self::PORT_SERVER_REPLY);
 		$oReply->appendByte(self::VERSION_BYTE);
 		$oReply->appendFixedString(self::SERVER_TYPE, 8);
-		$sName = (string) config::getValue('teletext_server_name');
+		$sName = config::getValueAsString('teletext_server_name');
 		$oReply->appendByte(strlen($sName));
 		if ($sName !== '') {
 			$oReply->appendString($sName);
@@ -389,7 +389,7 @@ class Teletext implements ProviderInterface {
 	{
 		$oReply = $this->_buildOpReply($oRequest);
 		$oReply->appendStatus(0);
-		$oReply->appendByte((int) config::getValue('teletext_max_users'));
+		$oReply->appendByte(config::getValueAsInt('teletext_max_users'));
 		$this->_addReplyToBuffer($oReply);
 	}
 
@@ -489,7 +489,7 @@ class Teletext implements ProviderInterface {
 	*/
 	public function checkTeefaxRefresh(?\React\EventLoop\LoopInterface $oLoop = null): void
 	{
-		$sChannel = (string) config::getValue('teletext_teefax_channel');
+		$sChannel = config::getValueAsString('teletext_teefax_channel');
 		if (!preg_match('/^[0-9]$/', $sChannel)) {
 			return;
 		}
@@ -507,7 +507,7 @@ class Teletext implements ProviderInterface {
 	*/
 	public function triggerTeefaxImport(): bool
 	{
-		$sChannel = (string) config::getValue('teletext_teefax_channel');
+		$sChannel = config::getValueAsString('teletext_teefax_channel');
 		if (!preg_match('/^[0-9]$/', $sChannel)) {
 			return false;
 		}
@@ -543,13 +543,13 @@ class Teletext implements ProviderInterface {
 		if ($iLastImported === null) {
 			return true;
 		}
-		$iInterval = (int) config::getValue('teletext_teefax_refresh_interval');
+		$iInterval = config::getValueAsInt('teletext_teefax_refresh_interval');
 		return ($this->_now() - $iLastImported) >= $iInterval;
 	}
 
 	protected function _readTeefaxImportedMarker(string $sChannel): ?int
 	{
-		$sPath = ((string) config::getValue('teletext_store_dir')) . '/' . $sChannel . '/.imported';
+		$sPath = (config::getValueAsString('teletext_store_dir')) . '/' . $sChannel . '/.imported';
 		if (!file_exists($sPath)) {
 			return null;
 		}
@@ -566,8 +566,8 @@ class Teletext implements ProviderInterface {
 	{
 		$sBinary = dirname(__DIR__, 4) . '/util/teefax-import';
 		$sCommand = escapeshellarg($sBinary) . ' --channel=' . escapeshellarg($sChannel);
-		if (defined('CONFIG_CONF_FILE_PATH')) {
-			$sCommand .= ' --config=' . escapeshellarg(CONFIG_CONF_FILE_PATH);
+		if (defined('CONFIG_CONF_FILE_PATH') && is_scalar(CONFIG_CONF_FILE_PATH)) {
+			$sCommand .= ' --config=' . escapeshellarg((string) CONFIG_CONF_FILE_PATH);
 		}
 		return new Process($sCommand);
 	}

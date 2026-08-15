@@ -7,6 +7,8 @@
 */
 namespace HomeLan\FileStore\Services\Provider\PrintServer;
 
+use HomeLan\FileStore\Authentication\HasUsername;
+
 /**
  * Represents one virtual printer configured in printers.cfg
  *
@@ -41,7 +43,7 @@ class Printer
 		return empty($this->aAllowedUsers) ? 'All' : implode(', ', $this->aAllowedUsers);
 	}
 
-	public function isUserAllowed(?object $oUser): bool
+	public function isUserAllowed(?HasUsername $oUser): bool
 	{
 		if (empty($this->aAllowedUsers)) {
 			return true;
@@ -50,7 +52,7 @@ class Printer
 			return false;
 		}
 		return in_array(
-			strtoupper($oUser->getUsername()),
+			strtoupper($oUser->getUsername() ?? ''),
 			array_map('strtoupper', $this->aAllowedUsers),
 			true
 		);

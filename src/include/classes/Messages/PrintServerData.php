@@ -14,7 +14,7 @@ use Exception;
  *
  * @package coreprotocol
 */
-class PrintServerData {
+class PrintServerData implements RequestInterface {
 
 	protected ?int $iSourceNetwork = NULL;
 
@@ -77,13 +77,18 @@ class PrintServerData {
 
 	}
 
+	private static function _asInt(mixed $mValue): int
+	{
+		return is_int($mValue) ? $mValue : 0;
+	}
+
 	public function getByte(int $iIndex): ?int
 	{
 		$aBytes = unpack('C*',(string) $this->sData);
 		if($aBytes === false){
 			return NULL;
 		}
-		if(array_key_exists($iIndex,$aBytes)){
+		if(array_key_exists($iIndex,$aBytes) && is_int($aBytes[$iIndex])){
 			return $aBytes[$iIndex];
 		}
 		return NULL;
@@ -103,8 +108,9 @@ class PrintServerData {
 			if(!array_key_exists($i,$aBytes)){
 				break;
 			}
-			if(chr($aBytes[$i])!="\r" AND chr($aBytes[$i])!="\n"){
-				$sRetstr = $sRetstr.chr($aBytes[$i]);
+			$iByte = self::_asInt($aBytes[$i]);
+			if(chr($iByte)!="\r" AND chr($iByte)!="\n"){
+				$sRetstr = $sRetstr.chr($iByte);
 			}else{
 				break;
 			}
@@ -119,7 +125,7 @@ class PrintServerData {
 		if($aInt === false){
 			return 0;
 		}
-		return $aInt[1];
+		return self::_asInt($aInt[1]);
 	}
 
 	public function get24bitIntLittleEndian(int $iStart): int
@@ -128,7 +134,7 @@ class PrintServerData {
 		if($aBytes === false || !array_key_exists($iStart,$aBytes) || !array_key_exists($iStart+1,$aBytes) || !array_key_exists($iStart+2,$aBytes)){
 			return 0;
 		}
-		$iInt= (int) bindec(str_pad(decbin($aBytes[$iStart+2]),8,"0",STR_PAD_LEFT).str_pad(decbin($aBytes[$iStart+1]),8,"0",STR_PAD_LEFT).str_pad(decbin($aBytes[$iStart]),8,"0",STR_PAD_LEFT));
+		$iInt= (int) bindec(str_pad(decbin(self::_asInt($aBytes[$iStart+2])),8,"0",STR_PAD_LEFT).str_pad(decbin(self::_asInt($aBytes[$iStart+1])),8,"0",STR_PAD_LEFT).str_pad(decbin(self::_asInt($aBytes[$iStart])),8,"0",STR_PAD_LEFT));
 		return $iInt;
 	}
 
@@ -139,7 +145,7 @@ class PrintServerData {
 		if($aInt === false){
 			return 0;
 		}
-		return $aInt[1];
+		return self::_asInt($aInt[1]);
 	}
 
 	public function buildReply(): \HomeLan\FileStore\Messages\Reply

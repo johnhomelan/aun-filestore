@@ -22,12 +22,12 @@ class Interfaces
 	public function __construct(private readonly ProviderInterface $oProvider,private readonly \Psr\Log\LoggerInterface $oLogger, ?string $sInterfaces=null)
  	{
 		if(is_null($sInterfaces)){
-			if(!file_exists(config::getValue('ipv4_interfaces_file'))){
+			if(!file_exists(config::getValueAsString('ipv4_interfaces_file'))){
 				return;
 			}
-			$sInterfaces = file_get_contents(config::getValue('ipv4_interfaces_file'));
+			$sInterfaces = file_get_contents(config::getValueAsString('ipv4_interfaces_file'));
 			if($sInterfaces === false){
-				$this->oLogger->warning("Unable to read ipv4 interfaces file ".config::getValue('ipv4_interfaces_file'));
+				$this->oLogger->warning("Unable to read ipv4 interfaces file ".config::getValueAsString('ipv4_interfaces_file'));
 				return;
 			}
 		}

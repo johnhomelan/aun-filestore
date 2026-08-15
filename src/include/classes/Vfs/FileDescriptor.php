@@ -35,9 +35,15 @@ class FileDescriptor {
 
 	protected bool $bDir;
 
+	/** Whether the path was required to already exist when this descriptor was built; carried through to changeVfs() retries. */
+	protected bool $bMustExist;
+
+	/** Whether this descriptor was opened read-only; carried through to changeVfs() retries. */
+	protected bool $bReadOnly;
+
 	protected \Psr\Log\LoggerInterface $oLogger;
 
-	public function __construct(\Psr\Log\LoggerInterface $oLogger,string $sVfsPlugin, User $oUser, string $sUnixFilePath, string $sEconetFilePath, mixed $iVfsHandle, int $iEconetHandle, bool $bFile=FALSE, bool $bDir=FALSE)
+	public function __construct(\Psr\Log\LoggerInterface $oLogger,string $sVfsPlugin, User $oUser, string $sUnixFilePath, string $sEconetFilePath, mixed $iVfsHandle, int $iEconetHandle, bool $bFile=FALSE, bool $bDir=FALSE, bool $bMustExist=TRUE, bool $bReadOnly=TRUE)
 	{
 		$this->oLogger = $oLogger;
 		$this->sVfsPlugin = $sVfsPlugin;
@@ -48,6 +54,8 @@ class FileDescriptor {
 		$this->iHandle = $iEconetHandle;
 		$this->bFile = $bFile;
 		$this->bDir = $bDir;
+		$this->bMustExist = $bMustExist;
+		$this->bReadOnly = $bReadOnly;
 	}
 
 	public function getEconetPath(): string
@@ -96,15 +104,26 @@ class FileDescriptor {
 			$this->oLogger->debug("filedescriptor: Changing vfsplugin to ".$sPlugin." due to softerror from ".$this->sVfsPlugin);
 
 			$this->sVfsPlugin = $sPlugin;
-			$sUnixPath = $sPlugin::_getUnixPathFromEconetPath($this->sEconetFilePath);
+			$oPath = new FilePath($this->getEconetParentPath(),$this->getEconetDirName() ?? '');
 
-			if(strlen((string) $sUnixPath)<1){
+			try {
+				$oNewFd = $sPlugin::_buildFiledescriptorFromEconetPath($this->oUser,$oPath,$this->bMustExist,$this->bReadOnly);
+			}catch(VfsException $oVfsException){
+				if($oVfsException->isHard()){
+					throw $oVfsException;
+				}
+				$oNewFd = null;
+			}
+
+			if($oNewFd === null){
 				//This vfs module can't process the econetpath try the next
 				$this->changeVfs();
+				return;
 			}
-			$this->sUnixFilePath=$sUnixPath;
-			$this->iVfsHandle = $sPlugin::_getHandleFromEconetPath($this->sEconetFilePath);
-
+			$this->sUnixFilePath = $oNewFd->sUnixFilePath;
+			$this->iVfsHandle = $oNewFd->iVfsHandle;
+			$this->bFile = $oNewFd->bFile;
+			$this->bDir = $oNewFd->bDir;
 		}
 	}
 

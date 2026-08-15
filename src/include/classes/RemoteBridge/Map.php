@@ -73,7 +73,7 @@ class Map
 		self::$aOutboundBuffer = [];
 
 		if ($sMapContent === null) {
-			$sFile = (string) config::getValue('remote_bridge_map_file');
+			$sFile = config::getValueAsString('remote_bridge_map_file');
 			if (!file_exists($sFile)) {
 				$oLogger->info("RemoteBridge: map file not found ({$sFile}), no connections configured");
 				return;
@@ -281,6 +281,7 @@ class Map
 		}
 	}
 
+	/** @return array<int, array{port:int, secret:string, networks:int[]}> */
 	/** @return array<int, array{port:int, secret:string, networks:int[]}> */
 	public static function getServerEntries(): array { return self::$aServerEntries; }
 

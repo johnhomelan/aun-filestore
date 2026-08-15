@@ -53,7 +53,7 @@ class EncapsulationTypeMap {
 		if(PiconetMap::networkKnown($iDstNetwork)){
 			return 'Piconet';
 		}
-		if(config::getValue('remote_bridge_enabled') && RemoteBridgeMap::networkKnown($iDstNetwork)){
+		if(config::getValueAsBool('remote_bridge_enabled') && RemoteBridgeMap::networkKnown($iDstNetwork)){
 			return 'RemoteBridge';
 		}
 		return 'AUN';

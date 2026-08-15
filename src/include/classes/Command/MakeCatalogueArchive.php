@@ -44,19 +44,21 @@ class MakeCatalogueArchive extends Command
 
     protected function execute(InputInterface $oInput, OutputInterface $oOutput): int
     {
-        $sSource = rtrim((string) $oInput->getArgument('source'), DIRECTORY_SEPARATOR);
+        $mSource = $oInput->getArgument('source');
+        $sSource = rtrim(is_scalar($mSource) ? (string) $mSource : '', DIRECTORY_SEPARATOR);
         if (!is_dir($sSource)) {
             $oOutput->writeln('<error>Source path is not a directory: ' . $sSource . '</error>');
             return Command::FAILURE;
         }
 
-        $sOutputPath  = $oInput->getOption('output') ?? (basename($sSource) . '.tar');
-        $sExistingTar = $oInput->getOption('existing-tar');
+        $mOutputOption = $oInput->getOption('output');
+        $sOutputPath   = is_scalar($mOutputOption) ? (string) $mOutputOption : (basename($sSource) . '.tar');
+        $mExistingTar  = $oInput->getOption('existing-tar');
 
         // Load previous index for version tracking.
         $aOldFiles = [];
-        if ($sExistingTar !== null) {
-            $aOldFiles = $this->_loadOldIndex($sExistingTar, $oOutput);
+        if ($mExistingTar !== null) {
+            $aOldFiles = $this->_loadOldIndex(is_scalar($mExistingTar) ? (string) $mExistingTar : '', $oOutput);
         }
 
         // Discover all non-.inf files in the source tree.
@@ -139,15 +141,30 @@ class MakeCatalogueArchive extends Command
         }
 
         $sIndexPath = $sTempDir . DIRECTORY_SEPARATOR . 'index.json';
-        $aData = [];
+        $mFiles = null;
         if (file_exists($sIndexPath)) {
-            $aData = json_decode((string) file_get_contents($sIndexPath), true) ?? [];
+            $aData = json_decode((string) file_get_contents($sIndexPath), true);
+            $mFiles = is_array($aData) ? ($aData['files'] ?? null) : null;
         } else {
             $oOutput->writeln('<comment>No index.json in existing tar — starting fresh</comment>');
         }
 
         $this->_rmDir($sTempDir);
-        return $aData['files'] ?? [];
+
+        if (!is_array($mFiles)) {
+            return [];
+        }
+        $aResult = [];
+        foreach ($mFiles as $mKey => $mEntry) {
+            if (is_array($mEntry)) {
+                $aEntry = [];
+                foreach ($mEntry as $mFieldKey => $mFieldValue) {
+                    $aEntry[(string) $mFieldKey] = $mFieldValue;
+                }
+                $aResult[(string) $mKey] = $aEntry;
+            }
+        }
+        return $aResult;
     }
 
     /**
@@ -159,10 +176,12 @@ class MakeCatalogueArchive extends Command
             return 1;
         }
         $aOld = $aOldFiles[$sEconetKey];
+        $mVersion = $aOld['version'] ?? null;
+        $iVersion = is_scalar($mVersion) ? (int) $mVersion : 0;
         if (($aOld['md5sum'] ?? '') === $sMd5) {
-            return max(1, (int) ($aOld['version'] ?? 1));
+            return max(1, $iVersion);
         }
-        return max(1, (int) ($aOld['version'] ?? 0)) + 1;
+        return max(1, $iVersion) + 1;
     }
 
     /**
@@ -213,7 +232,14 @@ class MakeCatalogueArchive extends Command
             \RecursiveIteratorIterator::CHILD_FIRST
         );
         foreach ($oIt as $oItem) {
-            $oItem->isDir() ? rmdir($oItem->getRealPath()) : unlink($oItem->getRealPath());
+            if (!($oItem instanceof \SplFileInfo)) {
+                continue;
+            }
+            $sRealPath = $oItem->getRealPath();
+            if ($sRealPath === false) {
+                continue;
+            }
+            $oItem->isDir() ? rmdir($sRealPath) : unlink($sRealPath);
         }
         rmdir($sDir);
     }

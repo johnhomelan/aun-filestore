@@ -26,7 +26,7 @@ class ClientHandler
 	private const RECONNECT_DELAY_MIN = 5;
 	private const RECONNECT_DELAY_MAX = 300;
 
-	/** @var array<string, array{entry: array{host: string, port: int, secret: string, networks: array<int,int>}, delay: int}> keyed by 'host:port' */
+	/** @var array<string, array{entry: array{host: string, port: int, secret: string, networks: int[]}, delay: int}> keyed by 'host:port' */
 	private array $aEntryState = [];
 
 	public function __construct(
@@ -71,8 +71,8 @@ class ClientHandler
 						// Only forward to the local interface if not addressed to our own virtual
 						// service station — packets for that station are handled exclusively by
 						// ServiceDispatcher below (no physical Piconet device to deliver to).
-						$iLocalNet = (int) config::getValue('piconet_local_network');
-						$iOurStn   = (int) config::getValue('piconet_station');
+						$iLocalNet = config::getValueAsInt('piconet_local_network');
+						$iOurStn   = config::getValueAsInt('piconet_station');
 						$bForLocalService = $iOurStn > 0
 							&& $oPkt->getDstStation() === $iOurStn
 							&& ($oPkt->getDstNetwork() === $iLocalNet || $oPkt->getDstNetwork() === 0);

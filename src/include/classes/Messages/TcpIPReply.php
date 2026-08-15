@@ -51,9 +51,13 @@ class TcpIPReply extends Reply {
 	}
 	
 	public function buildEconetpacket(): \HomeLan\FileStore\Messages\EconetPacket
-	{		
+	{
+		if($this->sSrcIP === null OR $this->sDstIP === null){
+			throw new Exception("TcpIPReply::buildEconetpacket() called before setSrcIP()/setDstIP()");
+		}
+
 		//IPv4 Header
-		
+
 		//First byte is the version/internet header length (fisrt 4 bits being the version)
 		$iVersion = $this->iVersion << 4;
 		$this->appendByte($iVersion + $this->getIpHeaderLength());
@@ -189,8 +193,8 @@ class TcpIPReply extends Reply {
 	{
 		$sTcpSegment = substr($this->sPkt, $iTcpStart);
 		// Pseudo-header: src IP (4) + dst IP (4) + zero (1) + protocol TCP=6 (1) + TCP segment length (2)
-		$sPseudo = inet_pton($this->sSrcIP)
-		         . inet_pton($this->sDstIP)
+		$sPseudo = inet_pton($this->sSrcIP ?? '')
+		         . inet_pton($this->sDstIP ?? '')
 		         . "\x00\x06"
 		         . pack('n', strlen($sTcpSegment));
 		$sBuffer = $sPseudo . $sTcpSegment;

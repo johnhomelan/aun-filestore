@@ -59,11 +59,11 @@ class Map {
 		self::$oLogger = $oLogger;
 		self::$oHandler = $oHandler;
 		if(is_null($sMap)){
-			if(!file_exists(config::getValue('aunmap_file'))){
+			if(!file_exists(config::getValueAsString('aunmap_file'))){
 				self::$oLogger->info("aunmapper: The configure aunmap files does not exist.");
 				return;
 			}
-			$sMap = file_get_contents(config::getValue('aunmap_file'));
+			$sMap = file_get_contents(config::getValueAsString('aunmap_file'));
 			if($sMap === false){
 				self::$oLogger->info("aunmapper: Failed to read the configuration file for the aunmap.");
 				return;
@@ -134,7 +134,7 @@ class Map {
 		if(!is_null($sPort)){
 			$sIP=$sIP.':'.$sPort;
 		}
-		Map::$aIPLookupCache[$sIP]=config::getValue('aunmap_autonet').'.'.$aIPParts[3];
+		Map::$aIPLookupCache[$sIP]=config::getValueAsString('aunmap_autonet').'.'.$aIPParts[3];
 		return Map::$aIPLookupCache[$sIP];
 	}
 

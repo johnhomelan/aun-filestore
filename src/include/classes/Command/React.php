@@ -79,12 +79,15 @@ class React extends Command {
 		$bDaemonize = FALSE;
 		$sPidFile = "";
 
-		$this->oLogger->info("Config input is ".$oInput->getOption('config'));
-		if($oInput->getOption('config')!==null){
-			safe_define('CONFIG_CONF_FILE_PATH',$oInput->getOption('config'));
+		$mConfigOption = $oInput->getOption('config');
+		$sConfigOption = is_scalar($mConfigOption) ? (string) $mConfigOption : '';
+		$this->oLogger->info("Config input is ".$sConfigOption);
+		if($mConfigOption!==null){
+			safe_define('CONFIG_CONF_FILE_PATH',$sConfigOption);
 		}
 		if($oInput->getOption('pidfile')!==null){
-			$sPidFile = $oInput->getOption('pidfile');
+			$mPidFile = $oInput->getOption('pidfile');
+			$sPidFile = is_scalar($mPidFile) ? (string) $mPidFile : '';
 		}
 		if($oInput->getOption('daemonize')!==null){
 			$bDaemonize = true;
@@ -152,7 +155,7 @@ class React extends Command {
 		PiconetMap::init($oLogger, $oPiconet);
 
 		//Setup the remote bridge (feature-gated)
-		if (config::getValue('remote_bridge_enabled')) {
+		if (config::getValueAsBool('remote_bridge_enabled')) {
 			$this->remoteBridgeService($oLoop, $oPacketDispatcher);
 		}
 		
@@ -169,7 +172,7 @@ class React extends Command {
 		});
 		
 		//Run regular house keeping tasks	
-		$oLoop->addPeriodicTimer(config::getValue('housekeeping_interval'), function(\React\EventLoop\Timer\Timer $oTimer) use ($oServices, $oLogger) {
+		$oLoop->addPeriodicTimer(config::getValueAsFloat('housekeeping_interval'), function(\React\EventLoop\Timer\Timer $oTimer) use ($oServices, $oLogger) {
 			$oLogger->debug("Running house keeping tasks");
 			Security::houseKeeping();
 			vfs::houseKeeping();
@@ -247,13 +250,20 @@ EOF;
 		$oDatagramFactory = new DatagramFactory($oLoop);
 		$oAunHandler = new AunHandler($this->oLogger, $this->oServices, $oPacketDispatcher);
 
-		$oDatagramFactory->createServer(config::getValue('aun_listen_address').':'.config::getValue('aun_listen_port'))
-	  		->then(function (\React\Datagram\Socket $oAunServer) use ($oAunHandler) {
-				$oAunServer->on('message', function($sMessage, $sSrcAddress, $oSocket) use ($oAunHandler){
-					$oAunHandler->receive($sMessage, $sSrcAddress, $oSocket->getLocalAddress());
+		$mServerPromise = $oDatagramFactory->createServer(config::getValueAsString('aun_listen_address').':'.config::getValueAsString('aun_listen_port'));
+		if ($mServerPromise instanceof \React\Promise\PromiseInterface) {
+			$mServerPromise->then(function (mixed $mAunServer) use ($oAunHandler) {
+				if (!$mAunServer instanceof \React\Datagram\Socket) {
+					return;
+				}
+				$oAunServer = $mAunServer;
+				$oAunServer->on('message', function(string $sMessage, string $sSrcAddress, \React\Datagram\Socket $oSocket) use ($oAunHandler){
+					$mLocalAddress = $oSocket->getLocalAddress();
+					$oAunHandler->receive($sMessage, $sSrcAddress, is_string($mLocalAddress) ? $mLocalAddress : '');
 				});
 				$oAunHandler->setSocket($oAunServer);
 			});
+		}
 		return $oAunHandler;
 	}
 
@@ -264,7 +274,7 @@ EOF;
 	{
 
 		//Add udp handling for AUN 
-		$oWebSocketTransport = new \React\Socket\SocketServer(config::getValue('websocket_listen_address').':'.config::getValue('websocket_listen_port'));
+		$oWebSocketTransport = new \React\Socket\SocketServer(config::getValueAsString('websocket_listen_address').':'.config::getValueAsString('websocket_listen_port'));
 
 		$oServices = $this->oServices;
 		$oLogger = $this->oLogger;
@@ -291,14 +301,14 @@ EOF;
 
 		$fConnect = null;
 		$fConnect = function() use ($oLoop, $oPiconetHandler) {
-			$sDevice = 'file://'.config::getValue('piconet_device');
+			$sDevice = 'file://'.config::getValueAsString('piconet_device');
 			$oPiconet = new UnixSerialDeviceConnector($oLoop);
 			$oPiconet->connect($sDevice)->then(
 				function (ConnectionInterface $oConnection) use ($oPiconetHandler) {
 					$oPiconetHandler->onOpen($oConnection);
 					$oPiconetHandler->onConnect();
 
-					$oConnection->on('data', function ($sMessage) use ($oPiconetHandler) {
+					$oConnection->on('data', function (string $sMessage) use ($oPiconetHandler) {
 						$oPiconetHandler->onMessage($sMessage);
 					});
 					$oConnection->on('close', function () use ($oPiconetHandler) {
@@ -309,7 +319,7 @@ EOF;
 					});
 				},
 				function (\Throwable $e) use ($oPiconetHandler) {
-					$this->oLogger->error('Piconet: failed to open device "'.config::getValue('piconet_device').'": '.$e->getMessage().'.');
+					$this->oLogger->error('Piconet: failed to open device "'.config::getValueAsString('piconet_device').'": '.$e->getMessage().'.');
 					$oPiconetHandler->scheduleReconnect();
 				}
 			);
@@ -394,17 +404,22 @@ EOF;
 				throw $oException;
 			}
 			$sResponseContent = $sfResponse->getContent();
+			//React's Response rejects null header values; Symfony's HeaderBag can carry them
+			$aResponseHeaders = array_map(
+				static fn(array $aValues): array => array_values(array_filter($aValues, static fn($mValue) => $mValue !== null)),
+				$sfResponse->headers->all()
+			);
 			$oResponse = new \React\Http\Message\Response(
 						200,
-						$sfResponse->headers->all(),
+						$aResponseHeaders,
 						$sResponseContent === false ? '' : $sResponseContent);
 			$oKernel->terminate($sfRequest, $sfResponse);
 			return $oResponse;
 		};
 
-		$oHttpSocket = new \React\Socket\Server(config::getValue('webadmin_listen_address').':'.config::getValue('webadmin_listen_port'),$oLoop);
+		$oHttpSocket = new \React\Socket\Server(config::getValueAsString('webadmin_listen_address').':'.config::getValueAsString('webadmin_listen_port'),$oLoop);
 		$oHttpServer = new \React\Http\HttpServer($callback);
-		$oLogger->info("Admin service is running on ".config::getValue('webadmin_listen_address').':'.config::getValue('webadmin_listen_port'));
+		$oLogger->info("Admin service is running on ".config::getValueAsString('webadmin_listen_address').':'.config::getValueAsString('webadmin_listen_port'));
 		$oHttpServer->listen($oHttpSocket);
 	}
 

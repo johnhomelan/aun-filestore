@@ -12,6 +12,7 @@ use HomeLan\FileStore\Messages\TorchnetRequest;
 use HomeLan\FileStore\Messages\TorchnetReply;
 use HomeLan\FileStore\Vfs\CpmVfs;
 use HomeLan\FileStore\Vfs\Exception as VfsException;
+use HomeLan\FileStore\Vfs\FileDescriptor;
 use HomeLan\FileStore\Vfs\FilePath;
 use HomeLan\FileStore\Vfs\Vfs;
 use HomeLan\FileStore\Services\Provider\Torchnet\Admin;
@@ -42,13 +43,17 @@ use config;
  *                        CpmDirectoryEntry::getCpmName() converts it to '.')
  *
  * @package core
+ *
+ * @phpstan-type TorchnetCpmPattern array{name:string,ext:string}
+ * @phpstan-type TorchnetSearchMatch array{name:string,ext:string,size:int}
+ * @phpstan-type TorchnetSearchState array{drive:string,pattern:TorchnetCpmPattern,matches:array<int,TorchnetSearchMatch>,cursor:int}
  */
 class Torchnet implements ProviderInterface
 {
     /** @var array<int,TorchnetReply> */
     private array $aReplyBuffer = [];
 
-    /** @var array<int,array<int,array<int,object>>> [net][stn][torchHandle] => FileDescriptor */
+    /** @var array<int,array<int,array<int,FileDescriptor>>> [net][stn][torchHandle] => FileDescriptor */
     private array $aFileHandles = [];
 
     /** @var array<int,array<int,int>> [net][stn] => next handle id to allocate (1–254, wrapping) */
@@ -59,7 +64,7 @@ class Torchnet implements ProviderInterface
      * Key: "{net}.{stn}"
      * Value: ['drive', 'pattern' => ['name','ext'], 'matches' => [...], 'cursor']
      *
-     * @var array<string,array<string,mixed>>
+     * @var array<string,TorchnetSearchState>
      */
     private array $aSearchState = [];
 
@@ -186,7 +191,7 @@ class Torchnet implements ProviderInterface
     {
         $iNet  = $oRequest->getSourceNetwork();
         $iStn  = $oRequest->getSourceStation();
-        $sDriveId = chr($oRequest->getByte(1));
+        $sDriveId = chr($oRequest->getByte(1) ?? 0);
         $iMode    = $oRequest->getByte(2);
         $aFilename = $oRequest->parseCpmFilename(3);
 
@@ -203,12 +208,6 @@ class Torchnet implements ProviderInterface
             $sCpmPath  = $this->buildCpmFilePath($sDriveId, $aFilename['name'], $aFilename['ext']);
             $bReadOnly = ($iMode === 0x01);
             $oFd = $this->cpmCreateFileHandle($iNet, $iStn, $sCpmPath, $bMustExist, $bReadOnly);
-
-            if (!is_object($oFd)) {
-                $oReply->openError();
-                $this->aReplyBuffer[] = $oReply;
-                return;
-            }
 
             $iHandle = $this->allocateHandle($iNet, $iStn);
             $this->aFileHandles[$iNet][$iStn][$iHandle] = $oFd;
@@ -282,10 +281,11 @@ class Torchnet implements ProviderInterface
             $sData = $oFd->read($iMax * 128);
             $bEof  = (bool) $oFd->isEof();
 
-            if ($sData === null || $sData === '') {
+            $sDataStr = is_scalar($sData) ? (string) $sData : '';
+            if ($sDataStr === '') {
                 $oReply->readEof();
             } else {
-                $oReply->readOk((string) $sData, $bEof);
+                $oReply->readOk($sDataStr, $bEof);
             }
         } catch (\Throwable $e) {
             $this->oLogger->error('TorchNet read: ' . $e->getMessage());
@@ -339,10 +339,17 @@ class Torchnet implements ProviderInterface
     {
         $iNet     = $oRequest->getSourceNetwork();
         $iStn     = $oRequest->getSourceStation();
-        $sDriveId = chr($oRequest->getByte(1));
+        $sDriveId = chr($oRequest->getByte(1) ?? 0);
         $aFilename = $oRequest->parseCpmFilename(3);
 
         $oReply = $oRequest->buildReply();
+
+        if ($iNet === null || $iStn === null) {
+            $this->oLogger->warning('TorchNet delete: no source network/station on request');
+            $oReply->error();
+            $this->aReplyBuffer[] = $oReply;
+            return;
+        }
 
         try {
             $sCpmPath = $this->buildCpmFilePath($sDriveId, $aFilename['name'], $aFilename['ext']);
@@ -365,11 +372,18 @@ class Torchnet implements ProviderInterface
     {
         $iNet     = $oRequest->getSourceNetwork();
         $iStn     = $oRequest->getSourceStation();
-        $sDriveId = chr($oRequest->getByte(1));
+        $sDriveId = chr($oRequest->getByte(1) ?? 0);
         $aOldName = $oRequest->parseCpmFilename(2);
         $aNewName = $oRequest->parseCpmFilename(13);
 
         $oReply = $oRequest->buildReply();
+
+        if ($iNet === null || $iStn === null) {
+            $this->oLogger->warning('TorchNet rename: no source network/station on request');
+            $oReply->error();
+            $this->aReplyBuffer[] = $oReply;
+            return;
+        }
 
         try {
             $sOldPath = $this->buildCpmFilePath($sDriveId, $aOldName['name'], $aOldName['ext']);
@@ -404,10 +418,18 @@ class Torchnet implements ProviderInterface
     {
         $iNet     = $oRequest->getSourceNetwork();
         $iStn     = $oRequest->getSourceStation();
-        $sDriveId = chr($oRequest->getByte(1));
+        $sDriveId = chr($oRequest->getByte(1) ?? 0);
         $aPattern = $oRequest->parseCpmFilename(3);
 
         $oReply   = $oRequest->buildReply();
+
+        if ($iNet === null || $iStn === null) {
+            $this->oLogger->warning('TorchNet search: no source network/station on request');
+            $oReply->searchEnd();
+            $this->aReplyBuffer[] = $oReply;
+            return;
+        }
+
         $sKey     = $iNet . '.' . $iStn;
 
         $bNeedNewSearch = $bFirst
@@ -420,11 +442,6 @@ class Torchnet implements ProviderInterface
 
             try {
                 $oFd = $this->cpmCreateFsHandle($iNet, $iStn, $sCpmDirPath, true, true);
-                if (!is_object($oFd)) {
-                    $oReply->searchEnd();
-                    $this->aReplyBuffer[] = $oReply;
-                    return;
-                }
                 $aAllEntries = $this->cpmGetDirectoryListing($oFd);
                 $oFd->close();
             } catch (\Throwable $e) {
@@ -473,7 +490,8 @@ class Torchnet implements ProviderInterface
             $aMatch       = $aState['matches'][$aState['cursor']];
             $iRecordCount = max(1, (int) ceil($aMatch['size'] / 128));
             $oReply->searchFound($aMatch['name'], $aMatch['ext'], $iRecordCount);
-            $this->aSearchState[$sKey]['cursor']++;
+            $aState['cursor']++;
+            $this->aSearchState[$sKey] = $aState;
         }
 
         $this->aReplyBuffer[] = $oReply;
@@ -512,8 +530,8 @@ class Torchnet implements ProviderInterface
     {
         $sKey = 'torchnet_drive_' . strtolower($sDriveId);
         try {
-            $sPath = config::getValue($sKey);
-            if ($sPath !== null && $sPath !== '') {
+            $sPath = config::getValueAsString($sKey);
+            if ($sPath !== '') {
                 return $sPath;
             }
         } catch (\Throwable) {
@@ -566,8 +584,8 @@ class Torchnet implements ProviderInterface
         foreach (range('A', 'Z') as $sLetter) {
             $sKey = 'torchnet_drive_' . strtolower($sLetter);
             try {
-                $sPath = config::getValue($sKey);
-                if (!empty($sPath)) {
+                $sPath = config::getValueAsString($sKey);
+                if ($sPath !== '') {
                     $aDrives[$sLetter] = $sPath;
                 }
             } catch (\Throwable) {
@@ -701,7 +719,7 @@ class Torchnet implements ProviderInterface
     // static VFS methods that depend on a real initialised filesystem)
     // -------------------------------------------------------------------------
 
-    protected function cpmCreateFileHandle(int $iNet, int $iStn, string $sCpmPath, bool $bMustExist, bool $bReadOnly): mixed
+    protected function cpmCreateFileHandle(int $iNet, int $iStn, string $sCpmPath, bool $bMustExist, bool $bReadOnly): FileDescriptor
     {
         return CpmVfs::createFsHandleForFile($iNet, $iStn, $sCpmPath, $bMustExist, $bReadOnly);
     }
@@ -716,15 +734,15 @@ class Torchnet implements ProviderInterface
         CpmVfs::moveFileCpm($iNet, $iStn, $sFrom, $sTo);
     }
 
-    protected function cpmCreateFsHandle(int $iNet, int $iStn, string $sCpmPath, bool $bMustExist, bool $bReadOnly): mixed
+    protected function cpmCreateFsHandle(int $iNet, int $iStn, string $sCpmPath, bool $bMustExist, bool $bReadOnly): FileDescriptor
     {
         return CpmVfs::createFsHandle($iNet, $iStn, $sCpmPath, $bMustExist, $bReadOnly);
     }
 
     /**
-     * @return array<int,\HomeLan\FileStore\Vfs\CpmDirectoryEntry>
+     * @return \HomeLan\FileStore\Vfs\CpmDirectoryEntry[]
     */
-    protected function cpmGetDirectoryListing(object $oFd): array
+    protected function cpmGetDirectoryListing(FileDescriptor $oFd): array
     {
         return CpmVfs::getDirectoryListing($oFd);
     }

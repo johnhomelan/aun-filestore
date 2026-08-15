@@ -49,18 +49,21 @@ use config;
  *
  * @package corevfs
  * @author John Brown <john@home-lan.co.uk>
+ *
+ * @phpstan-type CatalogueMapping array{_idx:int,econet_path:string,catalogue_url:string,reload_interval:?int}
+ * @phpstan-type CatalogueEntry array{version:string,load:?int,exec:?int,size:int,url:string}
  */
 class Catalogue implements PluginInterface {
 
     protected static \Psr\Log\LoggerInterface $oLogger;
     protected static bool $bMultiuser = false;
 
-    /** @var array<int,array<string,mixed>> */
+    /** @var array<int,CatalogueMapping> */
     protected static array $aMappings = [];
 
     /**
      * Catalogue entries keyed by mapping index then relative file path.
-     * @var array<int,array<string,array<string,mixed>>>
+     * @var array<int,array<string,CatalogueEntry>>
      */
     protected static array $aCatalogues = [];
 
@@ -78,7 +81,7 @@ class Catalogue implements PluginInterface {
     protected static int $iNextHandle = 1;
 
     /** Injected HTTP fetcher for testing: callable(string $sUrl): ?string */
-    protected static mixed $fHttpFetcher = null;
+    protected static ?\Closure $fHttpFetcher = null;
 
     // -------------------------------------------------------------------------
     // Lifecycle
@@ -89,19 +92,88 @@ class Catalogue implements PluginInterface {
         self::$oLogger    = $oLogger;
         self::$bMultiuser = $bMultiuser;
 
-        $sMappings = config::getValue('vfs_plugin_catalogue_mappings');
-        self::$aMappings = !empty($sMappings) ? (json_decode($sMappings, true) ?? []) : [];
+        $sMappings = config::getValueAsString('vfs_plugin_catalogue_mappings');
+        self::$aMappings = !empty($sMappings) ? self::_normalizeMappings(json_decode($sMappings, true)) : [];
 
-        $sCacheDir = config::getValue('vfs_plugin_catalogue_cache_dir');
+        $sCacheDir = config::getValueAsString('vfs_plugin_catalogue_cache_dir');
         self::$sCacheDir = !empty($sCacheDir) ? rtrim($sCacheDir, '/') . '/' : '/var/lib/cache/aun/catalogue/';
 
-        $iInterval = config::getValue('vfs_plugin_catalogue_reload_interval');
-        self::$iReloadInterval = !empty($iInterval) ? (int) $iInterval : 3600;
+        $iInterval = config::getValueAsInt('vfs_plugin_catalogue_reload_interval');
+        self::$iReloadInterval = !empty($iInterval) ? $iInterval : 3600;
 
-        foreach (self::$aMappings as $i => $aMapping) {
-            self::$aMappings[$i]['_idx'] = $i;
-            self::_loadCatalogue(self::$aMappings[$i]);
+        foreach (self::$aMappings as $aMapping) {
+            self::_loadCatalogue($aMapping);
         }
+    }
+
+    /**
+     * Safely stringifies/intifies a value read from decoded JSON (json_decode()
+     * gives back `mixed`, so callers can't assume a field is the scalar type
+     * the JSON was expected to contain).
+     */
+    private static function _asString(mixed $mValue): string
+    {
+        return is_scalar($mValue) ? (string) $mValue : '';
+    }
+
+    private static function _asInt(mixed $mValue): int
+    {
+        return is_scalar($mValue) ? (int) $mValue : 0;
+    }
+
+    /**
+     * Validates and normalizes the decoded vfs_plugin_catalogue_mappings JSON
+     * into a uniformly-shaped list (plus the injected _idx used to key
+     * $aCatalogues/$aLastReloaded) — entries missing econet_path are dropped.
+     *
+     * @return array<int,CatalogueMapping>
+     */
+    private static function _normalizeMappings(mixed $mDecoded): array
+    {
+        $aResult = [];
+        if (!is_array($mDecoded)) {
+            return $aResult;
+        }
+        $iIdx = 0;
+        foreach ($mDecoded as $mEntry) {
+            if (!is_array($mEntry) || !isset($mEntry['econet_path'])) {
+                continue;
+            }
+            $aResult[] = [
+                '_idx'            => $iIdx,
+                'econet_path'     => self::_asString($mEntry['econet_path']),
+                'catalogue_url'   => isset($mEntry['catalogue_url']) ? self::_asString($mEntry['catalogue_url']) : '',
+                'reload_interval' => isset($mEntry['reload_interval']) ? self::_asInt($mEntry['reload_interval']) : null,
+            ];
+            $iIdx++;
+        }
+        return $aResult;
+    }
+
+    /**
+     * Validates and normalizes a catalogue's decoded "files" object.
+     *
+     * @return array<string,CatalogueEntry>
+     */
+    private static function _normalizeCatalogueFiles(mixed $mFiles): array
+    {
+        $aResult = [];
+        if (!is_array($mFiles)) {
+            return $aResult;
+        }
+        foreach ($mFiles as $mRelPath => $mEntry) {
+            if (!is_string($mRelPath) || !is_array($mEntry)) {
+                continue;
+            }
+            $aResult[$mRelPath] = [
+                'version' => isset($mEntry['version']) ? self::_asString($mEntry['version']) : '',
+                'load'    => isset($mEntry['load']) ? self::_asInt($mEntry['load']) : null,
+                'exec'    => isset($mEntry['exec']) ? self::_asInt($mEntry['exec']) : null,
+                'size'    => isset($mEntry['size']) ? self::_asInt($mEntry['size']) : 0,
+                'url'     => isset($mEntry['url']) ? self::_asString($mEntry['url']) : '',
+            ];
+        }
+        return $aResult;
     }
 
     public static function houseKeeping(): void
@@ -122,7 +194,7 @@ class Catalogue implements PluginInterface {
      */
     public static function setHttpFetcher(callable $fFetcher): void
     {
-        self::$fHttpFetcher = $fFetcher;
+        self::$fHttpFetcher = \Closure::fromCallable($fFetcher);
     }
 
     /** Reset all static state (used in tests). */
@@ -163,19 +235,20 @@ class Catalogue implements PluginInterface {
     protected static function _fetchUrl(string $sUrl): ?string
     {
         if (self::$fHttpFetcher !== null) {
-            return (self::$fHttpFetcher)($sUrl);
+            $mResult = (self::$fHttpFetcher)($sUrl);
+            return is_string($mResult) ? $mResult : null;
         }
         $oContext = stream_context_create(['http' => ['timeout' => 10, 'method' => 'GET']]);
         $sData = @file_get_contents($sUrl, false, $oContext);
         return ($sData !== false) ? $sData : null;
     }
 
-    /** @param array<string,mixed> $aMapping */
+    /** @param CatalogueMapping $aMapping */
     protected static function _loadCatalogue(array $aMapping): void
     {
         $iIdx          = $aMapping['_idx'];
         $sEconetPath   = $aMapping['econet_path'];
-        $sCatalogueUrl = $aMapping['catalogue_url'] ?? '';
+        $sCatalogueUrl = $aMapping['catalogue_url'];
         if (empty($sCatalogueUrl)) {
             self::$oLogger->debug("Catalogue: no catalogue_url for mapping " . $sEconetPath);
             return;
@@ -195,9 +268,10 @@ class Catalogue implements PluginInterface {
             return;
         }
 
-        self::$aCatalogues[$iIdx]   = $aData['files'];
+        $aFiles = self::_normalizeCatalogueFiles($aData['files']);
+        self::$aCatalogues[$iIdx]   = $aFiles;
         self::$aLastReloaded[$iIdx] = time();
-        self::$oLogger->debug("Catalogue: loaded " . count($aData['files']) . " entries for " . $sEconetPath);
+        self::$oLogger->debug("Catalogue: loaded " . count($aFiles) . " entries for " . $sEconetPath);
 
         self::_checkVersionUpdates($aMapping);
     }
@@ -205,7 +279,7 @@ class Catalogue implements PluginInterface {
     /**
      * Invalidate cached files whose on-disk version tag differs from the freshly-loaded catalogue.
      */
-    /** @param array<string,mixed> $aMapping */
+    /** @param CatalogueMapping $aMapping */
     protected static function _checkVersionUpdates(array $aMapping): void
     {
         $iIdx    = $aMapping['_idx'];
@@ -215,7 +289,7 @@ class Catalogue implements PluginInterface {
             $sVerPath = self::_getCacheVersionPath($aMapping, $sRelPath);
             if (is_file($sVerPath)) {
                 $sCachedVersion = (string) file_get_contents($sVerPath);
-                $sNewVersion    = (string) ($aEntry['version'] ?? '');
+                $sNewVersion    = $aEntry['version'];
                 if ($sCachedVersion !== $sNewVersion) {
                     self::_invalidateCache($aMapping, $sRelPath);
                 }
@@ -227,7 +301,7 @@ class Catalogue implements PluginInterface {
     // Path helpers
     // -------------------------------------------------------------------------
 
-    /** @return ?array<string,mixed> */
+    /** @return ?CatalogueMapping */
     protected static function _findMapping(string $sEconetPath): ?array
     {
         foreach (self::$aMappings as $aMapping) {
@@ -239,7 +313,7 @@ class Catalogue implements PluginInterface {
         return null;
     }
 
-    /** @param array<string,mixed> $aMapping */
+    /** @param CatalogueMapping $aMapping */
     protected static function _econetToRelative(string $sEconetPath, array $aMapping): string
     {
         $sMappingPath = rtrim($aMapping['econet_path'], '.');
@@ -250,8 +324,8 @@ class Catalogue implements PluginInterface {
     }
 
     /**
-     * @param array<string,mixed> $aMapping
-     * @return ?array<string,mixed>
+     * @param CatalogueMapping $aMapping
+     * @return ?CatalogueEntry
      */
     protected static function _getCatalogueEntry(array $aMapping, string $sRelPath): ?array
     {
@@ -263,25 +337,25 @@ class Catalogue implements PluginInterface {
     // Local disk cache helpers
     // -------------------------------------------------------------------------
 
-    /** @param array<string,mixed> $aMapping */
+    /** @param CatalogueMapping $aMapping */
     protected static function _getCacheSlug(array $aMapping): string
     {
-        return md5($aMapping['catalogue_url'] ?? $aMapping['econet_path']);
+        return md5($aMapping['catalogue_url'] !== '' ? $aMapping['catalogue_url'] : $aMapping['econet_path']);
     }
 
-    /** @param array<string,mixed> $aMapping */
+    /** @param CatalogueMapping $aMapping */
     protected static function _getCacheFilePath(array $aMapping, string $sRelPath): string
     {
         return self::$sCacheDir . self::_getCacheSlug($aMapping) . '/' . str_replace('.', '/', $sRelPath);
     }
 
-    /** @param array<string,mixed> $aMapping */
+    /** @param CatalogueMapping $aMapping */
     protected static function _getCacheVersionPath(array $aMapping, string $sRelPath): string
     {
         return self::_getCacheFilePath($aMapping, $sRelPath) . '.ver';
     }
 
-    /** @param array<string,mixed> $aMapping */
+    /** @param CatalogueMapping $aMapping */
     protected static function _loadFromCache(array $aMapping, string $sRelPath): ?string
     {
         $sCachePath = self::_getCacheFilePath($aMapping, $sRelPath);
@@ -294,7 +368,7 @@ class Catalogue implements PluginInterface {
         $aEntry = self::_getCatalogueEntry($aMapping, $sRelPath);
         if ($aEntry !== null && is_file($sVerPath)) {
             $sCachedVersion = file_get_contents($sVerPath);
-            if ($sCachedVersion !== (string) ($aEntry['version'] ?? '')) {
+            if ($sCachedVersion !== $aEntry['version']) {
                 @unlink($sCachePath);
                 @unlink($sVerPath);
                 self::$oLogger->debug("Catalogue: stale cache for " . $sRelPath . " (version mismatch)");
@@ -311,7 +385,7 @@ class Catalogue implements PluginInterface {
         return $sData;
     }
 
-    /** @param array<string,mixed> $aMapping */
+    /** @param CatalogueMapping $aMapping */
     protected static function _saveToCache(array $aMapping, string $sRelPath, string $sData, string $sVersion): void
     {
         $sCachePath = self::_getCacheFilePath($aMapping, $sRelPath);
@@ -330,7 +404,7 @@ class Catalogue implements PluginInterface {
         self::$oLogger->debug("Catalogue: cached " . $sRelPath . " version " . $sVersion);
     }
 
-    /** @param array<string,mixed> $aMapping */
+    /** @param CatalogueMapping $aMapping */
     protected static function _invalidateCache(array $aMapping, string $sRelPath): void
     {
         $sCachePath = self::_getCacheFilePath($aMapping, $sRelPath);
@@ -371,17 +445,17 @@ class Catalogue implements PluginInterface {
             if ($sCached !== null) {
                 $sData = $sCached;
             } else {
-                $sFileUrl = $aEntry['url'] ?? '';
+                $sFileUrl = $aEntry['url'];
                 if (empty($sFileUrl)) {
                     throw new VfsException("No URL configured for file: " . $sFullPath);
                 }
-                $sResolvedUrl = self::_resolveFileUrl($sFileUrl, $aMapping['catalogue_url'] ?? '');
+                $sResolvedUrl = self::_resolveFileUrl($sFileUrl, $aMapping['catalogue_url']);
                 $sFetched = self::_fetchUrl($sResolvedUrl);
                 if ($sFetched === null) {
                     throw new VfsException("Failed to fetch file from URL: " . $sResolvedUrl);
                 }
                 $sData = $sFetched;
-                self::_saveToCache($aMapping, $sRelPath, $sData, (string) ($aEntry['version'] ?? ''));
+                self::_saveToCache($aMapping, $sRelPath, $sData, $aEntry['version']);
             }
         }
 
@@ -398,7 +472,9 @@ class Catalogue implements PluginInterface {
             $iHandle,
             $iEconetHandle,
             ($aEntry !== null),
-            false
+            false,
+            $bMustExist,
+            $bReadOnly
         );
     }
 
@@ -455,9 +531,9 @@ class Catalogue implements PluginInterface {
                     $aDirectoryListing[$sEntryRel] = new DirectoryEntry(
                         $sEntryRel, $sEntryRel,
                         'HomeLan\FileStore\Vfs\Plugin\Catalogue',
-                        $aEntry['load'] ?? null,
-                        $aEntry['exec'] ?? null,
-                        (int) ($aEntry['size'] ?? 0),
+                        $aEntry['load'],
+                        $aEntry['exec'],
+                        $aEntry['size'],
                         $sEconetPath . '.' . $sEntryRel,
                         time(), 'r/r', false
                     );
@@ -535,20 +611,20 @@ class Catalogue implements PluginInterface {
             return $sCached;
         }
 
-        $sFileUrl = $aEntry['url'] ?? '';
+        $sFileUrl = $aEntry['url'];
         if (empty($sFileUrl)) {
             throw new VfsException("No URL configured for file: " . $sFullPath);
         }
-        $sResolvedUrl = self::_resolveFileUrl($sFileUrl, $aMapping['catalogue_url'] ?? '');
+        $sResolvedUrl = self::_resolveFileUrl($sFileUrl, $aMapping['catalogue_url']);
         $sData = self::_fetchUrl($sResolvedUrl);
         if ($sData === null) {
             throw new VfsException("Failed to fetch file from URL: " . $sResolvedUrl);
         }
-        self::_saveToCache($aMapping, $sRelPath, $sData, (string) ($aEntry['version'] ?? ''));
+        self::_saveToCache($aMapping, $sRelPath, $sData, $aEntry['version']);
         return $sData;
     }
 
-    public static function setMeta(string $sEconetPath, ?int $iLoad, ?int $iExec, int $iAccess): void
+    public static function setMeta(string $sEconetPath, ?int $iLoad, ?int $iExec, ?int $iAccess): void
     {
         // Read-only plugin — silently ignore.
     }
@@ -559,7 +635,7 @@ class Catalogue implements PluginInterface {
 
     public static function fsFtell(User $oUser, mixed $fLocalHandle): int
     {
-        if (!isset(self::$aFileHandles[$fLocalHandle])) {
+        if (!is_int($fLocalHandle) || !isset(self::$aFileHandles[$fLocalHandle])) {
             throw new VfsException("Invalid file handle");
         }
         return self::$aFileHandles[$fLocalHandle]['pos'];
@@ -568,7 +644,7 @@ class Catalogue implements PluginInterface {
     /** @return array<int|string,int> */
     public static function fsFStat(User $oUser, mixed $fLocalHandle): array
     {
-        if (!isset(self::$aFileHandles[$fLocalHandle])) {
+        if (!is_int($fLocalHandle) || !isset(self::$aFileHandles[$fLocalHandle])) {
             throw new VfsException("Invalid file handle");
         }
         $iSize = strlen(self::$aFileHandles[$fLocalHandle]['data']);
@@ -577,7 +653,7 @@ class Catalogue implements PluginInterface {
 
     public static function isEof(User $oUser, mixed $fLocalHandle): bool
     {
-        if (!isset(self::$aFileHandles[$fLocalHandle])) {
+        if (!is_int($fLocalHandle) || !isset(self::$aFileHandles[$fLocalHandle])) {
             return true;
         }
         $oHandle = self::$aFileHandles[$fLocalHandle];
@@ -586,7 +662,7 @@ class Catalogue implements PluginInterface {
 
     public static function setPos(User $oUser, mixed $fLocalHandle, int $iPos): int
     {
-        if (!isset(self::$aFileHandles[$fLocalHandle])) {
+        if (!is_int($fLocalHandle) || !isset(self::$aFileHandles[$fLocalHandle])) {
             throw new VfsException("Invalid file handle");
         }
         self::$aFileHandles[$fLocalHandle]['pos'] = $iPos;
@@ -595,7 +671,7 @@ class Catalogue implements PluginInterface {
 
     public static function read(User $oUser, mixed $fLocalHandle, int $iLength): string
     {
-        if (!isset(self::$aFileHandles[$fLocalHandle])) {
+        if (!is_int($fLocalHandle) || !isset(self::$aFileHandles[$fLocalHandle])) {
             throw new VfsException("Invalid file handle");
         }
         $oHandle =& self::$aFileHandles[$fLocalHandle];
@@ -606,7 +682,7 @@ class Catalogue implements PluginInterface {
 
     public static function write(User $oUser, mixed $fLocalHandle, string $sData): int
     {
-        if (!isset(self::$aFileHandles[$fLocalHandle])) {
+        if (!is_int($fLocalHandle) || !isset(self::$aFileHandles[$fLocalHandle])) {
             throw new VfsException("Invalid file handle");
         }
         throw new VfsException("Catalogue plugin is read-only", true);
@@ -623,7 +699,7 @@ class Catalogue implements PluginInterface {
 
     public static function fsClose(User $oUser, mixed $fLocalHandle): bool
     {
-        if (!isset(self::$aFileHandles[$fLocalHandle])) {
+        if (!is_int($fLocalHandle) || !isset(self::$aFileHandles[$fLocalHandle])) {
             return false;
         }
         unset(self::$aFileHandles[$fLocalHandle]);

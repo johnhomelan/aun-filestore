@@ -19,10 +19,10 @@ use config;
 class EconetPacket {
 
 	//Single byte (unsigned char)
-	protected ?int $iDstStn = NULL;
+	protected int $iDstStn = 0;
 
 	//Single byte (unsigned char)
-	protected ?int $iDstNet = NULL;
+	protected int $iDstNet = 0;
 
 	//Single byte (unsigned char)
 	protected ?int $iSrcStn = NULL;
@@ -30,11 +30,11 @@ class EconetPacket {
 	//Single byte (unsigned char)
 	protected ?int $iSrcNet = NULL;
 
-	//Single byte (unsigned char) Control/flag 
-	protected ?int $iCb = NULL;
+	//Single byte (unsigned char) Control/flag
+	protected int $iCb = 0;
 
 	//Single byte (unsigned char) Port number
-	protected ?int $iPort = NULL;
+	protected int $iPort = 0;
 
 	protected ?int $iSequence = null;
 
@@ -201,8 +201,8 @@ class EconetPacket {
 					'network'=>$this->getDestinationNetwork()
 				],
 				'src'=>[
-					'station'=>config::getValue('websocket_station_address'),
-					'network'=>config::getValue('websocket_network_address')
+					'station'=>config::getValueAsInt('websocket_station_address'),
+					'network'=>config::getValueAsInt('websocket_network_address')
 				],
 				'payload'=>$this->_getAunRaw()
 			], 
@@ -221,7 +221,8 @@ class EconetPacket {
 		if($aPkt === false){
 			$aPkt = [];
 		}
-		$sReturn = "Header |  Port : ".$this->getPort()." Control : ".$this->iCb." | Body |".implode(":",$aPkt)." |";
+		$aPktStrings = array_map(fn(mixed $mByte): string => is_scalar($mByte) ? (string) $mByte : '', $aPkt);
+		$sReturn = "Header |  Port : ".$this->getPort()." Control : ".$this->iCb." | Body |".implode(":",$aPktStrings)." |";
 		return $sReturn;
 	}
 

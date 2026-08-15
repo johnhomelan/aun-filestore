@@ -11,6 +11,11 @@ use HomeLan\FileStore\Services\Provider\AdminEntity;
 
 class Admin implements EncapsulationAdminInterface
 {
+    private static function _asString(mixed $mValue): string
+    {
+        return is_scalar($mValue) ? (string) $mValue : '';
+    }
+
     public function getId(): string
     {
         return 'remotebridge';
@@ -60,14 +65,14 @@ class Admin implements EncapsulationAdminInterface
         switch ($sType) {
             case 'connection':
                 $aRows = array_map(
-                    fn($iNet) => ['network' => $iNet],
+                    fn(int $iNet): array => ['network' => $iNet],
                     Map::getKnownNetworks()
                 );
                 return AdminEntity::createCollection($sType, $this->getEntityFields($sType), $aRows, null, 'network');
 
             case 'server':
                 $aRows = array_map(
-                    fn($aEntry) => [
+                    fn(array $aEntry): array => [
                         'port'     => $aEntry['port'],
                         'networks' => implode(', ', $aEntry['networks']),
                     ],
@@ -77,12 +82,12 @@ class Admin implements EncapsulationAdminInterface
                     $sType,
                     $this->getEntityFields($sType),
                     $aRows,
-                    fn($aRow) => (string) $aRow['port']
+                    fn(array $aRow): string => self::_asString($aRow['port'])
                 );
 
             case 'client':
                 $aRows = array_map(
-                    fn($aEntry) => [
+                    fn(array $aEntry): array => [
                         'host'     => $aEntry['host'],
                         'port'     => $aEntry['port'],
                         'networks' => implode(', ', $aEntry['networks']),
@@ -93,7 +98,7 @@ class Admin implements EncapsulationAdminInterface
                     $sType,
                     $this->getEntityFields($sType),
                     $aRows,
-                    fn($aRow) => $aRow['host'] . ':' . $aRow['port']
+                    fn(array $aRow): string => self::_asString($aRow['host']) . ':' . self::_asString($aRow['port'])
                 );
         }
         return [];

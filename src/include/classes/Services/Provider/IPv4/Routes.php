@@ -29,12 +29,12 @@ class Routes
 	public function __construct(private readonly ProviderInterface $oProvider,private readonly \Psr\Log\LoggerInterface $oLogger, ?string $sRoutes=null)
  	{
 		if(is_null($sRoutes)){
-			if(!file_exists(config::getValue('ipv4_routes_file'))){
+			if(!file_exists(config::getValueAsString('ipv4_routes_file'))){
 				return;
 			}
-			$sRoutes = file_get_contents(config::getValue('ipv4_routes_file'));
+			$sRoutes = file_get_contents(config::getValueAsString('ipv4_routes_file'));
 			if($sRoutes === false){
-				$this->oLogger->warning("Unable to read ipv4 routes file ".config::getValue('ipv4_routes_file'));
+				$this->oLogger->warning("Unable to read ipv4 routes file ".config::getValueAsString('ipv4_routes_file'));
 				return;
 			}
 		}

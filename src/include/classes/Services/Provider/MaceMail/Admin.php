@@ -73,8 +73,8 @@ class Admin implements AdminInterface
 	public function getEntities(string $sType): array
 	{
 		return match ($sType) {
-			'slots'  => AdminEntity::createCollection($sType, $this->getEntityFields($sType), $this->oProvider->getRegisteredSlots(), fn($aRow) => $aRow['slot']),
-			'online' => AdminEntity::createCollection($sType, $this->getEntityFields($sType), $this->oProvider->getOnlineMailUsers(), fn($aRow) => $aRow['username']),
+			'slots'  => AdminEntity::createCollection($sType, $this->getEntityFields($sType), $this->oProvider->getRegisteredSlots(), fn(array $aRow): mixed => $aRow['slot']),
+			'online' => AdminEntity::createCollection($sType, $this->getEntityFields($sType), $this->oProvider->getOnlineMailUsers(), fn(array $aRow): mixed => $aRow['username']),
 			default  => [],
 		};
 	}

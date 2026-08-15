@@ -21,11 +21,13 @@ use config;
 /**
  * This class handles all AUN packets recieved and dispatched by the system
  * @package corenet
+ *
+ * @phpstan-type AunQueueEntry array{packet:EconetPacket,retries:int,attempts:int,backoff:int}
 */
 class Handler Implements HandleInterface {
 
 	/**
- 	 * @var array<string, array<int, array<string, mixed>>>
+ 	 * @var array<string, array<int, AunQueueEntry>>
  	*/
 	private array $aQueue = [];
 
@@ -71,7 +73,7 @@ class Handler Implements HandleInterface {
 		$oAunPacket = new AunPacket();
 
 		$oAunPacket->setSourceIP($sSrcAddress);
-		$oAunPacket->setDestinationIP(config::getValue('local_ip'));
+		$oAunPacket->setDestinationIP(config::getValueAsString('local_ip'));
 
 		try {
 			$oAunPacket->decode($sMessage);
@@ -228,8 +230,12 @@ class Handler Implements HandleInterface {
 				//is for a different frame, clear any ack service events waiting for this host
 				//as this is the wrong ack.
 				$oPacket = $oAck->buildEconetPacket();
-				$this->oServices->clearAckEvent($oPacket->getSourceNetwork(),$oPacket->getSourceStation());
-				$this->oLogger->debug("Aun Handler: Cleared ack event for ".$oPacket->getSourceNetwork().".".$oPacket->getSourceStation());
+				$iSourceNetwork = $oPacket->getSourceNetwork();
+				$iSourceStation = $oPacket->getSourceStation();
+				if ($iSourceNetwork !== null && $iSourceStation !== null) {
+					$this->oServices->clearAckEvent($iSourceNetwork,$iSourceStation);
+					$this->oLogger->debug("Aun Handler: Cleared ack event for ".$iSourceNetwork.".".$iSourceStation);
+				}
 			}else{
 				//This was the final-retry ack a service was waiting on.
 				$bExpected = true;
@@ -259,7 +265,7 @@ class Handler Implements HandleInterface {
 	{
 		$sIP = Map::ecoAddrToIpAddr($iNetwork,$iStation);
 		if(!str_contains($sIP,':')){
-			$sHost=$sIP.':'.config::getValue('aun_default_port');
+			$sHost=$sIP.':'.config::getValueAsString('aun_default_port');
 		}else{
 			$sHost=$sIP;
 		}

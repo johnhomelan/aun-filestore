@@ -66,7 +66,7 @@ class Connection
 	/** @var array<int, int> */
 	private array $aPeerNetworks = [];
 	private string $sProtocolVersion = '';
-	/** @var array<int, string> */
+	/** @var string[] */
 	private array $aSupportedVersions;
 	private float $fLastRxTime;
 	private ?TimerInterface $oPingTimer = null;

@@ -18,8 +18,8 @@ use Exception;
 class ArpWhoHas extends Reply {
 
 
-	private ?string $sIPv4Addr = NULL;
-	private ?string $sSourceIP = NULL;
+	private string $sIPv4Addr;
+	private string $sSourceIP;
 	private int $iSourceStation = 0;
 	private int $iNetwork;
 

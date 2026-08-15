@@ -18,7 +18,8 @@ class IfIsObjectCompiler extends Base {
                         throw new CompilerException("Invalid number of arguments for is_object. is_object expects exactly 1 parameter.");
                 }
 
-                return 'is_object(' . $params[0] . ')';
+                $mArg = $params[0];
+                return 'is_object(' . (is_scalar($mArg) ? (string) $mArg : '') . ')';
         }
 
 }

@@ -73,6 +73,17 @@ class JsonPacket implements EncapsulationInterface {
 	{
 		$this->oSocket = $oSocket;
 	}
+
+	/** json_decode() gives back `mixed` fields; safely narrow to scalar. */
+	private static function _asString(mixed $mValue): string
+	{
+		return is_scalar($mValue) ? (string) $mValue : '';
+	}
+
+	private static function _asInt(mixed $mValue): int
+	{
+		return is_scalar($mValue) ? (int) $mValue : 0;
+	}
 	/**
 	 * Get the econet port number the aun packet is for
 	 *
@@ -130,38 +141,38 @@ class JsonPacket implements EncapsulationInterface {
 	*/
 	public function decode($sJsonString): void
 	{
-		$aPacket = json_decode((string) $sJsonString,true, 255, JSON_THROW_ON_ERROR);
-		if(is_null($aPacket)){
+		$mDecoded = json_decode((string) $sJsonString,true, 255, JSON_THROW_ON_ERROR);
+		if(!is_array($mDecoded)){
 			throw new Exception("Invalid json encoded econet packet");
 		}
-		$this->sJsonMsgType = $aPacket['type'];
+		$this->sJsonMsgType = self::_asString($mDecoded['type'] ?? null);
 		switch($this->sJsonMsgType){
 			case 'pkt':
-				if (!isset($aPacket['src'], $aPacket['dst'], $aPacket['payload'])) {
+				if (!isset($mDecoded['src'], $mDecoded['dst'], $mDecoded['payload']) || !is_array($mDecoded['src']) || !is_array($mDecoded['dst'])) {
 					throw new Exception("pkt message missing required src, dst, or payload fields");
 				}
-				if (!isset($aPacket['src']['station'], $aPacket['src']['network'])) {
+				if (!isset($mDecoded['src']['station'], $mDecoded['src']['network'])) {
 					throw new Exception("pkt message src missing station or network");
 				}
-				if (!isset($aPacket['dst']['station'], $aPacket['dst']['network'])) {
+				if (!isset($mDecoded['dst']['station'], $mDecoded['dst']['network'])) {
 					throw new Exception("pkt message dst missing station or network");
 				}
-				$sPayload = (string) $aPacket['payload'];
+				$sPayload = self::_asString($mDecoded['payload']);
 				if (strlen($sPayload) < 8) {
 					throw new Exception("pkt payload too short (" . strlen($sPayload) . " bytes); minimum is 8");
 				}
 
-				$this->iStationNumber = $aPacket['src']['station'];
-				$this->iNetworkNumber = $aPacket['src']['network'];
-				$this->iDstStationNumber = $aPacket['dst']['station'];
-				$this->iDstNetworkNumber = $aPacket['dst']['network'];
+				$this->iStationNumber = self::_asInt($mDecoded['src']['station']);
+				$this->iNetworkNumber = self::_asInt($mDecoded['src']['network']);
+				$this->iDstStationNumber = self::_asInt($mDecoded['dst']['station']);
+				$this->iDstNetworkNumber = self::_asInt($mDecoded['dst']['network']);
 
 				//Read the aun packet type 1 byte unsigned int
 				$aHeader=unpack('C',$sPayload);
 				if($aHeader === false){
 					throw new Exception("Failed to unpack pkt payload aun packet type byte");
 				}
-				$this->iAunPktType = $aHeader[1];
+				$this->iAunPktType = self::_asInt($aHeader[1]);
 				$sBinaryString = substr($sPayload,1);
 
 				//Read the dst port 1 byte unsigned int
@@ -169,7 +180,7 @@ class JsonPacket implements EncapsulationInterface {
 				if($aHeader === false){
 					throw new Exception("Failed to unpack pkt payload port byte");
 				}
-				$this->iPort = $aHeader[1];
+				$this->iPort = self::_asInt($aHeader[1]);
 				$sBinaryString = substr($sBinaryString,1);
 
 				//Read the flag 1 byte unsigned int
@@ -177,7 +188,7 @@ class JsonPacket implements EncapsulationInterface {
 				if($aHeader === false){
 					throw new Exception("Failed to unpack pkt payload flag byte");
 				}
-				$this->iCb = $aHeader[1];
+				$this->iCb = self::_asInt($aHeader[1]);
 				$sBinaryString = substr($sBinaryString,1);
 
 				//Retrans 1 byte unsigned int
@@ -185,7 +196,7 @@ class JsonPacket implements EncapsulationInterface {
 				if($aHeader === false){
 					throw new Exception("Failed to unpack pkt payload retrans byte");
 				}
-				$this->iPadding = $aHeader[1];
+				$this->iPadding = self::_asInt($aHeader[1]);
 				$sBinaryString = substr($sBinaryString,1);
 
 				//Sequence 4 bytes little-endian
@@ -193,7 +204,7 @@ class JsonPacket implements EncapsulationInterface {
 				if($aHeader === false){
 					throw new Exception("Failed to unpack pkt payload sequence number");
 				}
-				$this->iSeq = $aHeader[1];
+				$this->iSeq = self::_asInt($aHeader[1]);
 				$sBinaryString = substr($sBinaryString,4);
 
 				//The rest is data
@@ -202,11 +213,11 @@ class JsonPacket implements EncapsulationInterface {
 
 				break;
 			case 'ctrl':
-				if (!isset($aPacket['request'], $aPacket['args'])) {
+				if (!isset($mDecoded['request'], $mDecoded['args']) || !is_array($mDecoded['args'])) {
 					throw new Exception("ctrl message missing required request or args fields");
 				}
-				$this->sCtrlRequest = $aPacket['request'];
-				$this->aCtrlRequestArgs = $aPacket['args'];
+				$this->sCtrlRequest = self::_asString($mDecoded['request']);
+				$this->aCtrlRequestArgs = array_values(array_filter($mDecoded['args'], 'is_array'));
 				break;
 			default:
 				throw new Exception("Invalid type supplied for json encoded econet packet");
@@ -255,8 +266,8 @@ class JsonPacket implements EncapsulationInterface {
 					$sPtk .= pack('C',0);
 					$sPtk .= pack('C',0);
 					$sPtk .= pack('V',0);
-					$sPtk .= pack('C',config::getValue('version_major'));
-					$sPtk .= pack('C',config::getValue('version_minor'));
+					$sPtk .= pack('C',config::getValueAsInt('version_major'));
+					$sPtk .= pack('C',config::getValueAsInt('version_minor'));
 					$sPtk .= pack('C',0x00);
 					$sPtk .= pack('C',0x00);
 				}
@@ -277,8 +288,8 @@ class JsonPacket implements EncapsulationInterface {
 					$sPtk = $sPtk.pack('C',0x40);
 					//Peek Hi
 					$sPtk = $sPtk.pack('C',0x66);
-					$sPtk = $sPtk.pack('C',config::getValue('version_minor'));
-					$sPtk = $sPtk.pack('C',config::getValue('version_major'));
+					$sPtk = $sPtk.pack('C',config::getValueAsInt('version_minor'));
+					$sPtk = $sPtk.pack('C',config::getValueAsInt('version_major'));
 				}
 				return json_encode(
 					[
@@ -288,8 +299,8 @@ class JsonPacket implements EncapsulationInterface {
 							'network'=>$this->iNetworkNumber
 						],
 						'src'=>[
-							'station'=>config::getValue('websocket_station_address'),
-							'network'=>config::getValue('websocket_network_address')
+							'station'=>config::getValueAsInt('websocket_station_address'),
+							'network'=>config::getValueAsInt('websocket_network_address')
 						],
 						'payload'=>$sPtk
 					], JSON_THROW_ON_ERROR);
@@ -320,6 +331,10 @@ class JsonPacket implements EncapsulationInterface {
 	*/
 	public function buildEconetPacket(): \HomeLan\FileStore\Messages\EconetPacket
 	{
+		if($this->iNetworkNumber === null OR $this->iStationNumber === null OR $this->iDstNetworkNumber === null OR $this->iDstStationNumber === null){
+			throw new Exception("JsonPacket::buildEconetPacket() called on a packet with no routing info (not a 'pkt' message)");
+		}
+
 		$oEconetPacket = new EconetPacket();
 		$oEconetPacket->setPort($this->iPort);
 		$oEconetPacket->setFlags($this->iCb);
@@ -342,7 +357,8 @@ class JsonPacket implements EncapsulationInterface {
 		if($aPkt === false){
 			$aPkt = [];
 		}
-		$sReturn = "Header | Type : ".$this->getPacketType()." Port : ".$this->getPort()." Control : ".$this->iCb." Pad : ".$this->iPadding." Seq : ".$this->iSeq." | Body |".implode(":",$aPkt)." |";
+		$aPktStrings = array_map(fn(mixed $mByte): string => is_scalar($mByte) ? (string) $mByte : '', $aPkt);
+		$sReturn = "Header | Type : ".$this->getPacketType()." Port : ".$this->getPort()." Control : ".$this->iCb." Pad : ".$this->iPadding." Seq : ".$this->iSeq." | Body |".implode(":",$aPktStrings)." |";
 		return $sReturn;
 	}
 

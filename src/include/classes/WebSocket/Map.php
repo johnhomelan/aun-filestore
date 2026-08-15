@@ -23,13 +23,13 @@ class Map {
 
 
 	/**
- 	 * @var array<int, mixed[]>>
+ 	 * @var array<int, mixed[]>
  	*/	
 	static array $aDynamicNetworks = [];
 
 	
 	/**
- 	 * @var array<int, mixed[]>>
+ 	 * @var array<int, mixed[]>
  	*/
 	static array $aSocketList= [];
 
@@ -40,7 +40,7 @@ class Map {
 	  *
 	  * @param string $sMap The text for the map file can be supplied as a string, this is intended largley for unit testing this function
 	*/
-	public static function init(LoggerInterface $oLogger, string $sMap=NULL): void
+	public static function init(LoggerInterface $oLogger, ?string $sMap=NULL): void
 	{
 		self::$oLogger = $oLogger;
 		if(is_null($sMap)){
@@ -49,6 +49,10 @@ class Map {
 				return;
 			}
 			$sMap = file_get_contents(config::getValue('websocketmap_dynamic_network_range_file'));
+			if($sMap === false){
+				self::$oLogger->info("websocketmapper: Failed to read the configuration file for the websocket map.");
+				return;
+			}
 		}
 		$aLines = explode("\n",$sMap);
 		foreach($aLines as $sLine){
@@ -84,9 +88,9 @@ class Map {
 	  */
  	public static function ecoAddrToSocket(int $iNetworkNumber,int $iStationNumber):?ConnectionInterface
 	{
-		if(array_key_exists($iNetworkNumber,self::$aDynamicNetworks) AND 
+		if(array_key_exists($iNetworkNumber,self::$aDynamicNetworks) AND
 			array_key_exists($iStationNumber,self::$aDynamicNetworks[$iNetworkNumber]) AND
-			is_object(self::$aDynamicNetworks[$iNetworkNumber][$iStationNumber])){
+			self::$aDynamicNetworks[$iNetworkNumber][$iStationNumber] instanceof ConnectionInterface){
 			return self::$aDynamicNetworks[$iNetworkNumber][$iStationNumber];
 		}
 		return null;

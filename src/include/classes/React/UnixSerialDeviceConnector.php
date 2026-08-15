@@ -18,9 +18,9 @@ use RuntimeException;
  */
 final class UnixSerialDeviceConnector implements ConnectorInterface
 {
-    private $loop;
+    private LoopInterface $loop;
 
-    public function __construct(LoopInterface $loop = null)
+    public function __construct(?LoopInterface $loop = null)
     {
         $this->loop = $loop ?: Loop::get();
     }

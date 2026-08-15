@@ -13,8 +13,11 @@ use HomeLan\FileStore\Messages\EconetPacket;
 */
 class StreamIn {
 
+	/** @var callable */
 	private $fRecivedPacket;
+	/** @var callable */
 	private $fSucessCallback;
+	/** @var callable */
 	private $fFailCallback;
 	private int $iTimeout;
 	private readonly int $iNoPktTimeout;

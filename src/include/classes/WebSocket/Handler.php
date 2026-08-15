@@ -33,6 +33,7 @@ class Handler implements MessageComponentInterface {
 
 	private int $iConnectionSequence = 0;
 
+	/** @var \SplObjectStorage<ConnectionInterface, int> */
 	private readonly \SplObjectStorage $oConnections;
 
 	/**

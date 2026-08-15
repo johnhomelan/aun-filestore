@@ -70,7 +70,7 @@ class Storage
 			return $sEntry !== '.' && $sEntry !== '..' && $this->isDir($this->sBaseDir . '/' . $sEntry);
 		});
 		sort($aChannels);
-		return array_values($aChannels);
+		return $aChannels;
 	}
 
 	/**

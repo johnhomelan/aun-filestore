@@ -401,8 +401,8 @@ class S3 implements PluginInterface {
                     $oInf = $oClient->getObject(['Bucket' => $sBucket, 'Key' => $sObjKey . '.inf']);
                     $aMatches = [];
                     if (preg_match('/^TAPE file ([0-9a-fA-F]+) ([0-9a-fA-F]+)/', (string) $oInf['Body'], $aMatches) > 0) {
-                        $aDirectoryListing[$sFileName]->setLoadAddr(hexdec($aMatches[1]));
-                        $aDirectoryListing[$sFileName]->setExecAddr(hexdec($aMatches[2]));
+                        $aDirectoryListing[$sFileName]->setLoadAddr((int) hexdec($aMatches[1]));
+                        $aDirectoryListing[$sFileName]->setExecAddr((int) hexdec($aMatches[2]));
                     }
                 } catch (S3Exception $e) {
                     // No .inf sidecar is normal

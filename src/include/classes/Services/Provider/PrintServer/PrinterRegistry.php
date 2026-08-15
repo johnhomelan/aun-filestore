@@ -80,7 +80,11 @@ class PrinterRegistry
 		return $this->aPrinters[strtoupper($sName)] ?? null;
 	}
 
-	/** All printers, enabled first then disabled. */
+	/**
+	 * All printers, enabled first then disabled.
+	 *
+	 * @return array<int,Printer>
+	*/
 	public function getAll(): array
 	{
 		$aEnabled  = array_values(array_filter($this->aPrinters, fn($p) => $p->isEnabled()));
@@ -88,7 +92,11 @@ class PrinterRegistry
 		return array_merge($aEnabled, $aDisabled);
 	}
 
-	/** Enabled printers only. */
+	/**
+	 * Enabled printers only.
+	 *
+	 * @return array<int,Printer>
+	*/
 	public function getEnabled(): array
 	{
 		return array_values(array_filter($this->aPrinters, fn($p) => $p->isEnabled()));

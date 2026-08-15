@@ -80,6 +80,11 @@ class IcmpRequest extends Request
         return $this->iCode;
     }
 
+    public function getChecksum(): int
+    {
+        return $this->iChecksum;
+    }
+
     public function getId(): int
     {
         return $this->iId;

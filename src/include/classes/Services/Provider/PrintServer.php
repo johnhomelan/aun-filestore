@@ -18,6 +18,7 @@ use HomeLan\FileStore\Messages\PrintServerData;
 use HomeLan\FileStore\Messages\EconetPacket;
 use config;
 use React\ChildProcess\Process;
+use HomeLan\FileStore\Messages\Reply;
 
 /**
  * This class implements the econet printserver
@@ -26,16 +27,20 @@ use React\ChildProcess\Process;
 */
 class PrintServer implements ProviderInterface {
 
-	protected $aReplyBuffer = [];
+	/** @var array<int,Reply> */
+	protected array $aReplyBuffer = [];
 
-	protected $aPrintBuffer = [];
+	/** @var array<int,array<int,array<string,mixed>>> */
+	protected array $aPrintBuffer = [];
 
-	/** [net][stn] => printer name last successfully enquired for by that station */
+	/** [net][stn] => printer name last successfully enquired for by that station
+	 * @var array<int,array<int,string>>
+	*/
 	protected array $aActivePrinters = [];
 
-	protected $oLogger;
+	protected \Psr\Log\LoggerInterface $oLogger;
 
-	protected $oLoop;
+	protected ?\React\EventLoop\LoopInterface $oLoop = null;
 
 	/**
 	 * Initializes the service
@@ -60,7 +65,7 @@ class PrintServer implements ProviderInterface {
 		return new Admin($this);
 	}
 
-	protected function _addReplyToBuffer($oReply): void
+	protected function _addReplyToBuffer(Reply $oReply): void
 	{
 		$this->aReplyBuffer[]=$oReply;
 	}
@@ -68,7 +73,7 @@ class PrintServer implements ProviderInterface {
 	/**
 	 * Gets the ports this service uses
 	 *
-	 * @return array of int
+	 * @return array<int,int>
 	*/
 	public function getServicePorts(): array
 	{
@@ -113,6 +118,8 @@ class PrintServer implements ProviderInterface {
 	 * Retreives all the reply objects built by the fileserver
 	 *
 	 * This method removes the replies from the buffer
+	 *
+	 * @return array<int,EconetPacket>
 	*/
 	public function getReplies(): array
 	{
@@ -168,6 +175,10 @@ class PrintServer implements ProviderInterface {
 
 		$iNet  = $oEnquiry->getSourceNetwork();
 		$iStn  = $oEnquiry->getSourceStation();
+		if ($iNet === null || $iStn === null) {
+			$this->oLogger->warning("PrintServer: Enquiry packet with no source network/station, ignoring");
+			return;
+		}
 		$oUser = $this->getUser($iNet, $iStn);
 
 		if (!$oPrinter->isUserAllowed($oUser)) {
@@ -187,10 +198,14 @@ class PrintServer implements ProviderInterface {
 		$this->aActivePrinters[$iNet][$iStn] = $sPrinterName;
 	}
 
-	public function processData($oPrintData): void
+	public function processData(PrintServerData $oPrintData): void
 	{
 		$iNet = $oPrintData->getSourceNetwork();
 		$iStn = $oPrintData->getSourceStation();
+		if ($iNet === null || $iStn === null) {
+			$this->oLogger->warning("PrintServer: Data packet with no source network/station, ignoring");
+			return;
+		}
 		$oReply = $oPrintData->buildReply();
 
 		if ($oPrintData->getLen() == 1 && $oPrintData->getByte(1) == 0) {
@@ -310,7 +325,7 @@ class PrintServer implements ProviderInterface {
 		return is_dir($sPath);
 	}
 
-	protected function getUser(int $iNet, int $iStn)
+	protected function getUser(int $iNet, int $iStn): ?object
 	{
 		return Security::getUser($iNet, $iStn);
 	}
@@ -325,6 +340,9 @@ class PrintServer implements ProviderInterface {
 		file_put_contents($sPath, $sData);
 	}
 
+	/**
+	 * @return array<int,array<string,mixed>>
+	*/
 	public function getJobs(): array
 	{
 		$aJobs = [];
@@ -344,6 +362,8 @@ class PrintServer implements ProviderInterface {
 
 	/**
 	 * Returns the configured virtual printers as plain arrays suitable for display.
+	 *
+	 * @return array<int,array<string,mixed>>
 	*/
 	public function getConfiguredPrinters(): array
 	{
@@ -364,6 +384,8 @@ class PrintServer implements ProviderInterface {
 	 * Returns a list of all spooled files.
 	 *
 	 * Directory structure: {spool_base}/{printer}/{user}/{filename}
+	 *
+	 * @return array<int,array<string,mixed>>
 	*/
 	public function getSpooledFiles(): array
 	{

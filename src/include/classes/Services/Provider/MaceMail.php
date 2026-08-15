@@ -114,6 +114,7 @@ class MaceMail implements ProviderInterface {
 		11 => 'CONTACT SYSTEM MANAGER',
 	];
 
+	/** @var array<int,MaceMailReply> */
 	protected array $aReplyBuffer = [];
 
 	/**
@@ -133,6 +134,8 @@ class MaceMail implements ProviderInterface {
 	 * protocol's change-password operation does not resend the current
 	 * password (the vintage client already re-verified it locally), but
 	 * AuthPluginInterface::setPassword() requires it. Cleared on logoff.
+	 *
+	 * @var array<string,string>
 	*/
 	protected array $aSessionPassword = [];
 
@@ -172,6 +175,9 @@ class MaceMail implements ProviderInterface {
 		return new Admin($this);
 	}
 
+	/**
+	 * @return array<int,int>
+	*/
 	public function getServicePorts(): array
 	{
 		return [
@@ -247,6 +253,9 @@ class MaceMail implements ProviderInterface {
 		}
 	}
 
+	/**
+	 * @return array<int,EconetPacket>
+	*/
 	public function getReplies(): array
 	{
 		$aReturn = [];
@@ -263,6 +272,9 @@ class MaceMail implements ProviderInterface {
 		return $aReturn;
 	}
 
+	/**
+	 * @return array<int,array<string,mixed>>
+	*/
 	public function getJobs(): array
 	{
 		return [];
@@ -1098,9 +1110,15 @@ class MaceMail implements ProviderInterface {
 	protected function secGetUser(int $iNet, int $iStn): ?User
 	{ return Security::getUser($iNet, $iStn); }
 
+	/**
+	 * @return array<string,int>
+	*/
 	protected function secGetUsersStation(string $sUser): array
 	{ return Security::getUsersStation($sUser); }
 
+	/**
+	 * @return array<int,array<int,array<mixed>>>
+	*/
 	protected function secGetUsersOnline(): array
 	{ return Security::getUsersOnline(); }
 

@@ -15,6 +15,7 @@ use HomeLan\FileStore\Piconet\Map as PiconetMap;
 use HomeLan\FileStore\RemoteBridge\Map as RemoteBridgeMap;
 use HomeLan\FileStore\Messages\BridgeRequest;
 use HomeLan\FileStore\Messages\EconetPacket;
+use HomeLan\FileStore\Messages\Reply;
 use HomeLan\FileStore\Services\Provider\Bridge\Admin;
 use config;
 use Exception;
@@ -26,15 +27,17 @@ use Exception;
 */
 class Bridge implements ProviderInterface {
 
-	protected $aReplyBuffer = [];
+	/** @var array<int,Reply> */
+	protected array $aReplyBuffer = [];
 
-	protected $oLogger;
+	protected \Psr\Log\LoggerInterface $oLogger;
 
 	/**
-	 * Holds a list of networks discovered that are reachable through other bridges 
+	 * Holds a list of networks discovered that are reachable through other bridges
 	 *
+	 * @var array<int,string>
 	*/
-	protected $aRemoteNetworks = [];
+	protected array $aRemoteNetworks = [];
 
 	/**
 	 * Initializes the service
@@ -45,7 +48,7 @@ class Bridge implements ProviderInterface {
 		$this->oLogger = $oLogger;
 	}
 
-	protected function _addReplyToBuffer($oReply): void
+	protected function _addReplyToBuffer(Reply $oReply): void
 	{
 		$this->aReplyBuffer[]=$oReply;
 	}
@@ -69,6 +72,8 @@ class Bridge implements ProviderInterface {
 	 *
 	 * Each entry is an array with keys 'network' (int) and 'via' (string),
 	 * where 'via' is "<sourceNetwork>.<sourceStation>" of the peer bridge.
+	 *
+	 * @return array<int,array{network:int,via:string}>
 	 */
 	public function getRemoteNetworks(): array
 	{
@@ -132,7 +137,7 @@ class Bridge implements ProviderInterface {
 	/**
 	 * Gets the ports this service uses
 	 *
-	 * @return array of int
+	 * @return array<int,int>
 	*/
 	public function getServicePorts(): array
 	{
@@ -167,7 +172,9 @@ class Bridge implements ProviderInterface {
 	/**
 	 * Retreives all the reply objects built by the bridge 
 	 *
-	 * This method removes the replies from the buffer 
+	 * This method removes the replies from the buffer
+	 *
+	 * @return array<int,EconetPacket>
 	*/
 	public function getReplies(): array
 	{
@@ -221,13 +228,13 @@ class Bridge implements ProviderInterface {
 	 */
 	public function getAllKnownNetworkNumbers(int $iExcludeNetwork): array
 	{
-		$aNetworks = array_merge(
+		$aNetworks = array_map('intval', array_merge(
 			Map::getNetworkNumbers(),
 			WebSocketMap::getNetworkNumbers(),
 			PiconetMap::getNetworkNumbers(),
 			RemoteBridgeMap::getKnownNetworks(),
 			array_keys($this->aRemoteNetworks),
-		);
+		));
 
 		$iLocalNet = (int) config::getValue('bridge_local_network_number');
 		if ($iLocalNet > 0) {
@@ -294,6 +301,9 @@ class Bridge implements ProviderInterface {
 		}
 	}
 
+	/**
+	 * @return array<int,array<string,mixed>>
+	*/
 	public function getJobs(): array
 	{
 		return [];

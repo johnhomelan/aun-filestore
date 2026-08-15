@@ -105,6 +105,9 @@ class IcmpEchoReply extends Reply
             $sData .= "\x00";
         }
         $aPairs = unpack('n*', $sData);
+        if($aPairs === false){
+            $aPairs = [];
+        }
         $iSum   = array_sum($aPairs);
         while ($iSum >> 16) {
             $iSum = ($iSum >> 16) + ($iSum & 0xffff);

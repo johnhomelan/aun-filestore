@@ -33,7 +33,11 @@ final readonly class SessionCookie implements EventSubscriberInterface{
 		if(is_null($oRequest->cookies->get($sSessionName))){
 			//No session cookie is set, so we need to redirect and set the cookie
 			$oRedirect = new RedirectResponse($oRequest->getPathInfo());
-			$oRedirect->headers->setCookie(Cookie::create($sSessionName,session_create_id()));
+			$sSessionId = session_create_id();
+			if($sSessionId === false){
+				$sSessionId = null;
+			}
+			$oRedirect->headers->setCookie(Cookie::create($sSessionName,$sSessionId));
 			$oRequestEvent->setResponse($oRedirect);
 			
 		}

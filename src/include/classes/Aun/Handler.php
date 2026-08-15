@@ -25,7 +25,7 @@ use config;
 class Handler Implements HandleInterface {
 
 	/**
- 	 * @var array<string, array<string, mixed>>
+ 	 * @var array<string, array<int, array<string, mixed>>>
  	*/
 	private array $aQueue = [];
 
@@ -165,7 +165,7 @@ class Handler Implements HandleInterface {
 
 	private function _runHostQueue(string $sHost):void
 	{
-		if(is_array($this->aQueue[$sHost]) AND count($this->aQueue[$sHost])>0){
+		if(count($this->aQueue[$sHost])>0){
 			$aQueueEntry = array_shift($this->aQueue[$sHost]);
 			if($aQueueEntry['backoff']>1){
 				//Linear backoff: wait (attempts × 400) timer ticks before the next retry
@@ -207,7 +207,7 @@ class Handler Implements HandleInterface {
 	{
 		$this->oLogger->debug("Aun Handler: Dequeuing packet due to scout ack");
 		$bExpected = false;
-		if(array_key_exists($sHost,$this->aQueue) AND is_array($this->aQueue[$sHost]) AND count($this->aQueue[$sHost])>0){
+		if(array_key_exists($sHost,$this->aQueue) AND count($this->aQueue[$sHost])>0){
 			$aQueueEntry = array_shift($this->aQueue[$sHost]);
 			if($oAck->getSequence() == $aQueueEntry['packet']->getSequence()){
 				$bExpected = true;

@@ -29,8 +29,8 @@ use config;
 */
 class S3Upload extends Command
 {
-    protected static $defaultName = 's3upload';
-    protected static $defaultDescription = 'Upload local files to a configured S3 VFS target';
+    protected static string $defaultName = 's3upload';
+    protected static string $defaultDescription = 'Upload local files to a configured S3 VFS target';
 
     protected function configure(): void
     {
@@ -102,9 +102,9 @@ class S3Upload extends Command
             if (file_exists($sInfPath)) {
                 $sInf     = file_get_contents($sInfPath);
                 $aMatches = [];
-                if (preg_match('/^TAPE file ([0-9a-fA-F]+) ([0-9a-fA-F]+)/', $sInf, $aMatches) > 0) {
-                    $iLoadAddr = hexdec($aMatches[1]);
-                    $iExecAddr = hexdec($aMatches[2]);
+                if ($sInf !== false && preg_match('/^TAPE file ([0-9a-fA-F]+) ([0-9a-fA-F]+)/', $sInf, $aMatches) > 0) {
+                    $iLoadAddr = (int) hexdec($aMatches[1]);
+                    $iExecAddr = (int) hexdec($aMatches[2]);
                 }
             }
 
@@ -141,6 +141,9 @@ class S3Upload extends Command
         return Command::SUCCESS;
     }
 
+    /**
+     * @param array<string, mixed> $aMapping
+     */
     protected function _buildClient(array $aMapping): S3Client
     {
         $aConfig = [
@@ -160,6 +163,9 @@ class S3Upload extends Command
         return new S3Client($aConfig);
     }
 
+    /**
+     * @return array<int, string>
+     */
     private function _scanDir(string $sDir): array
     {
         $aFiles  = [];

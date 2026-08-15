@@ -62,7 +62,11 @@ class EconetPacket {
 	public function getPortByName(string $sName): void
 	{
 		if(in_array($sName,$this->aPortMap)){
-			$this->iPort = array_search($sName,$this->aPortMap);
+			$mKey = array_search($sName,$this->aPortMap);
+			if($mKey === false){
+				throw new Exception($sName." is not a vailid econet service name.");
+			}
+			$this->iPort = $mKey;
 		}else{
 			throw new Exception($sName." is not a vailid econet service name.");
 		}
@@ -213,9 +217,12 @@ class EconetPacket {
 	*/
 	public function toString():string
 	{
-		$aPkt = unpack('C*',$this->getData());
+		$aPkt = unpack('C*',(string) $this->getData());
+		if($aPkt === false){
+			$aPkt = [];
+		}
 		$sReturn = "Header |  Port : ".$this->getPort()." Control : ".$this->iCb." | Body |".implode(":",$aPkt)." |";
-		return $sReturn;	
+		return $sReturn;
 	}
 
 }

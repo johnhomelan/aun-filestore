@@ -21,6 +21,7 @@ class TorchnetRequest extends Request
     private int $iCommand = 0;
     private int $iReplyPort = 0x90;
 
+    /** @var array<int, string> */
     private array $aCommandMap = [
         0x01 => 'TORCH_OPEN',
         0x02 => 'TORCH_CLOSE',
@@ -38,7 +39,7 @@ class TorchnetRequest extends Request
         0x1A => 'TORCH_CONTROL_ACTION',
     ];
 
-    public function __construct($oEconetPacket, \Psr\Log\LoggerInterface $oLogger)
+    public function __construct(EconetPacket $oEconetPacket, \Psr\Log\LoggerInterface $oLogger)
     {
         parent::__construct($oEconetPacket, $oLogger);
         $this->iReplyPort = $oEconetPacket->getPort();
@@ -66,6 +67,8 @@ class TorchnetRequest extends Request
      * payload at the given 1-based byte offset.
      *
      * Returns ['name' => '...', 'ext' => '...'] with trailing spaces stripped.
+     *
+     * @return array{name:string, ext:string}
      */
     public function parseCpmFilename(int $iOffset): array
     {
@@ -86,6 +89,9 @@ class TorchnetRequest extends Request
             return;
         }
         $aHdr = unpack('C', $sBinaryData);
+        if ($aHdr === false) {
+            return;
+        }
         $this->iCommand = $aHdr[1];
         $this->sData    = substr($sBinaryData, 1);
     }

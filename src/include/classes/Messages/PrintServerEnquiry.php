@@ -16,10 +16,7 @@ use Exception;
 */
 class PrintServerEnquiry extends Request{
 
-
-	protected $sData = NULL;
-
-	public function __construct($oEconetPacket, \Psr\Log\LoggerInterface $oLogger)
+	public function __construct(EconetPacket $oEconetPacket, \Psr\Log\LoggerInterface $oLogger)
 	{
 		parent::__construct($oEconetPacket, $oLogger);
 		$this->decode($oEconetPacket->getData());

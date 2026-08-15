@@ -16,6 +16,7 @@ use config;
 
 class Arpcache 
 {
+	/** @var array<string,array{network:int,station:int,ip:string,timeout:int}> */
 	private array $aCache = [];
 
 	const DEFAULT_ENTRY_TIMEOUT = 3600;
@@ -62,7 +63,8 @@ class Arpcache
 	/**
  	 * Get the network, station number for an IP in the arp cache, as an assoc array
  	 *
- 	*/  	
+ 	 * @return array{network:int,station:int}
+ 	*/
 	public function getNetworkAndStation(string $sIP):array
 	{
 		if(array_key_exists($sIP,$this->aCache)){
@@ -75,7 +77,9 @@ class Arpcache
 	 * Dumps the arp cache as an array
 	 * 
 	 * Used by the admin system to display the arp cache
-	*/	
+	 *
+	 * @return array<int,array{network:int,station:int,ipv4:string,timeout:int}>
+	*/
 	public function dumpArpCache():array
 	{
 		$aReturn = [];

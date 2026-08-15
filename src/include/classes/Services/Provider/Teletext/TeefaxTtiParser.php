@@ -54,7 +54,11 @@ class TeefaxTtiParser
 		$sPage     = null;
 		$iSubpage  = null;
 
-		foreach (preg_split('/\r\n|\n|\r/', $sContent) as $sLine) {
+		$aLines = preg_split('/\r\n|\n|\r/', $sContent);
+		if ($aLines === false) {
+			return $aResults;
+		}
+		foreach ($aLines as $sLine) {
 			if ($sLine === '') {
 				continue;
 			}

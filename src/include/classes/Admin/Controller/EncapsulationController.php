@@ -14,6 +14,7 @@ use HomeLan\FileStore\RemoteBridge\Admin as RemoteBridgeAdmin;
 
 class EncapsulationController extends AbstractController
 {
+    /** @return array<string,\HomeLan\FileStore\Encapsulation\EncapsulationAdminInterface> */
     private function getAdmins(): array
     {
         return [

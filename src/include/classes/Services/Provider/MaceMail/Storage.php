@@ -89,6 +89,9 @@ class Storage
 		$this->_writeSlots($aSlots);
 	}
 
+	/**
+	 * @return array<int,string>
+	*/
 	protected function _readSlots(): array
 	{
 		$aSlots = $this->_readJson($this->sBaseDir . '/slots.json') ?? [];
@@ -99,6 +102,9 @@ class Storage
 		return $aReturn;
 	}
 
+	/**
+	 * @param array<int,string> $aSlots
+	*/
 	protected function _writeSlots(array $aSlots): void
 	{
 		$this->_writeJson($this->sBaseDir . '/slots.json', $aSlots);
@@ -210,12 +216,21 @@ class Storage
 	 */
 	public function getMailIndex(string $sUsername): array
 	{
-		return $this->_readJson($this->_userDir($sUsername) . '/mail/index.json') ?? [];
+		$aIndex = $this->_readJson($this->_userDir($sUsername) . '/mail/index.json') ?? [];
+		$aReturn = [];
+		foreach ($aIndex as $aEntry) {
+			if (is_array($aEntry)) {
+				$aReturn[] = $aEntry;
+			}
+		}
+		return $aReturn;
 	}
 
 	/**
 	 * Returns a single mailbox index entry (header only), or null if the
 	 * user has no message with that id.
+	 *
+	 * @return array<string,mixed>|null
 	 */
 	public function getMailItem(string $sUsername, int $iId): ?array
 	{
@@ -322,6 +337,9 @@ class Storage
 	// Low-level filesystem access — the only methods that touch real disk
 	// -------------------------------------------------------------------------
 
+	/**
+	 * @return array<int|string,mixed>|null
+	*/
 	protected function _readJson(string $sPath): ?array
 	{
 		if (!$this->fileExists($sPath)) {
@@ -335,6 +353,9 @@ class Storage
 		return is_array($aData) ? $aData : null;
 	}
 
+	/**
+	 * @param array<int|string,mixed> $aData
+	*/
 	protected function _writeJson(string $sPath, array $aData): void
 	{
 		$this->_ensureDir(dirname($sPath));

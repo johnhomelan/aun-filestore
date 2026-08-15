@@ -185,7 +185,7 @@ class AfsImg implements PluginInterface {
 		foreach($aPathInsideImage as $sPathPart){
 			$aKeys = array_keys($aCat);
 			foreach($aKeys as $sKey){
-				if(strtoupper($sKey)==strtoupper($sPathPart)){
+				if(strtoupper((string) $sKey)==strtoupper($sPathPart)){
 					$iCount++;
 					if($aCat[$sKey]['type']=='dir'){
 						$aCat=$aCat[$sKey]['dir'];
@@ -240,6 +240,9 @@ class AfsImg implements PluginInterface {
 			$sPathInsideImage = AfsImg::_getPathInsideImage($sEconetPath,$sImageFile);
 			$oAdfs = AfsImg::_getImageReader($sImageFile);
 			$aImageStat = stat($sImageFile);
+			if($aImageStat === false){
+				return $aDirectoryListing;
+			}
 			$aCat = $oAdfs->getCatalogue();
 
 			if(strlen($sPathInsideImage)>0){
@@ -267,6 +270,9 @@ class AfsImg implements PluginInterface {
 					//Disk Image found
 					if(!array_key_exists(substr($sFile,0,strlen($sFile)-4),$aDirectoryListing)){
 						$aStat = stat($sUnixPath.DIRECTORY_SEPARATOR.$sFile);
+						if($aStat === false){
+							continue;
+						}
 						$aDirectoryListing[$sFile]=new DirectoryEntry(substr($sFile,0,strlen($sFile)-4),$sFile,'AfsImg',NULL,NULL,0,$sEconetPath.'.'.substr($sFile,0,strlen($sFile)-4),$aStat['ctime'],'-r/-r',TRUE);
 					}
 				}

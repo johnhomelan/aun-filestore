@@ -35,6 +35,7 @@ class TCPRequest extends Request {
 	private bool $bUrgent;
 	private bool $bPush;
 	private bool $bReset;
+	/** @var list<array{option: int|null, length: int|null, value: int|null}> */
 	private array $aOptions  = [];
 	private EconetPacket $oEconetPacket;
 	private int $iChecksum;
@@ -195,6 +196,7 @@ class TCPRequest extends Request {
 		return $this->iUrgent;
 	}
 
+	/** @return list<array{option: int|null, length: int|null, value: int|null}> */
 	public function getOptions():array
 	{
 		return $this->aOptions;

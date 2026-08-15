@@ -34,7 +34,7 @@ class Map {
 	  *
 	  * @param string $sMap The text for the map file can be supplied as a string, this is intended largley for unit testing this function
 	*/
-	public static function init(LoggerInterface $oLogger, Handler $oPiconetHandler, string $sMap=NULL): void
+	public static function init(LoggerInterface $oLogger, Handler $oPiconetHandler, ?string $sMap=NULL): void
 	{
 		self::$oLogger = $oLogger;
 		self::$oPiconetHandler = $oPiconetHandler;
@@ -44,6 +44,10 @@ class Map {
 				return;
 			}
 			$sMap = file_get_contents(config::getValue('piconetmap_file'));
+			if($sMap === false){
+				self::$oLogger->info("piconetmapper: Failed to read the configuration file for the piconet map.");
+				return;
+			}
 		}
 		$aLines = explode("\n",$sMap);
 		foreach($aLines as $sLine){

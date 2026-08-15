@@ -193,6 +193,9 @@ class CpmVfs extends Vfs
      */
     public static function getDirectoryListing(object $oFd): array
     {
+        if (!($oFd instanceof FileDescriptor)) {
+            throw new \Exception('CpmVfs::getDirectoryListing() requires a FileDescriptor');
+        }
         return array_map(
             static fn(DirectoryEntry $oEntry) => CpmDirectoryEntry::wrap($oEntry),
             parent::getDirectoryListing($oFd)

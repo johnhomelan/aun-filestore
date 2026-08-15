@@ -26,7 +26,7 @@ class ClientHandler
 	private const RECONNECT_DELAY_MIN = 5;
 	private const RECONNECT_DELAY_MAX = 300;
 
-	/** @var array<string, array{entry: array, delay: int}> keyed by 'host:port' */
+	/** @var array<string, array{entry: array{host: string, port: int, secret: string, networks: array<int,int>}, delay: int}> keyed by 'host:port' */
 	private array $aEntryState = [];
 
 	public function __construct(
@@ -111,7 +111,7 @@ class ClientHandler
 					$this->oLogger->error("RemoteBridge: connection error to {$sKey}: " . $oEx->getMessage());
 				});
 			},
-			function (\Exception $oEx) use ($sKey) {
+			function (\Throwable $oEx) use ($sKey) {
 				$this->oLogger->error("RemoteBridge: failed to connect to {$sKey}: " . $oEx->getMessage());
 				$this->scheduleReconnect($sKey);
 			}

@@ -62,7 +62,7 @@ class React extends Command {
 	const AUN_PKT_DELAY  = 0.04;
 
 
-	protected static $defaultDescription = 'Start the file, print and bridge services';
+	protected static string $defaultDescription = 'Start the file, print and bridge services';
  public function __construct(private readonly \Psr\Log\LoggerInterface $oLogger, private readonly ServiceDispatcher $oServices)
 	{
 		parent::__construct();
@@ -290,7 +290,7 @@ EOF;
 		$oPiconetHandler->setLoop($oLoop);
 
 		$fConnect = null;
-		$fConnect = function() use ($oLoop, $oPiconetHandler, &$fConnect) {
+		$fConnect = function() use ($oLoop, $oPiconetHandler) {
 			$sDevice = 'file://'.config::getValue('piconet_device');
 			$oPiconet = new UnixSerialDeviceConnector($oLoop);
 			$oPiconet->connect($sDevice)->then(
@@ -308,7 +308,7 @@ EOF;
 						$oPiconetHandler->onError($e);
 					});
 				},
-				function (\Exception $e) use ($oPiconetHandler) {
+				function (\Throwable $e) use ($oPiconetHandler) {
 					$this->oLogger->error('Piconet: failed to open device "'.config::getValue('piconet_device').'": '.$e->getMessage().'.');
 					$oPiconetHandler->scheduleReconnect();
 				}
@@ -359,9 +359,7 @@ EOF;
 			if (in_array(strtoupper($sMethod), ['POST', 'PUT', 'DELETE', 'PATCH'])) {
 				$sContentType = '';
 				if (isset($aHeaders['Content-Type'])) {
-					$sContentType = is_array($aHeaders['Content-Type'])
-						? (string) ($aHeaders['Content-Type'][0] ?? '')
-						: (string) $aHeaders['Content-Type'];
+					$sContentType = (string) ($aHeaders['Content-Type'][0] ?? '');
 				}
 				if (str_starts_with($sContentType, 'application/x-www-form-urlencoded')) {
 					parse_str((string) $sContent, $aPost);
@@ -395,10 +393,11 @@ EOF;
 				$oLogger->info("Error: ".$oException->getMessage());
 				throw $oException;
 			}
+			$sResponseContent = $sfResponse->getContent();
 			$oResponse = new \React\Http\Message\Response(
 						200,
 						$sfResponse->headers->all(),
-						$sfResponse->getContent());
+						$sResponseContent === false ? '' : $sResponseContent);
 			$oKernel->terminate($sfRequest, $sfResponse);
 			return $oResponse;
 		};

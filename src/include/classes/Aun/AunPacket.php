@@ -98,26 +98,41 @@ class AunPacket implements EncapsulationInterface {
 
 		//Read the aun packet type 1 byte unsigned int
 		$aHeader=unpack('C',$sBinaryString);
+		if($aHeader === false){
+			throw new Exception("Failed to unpack AUN packet type byte");
+		}
 		$this->iPktType = $aHeader[1];
 		$sBinaryString = substr($sBinaryString,1);
-		
+
 		//Read the dst port 1 byte unsigned int
 		$aHeader=unpack('C',$sBinaryString);
+		if($aHeader === false){
+			throw new Exception("Failed to unpack AUN packet port byte");
+		}
 		$this->iPort = $aHeader[1];
 		$sBinaryString = substr($sBinaryString,1);
-		
+
 		//Read the flag 1 byte unsigned int
 		$aHeader=unpack('C',$sBinaryString);
+		if($aHeader === false){
+			throw new Exception("Failed to unpack AUN packet flag byte");
+		}
 		$this->iCb = $aHeader[1];
 		$sBinaryString = substr($sBinaryString,1);
-		
+
 		//Retrans 1 byte unsigned int
 		$aHeader=unpack('C',$sBinaryString);
+		if($aHeader === false){
+			throw new Exception("Failed to unpack AUN packet retrans byte");
+		}
 		$this->iPadding = $aHeader[1];
 		$sBinaryString = substr($sBinaryString,1);
-		
+
 		//Sequence 4 bytes little-endian
 		$aHeader=unpack('V',$sBinaryString);
+		if($aHeader === false){
+			throw new Exception("Failed to unpack AUN packet sequence number");
+		}
 		$this->iSeq = $aHeader[1];
 		$sBinaryString = substr($sBinaryString,4);
 
@@ -266,7 +281,7 @@ class AunPacket implements EncapsulationInterface {
 
 		$sNetworkStation = Map::ipAddrToEcoAddr($this->sSoruceIP,$this->sSourceUdpPort);
 		$aEcoAddr = explode('.',$sNetworkStation);
-		if(array_key_exists(0,$aEcoAddr) AND array_key_exists(1,$aEcoAddr)){
+		if(array_key_exists(1,$aEcoAddr)){
 			$oEconetPacket->setSourceNetwork((int) $aEcoAddr[0]);
 			$oEconetPacket->setSourceStation((int) $aEcoAddr[1]);
 		}
@@ -282,8 +297,11 @@ class AunPacket implements EncapsulationInterface {
 	public function toString(): string
 	{
 		$aPkt = unpack('C*',$this->getData());
+		if($aPkt === false){
+			$aPkt = [];
+		}
 		$sReturn = "Header | Type : ".$this->getPacketType()." Port : ".$this->getPort()." Control : ".$this->iCb." Pad : ".$this->iPadding." Seq : ".$this->iSeq." | Body |".implode(":",$aPkt)." |";
-		return $sReturn;	
+		return $sReturn;
 	}
 
 }

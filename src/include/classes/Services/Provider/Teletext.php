@@ -76,6 +76,7 @@ class Teletext implements ProviderInterface {
 	private const VERSION_STRING = '1.00';
 	private const SERVER_TYPE    = 'TELETEXT';
 
+	/** @var array<int,TeletextReply|EconetPacket> */
 	protected array $aReplyBuffer = [];
 
 	protected readonly Storage $oStorage;
@@ -114,6 +115,9 @@ class Teletext implements ProviderInterface {
 		return new Admin($this);
 	}
 
+	/**
+	 * @return array<int,int>
+	*/
 	public function getServicePorts(): array
 	{
 		return [
@@ -137,7 +141,7 @@ class Teletext implements ProviderInterface {
 	{
 		$_this = $this;
 		$oLoop = $oServiceDispatcher->getLoop();
-		if (is_object($oLoop)) {
+		if ($oLoop !== null) {
 			$oLoop->addPeriodicTimer((float) config::getValue('teletext_carousel_interval'), function () use ($_this, $oServiceDispatcher) {
 				$_this->broadcastCurrentPage();
 				$oServiceDispatcher->sendPackets($_this);
@@ -176,6 +180,9 @@ class Teletext implements ProviderInterface {
 		}
 	}
 
+	/**
+	 * @return array<int,EconetPacket>
+	*/
 	public function getReplies(): array
 	{
 		$aReturn = [];
@@ -186,6 +193,9 @@ class Teletext implements ProviderInterface {
 		return $aReturn;
 	}
 
+	/**
+	 * @return array<int,array<string,mixed>>
+	*/
 	public function getJobs(): array
 	{
 		return [];

@@ -16,6 +16,7 @@ use config;
 class Interfaces
 {
 
+	/** @var array<string,array{network:int,station:int,ipaddr:string,ipint:int,mask:string,cidr:int}> */
 	private array $aInterfaces = [];
 
 	public function __construct(private readonly ProviderInterface $oProvider,private readonly \Psr\Log\LoggerInterface $oLogger, ?string $sInterfaces=null)
@@ -25,6 +26,10 @@ class Interfaces
 				return;
 			}
 			$sInterfaces = file_get_contents(config::getValue('ipv4_interfaces_file'));
+			if($sInterfaces === false){
+				$this->oLogger->warning("Unable to read ipv4 interfaces file ".config::getValue('ipv4_interfaces_file'));
+				return;
+			}
 		}
 		$aLines = explode("\n",$sInterfaces);
 		foreach($aLines as $sLine){
@@ -39,18 +44,25 @@ class Interfaces
 	 * Adds a new IP interface to the system
 	 *
 	*/  	
-	public function addInterface(int $iNetwork, int $iStation, string $sIP, string $sSubnetMask)
+	public function addInterface(int $iNetwork, int $iStation, string $sIP, string $sSubnetMask): void
 	{
-		$this->aInterfaces[$sIP] = ['network'=>$iNetwork,'station'=>$iStation,'ipaddr'=>$sIP,'ipint'=>ip2long($sIP),'mask'=>$sSubnetMask,'cidr'=>$this->subnetToCidr($sSubnetMask)];
-		$this->oLogger->debug("Interface Added  ".$iNetwork.":".$iStation." ".$sIP." ".$sSubnetMask); 
+		$iIpInt = ip2long($sIP);
+		if($iIpInt === false){
+			$this->oLogger->warning("Unable to add interface, invalid ip address ".$sIP);
+			return;
+		}
+		$this->aInterfaces[$sIP] = ['network'=>$iNetwork,'station'=>$iStation,'ipaddr'=>$sIP,'ipint'=>$iIpInt,'mask'=>$sSubnetMask,'cidr'=>$this->subnetToCidr($sSubnetMask)];
+		$this->oLogger->debug("Interface Added  ".$iNetwork.":".$iStation." ".$sIP." ".$sSubnetMask);
 	}
 
 	/**
 	 * Dumps out a list of the interfaces
 	 *
 	 * Used by the admin system to display the available interfaces
-	*/ 	 
-	public function dumpInterfaceTable()
+	 *
+	 * @return array<int,array{network:int,station:int,ipaddr:string,mask:string}>
+	*/
+	public function dumpInterfaceTable(): array
 	{
 		$aReturn=[];
 		foreach($this->aInterfaces as $aInt){
@@ -60,9 +72,15 @@ class Interfaces
 	}
 
 
-	public function getInterfaceFor($sIP):array
+	/**
+	 * @return array{network:int,station:int,ipaddr:string,ipint:int,mask:string,cidr:int}
+	*/
+	public function getInterfaceFor(string $sIP):array
 	{
 		$iIP =  ip2long($sIP);
+		if($iIP === false){
+			throw new NotFoundException("No interface has a subnet that can directly reach ".$sIP);
+		}
 		foreach($this->aInterfaces as $aInterface){
 			if($this->networkContains($iIP,$aInterface['ipint'],$aInterface['mask'],$aInterface['cidr'])){
 				return $aInterface;
@@ -71,7 +89,7 @@ class Interfaces
 		throw new NotFoundException("No interface has a subnet that can directly reach ".$sIP);
 	}
 
-	public function isInterfaceIP($sIP):bool
+	public function isInterfaceIP(string $sIP):bool
 	{
 		return array_key_exists($sIP,$this->aInterfaces);
 	}

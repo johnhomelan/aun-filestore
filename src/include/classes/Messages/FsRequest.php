@@ -80,27 +80,43 @@ class FsRequest extends Request {
 
 		//Read the reply port type 1 byte unsigned int
 		$aHeader=unpack('C',$sBinaryString);
+		if($aHeader === false){
+			$this->iReplyPort = 0;
+			return;
+		}
 		$this->iReplyPort = $aHeader[1];
 		$sBinaryString = substr($sBinaryString,1);
-		
+
 		//Read the function code 1 byte unsigned int
 		$aHeader=unpack('C',$sBinaryString);
+		if($aHeader === false){
+			return;
+		}
 		$this->iFunction = $aHeader[1];
 		$sBinaryString = substr($sBinaryString,1);
-	
+
 		//Read the urd code 1 byte unsigned int
 		$aHeader=unpack('C',$sBinaryString);
+		if($aHeader === false){
+			return;
+		}
 		$this->iUrd = $aHeader[1];
 		$sBinaryString = substr($sBinaryString,1);
 
 		//Read the csd code 1 byte unsigned int
 		$aHeader=unpack('C',$sBinaryString);
+		if($aHeader === false){
+			return;
+		}
 		$this->iCsd = $aHeader[1];
 		$sBinaryString = substr($sBinaryString,1);
 
 		//Read the lib code 1 byte unsigned int
 		if(strlen($sBinaryString)>0){
 			$aHeader=unpack('C',$sBinaryString);
+			if($aHeader === false){
+				return;
+			}
 			$this->iLib = $aHeader[1];
 			$sBinaryString = substr($sBinaryString,1);
 		}
@@ -114,6 +130,8 @@ class FsRequest extends Request {
 	 * Reads a CR-terminated string starting at the given 1-indexed byte position.
 	 *
 	 * Returns [string, first_byte_index_after_cr] so the caller can continue parsing.
+	 *
+	 * @return array{0:string,1:int}
 	 */
 	public function getStringEndPos(int $iStart): array
 	{

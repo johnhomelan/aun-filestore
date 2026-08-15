@@ -28,8 +28,10 @@ class Dci4ArpRequest extends ArpRequest {
 		if ($this->getFlags() !== 0xA1) {
 			return;
 		}
-		$this->sSourceIP = inet_ntop($sBinaryString[0].$sBinaryString[1].$sBinaryString[2].$sBinaryString[3]);
-		$this->sIPv4Addr = inet_ntop($sBinaryString[4].$sBinaryString[5].$sBinaryString[6].$sBinaryString[7]);
+		$sSourceIP = inet_ntop($sBinaryString[0].$sBinaryString[1].$sBinaryString[2].$sBinaryString[3]);
+		$this->sSourceIP = ($sSourceIP === false) ? null : $sSourceIP;
+		$sIPv4Addr = inet_ntop($sBinaryString[4].$sBinaryString[5].$sBinaryString[6].$sBinaryString[7]);
+		$this->sIPv4Addr = ($sIPv4Addr === false) ? null : $sIPv4Addr;
 	}
 
 	/**

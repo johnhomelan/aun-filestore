@@ -30,8 +30,8 @@ use Symfony\Component\Console\Output\OutputInterface;
  */
 class MakeCatalogueArchive extends Command
 {
-    protected static $defaultName = 'mkcatarchive';
-    protected static $defaultDescription = 'Build a Catalogue VFS tar archive with index.json';
+    protected static string $defaultName = 'mkcatarchive';
+    protected static string $defaultDescription = 'Build a Catalogue VFS tar archive with index.json';
 
     protected function configure(): void
     {
@@ -116,6 +116,9 @@ class MakeCatalogueArchive extends Command
     // Internal helpers
     // -------------------------------------------------------------------------
 
+    /**
+     * @return array<string, array<string, mixed>>
+     */
     private function _loadOldIndex(string $sTarPath, OutputInterface $oOutput): array
     {
         if (!file_exists($sTarPath)) {
@@ -147,6 +150,9 @@ class MakeCatalogueArchive extends Command
         return $aData['files'] ?? [];
     }
 
+    /**
+     * @param array<string, array<string, mixed>> $aOldFiles
+     */
     private function _determineVersion(string $sEconetKey, string $sMd5, array $aOldFiles): int
     {
         if (!isset($aOldFiles[$sEconetKey])) {
@@ -159,6 +165,9 @@ class MakeCatalogueArchive extends Command
         return max(1, (int) ($aOld['version'] ?? 0)) + 1;
     }
 
+    /**
+     * @return array{int, int}
+     */
     private function _readInf(string $sFilePath): array
     {
         $sInfPath  = $sFilePath . '.inf';
@@ -174,6 +183,9 @@ class MakeCatalogueArchive extends Command
         return [$iLoad, $iExec];
     }
 
+    /**
+     * @return array<int, string>
+     */
     private function _scanDir(string $sDir): array
     {
         $aFiles = [];

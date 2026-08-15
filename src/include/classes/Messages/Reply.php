@@ -16,17 +16,18 @@ use Exception;
 */
 class Reply {
 
-	protected $sPkt = NULL;
+	protected ?string $sPkt = NULL;
 
-	protected $oRequest = NULL;
+	protected object $oRequest;
 
-	protected $iFlags = NULL;
+	protected int $iFlags = 0;
 
-	protected $iReplyPort = NULL;
+	protected ?int $iReplyPort = NULL;
 
-	public function __construct($oRequest)
+	/** @param object $oRequest One of the concrete Request subclasses (or PrintServerData) accepted below. */
+	public function __construct(object $oRequest)
 	{
-		if(is_object($oRequest) AND ($oRequest::class=='HomeLan\FileStore\Messages\FsRequest' or $oRequest::class=='HomeLan\FileStore\Messages\PrintServerEnquiry' OR $oRequest::class=='HomeLan\FileStore\Messages\PrintServerData' OR $oRequest::class=='HomeLan\FileStore\Messages\ArpRequest' OR $oRequest::class=='HomeLan\FileStore\Messages\Dci4ArpRequest' OR $oRequest::class=='HomeLan\FileStore\Messages\BeebTermRequest' OR $oRequest::class=='HomeLan\FileStore\Messages\TorchnetRequest' OR $oRequest::class=='HomeLan\FileStore\Messages\BridgeRequest' OR $oRequest::class=='HomeLan\FileStore\Messages\MaceMailRequest' OR $oRequest::class=='HomeLan\FileStore\Messages\TeletextRequest')){
+		if($oRequest::class=='HomeLan\FileStore\Messages\FsRequest' or $oRequest::class=='HomeLan\FileStore\Messages\PrintServerEnquiry' OR $oRequest::class=='HomeLan\FileStore\Messages\PrintServerData' OR $oRequest::class=='HomeLan\FileStore\Messages\ArpRequest' OR $oRequest::class=='HomeLan\FileStore\Messages\Dci4ArpRequest' OR $oRequest::class=='HomeLan\FileStore\Messages\BeebTermRequest' OR $oRequest::class=='HomeLan\FileStore\Messages\TorchnetRequest' OR $oRequest::class=='HomeLan\FileStore\Messages\BridgeRequest' OR $oRequest::class=='HomeLan\FileStore\Messages\MaceMailRequest' OR $oRequest::class=='HomeLan\FileStore\Messages\TeletextRequest'){
 			$this->oRequest = $oRequest;
 			$this->iFlags = $oRequest->getFlags();
 			//Snapshotted now rather than re-read from $oRequest in
@@ -43,62 +44,62 @@ class Reply {
 		}
 	}
 
-	public function appendByte($iByte): void
+	public function appendByte(int $iByte): void
 	{
 		$this->sPkt = $this->sPkt.pack('C',$iByte);
 	}
 
-	public function appendString($sString): void
+	public function appendString(string $sString): void
 	{
-		$aChars = str_split((string) $sString);
+		$aChars = str_split($sString);
 		foreach($aChars as $sChar)
 		{
 			$this->sPkt = $this->sPkt.pack('C',ord($sChar));
 		}
 	}
 
-	public function append16bitIntLittleEndian($iInt): void
+	public function append16bitIntLittleEndian(int $iInt): void
 	{
 		$this->sPkt = $this->sPkt.pack('v',$iInt);
 	}
 
-	public function append24bitIntLittleEndian($iInt): void
+	public function append24bitIntLittleEndian(int $iInt): void
 	{
 		$this->sPkt = $this->sPkt.pack('v',$iInt).pack('C',0);
 	}
 
-	public function append32bitIntLittleEndian($iInt): void
+	public function append32bitIntLittleEndian(int $iInt): void
 	{
 		$this->sPkt = $this->sPkt.pack('V',$iInt);
 	}
 
-	public function append16bitIntBigEndian($iInt): void
+	public function append16bitIntBigEndian(int $iInt): void
 	{
 		$this->sPkt = $this->sPkt.pack('n',$iInt);
 	}
 
-	public function append24bitIntBigEndian($iInt): void
+	public function append24bitIntBigEndian(int $iInt): void
 	{
 		$this->sPkt = $this->sPkt.pack('C',0).pack('n',$iInt);
 	}
 
-	public function append32bitIntBigEndian($iInt): void
+	public function append32bitIntBigEndian(int $iInt): void
 	{
 		$this->sPkt = $this->sPkt.pack('N',$iInt);
 	}
 
 
-	public function appendRaw($sRawBytes): void
+	public function appendRaw(string $sRawBytes): void
 	{
 		$this->sPkt = $this->sPkt.$sRawBytes;
 	}
 
-	public function setFlags($iFlags): void
+	public function setFlags(int $iFlags): void
 	{
 		$this->iFlags = $iFlags;
 	}
 
-	public function getFlags()
+	public function getFlags(): int
 	{
 		return $this->iFlags;
 	}

@@ -21,7 +21,7 @@ class MaceMailRequest extends Request
 
 	private int $iReplyPort;
 
-	public function __construct($oEconetPacket, \Psr\Log\LoggerInterface $oLogger)
+	public function __construct(EconetPacket $oEconetPacket, \Psr\Log\LoggerInterface $oLogger)
 	{
 		parent::__construct($oEconetPacket, $oLogger);
 		$this->iPort = $oEconetPacket->getPort();

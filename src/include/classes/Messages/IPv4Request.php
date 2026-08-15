@@ -74,7 +74,7 @@ class IPv4Request extends Request {
 				
 				$this->iVerLength = $this->getByte(1);
 
-				$this->iIpHeaderLength = (($this->iVerLength&15)*32)/8;  //Mask out the highest order bits by doing a bitwise and with 00001111
+				$this->iIpHeaderLength = (int) ((($this->iVerLength&15)*32)/8);  //Mask out the highest order bits by doing a bitwise and with 00001111
 				if($this->iIpHeaderLength<20){
 					//The header is to small (or corupt) to be a vaild IPv4 header
 					throw new Exception("Invalid IPv4 packet");
@@ -98,9 +98,11 @@ class IPv4Request extends Request {
 				//NB As this bit decodes direct from the binary string, it starts a offset 0 not 1. Hence looks likes its over lapping the checksum, but its not.				
 
 				//The first remaining 4  bytes is the soruce ip address
-				$this->sSrcIP = inet_ntop($this->sData[12].$this->sData[13].$this->sData[14].$this->sData[15]);
+				$sSrcIP = inet_ntop($this->sData[12].$this->sData[13].$this->sData[14].$this->sData[15]);
+				$this->sSrcIP = ($sSrcIP === false) ? null : $sSrcIP;
 				//The second remianing 4 bytes is the dest ip address
-				$this->sDstIP = inet_ntop($this->sData[16].$this->sData[17].$this->sData[18].$this->sData[19]);
+				$sDstIP = inet_ntop($this->sData[16].$this->sData[17].$this->sData[18].$this->sData[19]);
+				$this->sDstIP = ($sDstIP === false) ? null : $sDstIP;
 
 				//Trim off the IP header 
 				$this->sData = substr($this->sData,$this->iIpHeaderLength);  
@@ -193,6 +195,9 @@ class IPv4Request extends Request {
 		$sPacket[11] = "\x00";
 		$sHeader = substr($sPacket, 0, $this->iIpHeaderLength);
 		$aPairs = unpack('n*', $sHeader);
+		if($aPairs === false){
+			$aPairs = [];
+		}
 		$iSum = array_sum($aPairs);
 		while ($iSum >> 16) {
 			$iSum = ($iSum >> 16) + ($iSum & 0xffff);

@@ -18,7 +18,7 @@ class config {
 	static protected ?array $aFileSettings=NULL;
 
 	/**
- 	 * @var array<string, string>
+ 	 * @var array<string, mixed>
  	*/
  	static protected array $_aConfigCache=[];
 
@@ -109,14 +109,19 @@ class config {
 			}
 
 			$aFiles=scandir(CONFIG_CONF_FILE_PATH);
-			
+			if($aFiles === false){
+				return NULL;
+			}
 
 			//Produce a list of only files ending in .conf
 			$sPat='/\.conf$/';
 			$aFiles=preg_grep($sPat,$aFiles);
+			if($aFiles === false){
+				return NULL;
+			}
 			$aFiles=array_values($aFiles);
 
-			if((is_countable($aFiles) ? count($aFiles) : 0)==0){
+			if(count($aFiles)==0){
 				return NULL;
 			}
 
@@ -124,7 +129,11 @@ class config {
 			$aSettings=[];
 			foreach($aFiles as $sFile){
 				$sFile=CONFIG_CONF_FILE_PATH.DIRECTORY_SEPARATOR.$sFile;
-				$aSettings = array_merge($aSettings,parse_ini_file($sFile, true));
+				$aParsedFile = parse_ini_file($sFile, true);
+				if($aParsedFile === false){
+					continue;
+				}
+				$aSettings = array_merge($aSettings,$aParsedFile);
 			}
 			//Cache our config for later use 
 			config::$aFileSettings=$aSettings;

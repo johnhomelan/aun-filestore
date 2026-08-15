@@ -96,7 +96,8 @@ class Admin implements AdminInterface
 	/**
 	 * Gets a list of all the entity type for this service provider
 	 *
-	*/ 
+	 * @return array<string,string>
+	*/
 	public function getEntityTypes(): array
 	{
 		return ['session'=>'Logged in users', 'stream'=>'File Streams', 'user'=>'Users'];
@@ -105,7 +106,8 @@ class Admin implements AdminInterface
 	/**
 	 * Gets a list of all the fields for an entity type
 	 *
-	*/ 
+	 * @return array<string,string>
+	*/
 	public function getEntityFields(string $sType): array
 	{
 		switch($sType){
@@ -120,8 +122,9 @@ class Admin implements AdminInterface
 	}
 
 	/**
-	 * Gets the entity instances of a given type for this service 
+	 * Gets the entity instances of a given type for this service
 	 *
+	 * @return array<int,AdminEntity>
 	*/
 	public function getEntities(string $sType): array
 	{
@@ -158,6 +161,8 @@ class Admin implements AdminInterface
 
 	/**
 	 * Gets all the commands that can be run
+	 *
+	 * @return array<int,array{label:string,url:string}>
 	*/
 	public function getCommands(): array
 	{

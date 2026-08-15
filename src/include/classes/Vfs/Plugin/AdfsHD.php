@@ -186,7 +186,7 @@ class AdfsHD implements PluginInterface {
 		foreach($aPathInsideImage as $sPathPart){
 			$aKeys = array_keys($aCat);
 			foreach($aKeys as $sKey){
-				if(strtoupper($sKey)==strtoupper($sPathPart)){
+				if(strtoupper((string) $sKey)==strtoupper($sPathPart)){
 					$iCount++;
 					if($aCat[$sKey]['type']=='dir'){
 						$aCat=$aCat[$sKey]['dir'];
@@ -241,6 +241,9 @@ class AdfsHD implements PluginInterface {
 			$sPathInsideImage = AdfsHD::_getPathInsideImage($sEconetPath,$sImageFile);
 			$oAdfs = AdfsHD::_getImageReader($sImageFile);
 			$aImageStat = stat($sImageFile);
+			if($aImageStat === false){
+				return $aDirectoryListing;
+			}
 			$aCat = $oAdfs->getCatalogue();
 
 			if(strlen($sPathInsideImage)>0){
@@ -268,6 +271,9 @@ class AdfsHD implements PluginInterface {
 					//Disk Image found
 					if(!array_key_exists(substr((string) $sFile,0,strlen((string) $sFile)-4),$aDirectoryListing)){
 						$aStat = stat($sUnixPath.DIRECTORY_SEPARATOR.$sFile);
+						if($aStat === false){
+							continue;
+						}
 						$aDirectoryListing[$sFile]=new DirectoryEntry(substr((string) $sFile,0,strlen((string) $sFile)-4),$sFile,'HomeLan\FileStore\Vfs\Plugin\AdfsHD',NULL,NULL,0,$sEconetPath.'.'.substr((string) $sFile,0,strlen((string) $sFile)-4),$aStat['ctime'],'-r/-r', TRUE);
 					}
 				}

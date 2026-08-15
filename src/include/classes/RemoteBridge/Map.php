@@ -182,6 +182,8 @@ class Map
 	/**
 	 * Registers the networks that a peer has announced as reachable via this connection.
 	 * Called when a NETWORKS message is received from the other side of an authenticated connection.
+	 *
+	 * @param array<int,int> $aNetworks
 	*/
 	public static function registerPeerNetworks(Connection $oConn, array $aNetworks): void
 	{

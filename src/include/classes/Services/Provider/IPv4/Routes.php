@@ -18,6 +18,7 @@ class Routes
 
 	const DEFAULT_ENTRY_METRIC=20;
 
+	/** @var array<int,array{network:string,networkint:int,subnet:string,via:string,cidr:int,metric:int}> */
 	private array $aRoutes=[];
 
 	/**
@@ -32,6 +33,10 @@ class Routes
 				return;
 			}
 			$sRoutes = file_get_contents(config::getValue('ipv4_routes_file'));
+			if($sRoutes === false){
+				$this->oLogger->warning("Unable to read ipv4 routes file ".config::getValue('ipv4_routes_file'));
+				return;
+			}
 		}
 		$aLines = explode("\n",$sRoutes);
 		foreach($aLines as $sLine){
@@ -53,18 +58,28 @@ class Routes
 	*/
 	public function addRoute(string $sIPv4NetworkAddr, string $sIPv4NetworkSubnet, string $sIPv4Via, int $iMetric):void
 	{
-		$this->aRoutes[] = ['network'=>$sIPv4NetworkAddr,'networkint'=>ip2long($sIPv4NetworkAddr),'subnet'=>$sIPv4NetworkAddr,'via'=>$sIPv4Via,'cidr'=>$this->subnetToCidr($sIPv4NetworkSubnet),'metric'=>$iMetric];
-		$this->oLogger->debug("Route Added  ".$sIPv4NetworkAddr); 
+		$iNetworkInt = ip2long($sIPv4NetworkAddr);
+		if($iNetworkInt === false){
+			$this->oLogger->warning("Unable to add route, invalid network address ".$sIPv4NetworkAddr);
+			return;
+		}
+		$this->aRoutes[] = ['network'=>$sIPv4NetworkAddr,'networkint'=>$iNetworkInt,'subnet'=>$sIPv4NetworkSubnet,'via'=>$sIPv4Via,'cidr'=>$this->subnetToCidr($sIPv4NetworkSubnet),'metric'=>$iMetric];
+		$this->oLogger->debug("Route Added  ".$sIPv4NetworkAddr);
 	}
 
 	/**
 	 * Get the route that should be used to an IP  
 	 *
 	 * Only a single route is returned which is the closest match (small subnet win, then metric is used is multple routes have the same subnet size).
-	*/ 	
-	public function getRoute($sIPAddr):?array
-	{		
+	 *
+	 * @return array{network:string,networkint:int,subnet:string,via:string,cidr:int,metric:int}|null
+	*/
+	public function getRoute(string $sIPAddr):?array
+	{
 		$iIP = ip2long($sIPAddr);
+		if($iIP === false){
+			return null;
+		}
 		$aOrderedRoutes= [];
 		foreach($this->aRoutes as $aRoute){
 			if($this->networkContains($iIP,$aRoute['networkint'],$aRoute['cidr'])){
@@ -86,7 +101,9 @@ class Routes
 	 * Dumps the routing table into an array for display 
 	 *
 	 * Used by the admin interface to display the routing table
-	*/	
+	 *
+	 * @return array<int,array{network:string,subnet:string,gw:string,metric:int}>
+	*/
 	public function dumpRoutingTable():array
 	{
 		$aReturn = [];

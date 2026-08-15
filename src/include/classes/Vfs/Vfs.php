@@ -10,7 +10,7 @@ namespace HomeLan\FileStore\Vfs;
 
 use Exception;
 use HomeLan\FileStore\Vfs\Exception as VfsException;
-use HomeLan\FileStore\Authentication\Security; 
+use HomeLan\FileStore\Authentication\Security;
 use HomeLan\FileStore\Vfs\FilePath;
 
 /**
@@ -170,6 +170,9 @@ class Vfs {
 
 		//Find the postion of the last path seporator, before the expantion point.
 		$iLastPathSeporator = strrpos(substr($sLocalDir,0,$iExpandPoint),'.');
+		if($iLastPathSeporator === false){
+			$iLastPathSeporator = 0;
+		}
 
 		//Gets the path as a string before the expantion point (i.e. the directory we must search)
 		$sPath = substr($sLocalDir,0,($iLastPathSeporator));
@@ -250,7 +253,9 @@ class Vfs {
 			if(!class_exists($sClassname,FALSE)){
 				try{
 					$sClassname::init(self::$oLogger, self::$bMultiuser);
-					$aReturn[]=$sClassname;
+					if(class_exists($sClassname)){
+						$aReturn[]=$sClassname;
+					}
 				}catch(Exception){
 					self::$oLogger->debug("VFS: Unable to load vfs plugin ".$sClassname);
 				}
@@ -274,6 +279,9 @@ class Vfs {
 		$aPlugins = Vfs::getVfsPlugins();
 		$oHandle=NULL;
 		foreach($aPlugins as $sPlugin){
+			if(!is_a($sPlugin, \HomeLan\FileStore\Vfs\Plugin\PluginInterface::class, true)){
+				continue;
+			}
 			try {
 				$oHandle = $sPlugin::_buildFiledescriptorFromEconetPath($oUser,$oEconetPath,$bMustExist,$bReadOnly);
 				if(is_object($oHandle)){

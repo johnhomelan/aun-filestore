@@ -16,7 +16,6 @@ use Exception;
 */
 class TcpIPReply extends Reply {
 
-	protected $sPkt = NULL;
 	private int $iSrcNetwork;
 	private int $iSrcStation;
 
@@ -175,6 +174,9 @@ class TcpIPReply extends Reply {
 	{
 		$sBuffer = substr($this->sPkt,$iStart,$iLength)."\x0";
 		$aPairs = unpack('n*', $sBuffer);
+		if($aPairs === false){
+			$aPairs = [];
+		}
 
 		$iSum = array_sum($aPairs);
 		while ($iSum >> 16){
@@ -196,6 +198,9 @@ class TcpIPReply extends Reply {
 			$sBuffer .= "\x00";
 		}
 		$aPairs = unpack('n*', $sBuffer);
+		if($aPairs === false){
+			$aPairs = [];
+		}
 		$iSum = array_sum($aPairs);
 		while ($iSum >> 16) {
 			$iSum = ($iSum >> 16) + ($iSum & 0xffff);

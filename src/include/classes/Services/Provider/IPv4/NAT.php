@@ -30,10 +30,13 @@ class NAT
 
 	private ServiceDispatcher $oServiceDispatcher;
 
+	/** @var array<string,array<string,mixed>> */
 	private array $aConnTrack=[];
 
+	/** @var array<int,array{ip_from:string,ip_to:string,port_from:int,port_to:int}> */
 	private array $aNatTable=[];
 
+	/** @var array<int,string> */
 	private array $aConnTrackPending=[];
 
 	const DEFAULT_TIMEOUT = 120;
@@ -50,6 +53,10 @@ class NAT
 				return;
 			}
 			$sNATEntries = file_get_contents(config::getValue('ipv4_nat_file'));
+			if($sNATEntries === false){
+				$this->oLogger->warning("Unable to read ipv4 nat file ".config::getValue('ipv4_nat_file'));
+				return;
+			}
 		}
 		$aLines = explode("\n",$sNATEntries);
 		foreach($aLines as $sLine){
@@ -71,7 +78,7 @@ class NAT
 		$this->oServiceDispatcher =  $oServiceDispatcher;
 	}
 
-	public function houseKeeping()
+	public function houseKeeping(): void
 	{
 		foreach($this->aConnTrack as $sKey=>$aEntry){
 			$iAge = time()-$aEntry['last_activity'];
@@ -102,6 +109,9 @@ class NAT
 		return false;
 	}
 
+	/**
+	 * @return array{ip_from:string,ip_to:string,port_from:int,port_to:int}
+	*/
 	public function getNatEntry(string $sIP, int $iPort):array
 	{
 		foreach($this->aNatTable as $aEntry){
@@ -112,12 +122,18 @@ class NAT
 		throw new NatException("No NAT entry for ip/port combination");
 	}
 
+	/**
+	 * @return array<int,array{ip_from:string,ip_to:string,port_from:int,port_to:int}>
+	*/
 	public function dumpNatTable():array
 	{
 		return $this->aNatTable;
 	}
-	
 
+
+	/**
+	 * @return array<string,array<string,mixed>>
+	*/
 	public function dumpConnTrack():array
 	{
 		return $this->aConnTrack;
@@ -164,7 +180,7 @@ class NAT
 		throw new ConntrackException("Connection unknown");
 	}
 
-	private function _createConntrackEntry(IPv4Request $oIPv4, TCPRequest $oTcp)
+	private function _createConntrackEntry(IPv4Request $oIPv4, TCPRequest $oTcp): void
 	{
 		$sKey = $oIPv4->getSrcIP().'_'.$oIPv4->getDstIP().'_'.$oTcp->getSrcPort().'_'.$oTcp->getDstPort();
 
@@ -315,6 +331,9 @@ class NAT
  	 * As everything is async (none blocking) this method starts the process, and returns a promise 	
  	 * not the connection its self, the function attached via then will get called once the socket is established
  	*/
+	/**
+	 * @return Promise<ConnectionInterface>
+	*/
 	private function _openConnection(string $sDstIP, int $iDstPort):Promise
 	{
 		$oLoop = $this->oServiceDispatcher->getLoop();
@@ -332,8 +351,10 @@ class NAT
 	 *
 	 * This method should never be called from outsite the class
 	 * Its only public becasuse is used by an async call back that is triggered
-	 * once the socket to an external host has been established. 
-	 */  
+	 * once the socket to an external host has been established.
+	 *
+	 * @param array{srcip:string,dstip:string,srcport:int,dstport:int,pktid:int,window_to:int,sequence:int,ack:int,state:string,last_activity:int,sequence_sock:int,socket:ConnectionInterface} $aConnectionData
+	 */
 	public function _registerConnection(string $sKey, array $aConnectionData):void
 	{
 		$this->oLogger->debug("NAT: Registering external connection ".$sKey."");
@@ -369,7 +390,7 @@ class NAT
 	 * Its only public becasuse is used by an async call back that is triggered
 	 * once the socket to an external host has been established. 
 	*/  
-	private function _remoteConnectionFailed(\Exception $oException, string $sKey, IPv4Request $oIPv4, TCPRequest $oTcp)
+	private function _remoteConnectionFailed(\Exception $oException, string $sKey, IPv4Request $oIPv4, TCPRequest $oTcp): void
 	{
 		$this->oLogger->debug("NAT: Could not connect to remote host (".$oException->getMessage().").");
 

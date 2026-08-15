@@ -145,6 +145,7 @@ class UserController extends AbstractController
     // Protected security wrappers — overridden by TestableUserController
     // -------------------------------------------------------------------------
 
+    /** @return array<int,array{plugin:string,user:mixed}> */
     protected function secGetAllUsers(): array
     {
         return Security::getAllUsers();
@@ -185,6 +186,7 @@ class UserController extends AbstractController
         Security::adminSetPassword($sUsername, $sPassword);
     }
 
+    /** @param array<string,mixed> $aVars */
     protected function renderTemplate(Smarty $oSmartyService, string $sTemplate, array $aVars): Response
     {
         $oSmarty = $oSmartyService->getSmarty();

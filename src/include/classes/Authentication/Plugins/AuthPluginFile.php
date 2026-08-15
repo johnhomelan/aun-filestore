@@ -60,12 +60,12 @@ class AuthPluginFile implements AuthPluginInterface {
 			$aMatches = [];
 			// Format with password hash (7-field: +quota; 6-field: legacy, quota defaults to 0)
 			if(preg_match('/([a-zA-Z0-9]+):([a-z0-9]+-[a-zA-Z0-9]+):([$a-z0-9A-Z\-._]+):([0-9]+):([0-9]):([A-Za-z]):?([0-9]*)/',$sLine,$aMatches)>0){
-				AuthPluginFile::$aUsers[strtoupper($aMatches[1])]=['username'=>strtoupper($aMatches[1]), 'password'=>$aMatches[2], 'homedir'=>$aMatches[3], 'unixuid'=>$aMatches[4], 'opt'=>$aMatches[5], 'priv'=>$aMatches[6], 'quota'=>(int)($aMatches[7] ?? 0)];
+				AuthPluginFile::$aUsers[strtoupper($aMatches[1])]=['username'=>strtoupper($aMatches[1]), 'password'=>$aMatches[2], 'homedir'=>$aMatches[3], 'unixuid'=>$aMatches[4], 'opt'=>$aMatches[5], 'priv'=>$aMatches[6], 'quota'=>(int)$aMatches[7]];
 			}
 			// Format with no password set (7-field: +quota; 6-field: legacy, quota defaults to 0)
 			$aMatches=[];
 			if(preg_match('/([a-zA-Z0-9]+)::([$a-z0-9A-Z\-._]+):([0-9]+):([0-9]):([A-Za-z]):?([0-9]*)/',$sLine,$aMatches)>0){
-				AuthPluginFile::$aUsers[strtoupper($aMatches[1])]=['username'=>strtoupper($aMatches[1]), 'password'=>'', 'homedir'=>$aMatches[2], 'unixuid'=>$aMatches[3], 'opt'=>$aMatches[4], 'priv'=>$aMatches[5], 'quota'=>(int)($aMatches[6] ?? 0)];
+				AuthPluginFile::$aUsers[strtoupper($aMatches[1])]=['username'=>strtoupper($aMatches[1]), 'password'=>'', 'homedir'=>$aMatches[2], 'unixuid'=>$aMatches[3], 'opt'=>$aMatches[4], 'priv'=>$aMatches[5], 'quota'=>(int)$aMatches[6]];
 			}
 		}
 	}

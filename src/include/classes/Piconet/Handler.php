@@ -51,8 +51,14 @@ class Handler {
 
 	private int $iReconnectDelay = self::RECONNECT_DELAY_MIN;
 
+	/**
+	 * @var array<int, array<string, mixed>>
+	*/
 	private array $aQueue = [];
 
+	/**
+	 * @var array<int, array<string, mixed>>
+	*/
 	private array $aAwaitingAck = [];
 
 	// Set in onConnect() when remote_bridge_enabled — true until the first STATUS
@@ -97,7 +103,8 @@ class Handler {
 		$this->iReconnectDelay = min($this->iReconnectDelay * 2, self::RECONNECT_DELAY_MAX);
 	}
 
-	public function onConnect(){
+	public function onConnect(): void
+	{
 		$this->oLogger->debug("Piconet handler: Connected");
 		//stream_set_blocking($this->oConnection->stream,true);
 		stream_set_write_buffer($this->oConnection->stream, 0); //Turn off the write buffer  @phpstan-ignore-line
@@ -115,7 +122,7 @@ class Handler {
 		}
 	}
 
-	public function bringupInterface()
+	public function bringupInterface(): void
 	{
 		$this->oLogger->debug("Piconet handler: Bringing up the interface");
 		$this->oLogger->debug("Piconet handler: Set station to ".config::getValue('piconet_station'));
@@ -206,7 +213,7 @@ class Handler {
 		$this->scheduleReconnect();
 	}
 
-	public function onMessage($sMessage):void
+	public function onMessage(string $sMessage):void
 	{
 		$aLines = explode("\n", $sMessage);
 		foreach ($aLines as $sLine) {
@@ -219,7 +226,7 @@ class Handler {
 	}
 
 
-	public function decodeMessage($sMessage):void
+	public function decodeMessage(string $sMessage):void
 	{
 		$aMessageParts = explode(" ",$sMessage);
 		switch(trim($aMessageParts[0])){
@@ -395,7 +402,7 @@ class Handler {
 		array_shift($this->aQueue);
 		$this->_runQueue();
 	}
-	private function _writeOutPkt(EconetPacket $oPacket)
+	private function _writeOutPkt(EconetPacket $oPacket): void
 	{
 		if ($this->oConnection === null) {
 			$this->oLogger->warning("Piconet Handler: Cannot transmit — no active connection");

@@ -68,6 +68,9 @@ class BridgeRequest extends Request {
 	{
 		//Read the function code 1 byte unsigned int
 		$aHeader=unpack('C',$sBinaryString);
+		if($aHeader === false){
+			return;
+		}
 		$this->iFunction = $aHeader[1];
 		$sBinaryString = substr($sBinaryString,1);
 
@@ -81,6 +84,9 @@ class BridgeRequest extends Request {
 
 		//Read the reply port type 1 byte unsigned int
 		$aHeader=unpack('C',$sBinaryString);
+		if($aHeader === false){
+			return;
+		}
 		$this->iReplyPort = $aHeader[1];
 		$sBinaryString = substr($sBinaryString,1);
 	
@@ -93,15 +99,23 @@ class BridgeRequest extends Request {
 	{
 		//This first byte after the reply port is the network number the bridge is being queried about
 		$aData = unpack('C',(string) $this->sData);
+		if($aData === false){
+			return 0;
+		}
 		return (int) $aData[1];
 	}
 
+	/** @return array<int,int> */
 	public function getNetworkList(): array
 	{
 		if(empty($this->sData)){
 			return [];
 		}
-		return array_values(unpack('C*', (string) $this->sData));
+		$aBytes = unpack('C*', (string) $this->sData);
+		if($aBytes === false){
+			return [];
+		}
+		return array_values($aBytes);
 	}
 
 	public function buildReply(): \HomeLan\FileStore\Messages\Reply

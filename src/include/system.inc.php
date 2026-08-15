@@ -1,7 +1,7 @@
 <?php
 
 
-function safe_define(string $sName, string|int $sDefine): bool {
+function safe_define(string $sName, string|int|bool $sDefine): bool {
 	if (!defined($sName)) {
 		define($sName, $sDefine);
 		return TRUE;

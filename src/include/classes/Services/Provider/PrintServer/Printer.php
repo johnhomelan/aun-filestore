@@ -14,6 +14,7 @@ namespace HomeLan\FileStore\Services\Provider\PrintServer;
 */
 class Printer
 {
+	/** @param array<int,string> $aAllowedUsers */
 	public function __construct(
 		private readonly string $sName,
 		private readonly string $sDescription,

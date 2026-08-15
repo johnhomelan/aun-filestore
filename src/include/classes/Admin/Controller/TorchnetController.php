@@ -81,6 +81,7 @@ class TorchnetController extends AbstractController
         return $oResponse;
     }
 
+    /** @param array<string,string> $aDrives */
     private function _isValidPath(string $sPath, array $aDrives): bool
     {
         foreach ($aDrives as $sDrivePath) {
@@ -91,6 +92,10 @@ class TorchnetController extends AbstractController
         return false;
     }
 
+    /**
+     * @param array<string,string> $aDrives
+     * @return array<int,array{label:string,path:?string}>
+     */
     private function _buildBreadcrumbs(string $sPath, array $aDrives): array
     {
         $aBreadcrumbs = [['label' => 'Drives', 'path' => '']];

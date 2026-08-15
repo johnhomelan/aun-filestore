@@ -14,6 +14,7 @@ class ReactSessionStorageFactory implements SessionStorageFactoryInterface
 {
     /**
      * @see NativeSessionStorage constructor.
+     * @param array<string,mixed> $options
      */
     public function __construct(
         private array $options = [],

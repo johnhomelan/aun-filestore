@@ -563,7 +563,7 @@ class BeebTermTest extends TestCase
     {
         $this->dispatch($this->loginPkt('shell'));
         $aSessions = $this->oProvider->getSessions();
-        $this->assertEquals('SHELL', $aSessions[0]['service']);
+        $this->assertEquals('SHELL', $aSessions[0]['command']);
         $this->assertIsInt($aSessions[0]['pid']);
     }
 

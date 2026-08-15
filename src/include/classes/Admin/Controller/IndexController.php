@@ -39,6 +39,7 @@ class IndexController extends AbstractController
 
 	public function favicon():  \Symfony\Component\HttpFoundation\Response
 	{
-		return new Response(file_get_contents(__DIR__."/../static/favicon.ico"));
+		$sFavicon = file_get_contents(__DIR__."/../static/favicon.ico");
+		return new Response($sFavicon === false ? null : $sFavicon);
 	}
 }

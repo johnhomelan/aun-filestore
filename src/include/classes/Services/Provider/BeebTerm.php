@@ -24,12 +24,15 @@ use React\ChildProcess\Process;
 */
 class BeebTerm implements ProviderInterface {
 
-	protected $aReplyBuffer = [];
+	/** @var array<int,EconetPacket> */
+	protected array $aReplyBuffer = [];
 
-	protected $oLogger;
-	
+	protected \Psr\Log\LoggerInterface $oLogger;
+
+	/** @var array<string,string> */
 	protected array $aServices = [];
 
+	/** @var array<string,array<string,mixed>> */
 	protected array $aClients = [];
 
 	private ServiceDispatcher $oServiceDispatcher;
@@ -48,6 +51,10 @@ class BeebTerm implements ProviderInterface {
 				return;
 			}
 			$sServices = file_get_contents(config::getValue('beeb_term_services_file'));
+			if($sServices === false){
+				$this->oLogger->warning("Unable to read beeb term services file ".config::getValue('beeb_term_services_file'));
+				return;
+			}
 		}
 		$aLines = explode("\n",$sServices);
 		foreach($aLines as $sLine){
@@ -58,7 +65,7 @@ class BeebTerm implements ProviderInterface {
 		}
 	}
 
-	protected function _addReplyToBuffer($oReply): void
+	protected function _addReplyToBuffer(EconetPacket $oReply): void
 	{
 		$this->aReplyBuffer[]=$oReply;
 	}
@@ -80,13 +87,16 @@ class BeebTerm implements ProviderInterface {
 	/**
 	 * Gets the ports this service uses 
 	 * 
-	 * @return array of int
+	 * @return array<int,int>
 	*/
 	public function getServicePorts(): array
 	{
 		return [0xa2];
 	}
 
+	/**
+	 * @return array<int,array<string,string>>
+	*/
 	public function getServices(): array
 	{
 		$aReturn = [];
@@ -96,11 +106,14 @@ class BeebTerm implements ProviderInterface {
 		return $aReturn;
 	}
 
+	/**
+	 * @return array<int,array{network:int,station:int,command:string,pid:int}>
+	*/
 	public function getSessions(): array
 	{
 		$aReturn = [];
 		foreach($this->aClients as $sKey=>$aClient ){
-			$aReturn[] = ['network'=>$aClient['net'], 'station'=>$aClient['station'], 'service'=>$aClient['process']->getCommand(),'pid'=>$aClient['process']->getPid()];
+			$aReturn[] = ['network'=>$aClient['net'], 'station'=>$aClient['station'], 'command'=>$aClient['process']->getCommand(),'pid'=>$aClient['process']->getPid()];
 		}
 		return $aReturn;
 	}
@@ -136,7 +149,7 @@ class BeebTerm implements ProviderInterface {
 
 	}
 
-	public function houseKeeping()
+	public function houseKeeping(): void
 	{
 		$aTimeoutKeys = [];
 		foreach($this->aClients as $sKey=>$aDetail){
@@ -151,7 +164,7 @@ class BeebTerm implements ProviderInterface {
 		}
 	}
 
-	public function addService(string $sName, string $sCommand)
+	public function addService(string $sName, string $sCommand): void
 	{
 		$this->aServices[$sName] = $sCommand;
 	}
@@ -159,7 +172,9 @@ class BeebTerm implements ProviderInterface {
 	/**
 	 * Retreives all the reply objects built by the bridge 
 	 *
-	 * This method removes the replies from the buffer 
+	 * This method removes the replies from the buffer
+	 *
+	 * @return array<int,EconetPacket>
 	*/
 	public function getReplies(): array
 	{
@@ -323,6 +338,9 @@ class BeebTerm implements ProviderInterface {
 		}
 	}
 
+	/**
+	 * @return array<int,array<string,mixed>>
+	*/
 	public function getJobs():array
 	{
 		return [];

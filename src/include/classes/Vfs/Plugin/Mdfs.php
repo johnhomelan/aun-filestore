@@ -234,7 +234,7 @@ class Mdfs implements PluginInterface {
 		foreach($aPathInsideImage as $sPathPart){
 			$sFoundKey = null;
 			foreach(array_keys($aCat) as $sKey){
-				if(strtoupper($sKey)==strtoupper($sPathPart)){
+				if(strtoupper((string) $sKey)==strtoupper($sPathPart)){
 					$sFoundKey = $sKey;
 					break;
 				}
@@ -333,6 +333,9 @@ class Mdfs implements PluginInterface {
 			$sPathInsideImage = self::_getPathInsideImage($sEconetPath,$sImageFile);
 			$oMdfs = self::_getImageReader($sImageFile);
 			$aImageStat = stat($sImageFile);
+			if($aImageStat === false){
+				return $aDirectoryListing;
+			}
 			$aCat = $oMdfs->getCatalogue();
 
 			if(strlen($sPathInsideImage)>0){
@@ -340,7 +343,7 @@ class Mdfs implements PluginInterface {
 				foreach($aPathParts as $sPart){
 					$sFoundKey = null;
 					foreach(array_keys($aCat) as $sKey){
-						if(strtoupper($sKey)==strtoupper($sPart)){
+						if(strtoupper((string) $sKey)==strtoupper($sPart)){
 							$sFoundKey = $sKey;
 							break;
 						}
@@ -374,6 +377,9 @@ class Mdfs implements PluginInterface {
 					$sDisplayName = substr((string) $sFile,0,strlen((string) $sFile)-5);
 					if(!array_key_exists($sDisplayName,$aDirectoryListing)){
 						$aStat = stat($sUnixPath.DIRECTORY_SEPARATOR.$sFile);
+						if($aStat === false){
+							continue;
+						}
 						$aDirectoryListing[$sFile]=new DirectoryEntry($sDisplayName,$sFile,'HomeLan\FileStore\Vfs\Plugin\Mdfs',NULL,NULL,0,$sEconetPath.'.'.$sDisplayName,$aStat['ctime'],'-r/-r', TRUE);
 					}
 				}

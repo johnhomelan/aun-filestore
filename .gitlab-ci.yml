@@ -16,7 +16,7 @@ phpunit_phpstan_php81:
    script:
      - cat src/composer.json
      - cd src; composer --no-scripts install; cd ..
-     - ./src/vendor/bin/phpstan analyse -n --no-ansi --no-progress src/include --memory-limit 512M src/filestored --level 5
+     - ./src/vendor/bin/phpstan analyse -n --no-ansi --no-progress src/include --memory-limit 512M src/filestored --level 6
 
 composer_dependency_analyser_php81:
    image: 

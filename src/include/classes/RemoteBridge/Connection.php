@@ -63,8 +63,10 @@ class Connection
 	private string $sNonce = '';
 	private int $iTimestamp = 0;
 	private string $sBuffer = '';
+	/** @var array<int, int> */
 	private array $aPeerNetworks = [];
 	private string $sProtocolVersion = '';
+	/** @var array<int, string> */
 	private array $aSupportedVersions;
 	private float $fLastRxTime;
 	private ?TimerInterface $oPingTimer = null;
@@ -420,6 +422,7 @@ class Connection
 		return $this->sState === self::STATE_AUTHENTICATED;
 	}
 
+	/** @return array<int, int> */
 	public function getPeerNetworks(): array
 	{
 		return $this->aPeerNetworks;
@@ -453,7 +456,7 @@ class Connection
 		if (empty($aCommon)) {
 			return null;
 		}
-		usort($aCommon, 'version_compare');
+		usort($aCommon, fn(string $sA, string $sB): int => version_compare($sA, $sB));
 		return end($aCommon);
 	}
 }

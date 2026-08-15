@@ -66,6 +66,7 @@ class FileServerController extends AbstractController
         return $oResponse;
     }
 
+    /** @return array<int,array{label:string,path:?string}> */
     private function _buildBreadcrumbs(string $sPath): array
     {
         if ($sPath === '$') {

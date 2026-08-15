@@ -29,34 +29,42 @@ class ServiceDispatcher {
 	static private ?\HomeLan\FileStore\Services\ServiceDispatcher $oSingleton = null;
 	private ?\HomeLan\FileStore\Encapsulation\EncapsulationTypeMap $oEncapsulationTypeMap = null;
 	private ?\React\EventLoop\LoopInterface $oLoop = null;
+	/** @var array<int,ProviderInterface> */
 	private array $aProviders = [];
+	/** @var array<int,ProviderInterface> */
 	private array $aPorts = [];
+	/** @var array<int,EconetPacket> */
 	private array $aReplies = [];
 	private int $iStreamPortStart=20;
+	/** @var array<int,int> */
 	private array $aPortTimeLimits = [];
+	/** @var array<int,callable> */
 	private array $aHouseKeepingTasks = [];
+	/** @var array<int,array<int,callable>> */
 	private array $aAckEvents = [];
 
 	const MAX_STREAMS = 20;
 	/**
 	 * Keeping this class as a singleton, this is static method should be used to get references to this object
 	 *
+	 * @param array<int,ProviderInterface> $aServices
 	*/
-	public static function create(\Psr\Log\LoggerInterface $oLogger = null, array $aServices = null)
+	public static function create(?\Psr\Log\LoggerInterface $oLogger = null, ?array $aServices = null): self
 	{
 		if(!is_object(ServiceDispatcher::$oSingleton)){
 			$oLogger->debug("Creating the singleton of ServiceDispatcher");
 			ServiceDispatcher::$oSingleton = new ServiceDispatcher($oLogger, $aServices);
 		}
-		return ServiceDispatcher::$oSingleton;	
+		return ServiceDispatcher::$oSingleton;
 	}
 
 	/**
-	 * Constructor registers the Logger and all the services 
-	 *  
+	 * Constructor registers the Logger and all the services
+	 *
+	 * @param array<int,ProviderInterface> $aServices
 	*/
 	public function __construct(private readonly \Psr\Log\LoggerInterface $oLogger, array $aServices)
-	{		
+	{
 		//Takes and array of serivce providers and adds them the the ServiceDispatcher so they get packets 
 		foreach($aServices as $oService){
 			$this->addService($oService);
@@ -77,9 +85,9 @@ class ServiceDispatcher {
 	/**
 	 * Gets a reference to the main event loop
 	 *
-	 * @TODO Fileserver needs updating so this is nolonger needed 
+	 * @TODO Fileserver needs updating so this is nolonger needed
 	*/
-	public function getLoop()
+	public function getLoop(): ?\React\EventLoop\LoopInterface
 	{
 		return $this->oLoop;
 	}
@@ -112,8 +120,9 @@ class ServiceDispatcher {
 	}
 
 	/**
-	 * Gets an array of all the regisitered services 
+	 * Gets an array of all the regisitered services
 	 *
+	 * @return array<int,ProviderInterface>
 	*/
 	public function getServices(): array
 	{
@@ -210,7 +219,7 @@ class ServiceDispatcher {
 	/**
 	 * Gets all the replies for all the services
 	 *
-	 * @return array of EconetPacket
+	 * @return array<int,EconetPacket>
 	*/
 	public function getReplies(): array
 	{
@@ -236,7 +245,7 @@ class ServiceDispatcher {
 	 * Adds an event for the this ack packet the a network/station
 	 *
 	*/
-	public function addAckEvent($iNetwork, $iStation, $fCallable): void
+	public function addAckEvent(int $iNetwork, int $iStation, callable $fCallable): void
 	{
 		if(!array_key_exists($iNetwork,$this->aAckEvents)){
 			$this->aAckEvents[$iNetwork]=[];
@@ -269,7 +278,7 @@ class ServiceDispatcher {
 		RemoteBridgeMap::relayAckIfKnown($iNetwork, $iStation);
 	}
 
-	public function clearAckEvent($iNetwork, $iStation):void
+	public function clearAckEvent(int $iNetwork, int $iStation):void
 	{
 		if(array_key_exists($iNetwork,$this->aAckEvents) AND array_key_exists( $iStation,$this->aAckEvents[$iNetwork])){
 			unset($this->aAckEvents[$iNetwork][$iStation]);

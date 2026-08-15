@@ -26,8 +26,8 @@ use config;
 */
 class TeefaxImport extends Command
 {
-    protected static $defaultName = 'teefax-import';
-    protected static $defaultDescription = 'Download and convert the Teefax teletext archive into a channel page store';
+    protected static string $defaultName = 'teefax-import';
+    protected static string $defaultDescription = 'Download and convert the Teefax teletext archive into a channel page store';
 
     protected function configure(): void
     {

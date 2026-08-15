@@ -97,7 +97,7 @@ class PiconetPacket implements EncapsulationInterface {
 	public function decode($sPacket): void
 	{
 		$aPacket = explode(" ", $sPacket);
-		if (!isset($aPacket[0])) {
+		if ($aPacket[0] === '') {
 			throw new Exception("Piconet message is empty");
 		}
 		$this->sMessageType = (string) $aPacket[0];
@@ -133,26 +133,44 @@ class PiconetPacket implements EncapsulationInterface {
 
 		//Read the dst/src controlbyte port each is 1 byte unsigned int |DstStn|DstNet|SrcStn|SrcNet|Cb|Port
 		$aScout = unpack('C', (string) $sRawScout);
+		if ($aScout === false) {
+			throw new Exception("Failed to unpack piconet scout destination station byte");
+		}
 		$sRawScout = substr($sRawScout, 1);
 		$this->iDstStationNumber = (int) $aScout[1];
 
 		$aScout = unpack('C', (string) $sRawScout);
+		if ($aScout === false) {
+			throw new Exception("Failed to unpack piconet scout destination network byte");
+		}
 		$sRawScout = substr($sRawScout, 1);
 		$this->iDstNetworkNumber = (int) $aScout[1];
 
 		$aScout = unpack('C', (string) $sRawScout);
+		if ($aScout === false) {
+			throw new Exception("Failed to unpack piconet scout source station byte");
+		}
 		$sRawScout = substr($sRawScout, 1);
 		$this->iStationNumber = (int) $aScout[1];
 
 		$aScout = unpack('C', (string) $sRawScout);
+		if ($aScout === false) {
+			throw new Exception("Failed to unpack piconet scout source network byte");
+		}
 		$sRawScout = substr($sRawScout, 1);
 		$this->iNetworkNumber = (int) $aScout[1];
 
 		$aScout = unpack('C', (string) $sRawScout);
+		if ($aScout === false) {
+			throw new Exception("Failed to unpack piconet scout control byte");
+		}
 		$sRawScout = substr($sRawScout, 1);
 		$this->iCb = (int) $aScout[1];
 
 		$aScout = unpack('C', (string) $sRawScout);
+		if ($aScout === false) {
+			throw new Exception("Failed to unpack piconet scout port byte");
+		}
 		$sRawScout = substr($sRawScout, 1);
 		$this->iPort = (int) $aScout[1];
 
@@ -224,8 +242,11 @@ class PiconetPacket implements EncapsulationInterface {
 	public function toString(): string
 	{
 		$aPkt = unpack('C*',$this->getData());
+		if($aPkt === false){
+			$aPkt = [];
+		}
 		$sReturn = "Header | Type : ".$this->getPacketType()." Port : ".$this->getPort()." Control : ".$this->iCb." | Body |".implode(":",$aPkt)." |";
-		return $sReturn;	
+		return $sReturn;
 	}
 
 }

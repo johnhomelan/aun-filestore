@@ -186,7 +186,7 @@ class AFS implements PluginInterface {
 		foreach($aPathInsideImage as $sPathPart){
 			$aKeys = array_keys($aCat);
 			foreach($aKeys as $sKey){
-				if(strtoupper($sKey)==strtoupper($sPathPart)){
+				if(strtoupper((string) $sKey)==strtoupper($sPathPart)){
 					$iCount++;
 					if($aCat[$sKey]['type']=='dir'){
 						$aCat=$aCat[$sKey]['dir'];
@@ -241,6 +241,9 @@ class AFS implements PluginInterface {
 			$sPathInsideImage = AFS::_getPathInsideImage($sEconetPath,$sImageFile);
 			$oAfs = AFS::_getImageReader($sImageFile);
 			$aImageStat = stat($sImageFile);
+			if($aImageStat === false){
+				return $aDirectoryListing;
+			}
 			$aCat = $oAfs->getCatalogue();
 
 			if(strlen($sPathInsideImage)>0){
@@ -269,6 +272,9 @@ class AFS implements PluginInterface {
 					$sDisplayName = substr((string) $sFile,0,strlen((string) $sFile)-3);
 					if(!array_key_exists($sDisplayName,$aDirectoryListing)){
 						$aStat = stat($sUnixPath.DIRECTORY_SEPARATOR.$sFile);
+						if($aStat === false){
+							continue;
+						}
 						$aDirectoryListing[$sFile]=new DirectoryEntry($sDisplayName,$sFile,'HomeLan\FileStore\Vfs\Plugin\AFS',NULL,NULL,0,$sEconetPath.'.'.$sDisplayName,$aStat['ctime'],'-r/-r', TRUE);
 					}
 				}

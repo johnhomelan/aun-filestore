@@ -45,18 +45,21 @@ use config;
  */
 class Torchnet implements ProviderInterface
 {
+    /** @var array<int,TorchnetReply> */
     private array $aReplyBuffer = [];
 
-    /** [net][stn][torchHandle] => FileDescriptor */
+    /** @var array<int,array<int,array<int,object>>> [net][stn][torchHandle] => FileDescriptor */
     private array $aFileHandles = [];
 
-    /** [net][stn] => next handle id to allocate (1–254, wrapping) */
+    /** @var array<int,array<int,int>> [net][stn] => next handle id to allocate (1–254, wrapping) */
     private array $aNextHandle = [];
 
     /**
      * Per-station search state.
      * Key: "{net}.{stn}"
      * Value: ['drive', 'pattern' => ['name','ext'], 'matches' => [...], 'cursor']
+     *
+     * @var array<string,array<string,mixed>>
      */
     private array $aSearchState = [];
 
@@ -74,6 +77,9 @@ class Torchnet implements ProviderInterface
         return new Admin($this);
     }
 
+    /**
+     * @return array<int,int>
+    */
     public function getServicePorts(): array
     {
         return [0x90, 0x91];
@@ -83,6 +89,9 @@ class Torchnet implements ProviderInterface
     {
     }
 
+    /**
+     * @return array<int,array<string,mixed>>
+    */
     public function getJobs(): array
     {
         return [];
@@ -98,6 +107,9 @@ class Torchnet implements ProviderInterface
         $this->processRequest(new TorchnetRequest($oPacket, $this->oLogger));
     }
 
+    /**
+     * @return array<int,EconetPacket>
+    */
     public function getReplies(): array
     {
         $aReturn = [];
@@ -179,6 +191,13 @@ class Torchnet implements ProviderInterface
         $aFilename = $oRequest->parseCpmFilename(3);
 
         $oReply = $oRequest->buildReply();
+
+        if ($iNet === null || $iStn === null) {
+            $this->oLogger->warning('TorchNet open: no source network/station on request');
+            $oReply->openError();
+            $this->aReplyBuffer[] = $oReply;
+            return;
+        }
 
         try {
             $sCpmPath  = $this->buildCpmFilePath($sDriveId, $aFilename['name'], $aFilename['ext']);
@@ -538,6 +557,8 @@ class Torchnet implements ProviderInterface
     /**
      * Return configured drives as ['letter' => 'acorn_path'].
      * Drive E is always included with its default or configured path.
+     *
+     * @return array<string,string>
      */
     public function getConfiguredDrives(): array
     {
@@ -562,6 +583,8 @@ class Torchnet implements ProviderInterface
     /**
      * List a directory by Acorn path, querying VFS plugins directly.
      * Bypasses the authentication layer so it is safe to call from the admin UI.
+     *
+     * @return array<string,\HomeLan\FileStore\Vfs\DirectoryEntry>
      */
     public function getAdminDirectoryListing(string $sAcornPath): array
     {
@@ -615,6 +638,8 @@ class Torchnet implements ProviderInterface
      * Return one row per network/station that has open file handles or an
      * active search state.  Each row has 'network', 'station', and
      * 'open_handles' (count of currently open file descriptors).
+     *
+     * @return array<int,array<string,int>>
      */
     public function getConnectedStations(): array
     {
@@ -648,6 +673,8 @@ class Torchnet implements ProviderInterface
     /**
      * Return one row per open file descriptor across all stations.
      * Each row has 'network', 'station', 'handle', and 'path' (Acorn path).
+     *
+     * @return array<int,array<string,int|string>>
      */
     public function getOpenFileHandles(): array
     {
@@ -694,6 +721,9 @@ class Torchnet implements ProviderInterface
         return CpmVfs::createFsHandle($iNet, $iStn, $sCpmPath, $bMustExist, $bReadOnly);
     }
 
+    /**
+     * @return array<int,\HomeLan\FileStore\Vfs\CpmDirectoryEntry>
+    */
     protected function cpmGetDirectoryListing(object $oFd): array
     {
         return CpmVfs::getDirectoryListing($oFd);

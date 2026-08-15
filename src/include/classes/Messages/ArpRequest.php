@@ -44,9 +44,11 @@ class ArpRequest extends Request {
 		switch($this->getFlags()){
 			case 33: //Arp request type
 				//The first 4 bytes is the ipv4 addr of the requesting host
-				$this->sSourceIP = inet_ntop($sBinaryString[0].$sBinaryString[1].$sBinaryString[2].$sBinaryString[3]);
-				//The second 4 bytes is the ipv4 address the remote host is requesting the layer address for 
-				$this->sIPv4Addr = inet_ntop($sBinaryString[4].$sBinaryString[5].$sBinaryString[6].$sBinaryString[7]);
+				$sSourceIP = inet_ntop($sBinaryString[0].$sBinaryString[1].$sBinaryString[2].$sBinaryString[3]);
+				$this->sSourceIP = ($sSourceIP === false) ? null : $sSourceIP;
+				//The second 4 bytes is the ipv4 address the remote host is requesting the layer address for
+				$sIPv4Addr = inet_ntop($sBinaryString[4].$sBinaryString[5].$sBinaryString[6].$sBinaryString[7]);
+				$this->sIPv4Addr = ($sIPv4Addr === false) ? null : $sIPv4Addr;
 				break;
 		}
 		

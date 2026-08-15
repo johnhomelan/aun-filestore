@@ -158,26 +158,41 @@ class JsonPacket implements EncapsulationInterface {
 
 				//Read the aun packet type 1 byte unsigned int
 				$aHeader=unpack('C',$sPayload);
+				if($aHeader === false){
+					throw new Exception("Failed to unpack pkt payload aun packet type byte");
+				}
 				$this->iAunPktType = $aHeader[1];
 				$sBinaryString = substr($sPayload,1);
 
 				//Read the dst port 1 byte unsigned int
 				$aHeader=unpack('C',$sBinaryString);
+				if($aHeader === false){
+					throw new Exception("Failed to unpack pkt payload port byte");
+				}
 				$this->iPort = $aHeader[1];
 				$sBinaryString = substr($sBinaryString,1);
 
 				//Read the flag 1 byte unsigned int
 				$aHeader=unpack('C',$sBinaryString);
+				if($aHeader === false){
+					throw new Exception("Failed to unpack pkt payload flag byte");
+				}
 				$this->iCb = $aHeader[1];
 				$sBinaryString = substr($sBinaryString,1);
 
 				//Retrans 1 byte unsigned int
 				$aHeader=unpack('C',$sBinaryString);
+				if($aHeader === false){
+					throw new Exception("Failed to unpack pkt payload retrans byte");
+				}
 				$this->iPadding = $aHeader[1];
 				$sBinaryString = substr($sBinaryString,1);
 
 				//Sequence 4 bytes little-endian
 				$aHeader=unpack('V',$sBinaryString);
+				if($aHeader === false){
+					throw new Exception("Failed to unpack pkt payload sequence number");
+				}
 				$this->iSeq = $aHeader[1];
 				$sBinaryString = substr($sBinaryString,4);
 
@@ -282,11 +297,15 @@ class JsonPacket implements EncapsulationInterface {
 				switch($this->sCtrlRequest){
 					case 'dynamic_alloction_request':
 						$sAllocation = Map::allocateAddress($this->oSocket);
-						return json_encode(
+						$sJson = json_encode(
 							[
 								'type'=>'ctrl',
 								'response'=>$sAllocation
 							]);
+						if($sJson === false){
+							return null;
+						}
+						return $sJson;
 				}
 		}
 		return null;
@@ -320,8 +339,11 @@ class JsonPacket implements EncapsulationInterface {
 	public function toString(): string
 	{
 		$aPkt = unpack('C*',$this->getData());
+		if($aPkt === false){
+			$aPkt = [];
+		}
 		$sReturn = "Header | Type : ".$this->getPacketType()." Port : ".$this->getPort()." Control : ".$this->iCb." Pad : ".$this->iPadding." Seq : ".$this->iSeq." | Body |".implode(":",$aPkt)." |";
-		return $sReturn;	
+		return $sReturn;
 	}
 
 }

@@ -25,6 +25,7 @@ class_exists(SessionHandlerProxy::class);
 class ReactSessionStorage extends NativeSessionStorage implements SessionStorageInterface
 {
 
+    /** @var array<string,array<string,mixed>> */
     static  array $SESSION = [];
     private Request $oRequest;
     private string $sessionId = "setme";
@@ -35,7 +36,11 @@ class ReactSessionStorage extends NativeSessionStorage implements SessionStorage
             return true;
         }
 
-        $this->sessionId = $this->oRequest->cookies->get(session_name());
+        $sSessionName = session_name();
+        if($sSessionName === false){
+            $sSessionName = 'PHPSESSID';
+        }
+        $this->sessionId = $this->oRequest->cookies->get($sSessionName);
 	if(array_key_exists($this->sessionId,self::$SESSION)){
 		self::$SESSION[$this->sessionId]=[];
 	}
@@ -45,15 +50,19 @@ class ReactSessionStorage extends NativeSessionStorage implements SessionStorage
         return true;
     }
 
-    public function setRequest(?Request $oRequest)
+    public function setRequest(?Request $oRequest): void
     {
 	$this->oRequest = $oRequest;
     }
 
+    /** @param array<string,mixed>|null $session */
     protected function loadSession(?array &$session = null): void
     {
 	if(file_exists('/tmp/session-'.$this->sessionId.'.dat')){
-		self::$SESSION[$this->sessionId] = unserialize(file_get_contents('/tmp/session-'.$this->sessionId.'.dat'));
+		$sSessionData = file_get_contents('/tmp/session-'.$this->sessionId.'.dat');
+		if($sSessionData !== false){
+			self::$SESSION[$this->sessionId] = unserialize($sSessionData);
+		}
 	}
         if (null === $session) {
             $session = &self::$SESSION[$this->sessionId];

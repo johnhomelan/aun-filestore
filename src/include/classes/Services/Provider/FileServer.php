@@ -15,6 +15,8 @@ use HomeLan\FileStore\Services\StreamIn;
 use HomeLan\FileStore\Vfs\Vfs;
 use HomeLan\FileStore\Vfs\Exception as VfsException;
 use HomeLan\FileStore\Vfs\FilePath;
+use HomeLan\FileStore\Vfs\DirectoryEntry;
+use HomeLan\FileStore\Vfs\FileDescriptor;
 use HomeLan\FileStore\Authentication\Security;
 use HomeLan\FileStore\Authentication\User;
 use HomeLan\FileStore\Messages\EconetPacket; 
@@ -31,15 +33,18 @@ use Exception;
 */
 class FileServer implements ProviderInterface{
 
-	protected $oServiceDispatcher = NULL ;
+	protected ?ServiceDispatcher $oServiceDispatcher = NULL;
 
-	protected $aCommands = ['BYE', 'CAT', 'CDIR', 'DELETE', 'DIR', 'FSOPT', 'INFO', 'I AM', 'LIB', 'LOAD', 'LOGOFF', 'OPT', 'PASS', 'PRINTER', 'RENAME', 'SAVE', 'SDISC', 'NEWUSER', 'PRIV', 'REMUSER', 'SETPASS', 'i.' ,'i .', 'CHROOTOFF', 'CHROOT', 'BACKUP', 'COMPACT', 'VERIFY', 'MAP', 'COPY', 'TYPE', 'DUMP'];
-	
-	protected $aReplyBuffer = [];
+	/** @var array<int,string> */
+	protected array $aCommands = ['BYE', 'CAT', 'CDIR', 'DELETE', 'DIR', 'FSOPT', 'INFO', 'I AM', 'LIB', 'LOAD', 'LOGOFF', 'OPT', 'PASS', 'PRINTER', 'RENAME', 'SAVE', 'SDISC', 'NEWUSER', 'PRIV', 'REMUSER', 'SETPASS', 'i.' ,'i .', 'CHROOTOFF', 'CHROOT', 'BACKUP', 'COMPACT', 'VERIFY', 'MAP', 'COPY', 'TYPE', 'DUMP'];
 
-	protected $oLogger;
+	/** @var array<int,FsReply|EconetPacket> */
+	protected array $aReplyBuffer = [];
 
-	protected $aStreamsIn = [];
+	protected \Psr\Log\LoggerInterface $oLogger;
+
+	/** @var array<int,array<int,StreamIn>> */
+	protected array $aStreamsIn = [];
 
 	/**
 	 * Initializes the service
@@ -71,9 +76,9 @@ class FileServer implements ProviderInterface{
 	}
 
 	/**
-	 * Gets the ports this service uses 
-	 * 
-	 * @return array of int
+	 * Gets the ports this service uses
+	 *
+	 * @return array<int,int>
 	*/
 	public function getServicePorts(): array
 	{
@@ -121,9 +126,11 @@ class FileServer implements ProviderInterface{
 	}
 
 	/**
-	 * Retreives all the reply objects built by the fileserver 
+	 * Retreives all the reply objects built by the fileserver
 	 *
-	 * This method removes the replies from the buffer 
+	 * This method removes the replies from the buffer
+	 *
+	 * @return array<int,EconetPacket>
 	*/
 	public function getReplies(): array
 	{
@@ -160,7 +167,7 @@ class FileServer implements ProviderInterface{
 	*/
 	private function addStream(int $iNetwork, int $iStation,StreamIn $oStream): void
 	{
-		if(!array_key_exists($iNetwork,$this->aStreamsIn) OR !is_array($this->aStreamsIn[$iNetwork])){
+		if(!array_key_exists($iNetwork,$this->aStreamsIn)){
 			$this->aStreamsIn[$iNetwork]=[];
 		}
 		$this->aStreamsIn[$iNetwork][$iStation]=$oStream;
@@ -175,6 +182,9 @@ class FileServer implements ProviderInterface{
 		unset ($oStream);
 	}
 
+	/**
+	 * @return array<int,array{network:int,station:int,stream:StreamIn}>
+	*/
 	public function getStreams(): array
 	{
 		$aStreams = [];
@@ -192,8 +202,8 @@ class FileServer implements ProviderInterface{
 		foreach($aStreamsToTest as $iNetwork=>$aStations){
 			foreach($aStations as $iStation=>$oStream){
 				//If the stream has timeout it will call its own fail event that
-				//should clean up the stream and references in $this->aStreamsIn 
-				$oStream->checkTimedOut();	
+				//should clean up the stream and references in $this->aStreamsIn
+				$oStream->checkTimeout();
 			}
 		}
 	}
@@ -363,9 +373,7 @@ class FileServer implements ProviderInterface{
 		try {
 			if(!is_null($oFsRequest->getCsd())){
 				$oCsd = $this->vfsGetFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oFsRequest->getCsd());
-				if(is_object($oCsd)){
-					$oUser->setCsd($oCsd->getEconetPath());
-				}
+				$oUser->setCsd($oCsd->getEconetPath());
 			}
 		}catch(Exception $oException){
 			$this->oLogger->debug("fileserver: Unable to set users csd to handle ".$oFsRequest->getCsd()." (".$oException->getMessage().")");
@@ -374,9 +382,7 @@ class FileServer implements ProviderInterface{
 		try {
 			if(!is_null($oFsRequest->getLib())){
 				$oLib = $this->vfsGetFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oFsRequest->getLib());
-				if(is_object($oLib)){
-					$oUser->setLib($oLib->getEconetPath());
-				}
+				$oUser->setLib($oLib->getEconetPath());
 			}
 		}catch(Exception $oException){
 			$this->oLogger->debug("fileserver: Unable to set users lib to handle ".$oFsRequest->getLib()." (".$oException->getMessage().")");
@@ -389,13 +395,16 @@ class FileServer implements ProviderInterface{
 	 *
 	 * Once the decode is complete the decoded request is passedto the runCli method
 	 *
-	 * @param object $oFsRequest
+	 * @param fsrequest $oFsRequest
 	*/
-	public function cliDecode(object $oFsRequest): void
+	public function cliDecode(FsRequest $oFsRequest): void
 	{
 		$sCommand = null;
   		$sData = $oFsRequest->getData();
 		$aDataAs8BitInts = unpack('C*',(string) $sData);
+		if($aDataAs8BitInts === false){
+			$aDataAs8BitInts = [];
+		}
 		$sDataAsString = "";
 		foreach($aDataAs8BitInts as $iChar){
 			$sDataAsString = $sDataAsString.chr($iChar);
@@ -910,7 +919,7 @@ class FileServer implements ProviderInterface{
 					$oReply->append32bitIntLittleEndian($oFile->getLoadAddr());
 					$oReply->append32bitIntLittleEndian($oFile->getExecAddr());
 					//Access mode
-					$oReply->appendByte($oFile->getAccess() ?? 0);
+					$oReply->appendByte($oFile->getAccess());
 					//Append 2 byte ctime Day,year+month
 					$oReply->appendRaw($oFile->getCTime());
 					$oReply->append24bitIntLittleEndian($oFile->getSin());
@@ -1123,7 +1132,7 @@ class FileServer implements ProviderInterface{
 	 *
 	 * This method is invoked by the *DIR command
 	*/
-	public function changeDirectory(FsRequest $oFsRequest,$sOptions): void
+	public function changeDirectory(FsRequest $oFsRequest,?string $sOptions): void
 	{
 		$oReply = $oFsRequest->buildReply();
 		$oUser = $this->secGetUser($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation());
@@ -1358,6 +1367,9 @@ class FileServer implements ProviderInterface{
 	public function cliLoad(FsRequest $oFsRequest, string $sOptions): void
 	{
 		$aParts = preg_split('/\s+/',trim($sOptions),2);
+		if($aParts === false){
+			$aParts = [];
+		}
 		$sPath  = $aParts[0] ?? '';
 
 		$oReply = $oFsRequest->buildReply();
@@ -1865,7 +1877,7 @@ class FileServer implements ProviderInterface{
 					$oReply2->appendByte($iAccess);
 
 					//Add current date
-					$iDay = date('j',time());
+					$iDay = (int) date('j',time());
 					$oReply2->appendByte($iDay);
 
 					//The last byte is month and year, first 4 bits year, last 4 bits month
@@ -2030,7 +2042,7 @@ class FileServer implements ProviderInterface{
 	 * Creates a new user (*NEWUSER)
 	 *
 	*/
-	public function createUser(FsRequest $oFsRequest,$sOptions): void
+	public function createUser(FsRequest $oFsRequest,?string $sOptions): void
 	{
 		$oReply = $oFsRequest->buildReply();
 		$oMyUser = $this->secGetUser($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation());
@@ -2125,7 +2137,7 @@ class FileServer implements ProviderInterface{
 	 * Implements the commnad sdisc
 	 *
 	*/
-	public function sDisc(FsRequest $oFsRequest,$sOptions): void
+	public function sDisc(FsRequest $oFsRequest,?string $sOptions): void
 	{
 		//As we can only ever have one disc this command has rather little todo
 		$oReply = $oFsRequest->buildReply();
@@ -2183,7 +2195,7 @@ class FileServer implements ProviderInterface{
 	 * Turns off the chroot feature reverting back to the true root of the filestore 
 	 *
 	*/
-	public function chrootoff(FsRequest $oFsRequest,$sOptions): void
+	public function chrootoff(FsRequest $oFsRequest,?string $sOptions): void
 	{
 		$oReply = $oFsRequest->buildReply();
 		$oUser = $this->secGetUser($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation());
@@ -2220,7 +2232,6 @@ class FileServer implements ProviderInterface{
 		$i = 0;
 		foreach($aUsers as $iNetwork=>$aStationUsers){
 			foreach($aStationUsers as $iStation=>$aData){
-				//@phpstan-ignore-next-line
 				if($iStart <= $i AND $i <= ($iStart+$iCount)){
 					$oUser = $aData['user'];
 					$oReply->appendByte($iNetwork);
@@ -2234,7 +2245,6 @@ class FileServer implements ProviderInterface{
 					}
 				}
 				$i++;
-				//@phpstan-ignore-next-line
 				if($i>($iStart+$iCount)){
 					$this->addReplyToBuffer($oReply->buildEconetpacket());
 					return;
@@ -2393,7 +2403,7 @@ class FileServer implements ProviderInterface{
 						$oReply2 = $oFsRequest->buildReply();
 						$oReply2->DoneOk();
 						$oReply2->appendByte(15);
-						$iDay = date('j',time());
+						$iDay = (int) date('j',time());
 						$oReply2->appendByte($iDay);
 						$iYear = (int) date('y',time());
 						$iYear <<= 4;
@@ -2419,7 +2429,7 @@ class FileServer implements ProviderInterface{
 			$oReply = $oFsRequest->buildReply();
 			$oReply->DoneOk();
 			$oReply->appendByte(15);
-			$iDay = date('j',time());
+			$iDay = (int) date('j',time());
 			$oReply->appendByte($iDay);
 			$iYear = (int) date('y',time());
 			$iYear <<= 4;
@@ -2628,6 +2638,11 @@ class FileServer implements ProviderInterface{
 			return;
 		}
 		$aParts = preg_split('/\s+/', trim($sOptions), 2);
+		if($aParts === false){
+			$oReply->setError(0xff, "Syntax: COPY <source> <dest>");
+			$this->addReplyToBuffer($oReply->buildEconetpacket());
+			return;
+		}
 		if(count($aParts) !== 2 || strlen($aParts[0]) === 0 || strlen($aParts[1]) === 0){
 			$oReply->setError(0xff, "Syntax: COPY <source> <dest>");
 			$this->addReplyToBuffer($oReply->buildEconetpacket());
@@ -2834,6 +2849,9 @@ class FileServer implements ProviderInterface{
 		$this->addReplyToBuffer($oReply->buildEconetpacket());	
 	}
 
+	/**
+	 * @return array<int,array<string,mixed>>
+	*/
 	public function getJobs(): array
 	{
 		return [];
@@ -2846,6 +2864,8 @@ class FileServer implements ProviderInterface{
 	/**
 	 * List a directory by Acorn path, querying VFS plugins directly.
 	 * Bypasses the authentication layer so it is safe to call from the admin UI.
+	 *
+	 * @return array<string,DirectoryEntry>
 	 */
 	public function getAdminDirectoryListing(string $sAcornPath): array
 	{
@@ -2901,31 +2921,48 @@ class FileServer implements ProviderInterface{
 		Vfs::init($this->oLogger, config::getValue('vfs_plugins'), config::getValue('security_mode')=='multiuser');
 	}
 
+	/**
+	 * @return DirectoryEntry
+	*/
 	protected function vfsGetMeta(int $iNet, int $iStn, string $sPath)
 	{ return Vfs::getMeta($iNet, $iStn, $sPath); }
 
-	protected function vfsSetMeta(int $iNet, int $iStn, string $sPath, $iLoad, $iExec, $iAccess): void
+	protected function vfsSetMeta(int $iNet, int $iStn, string $sPath, ?int $iLoad, ?int $iExec, ?int $iAccess): void
 	{ Vfs::setMeta($iNet, $iStn, $sPath, $iLoad, $iExec, $iAccess); }
 
-	protected function vfsGetFsHandle(int $iNet, int $iStn, $iHandle)
-	{ return Vfs::getFsHandle($iNet, $iStn, $iHandle); }
+	/**
+	 * @return FileDescriptor
+	*/
+	protected function vfsGetFsHandle(int $iNet, int $iStn, ?int $iHandle)
+	{
+		if($iHandle === null){
+			throw new Exception("vfs: No file handle supplied");
+		}
+		return Vfs::getFsHandle($iNet, $iStn, $iHandle);
+	}
 
+	/**
+	 * @return FileDescriptor
+	*/
 	protected function vfsCreateFsHandle(int $iNet, int $iStn, string $sPath, bool $bMustExist=false, bool $bReadOnly=false)
 	{ return Vfs::createFsHandle($iNet, $iStn, $sPath, $bMustExist, $bReadOnly); }
 
-	protected function vfsCloseFsHandle(int $iNet, int $iStn, $iHandle): void
+	protected function vfsCloseFsHandle(int $iNet, int $iStn, ?int $iHandle): void
 	{ Vfs::closeFsHandle($iNet, $iStn, $iHandle); }
 
 	protected function vfsCloseAllFsHandles(int $iNet, int $iStn): void
 	{ Vfs::closeAllFsHandles($iNet, $iStn); }
 
-	protected function vfsSaveFile(int $iNet, int $iStn, string $sPath, string $sData, $iLoad, $iExec): void
-	{ Vfs::saveFile($iNet, $iStn, $sPath, $sData, $iLoad, $iExec); }
+	protected function vfsSaveFile(int $iNet, int $iStn, string $sPath, string $sData, ?int $iLoad, ?int $iExec): void
+	{ Vfs::saveFile($iNet, $iStn, $sPath, $sData, $iLoad ?? 0, $iExec ?? 0); }
 
 	protected function vfsGetFile(int $iNet, int $iStn, string $sPath): string
 	{ return (string) Vfs::getFile($iNet, $iStn, $sPath); }
 
-	protected function vfsGetDirectoryListing($oFd): array
+	/**
+	 * @return array<string,DirectoryEntry>
+	*/
+	protected function vfsGetDirectoryListing(FileDescriptor $oFd): array
 	{ return Vfs::getDirectoryListing($oFd); }
 
 	protected function vfsCreateDirectory(int $iNet, int $iStn, string $sPath): void
@@ -2937,11 +2974,16 @@ class FileServer implements ProviderInterface{
 	protected function vfsMoveFile(int $iNet, int $iStn, string $sFrom, string $sTo): void
 	{ Vfs::moveFile($iNet, $iStn, $sFrom, $sTo); }
 
-	protected function vfsCreateFile(int $iNet, int $iStn, string $sPath, int $iSize, $iLoad, $iExec): void
+	protected function vfsCreateFile(int $iNet, int $iStn, string $sPath, int $iSize, int $iLoad, int $iExec): void
 	{ Vfs::createFile($iNet, $iStn, $sPath, $iSize, $iLoad, $iExec); }
 
-	protected function vfsReplaceFsHandle(int $iNet, int $iStn, $iOldId, $iNewId): void
-	{ Vfs::replaceFsHandle($iNet, $iStn, $iOldId, $iNewId); }
+	protected function vfsReplaceFsHandle(int $iNet, int $iStn, ?int $iOldId, int $iNewId): void
+	{
+		if($iOldId === null){
+			throw new Exception("vfs: No handle supplied to replace");
+		}
+		Vfs::replaceFsHandle($iNet, $iStn, $iOldId, $iNewId);
+	}
 
 	protected function secIsLoggedIn(int $iNet, int $iStn): bool
 	{ return Security::isLoggedIn($iNet, $iStn); }
@@ -2949,6 +2991,9 @@ class FileServer implements ProviderInterface{
 	protected function secUpdateIdleTimer(int $iNet, int $iStn): void
 	{ Security::updateIdleTimer($iNet, $iStn); }
 
+	/**
+	 * @return ?User
+	*/
 	protected function secGetUser(int $iNet, int $iStn)
 	{ return Security::getUser($iNet, $iStn); }
 
@@ -2958,9 +3003,15 @@ class FileServer implements ProviderInterface{
 	protected function secLogout(int $iNet, int $iStn): void
 	{ Security::logout($iNet, $iStn); }
 
+	/**
+	 * @return array<string,int>
+	*/
 	protected function secGetUsersStation(string $sUser): array
 	{ return Security::getUsersStation($sUser); }
 
+	/**
+	 * @return array<int,array<int,array<string,mixed>>>
+	*/
 	protected function secGetUsersOnline(): array
 	{ return Security::getUsersOnline(); }
 
@@ -2979,6 +3030,9 @@ class FileServer implements ProviderInterface{
 	protected function secSetOpt(int $iNet, int $iStn, string $sOpt): void
 	{ Security::setOpt($iNet, $iStn, $sOpt); }
 
+	/**
+	 * @return array<int,array<string,mixed>>
+	*/
 	protected function secGetAllUsers(): array
 	{ return Security::getAllUsers(); }
 

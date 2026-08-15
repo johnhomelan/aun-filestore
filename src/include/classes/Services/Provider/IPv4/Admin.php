@@ -89,7 +89,8 @@ class Admin implements AdminInterface
 	/**
 	 * Gets a list of all the entity type for this service provider
 	 *
-	*/ 
+	 * @return array<string,string>
+	*/
 	public function getEntityTypes(): array
 	{
 		return ['arp'=>'Arp Table','interfaces'=>'IPv4 Interfaces','routes'=>'Routing Table','nat'=>'Nat Rules','conntrack'=>'Conn Track Entries'];
@@ -98,7 +99,8 @@ class Admin implements AdminInterface
 	/**
 	 * Gets a list of all the fields for an entity type
 	 *
-	*/ 
+	 * @return array<string,string>
+	*/
 	public function getEntityFields(string $sType): array
  	{
      		return match ($sType) {
@@ -112,8 +114,9 @@ class Admin implements AdminInterface
  	}
 
 	/**
-	 * Gets the entity instances of a given type for this service 
+	 * Gets the entity instances of a given type for this service
 	 *
+	 * @return array<int,AdminEntity>
 	*/
 	public function getEntities(string $sType): array
 	{
@@ -144,6 +147,8 @@ class Admin implements AdminInterface
 
 	/**
 	 * Gets all the commands that can be run
+	 *
+	 * @return array<int,array{label:string,url:string}>
 	*/
 	public function getCommands(): array
 	{

@@ -99,7 +99,7 @@ class PrintServerTestable extends PrintServer
     }
 
     protected function isDir(string $sPath): bool { return in_array($sPath, $this->stubExistingDirs, true); }
-    protected function getUser(int $iNet, int $iStn) { return $this->stubUser; }
+    protected function getUser(int $iNet, int $iStn): ?object { return $this->stubUser; }
     protected function makeDir(string $sPath): void { $this->capCreatedDirs[] = $sPath; }
     protected function putFile(string $sPath, string $sData): void { $this->capWrittenFiles[] = ['path' => $sPath, 'data' => $sData]; }
 

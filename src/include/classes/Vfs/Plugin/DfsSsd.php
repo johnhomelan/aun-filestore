@@ -247,18 +247,24 @@ class DfsSsd implements PluginInterface {
 			if(strlen($sPathInsideImage)>0){
 				if(array_key_exists($sPathInsideImage,$aCat)){
 					$aImageStat = stat($sImageFile);
+					if($aImageStat === false){
+						return $aDirectoryListing;
+					}
 					foreach($aCat[$sPathInsideImage] as $sFile=>$aMeta){
 						$aDirectoryListing[$sFile] = new DirectoryEntry($sFile,$sImageFile,'HomeLan\FileStore\Vfs\Plugin\DfsSsd',$aMeta['loadaddr'],$aMeta['execaddr'],$aMeta['size'],$sEconetPath.'.'.$sFile,$aImageStat['ctime'],'-r/-r', FALSE);
 					}
 				}
 			}else{
 				$aImageStat = stat($sImageFile);
+				if($aImageStat === false){
+					return $aDirectoryListing;
+				}
 				foreach($aCat['$'] as $sFile=>$aMeta){
 					$aDirectoryListing[$sFile] = new DirectoryEntry($sFile,$sImageFile,'HomeLan\FileStore\Vfs\Plugin\DfsSsd',$aMeta['loadaddr'],$aMeta['execaddr'],$aMeta['size'],$sEconetPath.'.'.$sFile,$aImageStat['ctime'],'-r/-r', FALSE);
 				}
 				foreach(array_keys($aCat) as $sDir){
 					if($sDir!='$'){
-						$aDirectoryListing[$sDir] = new DirectoryEntry($sDir,$sImageFile,'HomeLan\FileStore\Vfs\Plugin\DfsSsd',NULL,NULL,0,$sEconetPath.'.'.$sDir,$aImageStat['ctime'],'-r/-r', TRUE);
+						$aDirectoryListing[$sDir] = new DirectoryEntry((string) $sDir,$sImageFile,'HomeLan\FileStore\Vfs\Plugin\DfsSsd',NULL,NULL,0,$sEconetPath.'.'.$sDir,$aImageStat['ctime'],'-r/-r', TRUE);
 					}
 				}
 			}
@@ -273,6 +279,9 @@ class DfsSsd implements PluginInterface {
 					//Disk Image found
 					if(!array_key_exists(substr((string) $sFile,0,strlen((string) $sFile)-4),$aDirectoryListing)){
 						$aStat = stat($sUnixPath.DIRECTORY_SEPARATOR.$sFile);
+						if($aStat === false){
+							continue;
+						}
 						$aDirectoryListing[$sFile]=new DirectoryEntry(substr((string) $sFile,0,strlen((string) $sFile)-4),$sFile,'HomeLan\FileStore\Vfs\Plugin\DfsSsd',NULL,NULL,0,$sEconetPath.'.'.substr((string) $sFile,0,strlen((string) $sFile)-4),$aStat['ctime'],'-r/-r', TRUE);
 					}
 				}

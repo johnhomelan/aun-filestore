@@ -40,10 +40,12 @@ use Exception;
 */
 class IPv4 implements ProviderInterface {
 
-	protected $aReplyBuffer = [];
+	/** @var array<int,EconetPacket> */
+	protected array $aReplyBuffer = [];
 
-	protected $oLogger;
+	protected \Psr\Log\LoggerInterface $oLogger;
 
+	/** @var array<string,array<string,mixed>> */
 	private array $aPacketQueue = [];
 	private Arpcache $oArpTable;
 	private Interfaces $oInterfaceTable;
@@ -86,7 +88,7 @@ class IPv4 implements ProviderInterface {
 		return new NAT($this, $this->oLogger, $sConfig);
 	}
 
-	private function addReplyToBuffer($oReply): void
+	private function addReplyToBuffer(EconetPacket $oReply): void
 	{
 		$this->aReplyBuffer[]=$oReply;
 	}
@@ -108,7 +110,7 @@ class IPv4 implements ProviderInterface {
 	/**
 	 * Gets the ports this service uses 
 	 * 
-	 * @return array of int
+	 * @return array<int,int>
 	*/
 	public function getServicePorts(): array
 	{
@@ -218,7 +220,7 @@ class IPv4 implements ProviderInterface {
 	}
 
 
-	public function processUnicastIPv4Pkt(IPv4Request $oIPv4,EconetPacket $oPacket)
+	public function processUnicastIPv4Pkt(IPv4Request $oIPv4,EconetPacket $oPacket): void
 	{
 		//Forward the IP packet
 		try {
@@ -380,7 +382,9 @@ class IPv4 implements ProviderInterface {
 	/**
 	 * Retreives all the reply objects built by the bridge 
 	 *
-	 * This method removes the replies from the buffer 
+	 * This method removes the replies from the buffer
+	 *
+	 * @return array<int,EconetPacket>
 	*/
 	public function getReplies(): array
 	{
@@ -389,31 +393,49 @@ class IPv4 implements ProviderInterface {
 		return $aReplies;
 	}
 
+	/**
+	 * @return array<int,array<string,mixed>>
+	*/
 	public function getJobs():array
 	{
 		return [];
 	}
 
+	/**
+	 * @return array<int,array{network:int,station:int,ipv4:string,timeout:int}>
+	*/
 	public function getArpEntries(): array
 	{
 		return $this->oArpTable->dumpArpCache();
 	}
 
+	/**
+	 * @return array<int,array{network:int,station:int,ipaddr:string,mask:string}>
+	*/
 	public function getInterfaces(): array
 	{
 		return $this->oInterfaceTable->dumpInterfaceTable();
 	}
 
+	/**
+	 * @return array<int,array{network:string,subnet:string,gw:string,metric:int}>
+	*/
 	public function getRoutes(): array
 	{
 		return $this->oRoutingTable->dumpRoutingTable();
 	}
 
+	/**
+	 * @return array<int,array{ip_from:string,ip_to:string,port_from:int,port_to:int}>
+	*/
 	public function getNatEntries(): array
 	{
 		return $this->oNat->dumpNatTable();
 	}
 
+	/**
+	 * @return array<string,array<string,mixed>>
+	*/
 	public function getConnTrack(): array
 	{
 		return $this->oNat->dumpConnTrack();

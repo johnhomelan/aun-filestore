@@ -43,6 +43,7 @@ class TeletextController extends AbstractController
         return null;
     }
 
+    /** @param array<string,mixed> $aVars */
     protected function renderTemplate(Smarty $oSmartyService, string $sTemplate, array $aVars): Response
     {
         $oSmarty = $oSmartyService->getSmarty();

@@ -26,11 +26,20 @@ interface ProviderInterface {
 
 	public function broadcastPacketIn(EconetPacket $oPacket): void;
 
-	public function getServicePorts(): array; 
+	/**
+	 * @return array<int,int>
+	*/
+	public function getServicePorts(): array;
 
 	public function registerService(ServiceDispatcher $oServiceDispatcher): void;
-	
+
+	/**
+	 * @return array<int,array<string,mixed>>
+	*/
 	public function getJobs(): array;
 
+	/**
+	 * @return array<int,EconetPacket>
+	*/
 	public function getReplies(): array;
 } 

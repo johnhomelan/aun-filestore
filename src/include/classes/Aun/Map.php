@@ -54,7 +54,7 @@ class Map {
 	  *
 	  * @param string $sMap The text for the map file can be supplied as a string, this is intended largley for unit testing this function
 	 */
-	public static function init(\Psr\Log\LoggerInterface $oLogger, HandleInterface $oHandler, string $sMap=NULL): void
+	public static function init(\Psr\Log\LoggerInterface $oLogger, HandleInterface $oHandler, ?string $sMap=NULL): void
 	{
 		self::$oLogger = $oLogger;
 		self::$oHandler = $oHandler;
@@ -64,6 +64,10 @@ class Map {
 				return;
 			}
 			$sMap = file_get_contents(config::getValue('aunmap_file'));
+			if($sMap === false){
+				self::$oLogger->info("aunmapper: Failed to read the configuration file for the aunmap.");
+				return;
+			}
 		}
 		$aLines = explode("\n",$sMap);
 		foreach($aLines as $sLine){
@@ -99,15 +103,19 @@ class Map {
 		//Search the map see if there is a host:port mapping
 		if(in_array($sIP.':'.$sPort,Map::$aHostMap)){
 			$sIndex = array_search($sIP.':'.$sPort,Map::$aHostMap,true);
-			Map::$aIPLookupCache[$sIP.':'.$sPort]=$sIndex;
-			return $sIndex;
+			if($sIndex !== false){
+				Map::$aIPLookupCache[$sIP.':'.$sPort]=$sIndex;
+				return $sIndex;
+			}
 		}
 
 		//Search the map see if there is a host mapping
 		if(in_array($sIP,Map::$aHostMap)){
 			$sIndex = array_search($sIP,Map::$aHostMap,true);
-			Map::$aIPLookupCache[$sIP]=$sIndex;
-			return $sIndex;
+			if($sIndex !== false){
+				Map::$aIPLookupCache[$sIP]=$sIndex;
+				return $sIndex;
+			}
 		}
 
 		//No host match try for a subnet match

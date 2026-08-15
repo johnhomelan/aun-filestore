@@ -52,6 +52,9 @@ class Admin implements AdminInterface
         return $this->bEnabled ? 'On-line' : 'Disabled';
     }
 
+    /**
+     * @return array<string,string>
+    */
     public function getEntityTypes(): array
     {
         return [
@@ -60,6 +63,9 @@ class Admin implements AdminInterface
         ];
     }
 
+    /**
+     * @return array<string,string>
+    */
     public function getEntityFields(string $sType): array
     {
         return match ($sType) {
@@ -69,6 +75,9 @@ class Admin implements AdminInterface
         };
     }
 
+    /**
+     * @return array<int,AdminEntity>
+    */
     public function getEntities(string $sType): array
     {
         return match ($sType) {
@@ -90,6 +99,9 @@ class Admin implements AdminInterface
         };
     }
 
+    /**
+     * @return array<int,array{label:string,url:string}>
+    */
     public function getCommands(): array
     {
         return [];

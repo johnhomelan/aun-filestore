@@ -83,7 +83,7 @@ class MockVfsPlugin implements PluginInterface
     static public function saveFile(User $oUser, FilePath $oPath, string $sData, int $iLoadAddr, int $iExecAddr): bool { return false; }
     static public function createFile(User $oUser, FilePath $oPath, int $iSize, int $iLoadAddr, int $iExecAddr): bool { return false; }
     static public function getFile(User $oUser, FilePath $oEconetPath): string { return ''; }
-    static public function setMeta(string $sEconetPath, ?int $iLoad, ?int $iExec, int $iAccess): void {}
+    static public function setMeta(string $sEconetPath, ?int $iLoad, ?int $iExec, ?int $iAccess): void {}
 
     static public function fsFtell(User $oUser, mixed $fLocalHandle): int  { return 0; }
     /** @return array<mixed> */

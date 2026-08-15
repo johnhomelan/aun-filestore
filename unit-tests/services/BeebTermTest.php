@@ -10,45 +10,63 @@ use Monolog\Handler\NullHandler;
 use HomeLan\FileStore\Messages\EconetPacket;
 use HomeLan\FileStore\Services\Provider\BeebTerm;
 use HomeLan\FileStore\Services\ServiceDispatcher;
+use React\ChildProcess\Process;
+use React\Stream\ReadableStreamInterface;
+use React\Stream\WritableStreamInterface;
+use Evenement\EventEmitter;
 
 include_once('include/system.inc.php');
 
 // ---------------------------------------------------------------------------
 // Minimal stream stub — replaces React's ReadableStream / WritableStream.
-// Supports on() for event registration, write() to capture stdin data, and
-// emit() to fire registered handlers (used in tests to simulate process I/O).
+// Genuinely implements both stream interfaces (rather than just duck-typing
+// on() / emit()) so it satisfies Process::$stdout / $stdin's declared types.
 // ---------------------------------------------------------------------------
-class FakeStream
+class FakeStream extends EventEmitter implements ReadableStreamInterface, WritableStreamInterface
 {
-    private array $aListeners = [];
-    public string $sWritten   = '';
+    public string $sWritten = '';
+    private bool $bClosed   = false;
 
-    public function on(string $sEvent, callable $fn): void
+    public function write($data): bool
     {
-        $this->aListeners[$sEvent][] = $fn;
+        $this->sWritten .= $data;
+        return true;
     }
 
-    public function write(string $sData): void
+    public function end($data = null): void
     {
-        $this->sWritten .= $sData;
-    }
-
-    public function emit(string $sEvent, ...$aArgs): void
-    {
-        foreach ($this->aListeners[$sEvent] ?? [] as $fn) {
-            $fn(...$aArgs);
+        if ($data !== null) {
+            $this->write($data);
         }
+        $this->emit('end');
+        $this->close();
     }
+
+    public function close(): void
+    {
+        if ($this->bClosed) {
+            return;
+        }
+        $this->bClosed = true;
+        $this->emit('close');
+    }
+
+    public function isReadable(): bool { return !$this->bClosed; }
+    public function isWritable(): bool { return !$this->bClosed; }
+    public function pause(): void {}
+    public function resume(): void {}
+    public function pipe(WritableStreamInterface $dest, array $options = []): WritableStreamInterface { return $dest; }
 }
 
 // ---------------------------------------------------------------------------
 // Minimal process stub — replaces React\ChildProcess\Process.
-// Tracks whether start() and terminate() were called.
+// Extends the real Process class (rather than duck-typing it) so it can be
+// returned wherever a Process is expected; parent::__construct() is
+// deliberately not called since it wires up a real proc_open() — this is a
+// pure in-memory test double. Tracks whether start()/terminate() were called.
 // ---------------------------------------------------------------------------
-class FakeProcess
+class FakeProcess extends Process
 {
-    public FakeStream $stdout;
-    public FakeStream $stdin;
     public bool $bStarted    = false;
     public bool $bTerminated = false;
 
@@ -62,9 +80,9 @@ class FakeProcess
         $this->iPid   = self::$iNextPid++;
     }
 
-    public function start($oLoop): void  { $this->bStarted = true; }
-    public function terminate(): void    { $this->bTerminated = true; }
-    public function getPid(): int        { return $this->iPid; }
+    public function start($loop = null, $interval = 0.1): void { $this->bStarted = true; }
+    public function terminate($signal = null): bool { $this->bTerminated = true; return true; }
+    public function getPid(): ?int       { return $this->iPid; }
     public function getCommand(): string { return $this->sCommand; }
 }
 
@@ -79,7 +97,7 @@ class BeebTermTestable extends BeebTerm
 {
     public array $processes = [];
 
-    protected function createProcess(string $sCommand): object
+    protected function createProcess(string $sCommand): Process
     {
         $oProcess = new FakeProcess($sCommand);
         $this->processes[] = $oProcess;
@@ -508,7 +526,7 @@ class BeebTermTest extends TestCase
     {
         $this->dispatch($this->loginPkt('shell', 1, 5));
 
-        $this->oProvider->processes[0]->stdout->emit('data', 'output from process');
+        $this->oProvider->processes[0]->stdout->emit('data', ['output from process']);
 
         $aReplies = $this->oProvider->getReplies();
         $this->assertCount(1, $aReplies);

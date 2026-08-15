@@ -4,12 +4,14 @@
  * @group unit-tests
  */
 
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Monolog\Logger;
 use Monolog\Handler\NullHandler;
 use HomeLan\FileStore\Messages\EconetPacket;
 use HomeLan\FileStore\Services\Provider\FileServer;
 use HomeLan\FileStore\Services\Provider\PrintServer\PrinterRegistry;
+use HomeLan\FileStore\Authentication\HasUsername;
 
 include_once('include/system.inc.php');
 
@@ -106,7 +108,7 @@ class FakeDirEntry
 // ---------------------------------------------------------------------------
 // Fake security-user object
 // ---------------------------------------------------------------------------
-class FsTestUser
+class FsTestUser implements HasUsername
 {
     public string  $sUsername  = 'JBROWN';
     public string  $sHomedir   = '$.JBROWN';
@@ -177,7 +179,7 @@ class FileServerTestable extends FileServer
 
     protected function secUpdateIdleTimer(int $iNet, int $iStn): void {}
 
-    protected function secGetUser(int $iNet, int $iStn)
+    public function secGetUser(int $iNet, int $iStn)
     { return $this->stubUser; }
 
     protected function secLogin(int $iNet, int $iStn, string $sUser, string $sPass): bool
@@ -188,16 +190,16 @@ class FileServerTestable extends FileServer
         if($this->stubLogoutThrows) throw new \Exception("Not logged in");
     }
 
-    protected function vfsGetMeta(int $iNet, int $iStn, string $sPath)
+    public function vfsGetMeta(int $iNet, int $iStn, string $sPath)
     {
         if($this->stubMetaThrows || $this->stubMeta === null) throw new \Exception("No file");
         return $this->stubMeta;
     }
 
-    protected function vfsSetMeta(int $iNet, int $iStn, string $sPath, $iLoad, $iExec, $iAccess): void
+    public function vfsSetMeta(int $iNet, int $iStn, string $sPath, $iLoad, $iExec, $iAccess): void
     { $this->capSetMeta[] = compact('sPath','iLoad','iExec','iAccess'); }
 
-    protected function vfsGetFsHandle(int $iNet, int $iStn, $iHandle)
+    public function vfsGetFsHandle(int $iNet, int $iStn, $iHandle)
     {
         if($this->stubHandleThrows) throw new \Exception("No handle");
         if(array_key_exists($iHandle, $this->stubHandles)) return $this->stubHandles[$iHandle];
@@ -205,7 +207,7 @@ class FileServerTestable extends FileServer
         throw new \Exception("No handle $iHandle");
     }
 
-    protected function vfsCreateFsHandle(int $iNet, int $iStn, string $sPath, bool $bMustExist=false, bool $bReadOnly=false)
+    public function vfsCreateFsHandle(int $iNet, int $iStn, string $sPath, bool $bMustExist=false, bool $bReadOnly=false)
     {
         if($this->stubLockedThrows) throw new \HomeLan\FileStore\Vfs\Exception("Already open", false, true);
         if($this->stubCreateHandleThrows) throw new \Exception("Cannot create");
@@ -213,27 +215,27 @@ class FileServerTestable extends FileServer
         throw new \Exception("No handle for $sPath");
     }
 
-    protected function vfsCloseFsHandle(int $iNet, int $iStn, $iHandle): void {}
+    public function vfsCloseFsHandle(int $iNet, int $iStn, $iHandle): void {}
 
-    protected function vfsCloseAllFsHandles(int $iNet, int $iStn): void
+    public function vfsCloseAllFsHandles(int $iNet, int $iStn): void
     { $this->capCloseAll = true; }
 
-    protected function vfsGetDirectoryListing($oFd): array
+    public function vfsGetDirectoryListing($oFd): array
     { return $this->stubDirEntries; }
 
-    protected function vfsCreateDirectory(int $iNet, int $iStn, string $sPath): void
+    public function vfsCreateDirectory(int $iNet, int $iStn, string $sPath): void
     {
         if($this->stubCreateDirThrows) throw new \Exception("Cannot create");
         $this->capCreatedDirs[] = $sPath;
     }
 
-    protected function vfsDeleteFile(int $iNet, int $iStn, string $sPath): void
+    public function vfsDeleteFile(int $iNet, int $iStn, string $sPath): void
     {
         if($this->stubDeleteThrows) throw new \Exception("Cannot delete");
         $this->capDeletedFiles[] = $sPath;
     }
 
-    protected function vfsMoveFile(int $iNet, int $iStn, string $sFrom, string $sTo): void
+    public function vfsMoveFile(int $iNet, int $iStn, string $sFrom, string $sTo): void
     {
         if($this->stubMoveThrows) throw new \Exception("Cannot move");
         $this->capMovedFiles[] = ['from' => $sFrom, 'to' => $sTo];
@@ -241,13 +243,13 @@ class FileServerTestable extends FileServer
 
     protected function vfsCreateFile(int $iNet, int $iStn, string $sPath, int $iSize, $iLoad, $iExec): void {}
 
-    protected function vfsSaveFile(int $iNet, int $iStn, string $sPath, string $sData, $iLoad, $iExec): void
+    public function vfsSaveFile(int $iNet, int $iStn, string $sPath, string $sData, $iLoad, $iExec): void
     {
         if($this->stubSaveFileThrows) throw new \Exception("Cannot save");
         $this->capSavedFiles[] = compact('sPath', 'sData', 'iLoad', 'iExec');
     }
 
-    protected function vfsGetFile(int $iNet, int $iStn, string $sPath): string
+    public function vfsGetFile(int $iNet, int $iStn, string $sPath): string
     {
         if($this->stubGetFileThrows) throw new \Exception("No such file");
         return $this->stubFileData;
@@ -258,34 +260,34 @@ class FileServerTestable extends FileServer
     protected function secGetUsersStation(string $sUser): array
     { return $this->stubUserStation; }
 
-    protected function secGetUsersOnline(): array
+    public function secGetUsersOnline(): array
     { return $this->stubUsersOnline; }
 
-    protected function secSetPassword(int $iNet, int $iStn, ?string $sOld, ?string $sNew): void {}
+    public function secSetPassword(int $iNet, int $iStn, ?string $sOld, ?string $sNew): void {}
 
     protected function secCreateUser(int $iNet, int $iStn, \HomeLan\FileStore\Authentication\User $oUser): void {}
 
     protected function secRemoveUser(int $iNet, int $iStn, string $sUser): bool
     { return $this->stubRemoveUser; }
 
-    protected function secSetPriv(int $iNet, int $iStn, string $sUser, string $sPriv): void {}
+    public function secSetPriv(int $iNet, int $iStn, string $sUser, string $sPriv): void {}
 
-    protected function secSetOpt(int $iNet, int $iStn, string $sOpt): void
+    public function secSetOpt(int $iNet, int $iStn, string $sOpt): void
     { $this->capSetOpt[] = $sOpt; }
 
     protected function secGetAllUsers(): array
     { return $this->stubAllUsers; }
 
-    protected function secGetUserByName(string $sUsername): ?\HomeLan\FileStore\Authentication\User
+    public function secGetUserByName(string $sUsername): ?\HomeLan\FileStore\Authentication\User
     { return $this->stubUserByName instanceof \HomeLan\FileStore\Authentication\User ? $this->stubUserByName : null; }
 
-    protected function secSetUserQuota(int $iNet, int $iStn, string $sUsername, int $iQuota): void
+    public function secSetUserQuota(int $iNet, int $iStn, string $sUsername, int $iQuota): void
     { $this->capSetUserQuota[] = compact('sUsername', 'iQuota'); }
 
-    protected function secSetAdminPassword(int $iNet, int $iStn, string $sUsername, string $sPassword): void
+    public function secSetAdminPassword(int $iNet, int $iStn, string $sUsername, string $sPassword): void
     { $this->capSetAdminPass[] = compact('sUsername', 'sPassword'); }
 
-    protected function getFileServerPrinterRegistry(): PrinterRegistry
+    public function getFileServerPrinterRegistry(): PrinterRegistry
     {
         return new PrinterRegistry(<<<INI
 [PRINT]
@@ -1960,7 +1962,7 @@ class FileServerTest extends TestCase
     // CLI *BACKUP / *COMPACT / *VERIFY / *MAP (not supported)
     // -----------------------------------------------------------------------
 
-    /** @dataProvider notSupportedCommandProvider */
+    #[DataProvider('notSupportedCommandProvider')]
     public function testCliNotSupportedCommandReturnsUnrecognisedOk(string $sCmd): void
     {
         $aReplies = $this->dispatch($this->makeCliPkt($sCmd));
@@ -1969,7 +1971,7 @@ class FileServerTest extends TestCase
         $this->assertSame(0, $aB[1]);
     }
 
-    /** @dataProvider notSupportedCommandProvider */
+    #[DataProvider('notSupportedCommandProvider')]
     public function testCliNotSupportedCommandContainsNotSupportedText(string $sCmd): void
     {
         $aReplies = $this->dispatch($this->makeCliPkt($sCmd));
@@ -1977,7 +1979,7 @@ class FileServerTest extends TestCase
         $this->assertStringContainsString('not supported', $sData);
     }
 
-    /** @dataProvider notSupportedCommandProvider */
+    #[DataProvider('notSupportedCommandProvider')]
     public function testCliNotSupportedCommandRequiresLogin(string $sCmd): void
     {
         $this->oFs->stubUser = null;

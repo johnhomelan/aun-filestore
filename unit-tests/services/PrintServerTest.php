@@ -11,16 +11,21 @@ use HomeLan\FileStore\Messages\EconetPacket;
 use HomeLan\FileStore\Services\Provider\PrintServer;
 use HomeLan\FileStore\Services\Provider\PrintServer\Admin;
 use HomeLan\FileStore\Services\Provider\PrintServer\PrinterRegistry;
+use HomeLan\FileStore\Authentication\User;
 
 include_once('include/system.inc.php');
 
 // ---------------------------------------------------------------------------
 // Minimal user stub — replaces a real Security user object.
+// Sets $sUsername directly (bypassing User::setUsername()'s uppercasing) so
+// tests can assert on the original-case spool directory names.
 // ---------------------------------------------------------------------------
-class FakeUser
+class FakeUser extends User
 {
-    public function __construct(private readonly string $sUsername) {}
-    public function getUsername(): string { return $this->sUsername; }
+    public function __construct(string $sUsername)
+    {
+        $this->sUsername = $sUsername;
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -58,7 +63,7 @@ class PrintServerTestable extends PrintServer
 {
     public string  $stubSpoolDir     = '/spool';
     public array   $stubExistingDirs = [];
-    public ?object $stubUser         = null;
+    public ?User    $stubUser         = null;
     public string  $stubRegistryIni  = TESTABLE_REGISTRY_INI;
 
     public array $capCreatedDirs    = [];
@@ -99,7 +104,7 @@ class PrintServerTestable extends PrintServer
     }
 
     protected function isDir(string $sPath): bool { return in_array($sPath, $this->stubExistingDirs, true); }
-    protected function getUser(int $iNet, int $iStn): ?object { return $this->stubUser; }
+    protected function getUser(int $iNet, int $iStn): ?User { return $this->stubUser; }
     protected function makeDir(string $sPath): void { $this->capCreatedDirs[] = $sPath; }
     protected function putFile(string $sPath, string $sData): void { $this->capWrittenFiles[] = ['path' => $sPath, 'data' => $sData]; }
 

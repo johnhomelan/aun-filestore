@@ -159,7 +159,7 @@ class SpyVfsPlugin implements PluginInterface
         return '';
     }
 
-    static public function setMeta(string $sEconetPath, ?int $iLoad, ?int $iExec, int $iAccess): void
+    static public function setMeta(string $sEconetPath, ?int $iLoad, ?int $iExec, ?int $iAccess): void
     {
         self::$aCallLog[] = ['method' => 'setMeta', 'args' => [$sEconetPath, $iLoad, $iExec, $iAccess]];
         if (self::$fnSetMeta !== null) {
@@ -348,7 +348,7 @@ class SpyVfsPlugin2 implements PluginInterface
         return '';
     }
 
-    static public function setMeta(string $sEconetPath, ?int $iLoad, ?int $iExec, int $iAccess): void
+    static public function setMeta(string $sEconetPath, ?int $iLoad, ?int $iExec, ?int $iAccess): void
     {
         self::$aCallLog[] = ['method' => 'setMeta', 'args' => [$sEconetPath]];
         if (self::$fnSetMeta !== null) {

@@ -18,6 +18,7 @@ use Monolog\Logger;
 use Monolog\Handler\NullHandler;
 use HomeLan\FileStore\Authentication\User;
 use HomeLan\FileStore\Vfs\Plugin\S3 as S3Plugin;
+use HomeLan\FileStore\Vfs\Plugin\S3ClientContract;
 use HomeLan\FileStore\Vfs\FilePath;
 use HomeLan\FileStore\Vfs\Exception as VfsException;
 
@@ -26,7 +27,7 @@ use HomeLan\FileStore\Vfs\Exception as VfsException;
  * that the S3 VFS plugin calls.  State is tracked in an in-memory array
  * so tests can verify what was written.
  */
-class StubS3Client {
+class StubS3Client implements S3ClientContract {
     private array $aObjects = [];
     private int $iGetObjectCalls = 0;
 

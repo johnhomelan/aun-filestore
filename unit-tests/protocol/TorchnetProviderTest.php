@@ -24,9 +24,9 @@ include_once('include/system.inc.php');
 // ---------------------------------------------------------------------------
 class TorchnetTestable extends Torchnet
 {
-    // --- stubs (set before dispatching a packet) ---
-    public mixed       $stubCpmFileFd      = null;    // returned by cpmCreateFileHandle
-    public mixed       $stubCpmDirFd       = null;    // returned by cpmCreateFsHandle (directory)
+    // --- stubs (must be set via mockFd() before dispatching a packet that opens a file/dir) ---
+    public FileDescriptor $stubCpmFileFd;    // returned by cpmCreateFileHandle
+    public FileDescriptor $stubCpmDirFd;     // returned by cpmCreateFsHandle (directory)
     public array       $stubCpmListing     = [];      // returned by cpmGetDirectoryListing
     public ?\Throwable $stubFileCreateEx   = null;
     public ?\Throwable $stubDeleteEx       = null;
@@ -40,7 +40,7 @@ class TorchnetTestable extends Torchnet
     public ?array $capDirCreate           = null; // ['path', 'mustExist', 'readOnly']
     public bool   $cpmListingWasCalled    = false;
 
-    protected function cpmCreateFileHandle(int $iNet, int $iStn, string $sCpmPath, bool $bMustExist, bool $bReadOnly): mixed
+    protected function cpmCreateFileHandle(int $iNet, int $iStn, string $sCpmPath, bool $bMustExist, bool $bReadOnly): FileDescriptor
     {
         if ($this->stubFileCreateEx !== null) {
             throw $this->stubFileCreateEx;
@@ -65,7 +65,7 @@ class TorchnetTestable extends Torchnet
         $this->capMove = ['from' => $sFrom, 'to' => $sTo];
     }
 
-    protected function cpmCreateFsHandle(int $iNet, int $iStn, string $sCpmPath, bool $bMustExist, bool $bReadOnly): mixed
+    protected function cpmCreateFsHandle(int $iNet, int $iStn, string $sCpmPath, bool $bMustExist, bool $bReadOnly): FileDescriptor
     {
         if ($this->stubDirCreateEx !== null) {
             throw $this->stubDirCreateEx;
@@ -74,7 +74,7 @@ class TorchnetTestable extends Torchnet
         return $this->stubCpmDirFd;
     }
 
-    protected function cpmGetDirectoryListing(object $oFd): array
+    protected function cpmGetDirectoryListing(FileDescriptor $oFd): array
     {
         $this->cpmListingWasCalled = true;
         return $this->stubCpmListing;
@@ -188,14 +188,6 @@ class TorchnetProviderTest extends TestCase
         $aBytes = $this->dispatch($this->pkt(pack('CC', 0x01, ord('E')) . pack('C', 0x01) . 'MYPROG  COM'));
         $this->assertEquals(0x00, $aBytes[1]);
         $this->assertGreaterThan(0, $aBytes[2]);
-    }
-
-    public function testOpenFailureWhenWrapperReturnsNull(): void
-    {
-        $this->oProvider->stubCpmFileFd = null;
-        $aBytes = $this->dispatch($this->pkt(pack('CC', 0x01, ord('E')) . pack('C', 0x01) . 'MYPROG  COM'));
-        $this->assertEquals(0xFF, $aBytes[1]);
-        $this->assertEquals(0x00, $aBytes[2]);
     }
 
     public function testOpenFailureWhenWrapperThrows(): void
@@ -544,13 +536,6 @@ class TorchnetProviderTest extends TestCase
         $this->assertEquals(0x00, $aBytes[1]);
         $sFirst5 = chr($aBytes[2]) . chr($aBytes[3]) . chr($aBytes[4]) . chr($aBytes[5]) . chr($aBytes[6]);
         $this->assertEquals('EDITO', $sFirst5);
-    }
-
-    public function testSearchFirstReturnsSearchEndWhenDirFdIsNull(): void
-    {
-        $this->oProvider->stubCpmDirFd = null;
-        $aBytes = $this->dispatch($this->searchPkt(0x06, 'E', '????????COM'));
-        $this->assertEquals(0xFF, $aBytes[1]);
     }
 
     public function testSearchFirstReturnsSearchEndWhenDirThrows(): void

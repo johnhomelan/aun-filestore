@@ -10,16 +10,19 @@
 use PHPUnit\Framework\TestCase;
 use HomeLan\FileStore\Services\Provider\PrintServer\PrinterRegistry;
 use HomeLan\FileStore\Services\Provider\PrintServer\Printer;
+use HomeLan\FileStore\Authentication\User;
 
 include_once('include/system.inc.php');
 
 // ---------------------------------------------------------------------------
 // Minimal user stub
 // ---------------------------------------------------------------------------
-class RegistryFakeUser
+class RegistryFakeUser extends User
 {
-    public function __construct(private readonly string $sUsername) {}
-    public function getUsername(): string { return $this->sUsername; }
+    public function __construct(string $sUsername)
+    {
+        $this->setUsername($sUsername);
+    }
 }
 
 class PrinterRegistryTest extends TestCase

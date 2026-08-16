@@ -1,0 +1,12 @@
+parameters:
+	ignoreErrors:
+		-
+			message: '#^Call to function is_countable\(\) with array<mixed> will always evaluate to true\.$#'
+			identifier: function.alreadyNarrowedType
+			count: 1
+			path: src/include/classes/Admin/Smarty/IfIsObjectCompiler.php
+		-
+			message: '#^Path in require_once\(\) "/usr/share/aun-filestored/vendor/autoload\.php" is not a file or it does not exist\.$#'
+			identifier: requireOnce.fileNotFound
+			count: 1
+			path: src/filestored

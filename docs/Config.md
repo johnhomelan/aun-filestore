@@ -818,3 +818,25 @@ Minimum number of seconds between automatic Teefax refreshes, checked on every h
 ~~~~~~
 teletext_teefax_refresh_interval = 86400
 ~~~~~~
+
+
+Viewdata
+==
+
+See [docs/protocols/viewdata.md](protocols/viewdata.md) for the wire protocol. There is no per-session service selection — every session bridges to the same configured upstream viewdata/videotex server (e.g. [Telstar](https://glasstty.com/telstar/)) over a plain TCP connection.
+
+**viewdata_host**
+
+Hostname or IP address of the upstream viewdata/videotex server. Default is `glasstty.com`.
+
+~~~~~~
+viewdata_host = glasstty.com
+~~~~~~
+
+**viewdata_port**
+
+TCP port to connect to on `viewdata_host`. Telstar offers `6502`/`6503` (8 data bits, no parity) and `6504` (7 data bits, even parity, for legacy terminal emulation). Default is `6502`.
+
+~~~~~~
+viewdata_port = 6502
+~~~~~~

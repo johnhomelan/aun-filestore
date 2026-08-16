@@ -76,6 +76,12 @@ Impliments a number of network services, that sit ontop of the econet encapsulat
     * One channel can be kept automatically populated from the [Teefax](https://magazine.raspberrypi.com/articles/teefax) teletext archive — set `teletext_teefax_channel` and the server periodically downloads and converts it in the background via its own housekeeping mechanism (no cron job needed), the same way it never blocks on anything else. See the "Teefax import" section of [docs/protocols/teletext.md](docs/protocols/teletext.md).
     * The admin interface shows service status, a read-only listing of channels and how many pages each has, and a "Refresh Teefax Now" button.
 
+* Viewdata
+    * Bridges an Econet station to a remote viewdata/videotex server — such as [Telstar](https://glasstty.com/telstar/), the open-source Prestel-style videotex server — over a plain TCP connection, one session per station. See [docs/protocols/viewdata.md](docs/protocols/viewdata.md) for the wire protocol.
+    * Unlike BeebTerm's menu of named local commands, there is exactly one upstream target, configured via `viewdata_host`/`viewdata_port` (defaults to Telstar's public server at `glasstty.com:6502`).
+    * A transparent byte pipe once connected — no character-set translation or pacing happens server-side, since the upstream viewdata server already throttles page rendering itself.
+    * BBC BASIC client software (both a plain listing and a 6502 `*command` build script) is provided under `bbc-tests/` (`VDTEST.BBC`, `VDCMD.BBC`).
+
 
 ## Admin Web Front End ##
 A browser-based admin interface is included and starts automatically with the server.
@@ -717,6 +723,7 @@ Detailed wire-format documentation for every protocol implemented by the server:
 * [TorchNet](docs/protocols/torchnet.md) — CP/M file server for Torch workstations: all command codes with request and reply byte layouts, record I/O, drive mapping, filename conventions
 * [MaceMail](docs/protocols/macemail.md) — reverse-engineered 1985 MaceMail electronic-mail protocol: quick-command envelope, operation codes, logon/mail/store/directory/chat payload layouts
 * [Teletext](docs/protocols/teletext.md) — Econet teletext server protocol (TSERV): ports, discovery, operation codes, page/current-page payload layouts
+* [Viewdata](docs/protocols/viewdata.md) — Econet-to-TCP viewdata/videotex bridge protocol (e.g. for Telstar): login/reject/data/terminate packet types, sequence fields, backend configuration
 
 ## Developer Documentation ##
 

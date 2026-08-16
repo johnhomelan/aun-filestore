@@ -5,7 +5,7 @@ on:
     branches:
       - master
     paths:
-      - 'README.md'
+      - 'DOCKERHUB.md'
   workflow_dispatch:
 
 jobs:
@@ -21,4 +21,5 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
           repository: crowly/aun-filestore
+          readme-filepath: ./DOCKERHUB.md
 

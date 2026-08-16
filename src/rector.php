@@ -6,22 +6,22 @@ use Rector\CodeQuality\Rector\Class_\InlineConstructorDefaultToPropertyRector;
 use Rector\CodeQuality\Rector\Class_\CompleteDynamicPropertiesRector;
 use Rector\Config\RectorConfig;
 use Rector\Set\ValueObject\LevelSetList;
-use Rector\Symfony\Set\SymfonyLevelSetList;
+use Rector\Symfony\Set\SymfonySetList;
 
 return static function (RectorConfig $rectorConfig): void {
     $rectorConfig->paths([
         __DIR__ . '/include',
-	__DIR__ . '.filestored',
+        __DIR__ . '/filestored',
     ]);
 
     // register a single rule
     $rectorConfig->rule(InlineConstructorDefaultToPropertyRector::class);
     $rectorConfig->rule(CompleteDynamicPropertiesRector::class);
-    
+
 
     ##define sets of rules
         $rectorConfig->sets([
-            LevelSetList::UP_TO_PHP_81,
-	    SymfonyLevelSetList::UP_TO_SYMFONY_60
+            LevelSetList::UP_TO_PHP_85,
+	    SymfonySetList::COMPOSER_BASED,
         ]);
 };

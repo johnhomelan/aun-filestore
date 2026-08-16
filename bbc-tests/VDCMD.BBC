@@ -1,0 +1,463 @@
+   10 REM ===================================================
+   20 REM VDCMD - Viewdata Client, 6502 assembler build script
+   30 REM Assembles a standalone *command (machine code) that
+   40 REM implements the same Econet Viewdata terminal as
+   50 REM VDTEST.BBC, so it can be run without a BASIC
+   60 REM interpreter present, just "*VDCMD" from the OS
+   70 REM command line.
+   80 REM
+   90 REM Usage: *VDCMD [station|network.station]
+  100 REM   *VDCMD          - connects to the station configured below
+  110 REM                     (iVDStn%, network 0), same as no argument
+  120 REM   *VDCMD 254      - connects to station 254 on the local network
+  130 REM   *VDCMD 1.254    - connects to station 254 on network 1
+  140 REM
+  150 REM RUN this file once: it assembles the code, then
+  160 REM saves it to disc as a machine code file called
+  170 REM VDCMD, ready to be run as "*VDCMD".
+  180 REM
+  190 REM Equivalent manual save command, if you'd rather run
+  200 REM it yourself instead of letting this program do it
+  210 REM (start/end/exec/reload are all printed after
+  220 REM assembly, in case you need to redo it):
+  230 REM   *SAVE VDCMD <start> <end> <exec> <reload>
+  240 REM
+  250 REM Low-level Econet control block layout, and the
+  260 REM OSBYTE &81/&7E keyboard/escape conventions, verified
+  270 REM against J.G.Harston's BLib.Net library and the OSWORD
+  280 REM reference at https://mdfs.net/Docs/Comp/BBC/Oswords
+  290 REM and https://beebwiki.mdfs.net/OSBYTE_&81
+  300 REM ===================================================
+  310 :
+  320 REM --- Configuration - edit and re-run to change ---
+  330 iVDStn%=254          : REM station running the Viewdata bridge
+  340 iPort%=&A3           : REM Viewdata bridge port
+  350 :
+  360 REM --- MOS entry points ---
+  370 OSWRCH=&FFEE:OSBYTE=&FFF4:OSWORD=&FFF1
+  380 :
+  390 REM --- Zero page: only the screen-copy pointer needs to
+  400 REM live here, since (zp),Y indirect addressing is the
+  410 REM only 6502 mode that requires a zero-page base. &70/71
+  420 REM is in the conventional free "user zero page" range.
+  430 zpptr%=&70
+  440 :
+  450 code%=&2000          : REM assembly origin - well clear of
+  460 REM zero page, OS workspace, the stack page and the MODE 7
+  470 REM screen (&7C00+), so it's safe as a fixed load address.
+  480 :
+  490 PROCassemble
+  500 PRINT
+  510 PRINT "Assembled ";end%-code%;" bytes."
+  520 PRINT "Entry/load address: &";~code%
+  530 PRINT "End address:        &";~end%
+  540 sCmd$="SAVE VDCMD "+STR$~(code%)+" "+STR$~(end%)+" "+STR$~(code%)+" "+STR$~(code%)
+  550 PRINT "*";sCmd$
+  560 OSCLI(sCmd$)
+  570 PRINT "Saved. Run it with *VDCMD"
+  580 END
+  590 :
+  600 REM =====================================================
+  610 REM PROCassemble - two-pass BBC BASIC inline assembler
+  620 REM =====================================================
+  630 DEF PROCassemble
+  640   FOR pass%=0 TO 3 STEP 3
+  650     P%=code%
+  660     [OPT pass%
+  670 :
+  680     \ ===============================================
+  690     \ Entry point - *VDCMD jumps straight in here
+  700     \ ===============================================
+  710     .start
+  720     JSR readargs
+  730     JSR init
+  740     JSR login
+  750     LDA session
+  760     BEQ finish
+  770     JSR mainloop
+  780     .finish
+  790     JSR cleanup
+  800     LDA #22:JSR OSWRCH:LDA #7:JSR OSWRCH  \ VDU 22,7 = MODE 7
+  810     LDX #LO(msgbye):LDY #HI(msgbye):JSR prstr
+  820     RTS
+  830 :
+  840     \ ===============================================
+  850     \ init - one-off setup: MODE 7, banner, and the
+  860     \ fixed (never-changing) fields of both control
+  870     \ blocks: port, station, network, tx buffer start
+  880     \ ===============================================
+  890     .init
+  900     LDA #22:JSR OSWRCH:LDA #7:JSR OSWRCH  \ MODE 7
+  910     LDX #LO(msghello):LDY #HI(msghello):JSR prstr
+  920     LDA #0:STA myseq:STA theirseq:STA session:STA rxnum
+  930     LDA #cfgport:STA txblock+1
+  940     LDA cfgstn_rt: STA txblock+2
+  950     LDA cfgnet_rt: STA txblock+3
+  960     LDA #LO(txbuf):STA txblock+4
+  970     LDA #HI(txbuf):STA txblock+5
+  980     LDA #0:STA txblock+12:STA txblock+13:STA txblock+14:STA txblock+15
+  990     RTS
+ 1000 :
+ 1010     \ ===============================================
+ 1020     \ readargs - reads the *command line tail via
+ 1030     \ OSARGS (A=1,Y=0 -> XY block gets a pointer to
+ 1040     \ the parameter text, CR-terminated). Sets
+ 1050     \ cfgstn_rt/cfgnet_rt from "station" or
+ 1060     \ "network.station"; if nothing was typed after
+ 1070     \ the command name, falls back to the assembled-in
+ 1080     \ default (cfgstn, network 0) - unchanged behaviour.
+ 1090     \ ===============================================
+ 1100     .readargs
+ 1110     LDA #1:LDX #zpptr%:LDY #0:JSR OSARGS
+ 1120     \ zpptr%/zpptr%+1 now point at the command tail (zpptr%+2/+3 are
+ 1130     \ also written by OSARGS as a side effect and are otherwise unused)
+ 1140     LDY #0
+ 1150     LDA (zpptr%),Y
+ 1160     CMP #13:BEQ ra_default        \ nothing typed after the command name
+ 1170     JSR parsearg
+ 1180     RTS
+ 1190     .ra_default
+ 1200     LDA #cfgstn:STA cfgstn_rt
+ 1210     LDA #0:     STA cfgnet_rt
+ 1220     RTS
+ 1230 :
+ 1240     \ ===============================================
+ 1250     \ parsearg - parses "station" or "network.station"
+ 1260     \ at (zpptr%),Y (Y=0 on entry) into cfgstn_rt and
+ 1270     \ cfgnet_rt.
+ 1280     \ ===============================================
+ 1290     .parsearg
+ 1300     JSR pa_readnum                \ leaves the value in parseval, and
+ 1310     \ the character that stopped the run of digits in A
+ 1320     CMP #46:BEQ pa_hasnet         \ '.' -> what we just read was the network
+ 1330     LDA parseval:STA cfgstn_rt
+ 1340     LDA #0:STA cfgnet_rt
+ 1350     RTS
+ 1360     .pa_hasnet
+ 1370     LDA parseval:STA cfgnet_rt
+ 1380     INY                            \ skip the '.'
+ 1390     JSR pa_readnum
+ 1400     LDA parseval:STA cfgstn_rt
+ 1410     RTS
+ 1420 :
+ 1430     \ ===============================================
+ 1440     \ pa_readnum - reads a run of ASCII digits at
+ 1450     \ (zpptr%),Y, accumulating into parseval (8-bit,
+ 1460     \ wraps silently on overflow - station/network
+ 1470     \ numbers fit in a byte). Advances Y past the last
+ 1480     \ digit. Returns the non-digit that stopped it in A.
+ 1490     \ ===============================================
+ 1500     .pa_readnum
+ 1510     LDA #0:STA parseval
+ 1520     .pa_rn_loop
+ 1530     LDA (zpptr%),Y
+ 1540     CMP #48:BCC pa_rn_done         \ < '0'
+ 1550     CMP #58:BCS pa_rn_done         \ > '9'
+ 1560     SEC:SBC #48:STA pa_digit       \ ASCII digit -> 0-9
+ 1570     LDA parseval:ASL A:STA pa_temp \ pa_temp = val*2
+ 1580     ASL A:ASL A                    \ A = val*8
+ 1590     CLC:ADC pa_temp                \ A = val*8+val*2 = val*10
+ 1600     CLC:ADC pa_digit               \ A = val*10+digit
+ 1610     STA parseval
+ 1620     INY
+ 1630     JMP pa_rn_loop
+ 1640     .pa_rn_done
+ 1650     LDA (zpptr%),Y                 \ reload the terminating character for the caller
+ 1660     RTS
+ 1670 :
+ 1680     \ ===============================================
+ 1690     \ tx - transmit. On entry: A=control byte (bit 7
+ 1700     \ must be set), X=payload length (bytes already in
+ 1710     \ txbuf). Returns A=0 on success, else an Econet
+ 1720     \ error code. Retries up to 5 times on a jammed
+ 1730     \ line / net error, same as the BASIC client.
+ 1740     \ ===============================================
+ 1750     .tx
+ 1760     STA txctrl:STX txtemp
+ 1770     CLC:LDA #LO(txbuf):ADC txtemp:STA txblock+8
+ 1780     LDA #HI(txbuf):ADC #0:STA txblock+9
+ 1790     LDA #5:STA txretry
+ 1800     .tx_attempt
+ 1810     .tx_arm
+ 1820     LDA txctrl:STA txblock+0
+ 1830     LDA #&10:LDX #LO(txblock):LDY #HI(txblock):JSR OSWORD
+ 1840     LDA txblock+0:BEQ tx_arm      \ still 0 = failed to start, re-arm and retry
+ 1850     .tx_poll
+ 1860     LDA #&32:LDX #0:LDY #0:JSR OSBYTE
+ 1870     TYA:BMI tx_poll               \ bit 7 set = still busy
+ 1880     CMP #&41:BEQ tx_jammed
+ 1890     CMP #&42:BEQ tx_jammed
+ 1900     RTS                           \ A = final status, 0 = ok
+ 1910     .tx_jammed
+ 1920     DEC txretry:BEQ tx_giveup
+ 1930     JSR delay20
+ 1940     JMP tx_attempt
+ 1950     .tx_giveup
+ 1960     RTS                           \ A still holds &41/&42
+ 1970 :
+ 1980     \ ===============================================
+ 1990     \ rxopen - (re)opens a receive block listening for
+ 2000     \ our station/port. Re-establishes the full block
+ 2010     \ every call: a completed read leaves the "buffer
+ 2020     \ end" field pointing at the end of the received
+ 2030     \ data, not the end of the buffer, so it must be
+ 2040     \ put back before the block can be reused.
+ 2050     \ Returns A=handle (0 = none free), also in rxnum.
+ 2060     \ ===============================================
+ 2070     .rxopen
+ 2080     LDA #0:        STA rxblock+0
+ 2090     LDA #&7F:      STA rxblock+1
+ 2100     LDA #cfgport:  STA rxblock+2
+ 2110     LDA cfgstn_rt: STA rxblock+3
+ 2120     LDA cfgnet_rt: STA rxblock+4
+ 2130     LDA #LO(rxbuf):STA rxblock+5
+ 2140     LDA #HI(rxbuf):STA rxblock+6
+ 2150     LDA #0:        STA rxblock+7
+ 2160     LDA #0:        STA rxblock+8
+ 2170     LDA #LO(rxbuf+1024):STA rxblock+9
+ 2180     LDA #HI(rxbuf+1024):STA rxblock+10
+ 2190     LDA #0:        STA rxblock+11
+ 2200     LDA #0:        STA rxblock+12
+ 2210     LDA #&11:LDX #LO(rxblock):LDY #HI(rxblock):JSR OSWORD
+ 2220     LDA rxblock+0:STA rxnum
+ 2230     RTS
+ 2240 :
+ 2250     \ ===============================================
+ 2260     \ rxpoll - non-blocking check of receive block
+ 2270     \ rxnum. Returns with N set (BMI taken) if data is
+ 2280     \ waiting, N clear (BPL taken) if not.
+ 2290     \ ===============================================
+ 2300     .rxpoll
+ 2310     LDA #&33:LDX rxnum:LDY #0:JSR OSBYTE
+ 2320     TYA
+ 2330     RTS
+ 2340 :
+ 2350     \ ===============================================
+ 2360     \ rxread - reads and frees receive block rxnum into
+ 2370     \ rxbuf. Sets rxflag to the control byte of the
+ 2380     \ packet received. rxblock+9/+10 hold the absolute
+ 2390     \ address of the end of the data on return - used
+ 2400     \ directly by dispframe below instead of a length.
+ 2410     \ ===============================================
+ 2420     .rxread
+ 2430     LDA rxnum:STA rxblock+0
+ 2440     LDA #&11:LDX #LO(rxblock):LDY #HI(rxblock):JSR OSWORD
+ 2450     LDA rxblock+1:STA rxflag
+ 2460     RTS
+ 2470 :
+ 2480     \ ===============================================
+ 2490     \ rxkill - abandons a receive block that was opened
+ 2500     \ but never triggered (OSBYTE &34). X=handle.
+ 2510     \ ===============================================
+ 2520     .rxkill
+ 2530     LDA #&34:JSR OSBYTE
+ 2540     RTS
+ 2550 :
+ 2560     \ ===============================================
+ 2570     \ login - sends LOGIN, waits up to ~5s for a reply
+ 2580     \ ===============================================
+ 2590     .login
+ 2600     JSR rxopen
+ 2610     LDA rxnum:BNE login_gotblock
+ 2620     LDX #LO(msgnoblock):LDY #HI(msgnoblock):JSR prstr
+ 2630     RTS
+ 2640     .login_gotblock
+ 2650     LDA #&81:LDX #0:JSR tx        \ LOGIN, no payload
+ 2660     CMP #0:BEQ login_sent
+ 2670     LDX #LO(msgtxfail):LDY #HI(msgtxfail):JSR prstr
+ 2680     LDX rxnum:JSR rxkill
+ 2690     RTS
+ 2700     .login_sent
+ 2710     LDA #250:STA logintmo         \ ~250 * 20ms = ~5s
+ 2720     .login_wait
+ 2730     JSR rxpoll:BMI login_reply
+ 2740     JSR delay20
+ 2750     DEC logintmo:BNE login_wait
+ 2760     LDX #LO(msgtimeout):LDY #HI(msgtimeout):JSR prstr
+ 2770     LDX rxnum:JSR rxkill
+ 2780     RTS
+ 2790     .login_reply
+ 2800     JSR rxread
+ 2810     LDA rxflag:CMP #&82:BEQ login_ok
+ 2820     LDX #LO(msgreject):LDY #HI(msgreject):JSR prstr
+ 2830     RTS
+ 2840     .login_ok
+ 2850     LDA #1:STA session
+ 2860     LDA #1:STA myseq              \ 1st Tx seq must be non-zero
+ 2870     LDA #255:STA theirseq         \ 1st expected Rx seq must not equal it
+ 2880     LDX #LO(msgconnect):LDY #HI(msgconnect):JSR prstr
+ 2890     RTS
+ 2900 :
+ 2910     \ ===============================================
+ 2920     \ mainloop - interactive terminal: poll keyboard,
+ 2930     \ poll for page data, until the server hangs up or
+ 2940     \ ESCAPE is pressed.
+ 2950     \ ===============================================
+ 2960     .mainloop
+ 2970     JSR rxopen
+ 2980     .ml_loop
+ 2990     LDA #129:LDX #0:LDY #0:JSR OSBYTE      \ OSBYTE 129 = INKEY, immediate poll
+ 3000     BCC ml_gotkey
+ 3010     CPY #27:BEQ ml_escape
+ 3020     JMP ml_poll_rx
+ 3030     .ml_gotkey
+ 3040     JSR senddata
+ 3050     .ml_poll_rx
+ 3060     JSR rxpoll:BPL ml_no_data
+ 3070     JSR rxread
+ 3080     JSR rxopen             \ reopen at once, unconditionally - same as
+ 3090     \ the BASIC client: leaves rxnum holding a fresh, never-triggered
+ 3100     \ handle no matter which packet type we just got, so cleanup's
+ 3110     \ rxkill is always safe to call on it later
+ 3120     LDA rxflag
+ 3130     CMP #&80:BEQ ml_data
+ 3140     CMP #&84:BEQ ml_terminate
+ 3150     JMP ml_no_data
+ 3160     .ml_data
+ 3170     JSR dispframe
+ 3180     JMP ml_no_data
+ 3190     .ml_terminate
+ 3200     LDX #LO(msgclosed):LDY #HI(msgclosed):JSR prstr
+ 3210     LDA #0:STA session
+ 3220     RTS
+ 3230     .ml_no_data
+ 3240     LDA session:BNE ml_loop
+ 3250     RTS
+ 3260     .ml_escape
+ 3270     LDA #126:JSR OSBYTE           \ OSBYTE 126 = acknowledge Escape
+ 3280     LDA #0:STA session
+ 3290     RTS
+ 3300 :
+ 3310     \ ===============================================
+ 3320     \ senddata - X holds the key code (from OSBYTE 129
+ 3330     \ above). Sends it as a DATA packet.
+ 3340     \ ===============================================
+ 3350     .senddata
+ 3360     STX txtemp2
+ 3370     LDA myseq:STA txbuf+0
+ 3380     LDA theirseq:STA txbuf+1
+ 3390     LDA txtemp2:STA txbuf+2
+ 3400     LDA #&80:LDX #3:JSR tx
+ 3410     CMP #0:BNE sd_done
+ 3420     INC myseq                     \ 8-bit wrap is automatic
+ 3430     .sd_done
+ 3440     RTS
+ 3450 :
+ 3460     \ ===============================================
+ 3470     \ dispframe - displays a just-read DATA frame.
+ 3480     \ rxbuf+0=their seq, rxbuf+1=their ack (unused),
+ 3490     \ rxbuf+2.. = page bytes up to rxblock+9/+10.
+ 3500     \ ===============================================
+ 3510     .dispframe
+ 3520     LDA rxblock+9:STA dispend      \ rxblock+9/10 is already an exclusive
+ 3530     LDA rxblock+10:STA dispend+1   \ end pointer for the whole payload -
+ 3540     \ the 2 seq bytes are skipped at the START (below) instead, so this
+ 3550     \ end pointer needs no adjustment of its own
+ 3560     LDA rxbuf+0:CMP theirseq:BEQ dispframe_done \ duplicate, already shown
+ 3570     STA theirseq
+ 3580     LDA #LO(rxbuf+2):STA zpptr%
+ 3590     LDA #HI(rxbuf+2):STA zpptr%+1
+ 3600     .df_loop
+ 3610     LDA zpptr%+1:CMP dispend+1:BNE df_continue
+ 3620     LDA zpptr%:CMP dispend:BEQ dispframe_done
+ 3630     .df_continue
+ 3640     LDY #0:LDA (zpptr%),Y:JSR OSWRCH
+ 3650     INC zpptr%:BNE df_loop
+ 3660     INC zpptr%+1:JMP df_loop
+ 3670     .dispframe_done
+ 3680     RTS
+ 3690 :
+ 3700     \ ===============================================
+ 3710     \ cleanup - frees any open receive block and tells
+ 3720     \ the server we're gone
+ 3730     \ ===============================================
+ 3740     .cleanup
+ 3750     LDA rxnum:BEQ cl_noblock
+ 3760     LDX rxnum:JSR rxkill
+ 3770     LDA #0:STA rxnum
+ 3780     .cl_noblock
+ 3790     LDA session:BEQ cl_done
+ 3800     LDA #&84:LDX #0:JSR tx
+ 3810     LDA #0:STA session
+ 3820     .cl_done
+ 3830     RTS
+ 3840 :
+ 3850     \ ===============================================
+ 3860     \ delay20 - waits ~20ms (OSBYTE 19 = wait for the
+ 3870     \ next two 20ms vsync events)
+ 3880     \ ===============================================
+ 3890     .delay20
+ 3900     LDA #19:JSR OSBYTE
+ 3910     RTS
+ 3920 :
+ 3930     \ ===============================================
+ 3940     \ prstr - prints a zero-terminated string. On
+ 3950     \ entry X/Y = LO/HI of the string address.
+ 3960     \ ===============================================
+ 3970     .prstr
+ 3980     STX zpptr%:STY zpptr%+1
+ 3990     .ps_loop
+ 4000     LDY #0:LDA (zpptr%),Y
+ 4010     BEQ ps_done
+ 4020     JSR OSWRCH
+ 4030     INC zpptr%:BNE ps_loop
+ 4040     INC zpptr%+1:JMP ps_loop
+ 4050     .ps_done
+ 4060     RTS
+ 4070 :
+ 4080     \ ===============================================
+ 4090     \ Fixed configuration - edit and re-run this
+ 4100     \ builder to change station/port.
+ 4110     \ ===============================================
+ 4120     cfgstn=iVDStn%
+ 4130     cfgport=iPort%
+ 4140 :
+ 4150     \ ===============================================
+ 4160     \ Messages
+ 4170     \ ===============================================
+ 4180     .msghello
+ 4190     EQUS "VIEWDATA CLIENT":EQUB 13,10,0
+ 4200     .msgnoblock
+ 4210     EQUS "No receive blocks free.":EQUB 13,10,0
+ 4220     .msgtxfail
+ 4230     EQUS "Transmit failed.":EQUB 13,10,0
+ 4240     .msgtimeout
+ 4250     EQUS "No reply from server (timed out).":EQUB 13,10,0
+ 4260     .msgreject
+ 4270     EQUS "Login rejected.":EQUB 13,10,0
+ 4280     .msgconnect
+ 4290     EQUS "Connected.":EQUB 13,10,13,10,0
+ 4300     .msgclosed
+ 4310     EQUS 13,10,"[Session closed by server]":EQUB 13,10,0
+ 4320     .msgbye
+ 4330     EQUS "Disconnected.":EQUB 13,10,0
+ 4340 :
+ 4350     \ ===============================================
+ 4360     \ Working storage
+ 4370     \ ===============================================
+ 4380     .myseq    EQUB 0
+ 4390     .theirseq EQUB 0
+ 4400     .rxnum    EQUB 0
+ 4410     .rxflag   EQUB 0
+ 4420     .session  EQUB 0
+ 4430     .txctrl   EQUB 0
+ 4440     .txtemp   EQUB 0
+ 4450     .txtemp2  EQUB 0
+ 4460     .txretry  EQUB 0
+ 4470     .logintmo EQUB 0
+ 4480     .dispend  EQUB 0,0
+ 4490     .cfgstn_rt EQUB 0   \ station, from the *command argument or cfgstn
+ 4500     .cfgnet_rt EQUB 0   \ network, from the *command argument or 0
+ 4510     .parseval  EQUB 0   \ pa_readnum's accumulator
+ 4520     .pa_digit  EQUB 0
+ 4530     .pa_temp   EQUB 0
+ 4540 :
+ 4550     .txblock  SKIP 16   \ OSWORD &10 control block
+ 4560     .rxblock  SKIP 16   \ OSWORD &11 control block
+ 4570     .txbuf    SKIP 8    \ outgoing payload (max 3 bytes used)
+ 4580     .rxbuf    SKIP 1024 \ incoming payload (one viewdata page)
+ 4590 :
+ 4600     end%=P%
+ 4610     ]
+ 4620   NEXT pass%
+ 4630 ENDPROC

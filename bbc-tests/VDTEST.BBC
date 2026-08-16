@@ -1,0 +1,194 @@
+   10 REM ===================================================
+   20 REM VDTEST - Viewdata Client (Telstar over Econet)
+   30 REM Talks to the HomeLan aun-filestore Viewdata bridge
+   40 REM (Services/Provider/Viewdata.php), which relays raw
+   50 REM bytes to a remote viewdata/videotex server such as
+   60 REM Telstar (glasstty.com).
+   70 REM
+   80 REM This is a full-duplex terminal: once connected, every
+   90 REM key you press is sent to the server as it is typed,
+  100 REM and page text sent back is displayed live in MODE 7
+  110 REM (teletext mode, which understands the same control
+  120 REM codes Prestel/Viewdata pages use, so pages need no
+  130 REM translation here - bytes go straight to VDU).
+  140 REM Press ESCAPE at any time to hang up and quit.
+  150 REM
+  160 REM Low-level Econet raw transmit/receive control block
+  170 REM layout adapted from J.G.Harston's BLib.Net library
+  180 REM (https://mdfs.net/System/Library/BLib/Net.bas) and
+  190 REM the OSWORD &10/&11 reference at
+  200 REM https://mdfs.net/Docs/Comp/BBC/Oswords
+  210 REM ===================================================
+  220 REM Setup before running:
+  230 REM   *NET               - switch to network filing system
+  240 REM   Set iVDStn% below to the station running filestored
+  250 REM   CHAIN"VDTEST" (or LOAD"VDTEST":RUN)
+  260 :
+  270 REM --- Configuration ---
+  280 iVDStn%=254          : REM station running the Viewdata bridge
+  290 iPort%=&A3           : REM Viewdata bridge port
+  300 :
+  310 REM --- Econet scratch buffers ---
+  320 DIM X% 20            : REM OSWORD/OSBYTE control block
+  330 DIM rxBuf% 1023      : REM Econet receive buffer (one page)
+  340 DIM txBuf% 31        : REM Econet transmit buffer
+  350 :
+  360 REM --- Session state ---
+  370 iRxNum%=0:bSession%=FALSE
+  380 :
+  390 MODE 7
+  400 ON ERROR GOTO 8000
+  410 PRINT "VIEWDATA CLIENT"
+  420 PRINT "Connecting to station ";iVDStn%;" port &";~iPort%;"..."
+  430 PRINT
+  440 :
+  450 PROClogin
+  460 IF bSession% THEN PROCmainloop
+  470 PROCcleanup
+  480 MODE 7
+  490 PRINT "Disconnected."
+  500 END
+  510 :
+  520 REM =====================================================
+  530 REM PROClogin - sends LOGIN, waits for LOGIN_OK/REJECT
+  540 REM =====================================================
+  550 DEF PROClogin
+  560   iRxNum%=FNrxopen(iVDStn%,iPort%,rxBuf%,1024)
+  570   IF iRxNum%=0 THEN PRINT "No receive blocks free.":ENDPROC
+  580   iErr%=FNtx(iVDStn%,&81,iPort%,txBuf%,0)
+  590   IF iErr%<>0 THEN PRINT "Transmit failed, code &";~iErr%:PROCrxkill(iRxNum%):iRxNum%=0:ENDPROC
+  600   iTmo%=TIME+500 : REM 5 second timeout
+  610   REPEAT:bGot%=FNrx(iRxNum%):UNTIL bGot% OR TIME>iTmo%
+  620   IF NOT bGot% THEN PRINT "No reply from server (timed out).":PROCrxkill(iRxNum%):iRxNum%=0:ENDPROC
+  630   iLen%=FNrxread(iRxNum%,rxBuf%,1024)
+  640   iRxNum%=0
+  650   IF iRxFlag%=&82 THEN PROCloginok ELSE PROCloginreject(iLen%)
+  660 ENDPROC
+  670 :
+  680 DEF PROCloginok
+  690   bSession%=TRUE
+  700   iMySeq%=1:iTheirSeq%=255 : REM 1st Tx seq must be non-zero, 1st expected Rx seq must not equal it
+  710   PRINT "Connected."
+  720   PRINT
+  730 ENDPROC
+  740 :
+  750 DEF PROCloginreject(iLen%)
+  760   PRINT "Login rejected";
+  770   IF iLen%>0 THEN PRINT ": ";:FOR iI%=0 TO iLen%-1:VDU rxBuf%?iI%:NEXT ELSE PRINT
+  780   PRINT
+  790 ENDPROC
+  800 :
+  810 REM =====================================================
+  820 REM PROCmainloop - interactive terminal: keyboard out,
+  830 REM page data in, until the server hangs up or ESCAPE
+  840 REM =====================================================
+  850 DEF PROCmainloop
+  860   iRxNum%=FNrxopen(iVDStn%,iPort%,rxBuf%,1024)
+  870   REPEAT
+  880     iKey%=INKEY(0)
+  890     IF iKey%>=0 THEN PROCsendkey(iKey%)
+  900     IF FNrx(iRxNum%) THEN PROCreceiveframe
+  910   UNTIL NOT bSession%
+  920 ENDPROC
+  930 :
+  940 DEF PROCsendkey(iKey%)
+  950   txBuf%?0=iMySeq%:txBuf%?1=iTheirSeq%:txBuf%?2=iKey%
+  960   iErr%=FNtx(iVDStn%,&80,iPort%,txBuf%,3)
+  970   IF iErr%=0 THEN iMySeq%=(iMySeq%+1)AND&FF
+  980 ENDPROC
+  990 :
+ 1000 DEF PROCreceiveframe
+ 1010   iLen%=FNrxread(iRxNum%,rxBuf%,1024)
+ 1020   iRxNum%=FNrxopen(iVDStn%,iPort%,rxBuf%,1024) : REM re-open at once, before we spend time drawing
+ 1030   IF iRxFlag%=&80 THEN PROCpagedata(iLen%)
+ 1040   IF iRxFlag%=&84 THEN PRINT'"[Session closed by server]":bSession%=FALSE
+ 1050 ENDPROC
+ 1060 :
+ 1070 DEF PROCpagedata(iLen%)
+ 1080   IF iLen%<2 THEN ENDPROC
+ 1090   iPktSeq%=rxBuf%?0
+ 1100   IF((iPktSeq%-iTheirSeq%)AND&FF)=0 THEN ENDPROC : REM duplicate, already displayed
+ 1110   iTheirSeq%=iPktSeq%
+ 1120   FOR iI%=2 TO iLen%-1
+ 1130     VDU rxBuf%?iI%
+ 1140   NEXT
+ 1150 ENDPROC
+ 1160 :
+ 1170 REM =====================================================
+ 1180 REM PROCcleanup - frees any open receive block and tells
+ 1190 REM the server we're gone
+ 1200 REM =====================================================
+ 1210 DEF PROCcleanup
+ 1220   IF iRxNum%<>0 THEN PROCrxkill(iRxNum%):iRxNum%=0
+ 1230   IF bSession% THEN iErr%=FNtx(iVDStn%,&84,iPort%,txBuf%,0):bSession%=FALSE
+ 1240 ENDPROC
+ 1250 :
+ 1260 REM =====================================================
+ 1270 REM Low level Econet primitives (OSWORD &10/&11, OSBYTE
+ 1280 REM &32/&33/&34). Adapted from J.G.Harston's BLib.Net -
+ 1290 REM see header comment for source.
+ 1300 REM =====================================================
+ 1310 :
+ 1320 REM FNtx - transmit iLen% bytes from iAddr% to iStn% on
+ 1330 REM iPort% with control byte iCtrl% (bit 7 must be set).
+ 1340 REM Returns 0 on success, else an Econet error code.
+ 1350 DEF FNtx(iStn%,iCtrl%,iPort%,iAddr%,iLen%)
+ 1360   LOCAL iE%,iTry%
+ 1370   X%?1=iPort%:X%!2=iStn%:X%!4=iAddr%:X%!8=iAddr%+iLen%:X%!12=0
+ 1380   iTry%=5
+ 1390   REPEAT
+ 1400     REPEAT:X%?0=iCtrl%:A%=&10:CALL&FFF1:UNTIL X%?0<>0
+ 1410     REPEAT:iE%=FNbyte(&32,0,0):UNTIL iE%<&80
+ 1420     IF iE%=&41 OR iE%=&42 THEN iTry%=iTry%-1:PROCdelay(50)
+ 1430   UNTIL(iE%<>&41 AND iE%<>&42)OR iTry%<1
+ 1440 =iE%
+ 1450 :
+ 1460 REM FNrxopen - opens a receive block listening on iPort%
+ 1470 REM (from any station). Returns the block handle, or 0
+ 1480 REM if no receive blocks are free.
+ 1490 DEF FNrxopen(iStn%,iPort%,iAddr%,iLen%)
+ 1500   X%?0=0:X%?1=&7F:X%?2=iPort%:X%!3=iStn%:X%!5=iAddr%:X%!9=iAddr%+iLen%
+ 1510   A%=&11:CALL&FFF1
+ 1520 =X%?0
+ 1530 :
+ 1540 REM FNrx - TRUE if the receive block iRxNum% has data
+ 1550 REM waiting (non-blocking poll).
+ 1560 DEF FNrx(iRxNum%)
+ 1570 =(FNbyte(&33,iRxNum%,0)AND&80)<>0
+ 1580 :
+ 1590 REM FNrxread - reads and frees receive block iRxNum%.
+ 1600 REM Sets global iRxFlag% to the control byte of the
+ 1610 REM packet received. Returns the number of data bytes.
+ 1620 DEF FNrxread(iRxNum%,iAddr%,iLen%)
+ 1630   X%?0=iRxNum%:X%!5=iAddr%:X%!9=iAddr%+iLen%
+ 1640   A%=&11:CALL&FFF1
+ 1650   iRxFlag%=X%?1
+ 1660 =X%!9-iAddr%
+ 1670 :
+ 1680 REM PROCrxkill - abandons a receive block that was
+ 1690 REM opened but never triggered.
+ 1700 DEF PROCrxkill(iRxNum%)
+ 1710   iE%=FNbyte(&34,iRxNum%,0)
+ 1720 ENDPROC
+ 1730 :
+ 1740 REM FNbyte - OSBYTE wrapper. Parameter names deliberately
+ 1750 REM shadow A%/X%/Y% - USR reads the current scope's A%/X%/
+ 1760 REM Y% to load the 6502 registers before calling.
+ 1770 DEF FNbyte(A%,X%,Y%)=((USR&FFF4)AND&FF00)DIV256
+ 1780 :
+ 1790 DEF PROCdelay(iCs%)
+ 1800   LOCAL iT%
+ 1810   iT%=TIME+iCs%
+ 1820   REPEAT UNTIL TIME>iT%
+ 1830 ENDPROC
+ 1840 :
+ 1850 REM =====================================================
+ 1860 REM ERROR HANDLER (also catches ESCAPE)
+ 1870 REM =====================================================
+ 1880 8000 IF iRxNum%<>0 THEN PROCrxkill(iRxNum%):iRxNum%=0
+ 1890 8010 IF bSession% THEN iErr%=FNtx(iVDStn%,&84,iPort%,txBuf%,0):bSession%=FALSE
+ 1900 8020 ON ERROR OFF
+ 1910 8030 IF ERR<>17 THEN PRINT'"Error ";ERR;": ";REPORT$
+ 1920 8040 MODE 7
+ 1930 8050 PRINT "Disconnected."
+ 1940 8060 END

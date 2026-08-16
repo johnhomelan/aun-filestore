@@ -17,6 +17,7 @@ use HomeLan\FileStore\Services\Provider\BeebTerm;
 use HomeLan\FileStore\Services\Provider\Torchnet;
 use HomeLan\FileStore\Services\Provider\MaceMail;
 use HomeLan\FileStore\Services\Provider\Teletext;
+use HomeLan\FileStore\Services\Provider\Viewdata;
 
 use Monolog\Logger;
 use Monolog\Handler\SyslogHandler;
@@ -39,7 +40,8 @@ $oApplication = new SingleCommandApplication(
 				new BeebTerm($oLogger),
 				new Torchnet($oLogger),
 				new MaceMail($oLogger),
-				new Teletext($oLogger)
+				new Teletext($oLogger),
+				new Viewdata($oLogger)
 			]
 		)
 	)

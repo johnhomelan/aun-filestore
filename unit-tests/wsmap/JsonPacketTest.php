@@ -50,9 +50,7 @@ class JsonPacketTest extends TestCase
     // -------------------------------------------------------------------------
 
     /**
-     * Build a JSON-encoded 'pkt' message.
-     *
-     * All payload bytes must be ≤ 0x7F for valid UTF-8 in JSON.
+     * Build a JSON-encoded 'pkt' message. payload is base64, so any byte value is safe.
      */
     private function makePktJson(
         int    $iDstNet  = 128,
@@ -60,7 +58,7 @@ class JsonPacketTest extends TestCase
         int    $iSrcNet  = 1,
         int    $iSrcStn  = 1,
         int    $iAunType = 2,      // 2=Unicast
-        int    $iPort    = 0x01,   // must be ≤ 0x7F
+        int    $iPort    = 0x01,
         int    $iCb      = 0,
         int    $iSeq     = 42,
         string $sData    = 'hello'
@@ -70,7 +68,7 @@ class JsonPacketTest extends TestCase
             'type'    => 'pkt',
             'src'     => ['station' => $iSrcStn, 'network' => $iSrcNet],
             'dst'     => ['station' => $iDstStn, 'network' => $iDstNet],
-            'payload' => $sPayload,
+            'payload' => base64_encode($sPayload),
         ], JSON_THROW_ON_ERROR);
     }
 
@@ -138,8 +136,10 @@ class JsonPacketTest extends TestCase
 
     public function testDecodeSetsPort(): void
     {
-        $oPkt = $this->decodePacket($this->makePktJson(iPort: 0x7F));
-        $this->assertSame(0x7F, $oPkt->getPort());
+        // 0xFF exercises a port byte value that would have been invalid UTF-8
+        // before payload was base64-encoded.
+        $oPkt = $this->decodePacket($this->makePktJson(iPort: 0xFF));
+        $this->assertSame(0xFF, $oPkt->getPort());
     }
 
     public function testDecodeSetsData(): void
@@ -152,6 +152,13 @@ class JsonPacketTest extends TestCase
     {
         $oPkt = $this->decodePacket($this->makePktJson(sData: ''));
         $this->assertSame('', $oPkt->getData());
+    }
+
+    public function testDecodeRoundTripsDataContainingHighBitBytes(): void
+    {
+        $sData = "\xFF\x80\x01\x7F\x00";
+        $oPkt = $this->decodePacket($this->makePktJson(sData: $sData));
+        $this->assertSame($sData, $oPkt->getData());
     }
 
     // =========================================================================
@@ -202,7 +209,7 @@ class JsonPacketTest extends TestCase
     {
         $oPkt = $this->decodePacket($this->makePktJson(iAunType: 2, iSeq: 33));
         $aDecoded = json_decode($oPkt->buildAck(), true);
-        $aType = unpack('C', $aDecoded['payload']);
+        $aType = unpack('C', base64_decode($aDecoded['payload']));
         $this->assertSame(3, $aType[1]);
     }
 
@@ -210,7 +217,7 @@ class JsonPacketTest extends TestCase
     {
         $oPkt = $this->decodePacket($this->makePktJson(iAunType: 2, iSeq: 99));
         $aDecoded = json_decode($oPkt->buildAck(), true);
-        $aSeq = unpack('V', substr($aDecoded['payload'], 4, 4));
+        $aSeq = unpack('V', substr(base64_decode($aDecoded['payload']), 4, 4));
         $this->assertSame(99, (int) $aSeq[1]);
     }
 
@@ -241,7 +248,7 @@ class JsonPacketTest extends TestCase
     {
         $oPkt = $this->decodePacket($this->makePktJson(iAunType: 5, iCb: 0));
         $aDecoded = json_decode($oPkt->buildAck(), true);
-        $aType = unpack('C', $aDecoded['payload']);
+        $aType = unpack('C', base64_decode($aDecoded['payload']));
         $this->assertSame(6, $aType[1]);
     }
 
@@ -249,7 +256,7 @@ class JsonPacketTest extends TestCase
     {
         $oPkt = $this->decodePacket($this->makePktJson(iAunType: 5, iCb: 0));
         $aDecoded = json_decode($oPkt->buildAck(), true);
-        $iMachineType = unpack('C', substr($aDecoded['payload'], 8, 1))[1];
+        $iMachineType = unpack('C', substr(base64_decode($aDecoded['payload']), 8, 1))[1];
         $this->assertSame(0x40, $iMachineType);
     }
 
@@ -257,7 +264,7 @@ class JsonPacketTest extends TestCase
     {
         $oPkt = $this->decodePacket($this->makePktJson(iAunType: 5, iCb: 1));
         $aDecoded = json_decode($oPkt->buildAck(), true);
-        $aType = unpack('C', $aDecoded['payload']);
+        $aType = unpack('C', base64_decode($aDecoded['payload']));
         $this->assertSame(6, $aType[1]);
     }
 
@@ -265,7 +272,7 @@ class JsonPacketTest extends TestCase
     {
         $oPkt = $this->decodePacket($this->makePktJson(iAunType: 5, iCb: 8));
         $aDecoded = json_decode($oPkt->buildAck(), true);
-        $aType = unpack('C', $aDecoded['payload']);
+        $aType = unpack('C', base64_decode($aDecoded['payload']));
         $this->assertSame(6, $aType[1]);
     }
 
@@ -424,7 +431,7 @@ class JsonPacketTest extends TestCase
         $sJson = json_encode([
             'type'    => 'pkt',
             'dst'     => ['station' => 254, 'network' => 128],
-            'payload' => $sPayload,
+            'payload' => base64_encode($sPayload),
         ]);
         $oPkt = new JsonPacket($this->oConn);
         $oPkt->decode($sJson);
@@ -437,7 +444,7 @@ class JsonPacketTest extends TestCase
         $sJson = json_encode([
             'type'    => 'pkt',
             'src'     => ['station' => 1, 'network' => 1],
-            'payload' => $sPayload,
+            'payload' => base64_encode($sPayload),
         ]);
         $oPkt = new JsonPacket($this->oConn);
         $oPkt->decode($sJson);
@@ -450,7 +457,7 @@ class JsonPacketTest extends TestCase
             'type'    => 'pkt',
             'src'     => ['station' => 1, 'network' => 1],
             'dst'     => ['station' => 254, 'network' => 128],
-            'payload' => 'short',  // only 5 bytes, minimum is 8
+            'payload' => base64_encode('short'),  // decodes to 5 bytes, minimum is 8
         ]);
         $oPkt = new JsonPacket($this->oConn);
         $oPkt->decode($sJson);
@@ -464,6 +471,19 @@ class JsonPacketTest extends TestCase
             'src'     => ['station' => 1, 'network' => 1],
             'dst'     => ['station' => 254, 'network' => 128],
             'payload' => '',
+        ]);
+        $oPkt = new JsonPacket($this->oConn);
+        $oPkt->decode($sJson);
+    }
+
+    public function testDecodePktNonBase64PayloadThrows(): void
+    {
+        $this->expectException(\Exception::class);
+        $sJson = json_encode([
+            'type'    => 'pkt',
+            'src'     => ['station' => 1, 'network' => 1],
+            'dst'     => ['station' => 254, 'network' => 128],
+            'payload' => 'not valid base64!!! ###',
         ]);
         $oPkt = new JsonPacket($this->oConn);
         $oPkt->decode($sJson);

@@ -105,7 +105,7 @@ class WebSocketHandlerTest extends TestCase
         int    $iSrcNet  = 1,
         int    $iSrcStn  = 1,
         int    $iAunType = 2,      // 2=Unicast
-        int    $iPort    = 0x01,   // must be ≤ 0x7F for valid UTF-8 in JSON
+        int    $iPort    = 0x01,
         int    $iCb      = 0,
         int    $iSeq     = 42,
         string $sData    = 'test'
@@ -115,7 +115,7 @@ class WebSocketHandlerTest extends TestCase
             'type'    => 'pkt',
             'src'     => ['station' => $iSrcStn, 'network' => $iSrcNet],
             'dst'     => ['station' => $iDstStn, 'network' => $iDstNet],
-            'payload' => $sPayload,
+            'payload' => base64_encode($sPayload),
         ], JSON_THROW_ON_ERROR);
     }
 
@@ -264,7 +264,7 @@ class WebSocketHandlerTest extends TestCase
         $this->oHandler->onMessage($this->oConnection, $this->makePktJson(iSeq: 77));
 
         $aDecoded = json_decode($sSentAck, true);
-        $aType = unpack('C', $aDecoded['payload']);
+        $aType = unpack('C', base64_decode($aDecoded['payload']));
         $this->assertSame(3, $aType[1], 'AUN ack type byte must be 3');
     }
 
@@ -278,7 +278,7 @@ class WebSocketHandlerTest extends TestCase
         $this->oHandler->onMessage($this->oConnection, $this->makePktJson(iSeq: 77));
 
         $aDecoded = json_decode($sSentAck, true);
-        $aSeq = unpack('V', substr($aDecoded['payload'], 4, 4));
+        $aSeq = unpack('V', substr(base64_decode($aDecoded['payload']), 4, 4));
         $this->assertSame(77, (int) $aSeq[1]);
     }
 
@@ -425,7 +425,21 @@ class WebSocketHandlerTest extends TestCase
             'type'    => 'pkt',
             'src'     => ['station' => 1, 'network' => 1],
             'dst'     => ['station' => self::WS_STN, 'network' => self::WS_NET],
-            'payload' => 'x',  // 1 byte — below 8-byte minimum
+            'payload' => base64_encode('short'),  // decodes to 5 bytes — below 8-byte minimum
+        ]);
+        $this->oHandler->onMessage($this->oConnection, $sMsg);
+    }
+
+    public function testOnMessagePktWithNonBase64PayloadIsDiscarded(): void
+    {
+        $this->oConnection->expects($this->never())->method('send');
+        $this->oServices->expects($this->never())->method('inboundPacket');
+
+        $sMsg = json_encode([
+            'type'    => 'pkt',
+            'src'     => ['station' => 1, 'network' => 1],
+            'dst'     => ['station' => self::WS_STN, 'network' => self::WS_NET],
+            'payload' => 'x',  // not a valid base64 string
         ]);
         $this->oHandler->onMessage($this->oConnection, $sMsg);
     }
@@ -458,7 +472,7 @@ class WebSocketHandlerTest extends TestCase
         $this->oHandler->onMessage($this->oConnection, $this->makePktJson(iAunType: 5, iCb: 0));
 
         $aDecoded = json_decode($sSentAck, true);
-        $aType = unpack('C', $aDecoded['payload']);
+        $aType = unpack('C', base64_decode($aDecoded['payload']));
         $this->assertSame(6, $aType[1], 'Response to machine type query must be ImmediateReply (type 6)');
     }
 
@@ -473,7 +487,7 @@ class WebSocketHandlerTest extends TestCase
 
         $aDecoded = json_decode($sSentAck, true);
         // Machine type byte is at payload offset 8
-        $iMachineType = unpack('C', substr($aDecoded['payload'], 8, 1))[1];
+        $iMachineType = unpack('C', substr(base64_decode($aDecoded['payload']), 8, 1))[1];
         $this->assertSame(0x40, $iMachineType);
     }
 
@@ -487,7 +501,7 @@ class WebSocketHandlerTest extends TestCase
         $this->oHandler->onMessage($this->oConnection, $this->makePktJson(iAunType: 5, iCb: 8));
 
         $aDecoded = json_decode($sSentAck, true);
-        $aType = unpack('C', $aDecoded['payload']);
+        $aType = unpack('C', base64_decode($aDecoded['payload']));
         $this->assertSame(6, $aType[1], 'Echo response must be ImmediateReply (type 6)');
     }
 

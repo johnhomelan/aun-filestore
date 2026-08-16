@@ -204,8 +204,8 @@ class EconetPacket {
 					'station'=>config::getValueAsInt('websocket_station_address'),
 					'network'=>config::getValueAsInt('websocket_network_address')
 				],
-				'payload'=>$this->_getAunRaw()
-			], 
+				'payload'=>base64_encode($this->_getAunRaw())
+			],
 			JSON_THROW_ON_ERROR);
 
 	}

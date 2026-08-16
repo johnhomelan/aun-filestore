@@ -157,7 +157,10 @@ class JsonPacket implements EncapsulationInterface {
 				if (!isset($mDecoded['dst']['station'], $mDecoded['dst']['network'])) {
 					throw new Exception("pkt message dst missing station or network");
 				}
-				$sPayload = self::_asString($mDecoded['payload']);
+				$sPayload = base64_decode(self::_asString($mDecoded['payload']), true);
+				if ($sPayload === false) {
+					throw new Exception("pkt payload is not valid base64");
+				}
 				if (strlen($sPayload) < 8) {
 					throw new Exception("pkt payload too short (" . strlen($sPayload) . " bytes); minimum is 8");
 				}
@@ -302,7 +305,7 @@ class JsonPacket implements EncapsulationInterface {
 							'station'=>config::getValueAsInt('websocket_station_address'),
 							'network'=>config::getValueAsInt('websocket_network_address')
 						],
-						'payload'=>$sPtk
+						'payload'=>$sPtk === null ? null : base64_encode($sPtk)
 					], JSON_THROW_ON_ERROR);
 			case 'ctrl':
 				switch($this->sCtrlRequest){

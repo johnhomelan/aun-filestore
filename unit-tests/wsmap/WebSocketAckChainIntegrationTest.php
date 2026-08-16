@@ -90,7 +90,7 @@ class WebSocketAckChainIntegrationTest extends TestCase
             'type'    => 'pkt',
             'src'     => ['station' => self::CLIENT_STN, 'network' => self::CLIENT_NET],
             'dst'     => ['station' => self::WS_STN, 'network' => self::WS_NET],
-            'payload' => $sPayload,
+            'payload' => base64_encode($sPayload),
         ], JSON_THROW_ON_ERROR);
     }
 

@@ -287,10 +287,25 @@ With this configuration up to 506 browser clients (253 stations × 2 networks) c
 When a WebSocket client connects it sends a `ctrl` message requesting an address:
 
 ~~~json
-{"type": "ctrl", "action": "dynamic_alloction_request"}
+{"type": "ctrl", "request": "dynamic_alloction_request", "args": []}
 ~~~
 
 The server responds with the allocated Econet network.station as a string (e.g. `"130.1"`).  Subsequent `pkt` messages from the client must be addressed to the server's `websocket_network_address` / `websocket_station_address`.  The server routes replies to the client using its allocated address.
+
+#### `pkt` message format ####
+
+~~~json
+{
+  "type": "pkt",
+  "src": {"station": 1, "network": 130},
+  "dst": {"station": 254, "network": 128},
+  "payload": "<base64>"
+}
+~~~
+
+`payload` is the standard 8-byte AUN header (type, port, control byte, pad, 4-byte
+little-endian sequence number) followed by the frame data, **base64-encoded** so that
+arbitrary binary payloads survive the JSON transport unchanged.
 
 ---
 

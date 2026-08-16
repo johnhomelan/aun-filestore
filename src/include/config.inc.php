@@ -6,6 +6,7 @@ safe_define('CONFIG_websocket_listen_address','0.0.0.0');
 safe_define('CONFIG_websocket_listen_port','8090');
 safe_define('CONFIG_websocket_network_address','128');
 safe_define('CONFIG_websocket_station_address','254');
+safe_define('CONFIG_websocketmap_dynamic_network_range_file','websocketmap_dynamic_network_range.txt');
 
 
 

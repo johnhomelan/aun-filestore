@@ -26,6 +26,7 @@ use Ratchet\WebSocket\WsServer;
 
 use HomeLan\FileStore\Services\ServiceDispatcher;
 use HomeLan\FileStore\WebSocket\Handler as WebSocketHandler;
+use HomeLan\FileStore\WebSocket\Map as WebSocketMap;
 use HomeLan\FileStore\Piconet\Handler as PiconetHandler;
 use HomeLan\FileStore\Piconet\Map as PiconetMap;
 use HomeLan\FileStore\RemoteBridge\Map as RemoteBridgeMap;
@@ -274,12 +275,15 @@ EOF;
 	public function websocketService(LoopInterface $oLoop,PacketDispatcher $oPacketDispatcher):void
 	{
 
-		//Add udp handling for AUN 
+		//Add udp handling for AUN
 		$oWebSocketTransport = new \React\Socket\SocketServer(config::getValueAsString('websocket_listen_address').':'.config::getValueAsString('websocket_listen_port'));
 
 		$oServices = $this->oServices;
 		$oLogger = $this->oLogger;
 		$oWebSocketHandler = new WebSocketHandler($this->oLogger, $oServices, $oPacketDispatcher);
+
+		//Load the dynamic network range so clients can be allocated a network.station on connect
+		WebSocketMap::init($this->oLogger);
 
 		$oWebsocketServer = new IoServer(
 			new HttpServer(

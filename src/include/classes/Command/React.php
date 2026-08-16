@@ -50,6 +50,7 @@ use Exception;
  * filestored is the main loop of the application.  It deals with all the socket operations, dispatches and collects
  * data from the main application classes (fileserver, print server), and handles all the initialization tasks.
 */
+#[\Symfony\Component\Console\Attribute\AsCommand(name: 'filestore')]
 class React extends Command {
 	/*
  	 * The delay be building a AUN packet, and dispatching it to the network.
@@ -200,7 +201,7 @@ Start the file, print and bridge services
 EOF;
 
 		parent::configure();
-		$this->setName('filestore')
+		$this
 			->addOption(
 				'config',
 				'c',
@@ -430,7 +431,7 @@ EOF;
 	 *
 	 * @param string $sPidFile The file to write the pid of the child to
 	*/
-	function daemonize(string $sPidFile): void
+	public function daemonize(string $sPidFile): void
 	{
 		$iPid=pcntl_fork();
 		if($iPid != 0){

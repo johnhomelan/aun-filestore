@@ -384,7 +384,7 @@ class S3 implements PluginInterface {
         $iEconetHandle = Vfs::getFreeFileHandleID($oUser);
         return new FileDescriptor(
             self::$oLogger,
-            'HomeLan\FileStore\Vfs\Plugin\S3',
+            \HomeLan\FileStore\Vfs\Plugin\S3::class,
             $oUser,
             $sKey,
             $sFullPath,
@@ -440,7 +440,7 @@ class S3 implements PluginInterface {
             if (!array_key_exists($sDirName, $aDirectoryListing)) {
                 $aDirectoryListing[$sDirName] = new DirectoryEntry(
                     $sDirName, $sDirName,
-                    'HomeLan\FileStore\Vfs\Plugin\S3',
+                    \HomeLan\FileStore\Vfs\Plugin\S3::class,
                     null, null, 0,
                     $sEconetPath . '.' . $sDirName,
                     time(), $sAccess, true
@@ -467,7 +467,7 @@ class S3 implements PluginInterface {
                 $aDirectoryListing[$sFileName] = new DirectoryEntry(
                     str_replace('.', '/', $sFileName),
                     $sFileName,
-                    'HomeLan\FileStore\Vfs\Plugin\S3',
+                    \HomeLan\FileStore\Vfs\Plugin\S3::class,
                     null, null,
                     $iSize,
                     $sEconetPath . '.' . $sFileName,
@@ -482,7 +482,7 @@ class S3 implements PluginInterface {
                         $aDirectoryListing[$sFileName]->setLoadAddr((int) hexdec($aMatches[1]));
                         $aDirectoryListing[$sFileName]->setExecAddr((int) hexdec($aMatches[2]));
                     }
-                } catch (S3Exception $e) {
+                } catch (S3Exception) {
                     // No .inf sidecar is normal
                 }
             }
@@ -649,7 +649,7 @@ class S3 implements PluginInterface {
                 self::_saveToCache($sBucket, $sKey, $sData);
             }
             return $sData;
-        } catch (S3Exception $e) {
+        } catch (S3Exception) {
             throw new VfsException("No such file: " . $sFullPath);
         }
     }

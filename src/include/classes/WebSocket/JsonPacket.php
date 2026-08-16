@@ -217,7 +217,7 @@ class JsonPacket implements EncapsulationInterface {
 					throw new Exception("ctrl message missing required request or args fields");
 				}
 				$this->sCtrlRequest = self::_asString($mDecoded['request']);
-				$this->aCtrlRequestArgs = array_values(array_filter($mDecoded['args'], 'is_array'));
+				$this->aCtrlRequestArgs = array_values(array_filter($mDecoded['args'], is_array(...)));
 				break;
 			default:
 				throw new Exception("Invalid type supplied for json encoded econet packet");

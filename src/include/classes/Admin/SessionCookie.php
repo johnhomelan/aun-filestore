@@ -15,7 +15,7 @@ use Symfony\Component\HttpFoundation\Session\Session as SessionSystem;
 
 final readonly class SessionCookie implements EventSubscriberInterface{
 
-	private const SESSION_NAME = 'PHPSESSID';
+	private const string SESSION_NAME = 'PHPSESSID';
 
 	public function start(RequestEvent $oRequestEvent): void
 	{

@@ -47,17 +47,17 @@ class Connection
 	public const SUPPORTED_VERSIONS = ['1.0', '1.1'];
 
 	/** Seconds between PING sends once authenticated on a 1.1+ connection. */
-	private const PING_INTERVAL_SECONDS = 3;
+	private const int PING_INTERVAL_SECONDS = 3;
 
 	/** Seconds of total silence (any line, not just PING/PONG) before a 1.1+ connection is considered dead. */
-	private const IDLE_TIMEOUT_SECONDS = 10;
+	private const int IDLE_TIMEOUT_SECONDS = 10;
 
-	private const STATE_WAITING_HELLO    = 'WAITING_HELLO';
-	private const STATE_CHALLENGING      = 'CHALLENGING';
-	private const STATE_HELLO_SENT       = 'HELLO_SENT';
-	private const STATE_WAITING_AUTH_OK  = 'WAITING_AUTH_OK';
-	private const STATE_AUTHENTICATED    = 'AUTHENTICATED';
-	private const STATE_CLOSED           = 'CLOSED';
+	private const string STATE_WAITING_HELLO    = 'WAITING_HELLO';
+	private const string STATE_CHALLENGING      = 'CHALLENGING';
+	private const string STATE_HELLO_SENT       = 'HELLO_SENT';
+	private const string STATE_WAITING_AUTH_OK  = 'WAITING_AUTH_OK';
+	private const string STATE_AUTHENTICATED    = 'AUTHENTICATED';
+	private const string STATE_CLOSED           = 'CLOSED';
 
 	private string $sState;
 	private string $sNonce = '';
@@ -157,7 +157,7 @@ class Connection
 	{
 		if ($sCmd === 'NETWORKS') {
 			$aPeerNets = array_filter(
-				array_map('intval', explode(',', trim($sArgs))),
+				array_map(intval(...), explode(',', trim($sArgs))),
 				fn(int $n) => $n > 0
 			);
 			$this->aPeerNetworks = array_values($aPeerNets);
@@ -253,7 +253,7 @@ class Connection
 		// HELLO <timestamp> <versions_csv>
 		$aParts = explode(' ', trim($sArgs), 2);
 		$iTs = (int) $aParts[0];
-		$aClientVersions = isset($aParts[1]) ? array_map('trim', explode(',', $aParts[1])) : ['1.0'];
+		$aClientVersions = isset($aParts[1]) ? array_map(trim(...), explode(',', $aParts[1])) : ['1.0'];
 
 		if (abs(time() - $iTs) > 60) {
 			$this->oLogger->warning("RemoteBridge: HELLO timestamp out of range ({$iTs}), rejecting");
@@ -450,8 +450,8 @@ class Connection
 	public static function negotiateVersion(array $aClientVersions, array $aServerVersions): ?string
 	{
 		$aCommon = array_intersect(
-			array_map('trim', $aClientVersions),
-			array_map('trim', $aServerVersions)
+			array_map(trim(...), $aClientVersions),
+			array_map(trim(...), $aServerVersions)
 		);
 		if (empty($aCommon)) {
 			return null;

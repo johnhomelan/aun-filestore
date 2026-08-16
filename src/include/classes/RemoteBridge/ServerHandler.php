@@ -94,8 +94,8 @@ class ServerHandler
 				$oLoop,
 			);
 
-			$oTcpConn->on('data', [$oConn, 'onData']);
-			$oTcpConn->on('close', [$oConn, 'onClose']);
+			$oTcpConn->on('data', $oConn->onData(...));
+			$oTcpConn->on('close', $oConn->onClose(...));
 			$oTcpConn->on('error', function (\Exception $oEx) use ($sPeer) {
 				$this->oLogger->error("RemoteBridge: connection error from {$sPeer}: " . $oEx->getMessage());
 			});

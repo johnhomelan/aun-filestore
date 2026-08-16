@@ -30,15 +30,12 @@ use config;
  *
  * @phpstan-import-type S3Mapping from S3
 */
+#[\Symfony\Component\Console\Attribute\AsCommand(name: 's3upload', description: 'Upload local files (with .inf sidecars) to an S3 VFS mapping')]
 class S3Upload extends Command
 {
-    protected static string $defaultName = 's3upload';
-    protected static string $defaultDescription = 'Upload local files to a configured S3 VFS target';
-
     protected function configure(): void
     {
-        $this->setName('s3upload')
-            ->setDescription('Upload local files (with .inf sidecars) to an S3 VFS mapping')
+        $this
             ->addArgument('source', InputArgument::REQUIRED, 'Local directory or file to upload')
             ->addOption('mapping', 'm', InputOption::VALUE_REQUIRED, 'Econet VFS path of the S3 mapping to upload into (e.g. $.s3files)')
             ->addOption('config', 'c', InputOption::VALUE_OPTIONAL, 'Path to config directory', null)

@@ -464,7 +464,7 @@ class FileServer implements ProviderInterface{
 	*/
 	public function login(FsRequest $oFsRequest,?string $sOptions): void
 	{
-		$sOptions = $sOptions ?? '';
+		$sOptions ??= '';
 		$this->oLogger->debug("fileserver: Login called ".$sOptions);
 		$aOptions = explode(" ",$sOptions);
 		if(strlen($sOptions)>0){
@@ -780,7 +780,7 @@ class FileServer implements ProviderInterface{
 					$oUser->setHomedir(config::getValueAsString('vfs_home_dir_path').'.'.$aOptions[0]);
 					try {
 						$this->vfsCreateDirectory($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),config::getValueAsString('vfs_home_dir_path').'.'.$aOptions[0]);
-					}catch(Exception $oException){
+					}catch(Exception){
 					}
 				}else{
 					$oUser->setHomedir('$');
@@ -807,7 +807,7 @@ class FileServer implements ProviderInterface{
 	*/
 	public function removeUser(FsRequest $oFsRequest,?string $sOptions): void
 	{
-		$sOptions = $sOptions ?? '';
+		$sOptions ??= '';
 		$oReply = $oFsRequest->buildReply();
 		if(strlen((string) $sOptions)<1 OR !ctype_alnum((string) $sOptions)){
 			$oReply->setError(0xff,"Syntax");
@@ -866,7 +866,7 @@ class FileServer implements ProviderInterface{
 				$this->addReplyToBuffer($oReply->buildEconetpacket());
 				return;
 			}
-		}catch(Exception $oException){
+		}catch(Exception){
 			$this->oLogger->debug("User tryed to chroot to ".$sOptions." however that is not a valid path.");
 			$oReply->setError(0xbe,"Invalid path");
 			$this->addReplyToBuffer($oReply->buildEconetpacket());
@@ -923,7 +923,7 @@ class FileServer implements ProviderInterface{
 		$oReply = $oFsRequest->buildReply();
 		$oReply->DoneOK();
 		$aUsers = $this->secGetUsersOnline();
-		$iTotalUsers = array_sum(array_map('count',$aUsers));
+		$iTotalUsers = array_sum(array_map(count(...),$aUsers));
 		$this->oLogger->debug("usersOnline: There are ".$iTotalUsers." on-line, the clients request details of (".$iStart."/".$iCount.")");
 		$iUsersRemaining = max(0, $iTotalUsers - $iStart);
 		if($iUsersRemaining>0){

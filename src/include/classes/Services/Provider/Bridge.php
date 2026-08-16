@@ -232,7 +232,7 @@ class Bridge implements ProviderInterface {
 	 */
 	public function getAllKnownNetworkNumbers(int $iExcludeNetwork): array
 	{
-		$aNetworks = array_map('intval', array_merge(
+		$aNetworks = array_map(intval(...), array_merge(
 			Map::getNetworkNumbers(),
 			WebSocketMap::getNetworkNumbers(),
 			PiconetMap::getNetworkNumbers(),

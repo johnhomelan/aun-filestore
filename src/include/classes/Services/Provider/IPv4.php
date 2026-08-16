@@ -239,7 +239,7 @@ class IPv4 implements ProviderInterface {
 				$oEconetPacket = $oIPv4->forward($aEconetDst['network'],$aEconetDst['station'],$aInterface['network'],$aInterface['station']);
 				$this->oLogger->debug("IPv4: Adding packet to output buffer for ".$oIPv4->getDstIP()." ".$aEconetDst['network'].".".$aEconetDst['station']);
 				$this->addReplyToBuffer($oEconetPacket);
-			}catch(ArpEntryNotFound $oNotfound){
+			}catch(ArpEntryNotFound){
 				//The address is not in the arp cache send the arp request, and queue the packet after setting 
 				//its source l2 address as the interface that will send the packet once the arp response arrives 
 
@@ -252,7 +252,7 @@ class IPv4 implements ProviderInterface {
 				$this->queuePacketWaitingOnArp($oIPv4->getDstIP(),$oPacket);
 
 			}
-		}catch (InterfaceNotFound $oNotfound){
+		}catch (InterfaceNotFound){
 			//See if we have a route to the subnet
 			$aRoute = $this->oRoutingTable->getRoute($oIPv4->getDstIP());
 			if(!is_null($aRoute)){
@@ -264,7 +264,7 @@ class IPv4 implements ProviderInterface {
 						$oEconetPacket = $oIPv4->forward($aEconetDst['network'],$aEconetDst['station'],$aInterface['network'],$aInterface['station']);
 						$this->oLogger->debug("IPv4: Adding packet to output buffer for ".$oIPv4->getDstIP());
 						$this->addReplyToBuffer($oEconetPacket);
-					}catch(ArpEntryNotFound $oNotfound){
+					}catch(ArpEntryNotFound){
 						//The l2 address of the router is not in the apr cache, send the  arp request, and queue the packet after setting
 						//its source l2 address as the interface that will send the packet once the arp response arrives
 						//
@@ -275,7 +275,7 @@ class IPv4 implements ProviderInterface {
 						$this->oLogger->debug("IPv4: Adding packet to queue waiting for ARP ".$aRoute['via']);
 						$this->queuePacketWaitingOnArp($aRoute['via'],$oPacket);
 					}
-				}catch(InterfaceNotFound $oNotfound){
+				}catch(InterfaceNotFound){
 					//The route specifies a gateway we have no interface for; send network unreachable.
 					$this->oLogger->debug("IPv4: No interface for route gateway, sending ICMP net unreachable");
 					$this->sendNetworkUnreachable($oIPv4, $oPacket);
@@ -323,7 +323,7 @@ class IPv4 implements ProviderInterface {
 
 		try {
 			$aIface = $this->oInterfaceTable->getInterfaceFor($oIPv4->getSrcIP());
-		} catch (InterfaceNotFound $e) {
+		} catch (InterfaceNotFound) {
 			return; // can't determine which interface to reply from
 		}
 

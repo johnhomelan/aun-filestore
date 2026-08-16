@@ -66,9 +66,7 @@ class Storage
 		if (!$this->isDir($this->sBaseDir)) {
 			return [];
 		}
-		$aChannels = array_filter($this->scanDir($this->sBaseDir), function (string $sEntry) {
-			return $sEntry !== '.' && $sEntry !== '..' && $this->isDir($this->sBaseDir . '/' . $sEntry);
-		});
+		$aChannels = array_filter($this->scanDir($this->sBaseDir), fn(string $sEntry) => $sEntry !== '.' && $sEntry !== '..' && $this->isDir($this->sBaseDir . '/' . $sEntry));
 		sort($aChannels);
 		return $aChannels;
 	}

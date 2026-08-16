@@ -246,7 +246,7 @@ class AFS implements PluginInterface {
 				$iEconetHandle = Vfs::getFreeFileHandleID($oUser);
 				$iVfsHandle = AFS::$iFileHandle++;
 				AFS::$aFileHandles[$iVfsHandle]=['image-file'=>$sImageFile, 'path-inside-image'=>'', 'pos'=>0];
-				return new FileDescriptor(self::$oLogger,'HomeLan\FileStore\Vfs\Plugin\AFS',$oUser,$sImageFile,$oEconetPath->getFilePath(),$iVfsHandle,$iEconetHandle,FALSE,TRUE,$bMustExist,$bReadOnly);
+				return new FileDescriptor(self::$oLogger,\HomeLan\FileStore\Vfs\Plugin\AFS::class,$oUser,$sImageFile,$oEconetPath->getFilePath(),$iVfsHandle,$iEconetHandle,FALSE,TRUE,$bMustExist,$bReadOnly);
 			}
 
 			if(AFS::_checkImageFileExists($sImageFile,$sPathInsideImage)){
@@ -254,7 +254,7 @@ class AFS implements PluginInterface {
 				$iVfsHandle = AFS::$iFileHandle++;
 				AFS::$aFileHandles[$iVfsHandle]=['image-file'=>$sImageFile, 'path-inside-image'=>$sPathInsideImage, 'pos'=>0];
 				$oAfs =  AFS::_getImageReader($sImageFile);
-				return new FileDescriptor(self::$oLogger,'HomeLan\FileStore\Vfs\Plugin\AFS',$oUser,$sImageFile,$oEconetPath->getFilePath(),$iVfsHandle,$iEconetHandle,$oAfs->isFile($sPathInsideImage),$oAfs->isDir($sPathInsideImage),$bMustExist,$bReadOnly);
+				return new FileDescriptor(self::$oLogger,\HomeLan\FileStore\Vfs\Plugin\AFS::class,$oUser,$sImageFile,$oEconetPath->getFilePath(),$iVfsHandle,$iEconetHandle,$oAfs->isFile($sPathInsideImage),$oAfs->isDir($sPathInsideImage),$bMustExist,$bReadOnly);
 			}
 		}
 
@@ -292,7 +292,7 @@ class AFS implements PluginInterface {
 			}
 
 			foreach($aCat as $sFile=>$aMeta){
-				$aDirectoryListing[$sFile] = new DirectoryEntry($sFile,$sImageFile,'HomeLan\FileStore\Vfs\Plugin\AFS',$aMeta['load'],$aMeta['exec'],$aMeta['size'],$sEconetPath.'.'.$sFile,$aImageStat['ctime'],'-r/-r', $aMeta['type']=='dir' ? TRUE : FALSE);
+				$aDirectoryListing[$sFile] = new DirectoryEntry($sFile,$sImageFile,\HomeLan\FileStore\Vfs\Plugin\AFS::class,$aMeta['load'],$aMeta['exec'],$aMeta['size'],$sEconetPath.'.'.$sFile,$aImageStat['ctime'],'-r/-r', $aMeta['type']=='dir' ? TRUE : FALSE);
 			}
 		}
 		
@@ -309,7 +309,7 @@ class AFS implements PluginInterface {
 						if($aStat === false){
 							continue;
 						}
-						$aDirectoryListing[$sFile]=new DirectoryEntry($sDisplayName,$sFile,'HomeLan\FileStore\Vfs\Plugin\AFS',NULL,NULL,0,$sEconetPath.'.'.$sDisplayName,$aStat['ctime'],'-r/-r', TRUE);
+						$aDirectoryListing[$sFile]=new DirectoryEntry($sDisplayName,$sFile,\HomeLan\FileStore\Vfs\Plugin\AFS::class,NULL,NULL,0,$sEconetPath.'.'.$sDisplayName,$aStat['ctime'],'-r/-r', TRUE);
 					}
 				}
 			}

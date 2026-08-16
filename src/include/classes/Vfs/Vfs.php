@@ -135,7 +135,7 @@ class Vfs {
 		}
 		if($oUser->getRoot()!='$'){
 			echo "Dir is ".$sDir."\n";
-			if(strpos($sDir,$oUser->getRoot())!==0){
+			if(!str_starts_with($sDir, $oUser->getRoot())){
 				//If the path is abosulte but does not start with the chroot prefix
 				$sDir = str_replace('$',$oUser->getRoot(),(string) $sDir);
 			}
@@ -145,7 +145,7 @@ class Vfs {
 			}
 			self::$oLogger->debug("User is chroot'd to ".$oUser->getRoot()." changeing path to ".$sDir);
 		}
-		if(strpos($sDir,'*')!==false){
+		if(str_contains($sDir,'*')){
 			//Deal with unsolvled directory path 
 			$sDir = self::_resolveFullPath($sDir,$iNetwork,$iStation);
 		}
@@ -233,7 +233,7 @@ class Vfs {
 		}
 
 		//Are there other parts the need expanding after the one this call worked on 
-		if($bMatched AND strpos($sLocalDir,'*',$iExpandPoint)!==false){
+		if($bMatched AND str_contains(substr($sLocalDir, $iExpandPoint),'*')){
 			// I know recussion naughty boy, but this time its fairly neat, 
 			// and the limit to an econet path length means this can't accidently call
 			// too many time. 

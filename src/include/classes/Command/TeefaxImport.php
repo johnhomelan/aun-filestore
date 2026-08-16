@@ -24,15 +24,12 @@ use config;
  * Usage:
  *   teefax-import --config=/etc/aun-filestored
 */
+#[\Symfony\Component\Console\Attribute\AsCommand(name: 'teefax-import', description: 'Download and convert the Teefax teletext archive into a channel page store')]
 class TeefaxImport extends Command
 {
-    protected static string $defaultName = 'teefax-import';
-    protected static string $defaultDescription = 'Download and convert the Teefax teletext archive into a channel page store';
-
     protected function configure(): void
     {
-        $this->setName('teefax-import')
-            ->setDescription('Download and convert the Teefax teletext archive into a channel page store')
+        $this
             ->addOption('config', 'c', InputOption::VALUE_OPTIONAL, 'Path to config directory', null)
             ->addOption('channel', null, InputOption::VALUE_OPTIONAL, 'Channel to import into (overrides teletext_teefax_channel)', null)
             ->addOption('source', null, InputOption::VALUE_OPTIONAL, 'Tarball URL to import from (overrides teletext_teefax_source)', null)

@@ -428,7 +428,7 @@ class Cli {
 				$oReply->appendString("\r");
 			}
 			$oReply->appendByte(0x80);
-		}catch(\Exception $oException){
+		}catch(\Exception){
 			$oReply->setError(0xff, "No such file");
 		}
 		$this->oProvider->addReplyToBuffer($oReply->buildEconetpacket());
@@ -478,7 +478,7 @@ class Cli {
 			$oReply->UnrecognisedOk();
 			$oReply->appendString($sOutput);
 			$oReply->appendByte(0x80);
-		}catch(\Exception $oException){
+		}catch(\Exception){
 			$oReply->setError(0xff, "No such file");
 		}
 		$this->oProvider->addReplyToBuffer($oReply->buildEconetpacket());

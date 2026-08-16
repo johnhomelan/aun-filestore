@@ -28,15 +28,12 @@ use Symfony\Component\Console\Output\OutputInterface;
  * Usage:
  *   mkcatarchive [--output=<path>] [--existing-tar=<path>] <source>
  */
+#[\Symfony\Component\Console\Attribute\AsCommand(name: 'mkcatarchive', description: 'Build a tar archive with an index.json catalogue for use with the Catalogue VFS plugin')]
 class MakeCatalogueArchive extends Command
 {
-    protected static string $defaultName = 'mkcatarchive';
-    protected static string $defaultDescription = 'Build a Catalogue VFS tar archive with index.json';
-
     protected function configure(): void
     {
-        $this->setName('mkcatarchive')
-            ->setDescription('Build a tar archive with an index.json catalogue for use with the Catalogue VFS plugin')
+        $this
             ->addArgument('source', InputArgument::REQUIRED, 'Path to the source directory')
             ->addOption('output', 'o', InputOption::VALUE_REQUIRED, 'Output tar file path (default: <dirname>.tar)')
             ->addOption('existing-tar', 'e', InputOption::VALUE_REQUIRED, 'Existing tar to read previous version numbers from');

@@ -31,10 +31,10 @@ use HomeLan\FileStore\Messages\EconetPacket;
 class Map
 {
 	/** How long a network stays "known" and its packets buffered after its connection drops. */
-	private const BUFFER_TTL_SECONDS = 5;
+	private const int BUFFER_TTL_SECONDS = 5;
 
 	/** Maximum outbound packets buffered per network while its connection is down. */
-	private const BUFFER_MAX_PACKETS_PER_NETWORK = 32;
+	private const int BUFFER_MAX_PACKETS_PER_NETWORK = 32;
 
 	/** @var \Psr\Log\LoggerInterface */
 	static private \Psr\Log\LoggerInterface $oLogger;
@@ -92,7 +92,7 @@ class Map
 				self::$aServerEntries[] = [
 					'port'     => (int) $aM[1],
 					'secret'   => $aM[2],
-					'networks' => array_map('intval', explode(',', $aM[3])),
+					'networks' => array_map(intval(...), explode(',', $aM[3])),
 				];
 				$oLogger->debug("RemoteBridge: server entry port={$aM[1]} networks={$aM[3]}");
 				continue;
@@ -104,7 +104,7 @@ class Map
 					'host'     => $aM[1],
 					'port'     => (int) $aM[2],
 					'secret'   => $aM[3],
-					'networks' => array_map('intval', explode(',', $aM[4])),
+					'networks' => array_map(intval(...), explode(',', $aM[4])),
 				];
 				$oLogger->debug("RemoteBridge: client entry host={$aM[1]}:{$aM[2]} networks={$aM[4]}");
 				continue;

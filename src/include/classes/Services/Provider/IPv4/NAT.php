@@ -166,7 +166,7 @@ class NAT
 			
 			$this->_sendDataViaSocket($sKey, $oIPv4, $oTcp);
 			$this->oLogger->debug("NAT: Sending data to exisiting stream ".$sKey);
-		}catch(ConntrackException $oException){
+		}catch(ConntrackException){
 			//Unknown to conntrack
 			if($oTcp->getSynFlag()){
 				$this->_createConntrackEntry($oIPv4,$oTcp);
@@ -215,7 +215,7 @@ class NAT
 					'ack'=>$oTcp->getAck(),
 					'state'=>'connecting',
 					'last_activity'=>time(),
-					'sequence_sock'=>rand(0,2000),
+					'sequence_sock'=>random_int(0,2000),
 					'socket'=>$oSocket];
 				$_this->_registerConnection($sKey,$aConnTrack);
 				$oSocket->on("data",function(string $sData) use ($_this, $sKey){

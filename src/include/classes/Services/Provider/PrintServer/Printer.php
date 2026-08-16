@@ -53,7 +53,7 @@ class Printer
 		}
 		return in_array(
 			strtoupper($oUser->getUsername() ?? ''),
-			array_map('strtoupper', $this->aAllowedUsers),
+			array_map(strtoupper(...), $this->aAllowedUsers),
 			true
 		);
 	}

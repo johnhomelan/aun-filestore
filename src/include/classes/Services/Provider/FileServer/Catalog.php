@@ -440,7 +440,7 @@ class Catalog {
 	*/
 	public function changeDirectory(FsRequest $oFsRequest,?string $sOptions): void
 	{
-		$sOptions = $sOptions ?? '';
+		$sOptions ??= '';
 		$oReply = $oFsRequest->buildReply();
 		$oUser = $this->oProvider->secGetUser($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation());
 
@@ -501,7 +501,7 @@ class Catalog {
 	*/
 	public function changeLibrary(FsRequest $oFsRequest,?string $sOptions): void
 	{
-		$sOptions = $sOptions ?? '';
+		$sOptions ??= '';
 		$oReply = $oFsRequest->buildReply();
 		if(!is_object($this->oProvider->secGetUser($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation()))){
 			$oReply->setError(0xbf,"Who are you?");
@@ -540,7 +540,7 @@ class Catalog {
 	*/
 	public function createDirectory(FsRequest $oFsRequest,?string $sOptions): void
 	{
-		$sOptions = $sOptions ?? '';
+		$sOptions ??= '';
 		$oReply = $oFsRequest->buildReply();
 		if(!is_object($this->oProvider->secGetUser($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation()))){
 			$oReply->setError(0xbf,"Who are you?");
@@ -574,7 +574,7 @@ class Catalog {
 	*/
 	public function deleteFile(FsRequest $oFsRequest,?string $sOptions): void
 	{
-		$sOptions = $sOptions ?? '';
+		$sOptions ??= '';
 		$oReply = $oFsRequest->buildReply();
 		if(!is_object($this->oProvider->secGetUser($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation()))){
 			$oReply->setError(0xbf,"Who are you?");

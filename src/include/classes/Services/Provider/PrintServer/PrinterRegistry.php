@@ -65,7 +65,7 @@ class PrinterRegistry
 			$sScript      = trim(self::_asString($aFields['script'] ?? ''));
 			$sDescription = trim(self::_asString($aFields['description'] ?? ''));
 			$sAllowed     = trim(self::_asString($aFields['allowed_users'] ?? ''));
-			$aAllowed     = $sAllowed !== '' ? array_map('trim', explode(',', $sAllowed)) : [];
+			$aAllowed     = $sAllowed !== '' ? array_map(trim(...), explode(',', $sAllowed)) : [];
 			$this->aPrinters[$sName] = new Printer(
 				$sName, $sDescription, $bEnabled, $sBehavior, $sScript, $aAllowed
 			);

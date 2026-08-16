@@ -9,7 +9,7 @@ if (is_array($env = @include __DIR__.'/../../../../.env.local.php')) {
     throw new RuntimeException('Please run "composer require symfony/dotenv" to load the ".env" files configuring the application.');
 } else {
 	// load all the .env files
-    (new Dotenv())->loadEnv(__DIR__.'/../../../../.env');
+    new Dotenv()->loadEnv(__DIR__.'/../../../../.env');
 }
 $_SERVER['APP_ENV'] = $_ENV['APP_ENV'] = ($_SERVER['APP_ENV'] ?? $_ENV['APP_ENV'] ?? null) ?: 'dev';
 $_SERVER['APP_DEBUG'] ??= $_ENV['APP_DEBUG'] ?? 'prod' !== $_SERVER['APP_ENV'];

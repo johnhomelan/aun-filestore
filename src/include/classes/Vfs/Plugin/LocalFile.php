@@ -127,7 +127,7 @@ class LocalFile implements PluginInterface {
 				$iVfsHandle = NULL;
 			}
 			$iEconetHandle = vfs::getFreeFileHandleID($oUser);
-			return new FileDescriptor(self::$oLogger,'HomeLan\FileStore\Vfs\Plugin\LocalFile',$oUser,$sUnixPath,$oEconetPath->getFilePath(),$iVfsHandle,$iEconetHandle,is_file($sUnixPath),is_dir($sUnixPath),$bMustExist,$bReadOnly);
+			return new FileDescriptor(self::$oLogger,\HomeLan\FileStore\Vfs\Plugin\LocalFile::class,$oUser,$sUnixPath,$oEconetPath->getFilePath(),$iVfsHandle,$iEconetHandle,is_file($sUnixPath),is_dir($sUnixPath),$bMustExist,$bReadOnly);
 		}
 		throw new VfsException("No such file");
 	}
@@ -169,7 +169,7 @@ class LocalFile implements PluginInterface {
 					if($aStat === false){
 						continue;
 					}
-					$aDirectoryListing[$sFile]=new DirectoryEntry(str_replace('.','/',(string) $sFile),$sFile,'HomeLan\FileStore\Vfs\Plugin\LocalFile',NULL,NULL,$aStat['size'],$sEconetPath.'.'.str_replace('.','/',(string) $sFile),$aStat['ctime'],self::_getAccessMode($aStat['uid'],$aStat['gid'],$aStat['mode']), is_dir($sUnixPath.DIRECTORY_SEPARATOR.$sFile));
+					$aDirectoryListing[$sFile]=new DirectoryEntry(str_replace('.','/',(string) $sFile),$sFile,\HomeLan\FileStore\Vfs\Plugin\LocalFile::class,NULL,NULL,$aStat['size'],$sEconetPath.'.'.str_replace('.','/',(string) $sFile),$aStat['ctime'],self::_getAccessMode($aStat['uid'],$aStat['gid'],$aStat['mode']), is_dir($sUnixPath.DIRECTORY_SEPARATOR.$sFile));
 				}
 				if(is_null($aDirectoryListing[$sFile]->getExecAddr())){
 					//If there is a .inf file use it toget the load exec addr

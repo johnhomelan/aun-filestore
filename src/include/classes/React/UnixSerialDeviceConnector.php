@@ -27,9 +27,9 @@ final class UnixSerialDeviceConnector implements ConnectorInterface
 
     public function connect($path)
     {
-        if (\strpos($path, '://') === false) {
+        if (!str_contains($path, '://')) {
             $path = 'file://' . $path;
-        } elseif (\substr($path, 0, 7) !== 'file://') {
+        } elseif (!str_starts_with($path, 'file://')) {
             return Promise\reject(new \InvalidArgumentException(
                 'Given URI "' . $path . '" is invalid (EINVAL)',
                  22

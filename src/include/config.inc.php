@@ -63,6 +63,9 @@ safe_define('CONFIG_ipv4_nat_file','nat.txt');
 
 safe_define('CONFIG_beeb_term_services_file','beebterm.txt');
 
+safe_define('CONFIG_viewdata_host','glasstty.com');
+safe_define('CONFIG_viewdata_port',6502); //6502/6503 = 8 data bits, no parity; 6504 = 7 data bits, even parity
+
 safe_define('CONFIG_remote_bridge_enabled', false);
 safe_define('CONFIG_remote_bridge_map_file', 'remotebridge.txt');
 safe_define('CONFIG_remote_bridge_server_address', '0.0.0.0');

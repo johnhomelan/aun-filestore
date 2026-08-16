@@ -72,9 +72,9 @@ class Teletext implements ProviderInterface {
 	public const ERROR_SERVER_ERROR           = 11;
 	public const ERROR_WHO                    = 12;
 
-	private const VERSION_BYTE   = 1;
-	private const VERSION_STRING = '1.00';
-	private const SERVER_TYPE    = 'TELETEXT';
+	private const int VERSION_BYTE   = 1;
+	private const string VERSION_STRING = '1.00';
+	private const string SERVER_TYPE    = 'TELETEXT';
 
 	/** @var array<int,TeletextReply|EconetPacket> */
 	protected array $aReplyBuffer = [];

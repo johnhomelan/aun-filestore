@@ -43,8 +43,8 @@ class Handler Implements HandleInterface {
 	 */
 	private array $aSeqWindows = [];
 
-	private const SEQ_WINDOW_SIZE = 8;
-	private const SEQ_PRUNE_TTL   = 300; // seconds before an idle source entry is evicted
+	private const int SEQ_WINDOW_SIZE = 8;
+	private const int SEQ_PRUNE_TTL   = 300; // seconds before an idle source entry is evicted
 
 	private Socket $oAunServer;
 

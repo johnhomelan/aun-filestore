@@ -17,7 +17,7 @@ class Kernel extends BaseKernel
 {
     use MicroKernelTrait;
 
-    private const CONFIG_EXTS = '.{php,xml,yaml,yml}';
+    private const string CONFIG_EXTS = '.{php,xml,yaml,yml}';
     private string $projectDir = __DIR__;
 
     public function getProjectDir(): string
@@ -25,7 +25,7 @@ class Kernel extends BaseKernel
 	return $this->projectDir;
     }
 
-    /** @return iterable<BundleInterface> */
+    /** @return iterable<\Symfony\Component\DependencyInjection\Kernel\BundleInterface> */
     public function registerBundles(): iterable
     {
         $contents = require $this->getProjectDir().'/config/bundles.php';
@@ -38,7 +38,7 @@ class Kernel extends BaseKernel
             }
             if ($envs[$this->environment] ?? $envs['all'] ?? false) {
                 $oBundle = new $class();
-                if (!($oBundle instanceof BundleInterface)) {
+                if (!($oBundle instanceof \Symfony\Component\DependencyInjection\Kernel\BundleInterface)) {
                     throw new \RuntimeException($class.' is not a valid Symfony bundle');
                 }
                 yield $oBundle;

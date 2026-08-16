@@ -465,7 +465,7 @@ class Catalogue implements PluginInterface {
         $iEconetHandle = Vfs::getFreeFileHandleID($oUser);
         return new FileDescriptor(
             self::$oLogger,
-            'HomeLan\FileStore\Vfs\Plugin\Catalogue',
+            \HomeLan\FileStore\Vfs\Plugin\Catalogue::class,
             $oUser,
             $sRelPath,
             $sFullPath,
@@ -519,7 +519,7 @@ class Catalogue implements PluginInterface {
                     $aSeenDirs[$sDirName] = true;
                     $aDirectoryListing[$sDirName] = new DirectoryEntry(
                         $sDirName, $sDirName,
-                        'HomeLan\FileStore\Vfs\Plugin\Catalogue',
+                        \HomeLan\FileStore\Vfs\Plugin\Catalogue::class,
                         null, null, 0,
                         $sEconetPath . '.' . $sDirName,
                         time(), 'r/r', true
@@ -530,7 +530,7 @@ class Catalogue implements PluginInterface {
                 if (!array_key_exists($sEntryRel, $aDirectoryListing)) {
                     $aDirectoryListing[$sEntryRel] = new DirectoryEntry(
                         $sEntryRel, $sEntryRel,
-                        'HomeLan\FileStore\Vfs\Plugin\Catalogue',
+                        \HomeLan\FileStore\Vfs\Plugin\Catalogue::class,
                         $aEntry['load'],
                         $aEntry['exec'],
                         $aEntry['size'],

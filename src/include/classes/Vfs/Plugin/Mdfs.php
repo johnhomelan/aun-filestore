@@ -306,7 +306,7 @@ class Mdfs implements PluginInterface {
 					'exec'=>0,
 					'access'=>0x0C,
 				];
-				return new FileDescriptor(self::$oLogger,'HomeLan\FileStore\Vfs\Plugin\Mdfs',$oUser,$sImageFile,$oEconetPath->getFilePath(),$iVfsHandle,$iEconetHandle,FALSE,TRUE,$bMustExist,$bReadOnly);
+				return new FileDescriptor(self::$oLogger,\HomeLan\FileStore\Vfs\Plugin\Mdfs::class,$oUser,$sImageFile,$oEconetPath->getFilePath(),$iVfsHandle,$iEconetHandle,FALSE,TRUE,$bMustExist,$bReadOnly);
 			}
 
 			$oMdfs = self::_getImageReader($sImageFile);
@@ -328,7 +328,7 @@ class Mdfs implements PluginInterface {
 					'exec'=>$aEntry['exec'],
 					'access'=>$aEntry['access'],
 				];
-				return new FileDescriptor(self::$oLogger,'HomeLan\FileStore\Vfs\Plugin\Mdfs',$oUser,$sImageFile,$oEconetPath->getFilePath(),$iVfsHandle,$iEconetHandle,$bIsFile,$bIsDir,$bMustExist,$bReadOnly);
+				return new FileDescriptor(self::$oLogger,\HomeLan\FileStore\Vfs\Plugin\Mdfs::class,$oUser,$sImageFile,$oEconetPath->getFilePath(),$iVfsHandle,$iEconetHandle,$bIsFile,$bIsDir,$bMustExist,$bReadOnly);
 			}
 
 			//The entry does not exist yet. If we are writable and the caller does not require
@@ -347,7 +347,7 @@ class Mdfs implements PluginInterface {
 					'exec'=>0,
 					'access'=>0x0C,
 				];
-				return new FileDescriptor(self::$oLogger,'HomeLan\FileStore\Vfs\Plugin\Mdfs',$oUser,$sImageFile,$oEconetPath->getFilePath(),$iVfsHandle,$iEconetHandle,FALSE,FALSE,$bMustExist,$bReadOnly);
+				return new FileDescriptor(self::$oLogger,\HomeLan\FileStore\Vfs\Plugin\Mdfs::class,$oUser,$sImageFile,$oEconetPath->getFilePath(),$iVfsHandle,$iEconetHandle,FALSE,FALSE,$bMustExist,$bReadOnly);
 			}
 		}
 
@@ -392,7 +392,7 @@ class Mdfs implements PluginInterface {
 
 			$sAccess = self::$bWriteEnabled ? 'wr/wr' : '-r/-r';
 			foreach($aCat as $sFile=>$aMeta){
-				$aDirectoryListing[$sFile] = new DirectoryEntry($sFile,$sImageFile,'HomeLan\FileStore\Vfs\Plugin\Mdfs',$aMeta['load'],$aMeta['exec'],$aMeta['size'],$sEconetPath.'.'.$sFile,$aImageStat['ctime'],$sAccess, $aMeta['type']=='dir' ? TRUE : FALSE);
+				$aDirectoryListing[$sFile] = new DirectoryEntry($sFile,$sImageFile,\HomeLan\FileStore\Vfs\Plugin\Mdfs::class,$aMeta['load'],$aMeta['exec'],$aMeta['size'],$sEconetPath.'.'.$sFile,$aImageStat['ctime'],$sAccess, $aMeta['type']=='dir' ? TRUE : FALSE);
 			}
 		}
 
@@ -415,7 +415,7 @@ class Mdfs implements PluginInterface {
 						if($aStat === false){
 							continue;
 						}
-						$aDirectoryListing[$sFile]=new DirectoryEntry($sDisplayName,$sFile,'HomeLan\FileStore\Vfs\Plugin\Mdfs',NULL,NULL,0,$sEconetPath.'.'.$sDisplayName,$aStat['ctime'],'-r/-r', TRUE);
+						$aDirectoryListing[$sFile]=new DirectoryEntry($sDisplayName,$sFile,\HomeLan\FileStore\Vfs\Plugin\Mdfs::class,NULL,NULL,0,$sEconetPath.'.'.$sDisplayName,$aStat['ctime'],'-r/-r', TRUE);
 					}
 				}
 			}
@@ -600,9 +600,9 @@ class Mdfs implements PluginInterface {
 			if(is_null($aEntry)){
 				return;
 			}
-			$iNewLoad = is_null($iLoad) ? $aEntry['load'] : $iLoad;
-			$iNewExec = is_null($iExec) ? $aEntry['exec'] : $iExec;
-			$iNewAccess = is_null($iAccess) ? $aEntry['access'] : $iAccess;
+			$iNewLoad = $iLoad ?? $aEntry['load'];
+			$iNewExec = $iExec ?? $aEntry['exec'];
+			$iNewAccess = $iAccess ?? $aEntry['access'];
 			$oWriter->setLoadExec($sPathInsideImage,$iNewLoad,$iNewExec);
 			$oWriter->setAccess($sPathInsideImage,$iNewAccess);
 		}catch(\Exception $oException){

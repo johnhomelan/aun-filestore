@@ -43,7 +43,7 @@ class Handler implements MessageComponentInterface {
 	 */
 	private array $aSeqWindows = [];
 
-	private const SEQ_WINDOW_SIZE = 8;
+	private const int SEQ_WINDOW_SIZE = 8;
 
 
 	public function __construct(private readonly \Psr\Log\LoggerInterface $oLogger,  private readonly ServiceDispatcher $oServices, private readonly PacketDispatcher $oPacketDispatcher) 
@@ -55,7 +55,7 @@ class Handler implements MessageComponentInterface {
 	public function onOpen(ConnectionInterface $oConnection):void
 	{
 		$this->iConnectionSequence++;
-		$this->oConnections->attach($oConnection,$this->iConnectionSequence);
+		$this->oConnections->offsetSet($oConnection,$this->iConnectionSequence);
 	}
 
 	public function onClose(ConnectionInterface $oConnection):void
@@ -67,7 +67,7 @@ class Handler implements MessageComponentInterface {
 		WebSocketMap::freeAddress($oConnection);
 
 		//Remove the connection from connections object store
-		$this->oConnections->detach($oConnection);
+		$this->oConnections->offsetUnset($oConnection);
 
 		//Free the dedup window for this connection
 		unset($this->aSeqWindows[spl_object_id($oConnection)]);
@@ -137,7 +137,7 @@ class Handler implements MessageComponentInterface {
 	public function onError(ConnectionInterface $oConnection, \Exception $oError):void
 	{
 		//Remove the connection from connections object store
-		$this->oConnections->detach($oConnection);
+		$this->oConnections->offsetUnset($oConnection);
 
 		//Need to logout of the filestore
 		//@TODO The logout needs implmenting, or security contexts will leak which is bad TM

@@ -28,10 +28,10 @@ use config;
 class AfsImg implements PluginInterface {
 
 	/** @var array<string,L3fsReader> */
-	protected static array $aImageReaders = array();
+	protected static array $aImageReaders = [];
 
 	/** @var array<int,array{image-file:string,path-inside-image:string,pos:int}> */
-	protected static array $aFileHandles = array();
+	protected static array $aFileHandles = [];
 
 	protected static int $iFileHandle = 0;
 
@@ -244,14 +244,14 @@ class AfsImg implements PluginInterface {
 				//The path refers to the image itself — present it as a directory
 				$iEconetHandle = Vfs::getFreeFileHandleID($oUser);
 				$iVfsHandle = AfsImg::$iFileHandle++;
-				AfsImg::$aFileHandles[$iVfsHandle]=array('image-file'=>$sImageFile,'path-inside-image'=>'','pos'=>0);
+				AfsImg::$aFileHandles[$iVfsHandle]=['image-file'=>$sImageFile,'path-inside-image'=>'','pos'=>0];
 				return new FileDescriptor(self::$oLogger,'AfsImg',$oUser,$sImageFile,$oEconetPath->getFilePath(),$iVfsHandle,$iEconetHandle,FALSE,TRUE,$bMustExist,$bReadOnly);
 			}
 
 			if(AfsImg::_checkImageFileExists($sImageFile,$sPathInsideImage)){
 				$iEconetHandle = Vfs::getFreeFileHandleID($oUser);
 				$iVfsHandle = AfsImg::$iFileHandle++;
-				AfsImg::$aFileHandles[$iVfsHandle]=array('image-file'=>$sImageFile,'path-inside-image'=>$sPathInsideImage,'pos'=>0);
+				AfsImg::$aFileHandles[$iVfsHandle]=['image-file'=>$sImageFile,'path-inside-image'=>$sPathInsideImage,'pos'=>0];
 				$oAdfs =  AfsImg::_getImageReader($sImageFile);
 				return new FileDescriptor(self::$oLogger,'AfsImg',$oUser,$sImageFile,$oEconetPath->getFilePath(),$iVfsHandle,$iEconetHandle,$oAdfs->isFile($sPathInsideImage),$oAdfs->isDir($sPathInsideImage),$bMustExist,$bReadOnly);
 			}
@@ -315,7 +315,7 @@ class AfsImg implements PluginInterface {
 
 
 		//Rip out and .adl files from the list
-		$aReturn = array();
+		$aReturn = [];
 		foreach($aDirectoryListing as $sFile => $oFile){
 			if(stripos($sFile,"\/adl")===FALSE){
 				$aReturn[$sFile]=$oFile;
@@ -384,7 +384,7 @@ class AfsImg implements PluginInterface {
 		if(is_int($fLocalHandle) && array_key_exists($fLocalHandle,AfsImg::$aFileHandles)){
 			$oAdfs = AfsImg::_getImageReader(AfsImg::$aFileHandles[$fLocalHandle]['image-file']);
 			$aStat = $oAdfs->getStat(AfsImg::$aFileHandles[$fLocalHandle]['path-inside-image']);
-			return array('dev'=>null,'ino'=>$aStat['sector'],'size'=>$aStat['size'],'nlink'=>1);
+			return ['dev'=>null,'ino'=>$aStat['sector'],'size'=>$aStat['size'],'nlink'=>1];
 		}
 		throw new VfsException("Invalid handle");
 	}

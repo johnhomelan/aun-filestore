@@ -23,8 +23,8 @@ use config;
 */
 class ClientHandler
 {
-	private const RECONNECT_DELAY_MIN = 5;
-	private const RECONNECT_DELAY_MAX = 300;
+	private const int RECONNECT_DELAY_MIN = 5;
+	private const int RECONNECT_DELAY_MAX = 300;
 
 	/** @var array<string, array{entry: array{host: string, port: int, secret: string, networks: int[]}, delay: int}> keyed by 'host:port' */
 	private array $aEntryState = [];
@@ -102,7 +102,7 @@ class ClientHandler
 					$this->oLoop,
 				);
 
-				$oTcpConn->on('data', [$oConn, 'onData']);
+				$oTcpConn->on('data', $oConn->onData(...));
 				$oTcpConn->on('close', function () use ($oConn, $sKey) {
 					$oConn->onClose();
 					$this->scheduleReconnect($sKey);

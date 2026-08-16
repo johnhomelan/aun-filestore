@@ -22,7 +22,7 @@ class AdminEntity {
 	 * @param null|callable(array<string,mixed>):mixed $fComputeId
 	 * @return array<int,AdminEntity>
 	*/
-	static function createCollection(string $sType, array $aFields, array $aRows, ?callable $fComputeId=null, ?string $sIdField=null): array
+	public static function createCollection(string $sType, array $aFields, array $aRows, ?callable $fComputeId=null, ?string $sIdField=null): array
 	{
 		$aReturn = [];
 		foreach($aRows as $aRow){

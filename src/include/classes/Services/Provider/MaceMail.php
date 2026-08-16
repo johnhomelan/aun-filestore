@@ -84,20 +84,20 @@ class MaceMail implements ProviderInterface {
 	public const OP_NETWORK_NUMBER    = 21;
 
 	// Logon error codes (returned as the sole byte of a failed 0x1C reply)
-	private const LOGON_ERROR_UNKNOWN_SLOT   = 0xFE;
-	private const LOGON_ERROR_ALREADY_ONLINE = 0xFD;
-	private const LOGON_ERROR_BAD_PASSWORD   = 0xFC;
+	private const int LOGON_ERROR_UNKNOWN_SLOT   = 0xFE;
+	private const int LOGON_ERROR_ALREADY_ONLINE = 0xFD;
+	private const int LOGON_ERROR_BAD_PASSWORD   = 0xFC;
 
 	/**
 	 * Directory replies are one count byte plus 30-byte records inside a
 	 * 960-byte buffer (the vintage client's own allocation) — floor(959/30).
 	*/
-	private const DIRECTORY_MAX_ENTRIES = 31;
+	private const int DIRECTORY_MAX_ENTRIES = 31;
 
 	// PORT_NOTIFY (0x40) type bytes, matching SERV.bas's PROCCONT() call sites
-	private const NOTIFY_CHAT_INVITE  = 1;
-	private const NOTIFY_NEW_MAIL     = 7;
-	private const NOTIFY_FORCED_LOGOFF = 10;
+	private const int NOTIFY_CHAT_INVITE  = 1;
+	private const int NOTIFY_NEW_MAIL     = 7;
+	private const int NOTIFY_FORCED_LOGOFF = 10;
 
 	/**
 	 * System-broadcast message types the vintage client renders as canned,
@@ -824,7 +824,7 @@ class MaceMail implements ProviderInterface {
 	// never inspects their contents.
 	// -------------------------------------------------------------------------
 
-	private const STORE_SLOT_SIZE = 440;
+	private const int STORE_SLOT_SIZE = 440;
 
 	protected function handleGetStoreOp(MaceMailRequest $oRequest, int $iSlot, int $iStoreSlot): void
 	{
@@ -883,8 +883,8 @@ class MaceMail implements ProviderInterface {
 	// handleIndividualMailOp()).
 	// -------------------------------------------------------------------------
 
-	private const LOOK_RECORD_SIZE  = 35;
-	private const LOOK_MAX_PER_BATCH = 6;
+	private const int LOOK_RECORD_SIZE  = 35;
+	private const int LOOK_MAX_PER_BATCH = 6;
 
 	protected function handleMailboxScanOp(MaceMailRequest $oRequest, int $iSlot): void
 	{

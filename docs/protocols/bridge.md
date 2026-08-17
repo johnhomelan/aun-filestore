@@ -13,7 +13,10 @@ Replies are sent to the reply port specified within each request payload.
 
 ## Request Packet Layout
 
-All bridge requests share a common 8-byte header:
+Two wire layouts are seen in practice, and the server accepts both:
+
+**Layout A** — used by this server's own replies, and by some software
+bridges. The function code is a leading data byte, ahead of the magic string:
 
 ```
 Offset  Size  Field
@@ -24,7 +27,27 @@ Offset  Size  Field
 8+      n     Per-function data
 ```
 
-If the magic string does not match, the packet is silently discarded.
+**Layout B** — sent by genuine Acorn hardware (e.g. the ANFS ROM). The
+function code travels in the Econet control byte instead, so the data starts
+directly with the magic string, which the ROM commonly sends upper-cased
+("BRIDGE"):
+
+```
+Control byte: Function code (uint8)
+
+Data offset  Size  Field
+-----------  ----  -----
+0            6     Magic string — ASCII "Bridge", case-insensitive
+6            1     Reply port (uint8)
+7+           n     Per-function data
+```
+
+The magic string match is case-insensitive in both layouts. `BridgeRequest::decode()`
+tries layout A first (checking for the magic string at data offset 1), then
+falls back to layout B (checking at data offset 0, using the packet's control
+byte as the function code). If neither matches, the packet is silently
+discarded — `Bridge::broadcastPacketIn()` catches the decode failure and logs
+it rather than letting it propagate to the encapsulation layer.
 
 ## Function Codes
 

@@ -276,6 +276,33 @@ class JsonPacketTest extends TestCase
         $this->assertSame(6, $aType[1]);
     }
 
+    // The flag byte (offset 2) must echo the request's control byte with the top bit set
+    // (0x80|iCb), not a fixed value: a real station's ADLC validates this byte is in the
+    // 0x81-0x88 immediate-op range before it will read the rest of the reply frame at all.
+    public function testBuildAckImmediateMachineTypeFlagByteEchoesControlByte(): void
+    {
+        $oPkt = $this->decodePacket($this->makePktJson(iAunType: 5, iCb: 0));
+        $aDecoded = json_decode($oPkt->buildAck(), true);
+        $iFlag = unpack('C', substr(base64_decode($aDecoded['payload']), 2, 1))[1];
+        $this->assertSame(0x80, $iFlag);
+    }
+
+    public function testBuildAckImmediateOsVersionFlagByteEchoesControlByte(): void
+    {
+        $oPkt = $this->decodePacket($this->makePktJson(iAunType: 5, iCb: 1));
+        $aDecoded = json_decode($oPkt->buildAck(), true);
+        $iFlag = unpack('C', substr(base64_decode($aDecoded['payload']), 2, 1))[1];
+        $this->assertSame(0x81, $iFlag);
+    }
+
+    public function testBuildAckImmediateEchoFlagByteEchoesControlByte(): void
+    {
+        $oPkt = $this->decodePacket($this->makePktJson(iAunType: 5, iCb: 8));
+        $aDecoded = json_decode($oPkt->buildAck(), true);
+        $iFlag = unpack('C', substr(base64_decode($aDecoded['payload']), 2, 1))[1];
+        $this->assertSame(0x88, $iFlag);
+    }
+
     // =========================================================================
     // buildAck() — ctrl
     // =========================================================================

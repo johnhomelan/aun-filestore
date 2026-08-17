@@ -653,4 +653,157 @@ class WebSocketHandlerTest extends TestCase
             iDstStn: self::WS_STN,
         ));
     }
+
+    // =========================================================================
+    // onMessage() — 'pkt' with source network 0 ("my local network")
+    // =========================================================================
+
+    public function testSrcNetworkZeroIsOverriddenWithConnectionsMappedNetworkOnForward(): void
+    {
+        $this->oHandler->onOpen($this->oConnection);
+        $this->oConnection->method('send');
+        $this->oServices->method('getReplies')->willReturn([]);
+
+        // Allocate this connection an address on the dynamic network range first,
+        // the way a real client does via a 'dynamic_alloction_request' ctrl message.
+        $sAllocated = WebSocketMap::allocateAddress($this->oConnection);
+        [, $iAllocatedStn] = array_map('intval', explode('.', $sAllocated));
+
+        $oCaptured = null;
+        $this->oPacketDispatcher->method('sendPacket')
+            ->willReturnCallback(function ($oPkt) use (&$oCaptured) { $oCaptured = $oPkt; });
+
+        // src network 0 with a non-local destination so the packet is forwarded
+        $this->oHandler->onMessage($this->oConnection, $this->makePktJson(
+            iDstNet: 5,
+            iDstStn: 10,
+            iSrcNet: 0,
+            iSrcStn: $iAllocatedStn,
+        ));
+
+        $this->assertNotNull($oCaptured);
+        $this->assertSame(self::DYN_NET, $oCaptured->getSourceNetwork(), 'Source network 0 must be replaced with the connection\'s mapped network');
+    }
+
+    public function testSrcNetworkZeroIsOverriddenInAckToSender(): void
+    {
+        $this->oHandler->onOpen($this->oConnection);
+        $sAllocated = WebSocketMap::allocateAddress($this->oConnection);
+        [, $iAllocatedStn] = array_map('intval', explode('.', $sAllocated));
+
+        $this->oServices->method('getReplies')->willReturn([]);
+
+        $sSentAck = null;
+        $this->oConnection->method('send')
+            ->willReturnCallback(function ($s) use (&$sSentAck) { $sSentAck = $s; });
+
+        $this->oHandler->onMessage($this->oConnection, $this->makePktJson(
+            iDstNet: 5,
+            iDstStn: 10,
+            iSrcNet: 0,
+            iSrcStn: $iAllocatedStn,
+        ));
+
+        $aDecoded = json_decode($sSentAck, true);
+        $this->assertSame(self::DYN_NET, $aDecoded['dst']['network'], 'Ack must address the sender using its real mapped network, not 0');
+    }
+
+    public function testSrcNetworkZeroWithoutMappingLeavesNetworkUnchangedAndLogsWarning(): void
+    {
+        $this->oHandler->onOpen($this->oConnection);
+        $this->oConnection->method('send');
+        $this->oServices->method('getReplies')->willReturn([]);
+
+        // No allocateAddress() call — this connection has no entry in WebSocketMap.
+        $oCaptured = null;
+        $this->oPacketDispatcher->method('sendPacket')
+            ->willReturnCallback(function ($oPkt) use (&$oCaptured) { $oCaptured = $oPkt; });
+
+        $this->oHandler->onMessage($this->oConnection, $this->makePktJson(
+            iDstNet: 5,
+            iDstStn: 10,
+            iSrcNet: 0,
+            iSrcStn: 1,
+        ));
+
+        $this->assertNotNull($oCaptured);
+        $this->assertSame(0, $oCaptured->getSourceNetwork());
+    }
+
+    public function testNonZeroSrcNetworkIsNotOverridden(): void
+    {
+        $this->oHandler->onOpen($this->oConnection);
+        $this->oConnection->method('send');
+        WebSocketMap::allocateAddress($this->oConnection);
+        $this->oServices->method('getReplies')->willReturn([]);
+
+        $oCaptured = null;
+        $this->oPacketDispatcher->method('sendPacket')
+            ->willReturnCallback(function ($oPkt) use (&$oCaptured) { $oCaptured = $oPkt; });
+
+        $this->oHandler->onMessage($this->oConnection, $this->makePktJson(
+            iDstNet: 5,
+            iDstStn: 10,
+            iSrcNet: 42,
+            iSrcStn: 1,
+        ));
+
+        $this->assertNotNull($oCaptured);
+        $this->assertSame(42, $oCaptured->getSourceNetwork());
+    }
+
+    // =========================================================================
+    // onMessage() — 'pkt' broadcast (AUN type 1, dst station 255)
+    // =========================================================================
+
+    public function testBroadcastPacketIsDispatchedToLocalServices(): void
+    {
+        $this->oHandler->onOpen($this->oConnection);
+        $this->oConnection->method('send');
+        $this->oServices->method('getReplies')->willReturn([]);
+
+        // A broadcast reaches every station, including us, regardless of the
+        // dst network/station values — unlike a unicast, it must never be
+        // treated as purely a transit packet.
+        $this->oServices->expects($this->once())->method('inboundPacket');
+
+        $this->oHandler->onMessage($this->oConnection, $this->makePktJson(
+            iDstNet: 3,
+            iDstStn: 255,
+            iAunType: 1,
+        ));
+    }
+
+    public function testBroadcastPacketIsAlsoForwardedViaPacketDispatcher(): void
+    {
+        $this->oHandler->onOpen($this->oConnection);
+        $this->oConnection->method('send');
+        $this->oServices->method('getReplies')->willReturn([]);
+
+        // Broadcasts must also reach every other station on the network
+        $this->oPacketDispatcher->expects($this->once())
+            ->method('sendPacket')
+            ->with($this->isInstanceOf(EconetPacket::class));
+
+        $this->oHandler->onMessage($this->oConnection, $this->makePktJson(
+            iDstNet: 3,
+            iDstStn: 255,
+            iAunType: 1,
+        ));
+    }
+
+    public function testBroadcastPacketAddressedToOurNetworkIsStillDispatchedLocally(): void
+    {
+        $this->oHandler->onOpen($this->oConnection);
+        $this->oConnection->method('send');
+        $this->oServices->method('getReplies')->willReturn([]);
+
+        $this->oServices->expects($this->once())->method('inboundPacket');
+
+        $this->oHandler->onMessage($this->oConnection, $this->makePktJson(
+            iDstNet: self::WS_NET,
+            iDstStn: 255,
+            iAunType: 1,
+        ));
+    }
 }

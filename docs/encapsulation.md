@@ -90,7 +90,7 @@ Return one of the string constants that `ServiceDispatcher` switches on:
 
 | Return value | Meaning |
 |---|---|
-| `'Broadcast'` | Econet broadcast — delivered to all registered providers |
+| `'Broadcast'` | Econet broadcast — routed by port, same as unicast, but calls `broadcastPacketIn()` |
 | `'Unicast'` | Addressed unicast — routed by port |
 | `'Ack'` | Acknowledgement frame — triggers ACK-event callbacks |
 | `'Immediate'` | Immediate operation (e.g. machine type query) |
@@ -197,7 +197,9 @@ object, looked up via `Map::ecoAddrToSocket()`.
 3. **The handler calls `ServiceDispatcher::inboundPacket($oXxxPacket)`**.
 4. `ServiceDispatcher` calls `$oXxxPacket->getPacketType()` and switches:
    - `'Unicast'` / `'Immediate'` → `$this->aPorts[$port]->unicastPacketIn($oXxxPacket->buildEconetPacket())`
-   - `'Broadcast'` → same method on every registered provider
+   - `'Broadcast'` → `$this->aPorts[$port]->broadcastPacketIn($oXxxPacket->buildEconetPacket())` — same
+     per-port lookup as unicast, just calling the broadcast-specific method on whichever single
+     provider owns that port
    - `'Ack'` → `$this->ackEvents($oXxxPacket)` (triggers any waiting ACK callbacks)
 5. After calling the provider, `ServiceDispatcher` drains `$oProvider->getReplies()`,
    places each `EconetPacket` on a queue, and calls `PacketDispatcher::sendPacket()`

@@ -82,23 +82,31 @@ class BridgeRequest extends Request {
 	}
 
 	/**
-	  * Decodes an AUN packet 
+	  * Decodes an AUN packet
+	  *
+	  * Two wire layouts are seen in the wild, so both are tried:
+	  *
+	  *   A) [function:1]["Bridge":6][replyPort:1][data]  — this project's own bridge
+	  *      replies, and some software bridges, put the function code as a leading
+	  *      data byte ahead of the mixed-case magic string.
+	  *   B) [magic:6][replyPort:1][data], function code carried in the Econet
+	  *      control byte — genuine Acorn ANFS ROM broadcasts. The ROM's magic
+	  *      string is commonly upper-cased ("BRIDGE"), so the match is
+	  *      case-insensitive.
  	  *
  	*/
 	public function decode(string $sBinaryString): void
 	{
-		//Read the function code 1 byte unsigned int
-		$aHeader=unpack('C',$sBinaryString);
-		if($aHeader === false){
-			return;
-		}
-		$this->iFunction = self::_asInt($aHeader[1]);
-		$sBinaryString = substr($sBinaryString,1);
-
-		//All bridge requests contain the 6-byte ASCII string "Bridge"
-		$sMagic = substr($sBinaryString, 0, 6);
-		$sBinaryString = substr($sBinaryString, 6);
-		if($sMagic !== 'Bridge'){
+		if(strcasecmp(substr($sBinaryString, 1, 6), 'Bridge') === 0){
+			//Layout A — function code is the leading data byte
+			$aHeader=unpack('C',$sBinaryString);
+			$this->iFunction = ($aHeader !== false) ? self::_asInt($aHeader[1]) : 0;
+			$sBinaryString = substr($sBinaryString, 7);
+		}elseif(strcasecmp(substr($sBinaryString, 0, 6), 'Bridge') === 0){
+			//Layout B — no leading function byte; the control byte carries it instead
+			$this->iFunction = self::_asInt($this->oEconetPacket?->getFlags());
+			$sBinaryString = substr($sBinaryString, 6);
+		}else{
 			$this->oLogger->debug("An invalid bridge request was received (it did not begin with the string Bridge)");
 			throw new Exception("Invalid bridge request");
 		}

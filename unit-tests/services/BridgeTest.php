@@ -110,6 +110,27 @@ class BridgeTest extends TestCase
         return $this->makePkt(0x81, $sNets, 0x9C, $iNet, $iStn);
     }
 
+    /**
+     * Build a raw EconetPacket carrying a genuine Acorn ANFS ROM bridge broadcast.
+     *
+     * Real ROM broadcasts carry the function code in the Econet control byte
+     * (not as a leading data byte) and spell the magic string upper-case.
+     *
+     * Format: flags=fncode, data=[BRIDGE:6][replyPort:1][extra]
+     */
+    private function makeRomPkt(int $iFn, string $sExtra = '', int $iEcoPort = 0x9D, int $iNet = 1, int $iStn = 3): EconetPacket
+    {
+        $oPkt = new EconetPacket();
+        $oPkt->setPort($iEcoPort);
+        $oPkt->setSourceNetwork($iNet);
+        $oPkt->setSourceStation($iStn);
+        $oPkt->setFlags($iFn);
+        $oPkt->setDestinationNetwork(0);
+        $oPkt->setDestinationStation(255);
+        $oPkt->setData('BRIDGE' . pack('C', 0x9C) . $sExtra);
+        return $oPkt;
+    }
+
     private function dispatch(EconetPacket $oPkt): array
     {
         $this->oBridge->broadcastPacketIn($oPkt);
@@ -150,6 +171,69 @@ class BridgeTest extends TestCase
         $oLogger->pushHandler(new NullHandler());
         $oReq = new BridgeRequest($this->query2Pkt(), $oLogger);
         $this->assertSame('EC_BR_QUERY2', $oReq->getFunction());
+    }
+
+    // -----------------------------------------------------------------------
+    // BridgeRequest — genuine Acorn ANFS ROM wire layout (function code in
+    // the control byte, upper-case "BRIDGE" magic, no leading data byte)
+    // -----------------------------------------------------------------------
+
+    public function testDecodeRomLocalnetFunction(): void
+    {
+        $oLogger = new Logger('test');
+        $oLogger->pushHandler(new NullHandler());
+        $oReq = new BridgeRequest($this->makeRomPkt(0x82), $oLogger);
+        $this->assertSame('EC_BR_LOCALNET', $oReq->getFunction());
+    }
+
+    public function testDecodeRomQueryFunction(): void
+    {
+        $oLogger = new Logger('test');
+        $oLogger->pushHandler(new NullHandler());
+        $oReq = new BridgeRequest($this->makeRomPkt(0x80, '', 0x9C), $oLogger);
+        $this->assertSame('EC_BR_QUERY', $oReq->getFunction());
+    }
+
+    public function testDecodeRomReplyPortReadCorrectly(): void
+    {
+        $oLogger = new Logger('test');
+        $oLogger->pushHandler(new NullHandler());
+        $oReq = new BridgeRequest($this->makeRomPkt(0x82), $oLogger);
+        $this->assertSame(0x9C, $oReq->getReplyPort());
+    }
+
+    public function testRomLocalnetPacketProducesReply(): void
+    {
+        $aReplies = $this->dispatch($this->makeRomPkt(0x82));
+        $this->assertCount(1, $aReplies);
+    }
+
+    /**
+     * The exact base64 payload reported from a real Acorn ANFS ROM client:
+     * AZyCAAAAAABCUklER0WcAA== decodes to AUN type=1 (Broadcast), port=0x9C,
+     * control=0x82 (EC_BR_LOCALNET), data="BRIDGE"+0x9C+0x00 — no leading
+     * function byte, upper-case magic. Must decode without throwing and
+     * produce exactly one EC_BR_LOCALNET reply.
+     */
+    public function testRealAnfsRomLocalnetBroadcastDecodesCorrectly(): void
+    {
+        $sPayload = base64_decode('AZyCAAAAAABCUklER0WcAA==', true);
+        $this->assertNotFalse($sPayload);
+
+        $aHeader = unpack('Ctype/Cport/Ccb/Cpad/Vseq', $sPayload);
+        $this->assertNotFalse($aHeader);
+
+        $oPkt = new EconetPacket();
+        $oPkt->setPort($aHeader['port']);
+        $oPkt->setFlags($aHeader['cb']);
+        $oPkt->setSourceNetwork(1);
+        $oPkt->setSourceStation(3);
+        $oPkt->setDestinationNetwork(0);
+        $oPkt->setDestinationStation(255);
+        $oPkt->setData(substr($sPayload, 8));
+
+        $aReplies = $this->dispatch($oPkt);
+        $this->assertCount(1, $aReplies);
     }
 
     public function testDecodeInvalidMagicThrows(): void
@@ -234,6 +318,47 @@ class BridgeTest extends TestCase
     public function testUnicastPacketInGeneratesNoReply(): void
     {
         $this->oBridge->unicastPacketIn($this->localnetPkt());
+        $this->assertEmpty($this->oBridge->getReplies());
+    }
+
+    // -----------------------------------------------------------------------
+    // Bridge service — malformed broadcast is silently discarded, not thrown
+    //
+    // docs/protocols/bridge.md: "If the magic string does not match, the
+    // packet is silently discarded." BridgeRequest::decode() throws on a bad
+    // magic string (see testDecodeInvalidMagicThrows above); broadcastPacketIn()
+    // must catch that so one malformed packet on the shared 0x9C/0x9D port
+    // doesn't propagate an exception up to the encapsulation handler and tear
+    // down the sending connection.
+    // -----------------------------------------------------------------------
+
+    public function testBroadcastPacketInDoesNotThrowOnBadMagicString(): void
+    {
+        $oPkt = new EconetPacket();
+        $oPkt->setPort(0x9D);
+        $oPkt->setSourceNetwork(1);
+        $oPkt->setSourceStation(3);
+        $oPkt->setFlags(0);
+        $oPkt->setDestinationNetwork(0);
+        $oPkt->setDestinationStation(255);
+        $oPkt->setData(pack('C', 0x82) . 'BADSTR' . pack('C', 0x9E));
+
+        $this->oBridge->broadcastPacketIn($oPkt);
+        $this->assertTrue(true, 'broadcastPacketIn() must not throw for a malformed bridge payload');
+    }
+
+    public function testBroadcastPacketInGeneratesNoReplyOnBadMagicString(): void
+    {
+        $oPkt = new EconetPacket();
+        $oPkt->setPort(0x9D);
+        $oPkt->setSourceNetwork(1);
+        $oPkt->setSourceStation(3);
+        $oPkt->setFlags(0);
+        $oPkt->setDestinationNetwork(0);
+        $oPkt->setDestinationStation(255);
+        $oPkt->setData(pack('C', 0x82) . 'BADSTR' . pack('C', 0x9E));
+
+        $this->oBridge->broadcastPacketIn($oPkt);
         $this->assertEmpty($this->oBridge->getReplies());
     }
 

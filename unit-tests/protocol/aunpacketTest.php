@@ -79,6 +79,7 @@ class aunpacketTest extends TestCase {
 		$this->assertNotNull($sReply);
 		$aReply = unpack('C*', $sReply);
 		$this->assertEquals(6,    $aReply[1]);  // ImmediateReply
+		$this->assertEquals(0x80, $aReply[3]);  // flag echoes 0x80|cb, not a fixed 0
 		$this->assertEquals(0x40, $aReply[9]);  // FS01 machine type
 		$this->assertEquals(0x00, $aReply[10]);
 		$this->assertEquals(0x00, $aReply[11]);
@@ -106,6 +107,7 @@ class aunpacketTest extends TestCase {
 		$this->assertNotNull($sReply);
 		$aReply = unpack('C*', $sReply);
 		$this->assertEquals(6, $aReply[1]);  // ImmediateReply
+		$this->assertEquals(0x81, $aReply[3]); // flag echoes 0x80|cb, not a fixed 0
 		$this->assertEquals(1, $aReply[9]);  // version_major
 		$this->assertEquals(2, $aReply[10]); // version_minor
 		$this->assertEquals(0, $aReply[11]);
@@ -113,6 +115,29 @@ class aunpacketTest extends TestCase {
 
 		config::resetValue('version_major');
 		config::resetValue('version_minor');
+	}
+
+	public function testBuildAckImmediateEcho():void
+	{
+		$oPacket = new AunPacket();
+		$oPacket->setSourceIP('192.168.0.2');
+		$oPacket->setDestinationIP('192.168.0.1');
+
+		$sBinaryPacket  = pack('C', 5);  // type = Immediate
+		$sBinaryPacket .= pack('C', 0);  // port = 0
+		$sBinaryPacket .= pack('C', 8);  // cb = 8 (echo request equiv / machine peek)
+		$sBinaryPacket .= pack('C', 0);  // pad = 0
+		$sBinaryPacket .= pack('V', 4);  // sequence = 4
+
+		$oPacket->decode($sBinaryPacket);
+		$sReply = $oPacket->buildAck();
+
+		$this->assertNotNull($sReply);
+		$aReply = unpack('C*', $sReply);
+		$this->assertEquals(6,    $aReply[1]);  // ImmediateReply
+		$this->assertEquals(0x88, $aReply[3]);  // flag echoes 0x80|cb, not a fixed 0
+		$this->assertEquals(0x40, $aReply[9]);  // Peek Lo
+		$this->assertEquals(0x66, $aReply[10]); // Peek Hi
 	}
 
 	public function testBuildAckImmediateUnknownCb():void

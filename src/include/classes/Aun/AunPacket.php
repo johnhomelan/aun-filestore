@@ -173,7 +173,10 @@ class AunPacket implements EncapsulationInterface {
 			// Machine type query — identify as Acorn FS01 FileStore
 			$sPtk = pack('C',6);
 			$sPtk .= pack('C',0);
-			$sPtk .= pack('C',0);
+			// Flag: real Econet immediate-op replies echo the request's control byte with the top
+			// bit set (0x80|op), not a fixed 0 — a receiving station's ADLC validates this range
+			// before it will read the rest of the frame.
+			$sPtk .= pack('C',0x80|$this->iCb);
 			$sPtk .= pack('C',0);
 			$sPtk .= pack('V',$this->iSeq);
 			$sPtk .= pack('C',0x40); // FS01 FileStore machine type (Acorn Econet machine type table)
@@ -185,7 +188,7 @@ class AunPacket implements EncapsulationInterface {
 			// OS version query
 			$sPtk = pack('C',6);
 			$sPtk .= pack('C',0);
-			$sPtk .= pack('C',0);
+			$sPtk .= pack('C',0x80|$this->iCb); // Flag: see the iCb==0 case above
 			$sPtk .= pack('C',0);
 			$sPtk .= pack('V',$this->iSeq);
 			$sPtk .= pack('C',config::getValueAsInt('version_major'));
@@ -200,8 +203,8 @@ class AunPacket implements EncapsulationInterface {
 			$sPtk = pack('C',6);
 			//Port 0
 			$sPtk = $sPtk.pack('C',0);
-			//Flag 0
-			$sPtk = $sPtk.pack('C',0);
+			//Flag: see the iCb==0 case above
+			$sPtk = $sPtk.pack('C',0x80|$this->iCb);
 			//Retrans 0
 			$sPtk = $sPtk.pack('C',0);
 			//Sequence — echo back the received sequence number

@@ -159,8 +159,8 @@ class EconetPacket {
 
 	private function _getAunRaw():string
 	{
-		//Set the packet type to unicast
-		$sPacket = pack('C',2);
+		//Station 255 is the Econet broadcast address (AUN type 1); everything else is a regular unicast (AUN type 2)
+		$sPacket = pack('C', $this->iDstStn === 255 ? 1 : 2);
 	
 		//Set the port
 		$sPacket=$sPacket.pack('C',$this->iPort);

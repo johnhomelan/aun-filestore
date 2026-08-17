@@ -156,8 +156,16 @@ class Bridge implements ProviderInterface {
 			$this->oLogger->warning("Bridge: dropping broadcast packet with no resolvable source network/station");
 			return;
 		}
-		$this->processRequest(new BridgeRequest($oPacket,$this->oLogger));
-
+		//Port 0x9C/0x9D also carries broadcasts from other, non-bridge protocols (or simply
+		//malformed frames); BridgeRequest::decode() throws when the payload doesn't match the
+		//bridge wire format (see docs/protocols/bridge.md — "packet is silently discarded").
+		//Without this guard the exception would propagate up to the encapsulation handler and
+		//tear down the sending connection over a single bad packet.
+		try {
+			$this->processRequest(new BridgeRequest($oPacket,$this->oLogger));
+		} catch (Exception $oEx) {
+			$this->oLogger->debug("Bridge: dropping unrecognised broadcast packet: " . $oEx->getMessage());
+		}
 	}
 
 	/** 

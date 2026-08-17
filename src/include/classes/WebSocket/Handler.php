@@ -85,6 +85,20 @@ class Handler implements MessageComponentInterface {
 
 		switch($oJsonMessage->getType()){
 			case 'pkt':
+				//A source network of 0 means "my local network" from the client's perspective —
+				//substitute the real network number this connection was allocated on the websocket
+				//map before the packet is acked, dispatched to local services, or forwarded out of
+				//another encapsulation.
+				if ($oJsonMessage->getSrcNetwork() === 0) {
+					$sMappedAddress = WebSocketMap::webSocketToEconetAddress($oConnection);
+					if ($sMappedAddress !== null) {
+						[$iMappedNetwork, ] = explode('.', $sMappedAddress, 2);
+						$oJsonMessage->setSrcNetwork((int) $iMappedNetwork);
+					} else {
+						$this->oLogger->warning("websocket: Received pkt with src network 0 from a connection with no allocated network/station mapping");
+					}
+				}
+
 				$iSeq    = $oJsonMessage->getSequence();
 				$iConnId = spl_object_id($oConnection);
 
@@ -101,11 +115,15 @@ class Handler implements MessageComponentInterface {
 				}
 				$this->recordSeq($iConnId, $iSeq);
 
-				if (
-					$oJsonMessage->getDstNetwork()==config::getValueAsInt('websocket_network_address') AND
-					$oJsonMessage->getDstStation()==config::getValueAsInt('websocket_station_address')
-				){
-					//We are the target — dispatch to local services
+				//Broadcasts are addressed to every station on the network — including us — so they are
+				//never matched by the "addressed to our station" check below; a non-broadcast packet
+				//is only ours if it is explicitly addressed to our network/station.
+				$bBroadcast = $oJsonMessage->getPacketType() === 'Broadcast';
+				$bForUs = $oJsonMessage->getDstNetwork()==config::getValueAsInt('websocket_network_address') AND
+					$oJsonMessage->getDstStation()==config::getValueAsInt('websocket_station_address');
+
+				if ($bBroadcast OR $bForUs){
+					//We are one of the targets — dispatch to local services
 					$this->oLogger->debug("websocket: Sending Ack packet for pkt message");
 					$this->oServices->inboundPacket($oJsonMessage);
 
@@ -114,9 +132,11 @@ class Handler implements MessageComponentInterface {
 					foreach($aReplies as $oReply){
 						$this->oPacketDispatcher->sendPacket($oReply);
 					}
-				} else {
-					//Transit packet — forward to the appropriate encapsulation
-					$this->oLogger->debug("websocket: Forwarding transit pkt to {$oJsonMessage->getDstNetwork()}.{$oJsonMessage->getDstStation()}");
+				}
+				if ($bBroadcast OR !$bForUs){
+					//Broadcasts must also reach every other station on the network; a packet not
+					//addressed to us at all is a transit packet — forward to the appropriate encapsulation
+					$this->oLogger->debug("websocket: Forwarding ".($bBroadcast ? 'broadcast' : 'transit')." pkt to {$oJsonMessage->getDstNetwork()}.{$oJsonMessage->getDstStation()}");
 					$this->oPacketDispatcher->sendPacket($oJsonMessage->buildEconetPacket());
 				}
 				break;

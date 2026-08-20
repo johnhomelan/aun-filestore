@@ -108,7 +108,7 @@ class Vfs {
 	 * This takes chroot in to account converting absolute chrooted path to real absolute path
 	 * @return FilePath
 	 */ 
-	private static function buildFullPath(int $iNetwork,int $iStation,string $sEconetPath): FilePath
+	private static function buildFullPath(int $iNetwork,int $iStation,string $sEconetPath,bool $bUseLibrary=false): FilePath
 	{
 		$oUser = security::getUser($iNetwork,$iStation);
 		if($oUser === null){
@@ -117,7 +117,7 @@ class Vfs {
 		if(str_starts_with($sEconetPath, '&')){
 			$sEconetPath = str_replace('&','$',$sEconetPath);
 		}
-		echo "Econet path is ".$sEconetPath."\n";
+		//echo "Econet path is ".$sEconetPath."\n";
   		if(str_starts_with($sEconetPath, '$')){
 			//Absolute path
 			$aPath = explode('.',$sEconetPath);
@@ -129,28 +129,72 @@ class Vfs {
 			$sFile = array_pop($aPath);
 			$sDir = $oUser->getCsd().'.'.join('.',$aPath);
 		}else{
-			//No path
+			//No path — a bare name resolves against the CSD, or against the
+			//library when the caller is doing a library-search fallback
 			$sFile = $sEconetPath;
-			$sDir = $oUser->getCsd() ?? '';
+			$sDir = ($bUseLibrary ? $oUser->getLib() : $oUser->getCsd()) ?? '';
 		}
-		if($oUser->getRoot()!='$'){
-			echo "Dir is ".$sDir."\n";
+		if($oUser->getRoot()!='$' AND !$bUseLibrary){
+			//The library directory is a fixed, server-wide location (e.g. $.LIBRARY) used
+			//to find common commands/utilities regardless of what the user is chroot'd
+			//into, so it must resolve against the true root, not the chroot prefix.
+			//echo "Dir is ".$sDir."\n";
 			if(!str_starts_with($sDir, $oUser->getRoot())){
 				//If the path is abosulte but does not start with the chroot prefix
 				$sDir = str_replace('$',$oUser->getRoot(),(string) $sDir);
 			}
-			if($sFile=='$'){				
+			if($sFile=='$'){
 				$sDir = $oUser->getRoot();
 				$sFile =  '';
 			}
 			self::$oLogger->debug("User is chroot'd to ".$oUser->getRoot()." changeing path to ".$sDir);
 		}
 		if(str_contains($sDir,'*')){
-			//Deal with unsolvled directory path 
+			//Deal with unsolvled directory path
 			$sDir = self::_resolveFullPath($sDir,$iNetwork,$iStation);
 		}
-			
+
 		return new FilePath($sDir, $sFile);
+	}
+
+	/**
+	 * True for a bare filename with no directory/disc qualification (no '$', '&' or '.').
+	 *
+	 * Acorn filing systems resolve such names against the CSD, and if not found there,
+	 * fall back to searching the user's library directory — this is what lets typing a
+	 * command name that only lives in the library (e.g. $.LIBRARY) still load and run it.
+	 */
+	private static function isUnqualifiedName(string $sEconetPath): bool
+	{
+		return !str_starts_with($sEconetPath,'$') AND !str_starts_with($sEconetPath,'&') AND !str_contains($sEconetPath,'.');
+	}
+
+	/**
+	 * Finds a named entry in a directory listing, trying an exact match first
+	 * and falling back to a case-insensitive match, as the rest of the VFS layer does.
+	 *
+	 * @param array<string,DirectoryEntry> $aDirectoryListing
+	 */
+	private static function findInListing(array $aDirectoryListing, string $sFile): ?DirectoryEntry
+	{
+		if(array_key_exists($sFile,$aDirectoryListing)){
+			return $aDirectoryListing[$sFile];
+		}
+		$sWanted = trim(strtolower($sFile));
+		foreach($aDirectoryListing as $sTestFileName => $oFile){
+			if(trim(strtolower((string) $sTestFileName))==$sWanted){
+				return $oFile;
+			}
+			//The array key isn't always the display name — disk-image-backed plugins
+			//(AFS, DfsSsd, AdfsAdl, AdfsHD, Mdfs) key their virtual-directory entry by
+			//the raw on-disk filename (e.g. "LEVEL3.l3"), so that LocalFile's own
+			//de-dup check naturally skips adding a duplicate raw entry for the same
+			//file. Fall back to matching the entry's own display name too.
+			if(trim(strtolower((string) $oFile->getEconetName()))==$sWanted){
+				return $oFile;
+			}
+		}
+		return null;
 	}
 
 	/**
@@ -165,7 +209,7 @@ class Vfs {
 	{
 		$sLocalDir = $sDir;
 		$iExpandPoint = strpos($sLocalDir,'*');
-		echo "Dir supplied is ".$sDir."\n";
+		//echo "Dir supplied is ".$sDir."\n";
 		//If there is nothing to expand return 
 		if($iExpandPoint===false){
 			return $sLocalDir;
@@ -192,7 +236,7 @@ class Vfs {
 			$sPath = $oUser->getCsd() ?? '';
 		}
 
-		echo  "path is ".$sPath." expandpoint is ".$iExpandPoint." last path is ".$iLastPathSeporator." search is ".$sSearch." \n";
+		//echo  "path is ".$sPath." expandpoint is ".$iExpandPoint." last path is ".$iLastPathSeporator." search is ".$sSearch." \n";
 		//Build a directory listing from all the plugins 
 		$aDirectoryListing = [];
 		$aPlugins = Vfs::getVfsPlugins();
@@ -213,7 +257,7 @@ class Vfs {
 				if(stripos($oFile->getEconetName(),$sSearch)===0){
 					//We have found a match, replace and jump out of the loop
 					$sLocalDir =  str_replace($sSearch.'*',$oFile->getEconetName(),$sLocalDir);
-					echo "Dir updated to ".$sLocalDir."\n";
+					//echo "Dir updated to ".$sLocalDir."\n";
 					$bMatched = true;
 					break;
 				}
@@ -280,14 +324,16 @@ class Vfs {
 	 * @param FilePath $oEconetPath The econet file path
 	 * @param boolean $bMustExist The path must exist
 	 * @param boolean $bReadOnly If the file descriptor should be read-only
+	 * @param boolean $bDirectory If set, the handle must resolve to an existing directory —
+	 *  plugins must never create a file on disk to satisfy this request
 	*/
-	static protected function _buildFiledescriptorFromEconetPath(\HomeLan\FileStore\Authentication\User  $oUser,FilePath $oEconetPath,bool $bMustExist,bool $bReadOnly): FileDescriptor
+	static protected function _buildFiledescriptorFromEconetPath(\HomeLan\FileStore\Authentication\User  $oUser,FilePath $oEconetPath,bool $bMustExist,bool $bReadOnly,bool $bDirectory=false): FileDescriptor
 	{
 		$aPlugins = Vfs::getVfsPlugins();
 		$oHandle=NULL;
 		foreach($aPlugins as $sPlugin){
 			try {
-				$oHandle = $sPlugin::_buildFiledescriptorFromEconetPath($oUser,$oEconetPath,$bMustExist,$bReadOnly);
+				$oHandle = $sPlugin::_buildFiledescriptorFromEconetPath($oUser,$oEconetPath,$bMustExist,$bReadOnly,$bDirectory);
 				if(is_object($oHandle)){
 					break;
 				}
@@ -526,7 +572,6 @@ class Vfs {
 		}
 		$oPath = Vfs::buildFullPath($iNetwork,$iStation,$sEconetPath);
 		$aPlugins = Vfs::getVfsPlugins();
-		$oHandle=NULL;
 		foreach($aPlugins as $sPlugin){
 			try {
 				return $sPlugin::getFile($oUser,$oPath);
@@ -534,6 +579,20 @@ class Vfs {
 				//If it's a hard error abort the operation
 				if($oVfsException->isHard()){
 					throw $oVfsException;
+				}
+			}
+		}
+		if(self::isUnqualifiedName($sEconetPath)){
+			//Not found in the CSD — for a bare filename, also search the user's
+			//library directory before giving up.
+			$oLibPath = Vfs::buildFullPath($iNetwork,$iStation,$sEconetPath,true);
+			foreach($aPlugins as $sPlugin){
+				try {
+					return $sPlugin::getFile($oUser,$oLibPath);
+				}catch(VfsException $oVfsException){
+					if($oVfsException->isHard()){
+						throw $oVfsException;
+					}
 				}
 			}
 		}
@@ -564,18 +623,33 @@ class Vfs {
 				}
 			}
 		}
-		if(array_key_exists($oPath->sFile,$aDirectoryListing)){
-			return $aDirectoryListing[$oPath->sFile];
-		}else{
-			//Try case insensative search
-			foreach($aDirectoryListing as $sTestFileName => $oFile){
-				if(trim(strtolower((string) $sTestFileName))==trim(strtolower((string) $oPath->sFile))){
-					return $oFile;
+		$oFound = self::findInListing($aDirectoryListing,$oPath->sFile);
+		if($oFound !== null){
+			return $oFound;
+		}
+
+		if(self::isUnqualifiedName($sEconetPath)){
+			//Not found in the CSD — for a bare filename, also search the user's
+			//library directory before giving up.
+			$oLibPath = Vfs::buildFullPath($iNetwork,$iStation,$sEconetPath,true);
+			$aLibListing = [];
+			foreach($aPlugins as $sPlugin){
+				try {
+					$aLibListing = $sPlugin::getDirectoryListing($oLibPath->sDir,$aLibListing);
+				}catch(VfsException $oVfsException){
+					if($oVfsException->isHard()){
+						throw $oVfsException;
+					}
 				}
 			}
-			self::$oLogger->debug("VFS: getMeta no such file ".$oPath->sFile." in dir ".$oPath->sDir."");
-			throw new Exception("No such file");
+			$oFound = self::findInListing($aLibListing,$oLibPath->sFile);
+			if($oFound !== null){
+				return $oFound;
+			}
 		}
+
+		self::$oLogger->debug("VFS: getMeta no such file ".$oPath->sFile." in dir ".$oPath->sDir."");
+		throw new Exception("No such file");
 	}
 
 	/**
@@ -619,8 +693,10 @@ class Vfs {
 	 * @param string $sEconetPath
 	 * @param boolean $bMustExist
 	 * @param boolean $bReadOnly
+	 * @param boolean $bDirectory If set, the handle must resolve to an existing directory —
+	 *  it will never be auto-created as a file. Use this for CSD/URD/LIB handles.
 	*/
-	static public function createFsHandle(int $iNetwork,int $iStation,string $sEconetPath,bool $bMustExist=TRUE,bool $bReadOnly=TRUE): FileDescriptor
+	static public function createFsHandle(int $iNetwork,int $iStation,string $sEconetPath,bool $bMustExist=TRUE,bool $bReadOnly=TRUE,bool $bDirectory=false): FileDescriptor
 	{
 		if(!Security::isLoggedIn($iNetwork,$iStation)){
 			self::$oLogger->debug("vfs: Un-able to create a handle for a station that is not logged in (Who are you?)");
@@ -632,7 +708,39 @@ class Vfs {
 			throw new Exception("vfs: Un-able to create a handle for a station that is not logged in (Who are you?)");
 		}
 		$oPath = Vfs::buildFullPath($iNetwork,$iStation,$sEconetPath);
-		$oHandle = Vfs::_buildFiledescriptorFromEconetPath($oUser,$oPath,$bMustExist,$bReadOnly);
+		try {
+			$oHandle = Vfs::_buildFiledescriptorFromEconetPath($oUser,$oPath,$bMustExist,$bReadOnly,$bDirectory);
+		}catch(VfsException $oVfsException){
+			if($oVfsException->isHard()){
+				throw $oVfsException;
+			}
+			$oHandle = null;
+		}catch(Exception){
+			$oHandle = null;
+		}
+
+		if(($oHandle === null OR (!$oHandle->isFile() AND !$oHandle->isDir())) AND !$bDirectory AND self::isUnqualifiedName($sEconetPath)){
+			//Not found in the CSD — for a bare filename (e.g. loading a "*command"),
+			//also search the user's library directory before giving up.
+			$oLibPath = Vfs::buildFullPath($iNetwork,$iStation,$sEconetPath,true);
+			try {
+				$oLibHandle = Vfs::_buildFiledescriptorFromEconetPath($oUser,$oLibPath,$bMustExist,$bReadOnly,$bDirectory);
+				if($oLibHandle->isFile() OR $oLibHandle->isDir()){
+					$oHandle = $oLibHandle;
+				}
+			}catch(VfsException $oVfsException){
+				if($oVfsException->isHard()){
+					throw $oVfsException;
+				}
+				//Not in the library either — fall through with the original (CSD) result
+			}catch(Exception){
+				//Not in the library either — fall through with the original (CSD) result
+			}
+		}
+
+		if($oHandle === null){
+			throw new Exception("vfs: File/Dir not found (".$sEconetPath.")");
+		}
 
 		//Enforce file-level locking for file handles (not directories)
 		if($oHandle->isFile()){

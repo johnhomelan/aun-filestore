@@ -33,7 +33,7 @@ interface PluginInterface {
 	*/
 	public static function houseKeeping(): void;
 
-	public static function _buildFiledescriptorFromEconetPath(User $oUser,FilePath $oEconetPath,bool $bMustExist,bool $bReadOnly): ?FileDescriptor;
+	public static function _buildFiledescriptorFromEconetPath(User $oUser,FilePath $oEconetPath,bool $bMustExist,bool $bReadOnly,bool $bDirectory=false): ?FileDescriptor;
 
 	public static function _getAccessMode(int $iGid,int $iUid,int $iMode): string;
 

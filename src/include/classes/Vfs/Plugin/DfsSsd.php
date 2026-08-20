@@ -242,7 +242,7 @@ class DfsSsd implements PluginInterface {
 		return $bFound;
 	}
 
-	public static function _buildFiledescriptorFromEconetPath(User $oUser,FilePath $oEconetPath,bool $bMustExist,bool $bReadOnly): \HomeLan\FileStore\Vfs\FileDescriptor
+	public static function _buildFiledescriptorFromEconetPath(User $oUser,FilePath $oEconetPath,bool $bMustExist,bool $bReadOnly,bool $bDirectory=false): \HomeLan\FileStore\Vfs\FileDescriptor
 	{
 		$sImageFile = DfsSsd::_getImageFile($oEconetPath->getFilePath());
 		if(strlen($sImageFile)>0){
@@ -257,10 +257,15 @@ class DfsSsd implements PluginInterface {
 			}
 
 			if(DfsSsd::_checkImageFileExists($sImageFile,$sPathInsideImage)){
+				$oDfs =  DfsSsd::_getImageReader($sImageFile);
+				if($bDirectory){
+					if(!$oDfs->isDir($sPathInsideImage)){
+						throw new VfsException("No such directory");
+					}
+				}
 				$iEconetHandle = Vfs::getFreeFileHandleID($oUser);
 				$iVfsHandle = DfsSsd::$iFileHandle++;
 				DfsSsd::$aFileHandles[$iVfsHandle]=['image-file'=>$sImageFile, 'path-inside-image'=>$sPathInsideImage, 'pos'=>0];
-				$oDfs =  DfsSsd::_getImageReader($sImageFile);
 				return new FileDescriptor(self::$oLogger,\HomeLan\FileStore\Vfs\Plugin\DfsSsd::class,$oUser,$sImageFile,$oEconetPath->getFilePath(),$iVfsHandle,$iEconetHandle,$oDfs->isFile($sPathInsideImage),$oDfs->isDir($sPathInsideImage),$bMustExist,$bReadOnly);
 			}
 		}

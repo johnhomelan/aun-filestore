@@ -234,7 +234,7 @@ class AdfsAdl implements PluginInterface {
 		return FALSE;
 	}
 
-	public static function _buildFiledescriptorFromEconetPath(User $oUser,FilePath $oEconetPath,bool $bMustExist,bool $bReadOnly): \HomeLan\FileStore\Vfs\FileDescriptor
+	public static function _buildFiledescriptorFromEconetPath(User $oUser,FilePath $oEconetPath,bool $bMustExist,bool $bReadOnly,bool $bDirectory=false): \HomeLan\FileStore\Vfs\FileDescriptor
 	{
 		$sImageFile = AdfsAdl::_getImageFile($oEconetPath->getFilePath());
 		if(strlen($sImageFile)>0){
@@ -249,10 +249,15 @@ class AdfsAdl implements PluginInterface {
 			}
 
 			if(AdfsAdl::_checkImageFileExists($sImageFile,$sPathInsideImage)){
+				$oAdfs =  AdfsAdl::_getImageReader($sImageFile);
+				if($bDirectory){
+					if(!$oAdfs->isDir($sPathInsideImage)){
+						throw new VfsException("No such directory");
+					}
+				}
 				$iEconetHandle = Vfs::getFreeFileHandleID($oUser);
 				$iVfsHandle = AdfsAdl::$iFileHandle++;
 				AdfsAdl::$aFileHandles[$iVfsHandle]=['image-file'=>$sImageFile, 'path-inside-image'=>$sPathInsideImage, 'pos'=>0];
-				$oAdfs =  AdfsAdl::_getImageReader($sImageFile);
 				return new FileDescriptor(self::$oLogger,\HomeLan\FileStore\Vfs\Plugin\AdfsAdl::class,$oUser,$sImageFile,$oEconetPath->getFilePath(),$iVfsHandle,$iEconetHandle,$oAdfs->isFile($sPathInsideImage),$oAdfs->isDir($sPathInsideImage),$bMustExist,$bReadOnly);
 			}
 		}

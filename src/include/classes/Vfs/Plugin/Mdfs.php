@@ -285,7 +285,7 @@ class Mdfs implements PluginInterface {
 		return $aEntry;
 	}
 
-	public static function _buildFiledescriptorFromEconetPath(User $oUser,FilePath $oEconetPath,bool $bMustExist,bool $bReadOnly): \HomeLan\FileStore\Vfs\FileDescriptor
+	public static function _buildFiledescriptorFromEconetPath(User $oUser,FilePath $oEconetPath,bool $bMustExist,bool $bReadOnly,bool $bDirectory=false): \HomeLan\FileStore\Vfs\FileDescriptor
 	{
 		$sImageFile = self::_getImageFile($oEconetPath->getFilePath());
 		if(strlen($sImageFile)>0){
@@ -328,12 +328,20 @@ class Mdfs implements PluginInterface {
 					'exec'=>$aEntry['exec'],
 					'access'=>$aEntry['access'],
 				];
+				if($bDirectory){
+					if(!$bIsDir){
+						throw new VfsException("No such directory");
+					}
+				}
 				return new FileDescriptor(self::$oLogger,\HomeLan\FileStore\Vfs\Plugin\Mdfs::class,$oUser,$sImageFile,$oEconetPath->getFilePath(),$iVfsHandle,$iEconetHandle,$bIsFile,$bIsDir,$bMustExist,$bReadOnly);
 			}
 
 			//The entry does not exist yet. If we are writable and the caller does not require
 			//it to already exist, hand back a handle for a brand new file inside the image.
 			if(!$bMustExist && !$bReadOnly && self::$bWriteEnabled){
+				if($bDirectory){
+					throw new VfsException("No such directory");
+				}
 				$iEconetHandle = Vfs::getFreeFileHandleID($oUser);
 				$iVfsHandle = self::$iFileHandle++;
 				self::$aFileHandles[$iVfsHandle]=[

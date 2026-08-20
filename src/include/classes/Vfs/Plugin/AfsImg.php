@@ -211,8 +211,8 @@ class AfsImg implements PluginInterface {
 
 	protected static function _checkImageFileExists(string $sImageFile,string $sPathInsideImage): bool
 	{
-		$oAdfs = AfsImg::_getImageReader($sImageFile);
-		$aCat = self::_normalizeCatalogue($oAdfs->getCatalogue());
+		$oAfs = AfsImg::_getImageReader($sImageFile);
+		$aCat = self::_normalizeCatalogue($oAfs->getCatalogue());
 		$aPathInsideImage = explode('.',$sPathInsideImage);
 		$bFound = FALSE;
 		$iCount = 0;
@@ -234,7 +234,7 @@ class AfsImg implements PluginInterface {
 		return FALSE;
 	}
 
-	public static function _buildFiledescriptorFromEconetPath(User $oUser,FilePath $oEconetPath,bool $bMustExist,bool $bReadOnly): \HomeLan\FileStore\Vfs\FileDescriptor
+	public static function _buildFiledescriptorFromEconetPath(User $oUser,FilePath $oEconetPath,bool $bMustExist,bool $bReadOnly,bool $bDirectory=false): \HomeLan\FileStore\Vfs\FileDescriptor
 	{
 		$sImageFile = AfsImg::_getImageFile($oEconetPath->getFilePath());
 		if(strlen($sImageFile)>0){
@@ -249,11 +249,17 @@ class AfsImg implements PluginInterface {
 			}
 
 			if(AfsImg::_checkImageFileExists($sImageFile,$sPathInsideImage)){
+				if($bDirectory){
+					$oAfs = AfsImg::_getImageReader($sImageFile);
+					if(!$oAfs->isDir($sPathInsideImage)){
+						throw new VfsException("No such directory");
+					}
+				}
 				$iEconetHandle = Vfs::getFreeFileHandleID($oUser);
 				$iVfsHandle = AfsImg::$iFileHandle++;
 				AfsImg::$aFileHandles[$iVfsHandle]=['image-file'=>$sImageFile,'path-inside-image'=>$sPathInsideImage,'pos'=>0];
-				$oAdfs =  AfsImg::_getImageReader($sImageFile);
-				return new FileDescriptor(self::$oLogger,'AfsImg',$oUser,$sImageFile,$oEconetPath->getFilePath(),$iVfsHandle,$iEconetHandle,$oAdfs->isFile($sPathInsideImage),$oAdfs->isDir($sPathInsideImage),$bMustExist,$bReadOnly);
+				$oAfs =  AfsImg::_getImageReader($sImageFile);
+				return new FileDescriptor(self::$oLogger,'AfsImg',$oUser,$sImageFile,$oEconetPath->getFilePath(),$iVfsHandle,$iEconetHandle,$oAfs->isFile($sPathInsideImage),$oAfs->isDir($sPathInsideImage),$bMustExist,$bReadOnly);
 			}
 		}
 
@@ -272,12 +278,12 @@ class AfsImg implements PluginInterface {
 		//Produce a directory listing for file inside the image if the selected path is inside the image
 		if(strlen($sImageFile)>0){
 			$sPathInsideImage = AfsImg::_getPathInsideImage($sEconetPath,$sImageFile);
-			$oAdfs = AfsImg::_getImageReader($sImageFile);
+			$oAfs = AfsImg::_getImageReader($sImageFile);
 			$aImageStat = stat($sImageFile);
 			if($aImageStat === false){
 				return $aDirectoryListing;
 			}
-			$aCat = self::_normalizeCatalogue($oAdfs->getCatalogue());
+			$aCat = self::_normalizeCatalogue($oAfs->getCatalogue());
 
 			if(strlen($sPathInsideImage)>0){
 				$aPathParts = explode('.',$sPathInsideImage);
@@ -359,8 +365,8 @@ class AfsImg implements PluginInterface {
 		if(strlen($sImageFile)>0){
 			$sPathInsideImage = AfsImg::_getPathInsideImage($oEconetPath->getFilePath(),$sImageFile);
 			if(AfsImg::_checkImageFileExists($sImageFile,$sPathInsideImage)){
-				$oAdfs = AfsImg::_getImageReader($sImageFile);
-				return $oAdfs->getFile($sPathInsideImage);
+				$oAfs = AfsImg::_getImageReader($sImageFile);
+				return $oAfs->getFile($sPathInsideImage);
 			}
 		}
 		throw new VfsException("No such file");
@@ -382,8 +388,8 @@ class AfsImg implements PluginInterface {
 	public static function fsFStat(User $oUser,mixed $fLocalHandle): array
 	{
 		if(is_int($fLocalHandle) && array_key_exists($fLocalHandle,AfsImg::$aFileHandles)){
-			$oAdfs = AfsImg::_getImageReader(AfsImg::$aFileHandles[$fLocalHandle]['image-file']);
-			$aStat = $oAdfs->getStat(AfsImg::$aFileHandles[$fLocalHandle]['path-inside-image']);
+			$oAfs = AfsImg::_getImageReader(AfsImg::$aFileHandles[$fLocalHandle]['image-file']);
+			$aStat = $oAfs->getStat(AfsImg::$aFileHandles[$fLocalHandle]['path-inside-image']);
 			return ['dev'=>null,'ino'=>$aStat['sector'],'size'=>$aStat['size'],'nlink'=>1];
 		}
 		throw new VfsException("Invalid handle");
@@ -392,8 +398,8 @@ class AfsImg implements PluginInterface {
 	public static function isEof(User $oUser,mixed $fLocalHandle): bool
 	{
 		if(is_int($fLocalHandle) && array_key_exists($fLocalHandle,AfsImg::$aFileHandles)){
-			$oAdfs = AfsImg::_getImageReader(AfsImg::$aFileHandles[$fLocalHandle]['image-file']);
-			$aStat = $oAdfs->getStat(AfsImg::$aFileHandles[$fLocalHandle]['path-inside-image']);
+			$oAfs = AfsImg::_getImageReader(AfsImg::$aFileHandles[$fLocalHandle]['image-file']);
+			$aStat = $oAfs->getStat(AfsImg::$aFileHandles[$fLocalHandle]['path-inside-image']);
 			if(AfsImg::$aFileHandles[$fLocalHandle]['pos']>=$aStat['size']){
 				return TRUE;
 			}
@@ -414,8 +420,8 @@ class AfsImg implements PluginInterface {
 	public static function read(User $oUser,mixed $fLocalHandle,int $iLength): string
 	{
 		if(is_int($fLocalHandle) && array_key_exists($fLocalHandle,AfsImg::$aFileHandles)){
-			$oAdfs = AfsImg::_getImageReader(AfsImg::$aFileHandles[$fLocalHandle]['image-file']);
-			$sFileData = $oAdfs->getFile(AfsImg::$aFileHandles[$fLocalHandle]['path-inside-image']);
+			$oAfs = AfsImg::_getImageReader(AfsImg::$aFileHandles[$fLocalHandle]['image-file']);
+			$sFileData = $oAfs->getFile(AfsImg::$aFileHandles[$fLocalHandle]['path-inside-image']);
 			return substr($sFileData,AfsImg::$aFileHandles[$fLocalHandle]['pos'],$iLength);
 		}
 		throw new VfsException("Invalid handle");

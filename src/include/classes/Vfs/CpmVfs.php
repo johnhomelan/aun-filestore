@@ -155,9 +155,9 @@ class CpmVfs extends Vfs
         parent::setMeta($iNetwork, $iStation, self::toAcornPath($sEconetPath), $iLoad, $iExec, $iAccess);
     }
 
-    public static function createFsHandle(int $iNetwork, int $iStation, string $sEconetPath, bool $bMustExist = true, bool $bReadOnly = true): FileDescriptor
+    public static function createFsHandle(int $iNetwork, int $iStation, string $sEconetPath, bool $bMustExist = true, bool $bReadOnly = true, bool $bDirectory = false): FileDescriptor
     {
-        return parent::createFsHandle($iNetwork, $iStation, self::toAcornPath($sEconetPath), $bMustExist, $bReadOnly);
+        return parent::createFsHandle($iNetwork, $iStation, self::toAcornPath($sEconetPath), $bMustExist, $bReadOnly, $bDirectory);
     }
 
     /**

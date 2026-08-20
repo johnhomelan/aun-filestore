@@ -100,18 +100,38 @@ class LocalFile implements PluginInterface {
 				}
 				if($iMatches==count($aDirParts)){
 					return $sNewDirPath;
+				}elseif($iMatches==count($aDirParts)-1){
+					//Every part matched case insensitively except the last one, which is fine as the
+					//last part is allowed to not exist yet (e.g. a new file/dir about to be created).
+					//Use the case corrected parent path so operations like fopen()/mkdir() against a
+					//parent whose case differs on disk (e.g. HOME vs home) don't fail.
+					return $sNewDirPath.DIRECTORY_SEPARATOR.end($aDirParts);
 				}
-				
+
 			}
 		}
 		return $sUnixPath;
 	}
 
-	public static function _buildFiledescriptorFromEconetPath(User $oUser,FilePath $oEconetPath,bool $bMustExist,bool $bReadOnly): \HomeLan\FileStore\Vfs\FileDescriptor
+	public static function _buildFiledescriptorFromEconetPath(User $oUser,FilePath $oEconetPath,bool $bMustExist,bool $bReadOnly,bool $bDirectory=false): \HomeLan\FileStore\Vfs\FileDescriptor
 	{
 		$sUnixPath = LocalFile::_econetToUnix($oEconetPath->getFilePath());
 		if(strlen($sUnixPath)>0){
-			if(is_file($sUnixPath)){
+			if($bDirectory){
+				//Callers asking for a directory handle (CSD/URD/LIB) must never cause a
+				//file to be created on disk just because the directory doesn't exist yet.
+				if(is_dir($sUnixPath)){
+					$iVfsHandle = NULL;
+				}elseif(is_file($sUnixPath)){
+					//Exists, but as a file — leave it to the caller's isDir() check to
+					//report "Not a directory" rather than treating it as openable.
+					$iVfsHandle = NULL;
+				}else{
+					throw new VfsException("No such directory");
+				}
+			}elseif(is_dir($sUnixPath)){
+				$iVfsHandle = NULL;
+			}elseif(is_file($sUnixPath)){
 				if($bReadOnly){
 					$iVfsHandle = fopen($sUnixPath,'r');
 				}else{
@@ -160,7 +180,7 @@ class LocalFile implements PluginInterface {
 		$aFiles = scandir($sUnixPath);
 		foreach($aFiles as $sFile){
 			if($sFile=='..' or $sFile=='.'){
-				//Skip 
+				//Skip
 			}elseif(stripos((string) $sFile,'.inf')!==FALSE){
 				//Files ending in .inf skip
 			}else{
@@ -192,7 +212,7 @@ class LocalFile implements PluginInterface {
 		//Rip out and .inf files from the list
 		$aReturn = [];
 		foreach($aDirectoryListing as $sFile => $oFile){
-			if(stripos($sFile,"\/inf")===FALSE){
+			if(stripos($sFile,".inf")===FALSE){
 				$aReturn[$sFile]=$oFile;
 			}
 		}

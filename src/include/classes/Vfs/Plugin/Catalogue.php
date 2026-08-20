@@ -420,7 +420,7 @@ class Catalogue implements PluginInterface {
     // PluginInterface — file handle operations
     // -------------------------------------------------------------------------
 
-    public static function _buildFiledescriptorFromEconetPath(User $oUser, FilePath $oEconetPath, bool $bMustExist, bool $bReadOnly): FileDescriptor
+    public static function _buildFiledescriptorFromEconetPath(User $oUser, FilePath $oEconetPath, bool $bMustExist, bool $bReadOnly,bool $bDirectory=false): FileDescriptor
     {
         $sFullPath = $oEconetPath->getFilePath();
         $aMapping  = self::_findMapping($sFullPath);

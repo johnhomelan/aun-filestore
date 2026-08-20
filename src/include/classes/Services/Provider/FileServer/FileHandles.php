@@ -36,6 +36,33 @@ class FileHandles {
 	}
 
 	/**
+	 * Moves a handle's position to $iExpectedPos only if it isn't already
+	 * there.
+	 *
+	 * Plugins that self-advance position as a side effect of read()
+	 * (LocalFile, Mdfs) already report the correct fsFTell() immediately
+	 * after a read, so calling setPos() again here isn't just redundant —
+	 * for LocalFile it's actively harmful: PHP's feof() only becomes true
+	 * once a read attempt has hit the end of the stream, and any further
+	 * fseek() (even to the same byte offset) resets that flag, so isEof()
+	 * reports false forever and the caller's read loop spins. Only plugins
+	 * that don't self-advance (AFS, DfsSsd, AdfsAdl, AdfsHD) actually need
+	 * the explicit setPos() this guards.
+	 *
+	 * @param FileDescriptor $oFsHandle Untyped natively (matching
+	 *  vfsGetFsHandle()'s own untyped signature) so test doubles that don't
+	 *  extend FileDescriptor keep working; PHPStan is told the real type via
+	 *  this docblock.
+	*/
+	private function syncPos($oFsHandle, int $iExpectedPos): void
+	{
+		$mPos = $oFsHandle->fsFTell();
+		if((is_int($mPos) ? $mPos : 0) !== $iExpectedPos){
+			$oFsHandle->setPos($iExpectedPos);
+		}
+	}
+
+	/**
 	 * EC_FS_FUNC_OPEN — opens (or creates) a file/directory and returns a
 	 * new handle ID for it.
 	*/
@@ -121,7 +148,8 @@ class FileHandles {
 		//Send reply directly
 		$oReply = $oFsRequest->buildReply();
 		$oReply->DoneOk();
-		$this->oProvider->addReplyToBuffer($oReply->buildEconetpacket());
+		$oReplyEconetPacket = $oReply->buildEconetpacket();
+		$this->oProvider->addReplyToBuffer($oReplyEconetPacket);
 
 		$_this = $this->oProvider;
 		$oServiceDispatcher = $this->oProvider->getServiceDispatcher();
@@ -131,10 +159,17 @@ class FileHandles {
 			return;
 		}
 
-		$oServiceDispatcher->addAckEvent($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),function() use ($_this, $oFsHandle, $oFsRequest, $iBytes, $iOffset, $iUserPtr, $iDataPort, $oServiceDispatcher){
+		$oServiceDispatcher->addAckEvent($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oReplyEconetPacket->getSequence(),function() use ($_this, $oFsHandle, $oFsRequest, $iBytes, $iOffset, $iUserPtr, $iDataPort, $oServiceDispatcher){
 			if($iUserPtr != 0){
 				$oFsHandle->setPos($iOffset);
 			}
+			//Not every VFS plugin's read() advances the handle's own position as a
+			//side effect (see syncPos()) — capture the absolute start position here
+			//and sync it explicitly around every block read below, rather than
+			//relying on read() to have moved it — otherwise those plugins re-read
+			//the same block forever and isEof() never trips.
+			$mStartPos = $oFsHandle->fsFTell();
+			$iStartPos = is_int($mStartPos) ? $mStartPos : 0;
 			$iBytesToRead = $iBytes;
 			if($iBytesToRead>256){
 				$mBlock = $oFsHandle->read(256);
@@ -145,6 +180,14 @@ class FileHandles {
 				$sBlock = is_string($mBlock) ? $mBlock : '';
 				$iBytesToRead = $iBytesToRead-strlen($sBlock);
 			}
+			//Persist how far this read actually got straight away — the client may
+			//send GETBYTES as a series of separate FS requests (one per 256-byte
+			//block, each with $iUserPtr=0 meaning "continue from the current
+			//position") rather than one request the ack-loop below chunks
+			//internally. Without this, a request that's satisfied by this single
+			//read (the common case) never advances the handle's position at all,
+			//so the next GETBYTES request re-reads the same bytes forever.
+			$this->syncPos($oFsHandle, $iStartPos + ($iBytes - $iBytesToRead));
 			if(strlen($sBlock)>0){
 
 				$oEconetPacket = new EconetPacket();
@@ -155,6 +198,7 @@ class FileHandles {
 				$oEconetPacket->setData($sBlock);
 
 				$_this->addReplyToBuffer($oEconetPacket);
+				$iSentSeq = $oEconetPacket->getSequence();
 				$oServiceDispatcher->sendPackets($_this);
 			}else{
 				//No data to move so send the packet to say we are done, and return
@@ -165,7 +209,7 @@ class FileHandles {
 				return;
 			}
 
-			$cAckHandler = function(EncapsulationInterface $oAckPacket, FileServer $_this, FsRequest $oFsRequest, ServiceDispatcher $oServiceDispatcher, int $iBytes, int $iBytesToRead, FileDescriptor $oFsHandle, int $iDataPort, \Closure &$cAckHandler): void {
+			$cAckHandler = function(EncapsulationInterface $oAckPacket, FileServer $_this, FsRequest $oFsRequest, ServiceDispatcher $oServiceDispatcher, int $iBytes, int $iBytesToRead, FileDescriptor $oFsHandle, int $iDataPort, int $iStartPos, \Closure &$cAckHandler): void {
 				if($iBytesToRead==0 OR $oFsHandle->isEof()){
 					$oReply2 = $oFsRequest->buildReply();
 					$oReply2->DoneOk();
@@ -190,6 +234,9 @@ class FileHandles {
 					$oServiceDispatcher->sendPackets($_this);
 
 				}else{
+					//See the comment in the outer closure — explicitly position the
+					//handle at the next block before reading it.
+					$this->syncPos($oFsHandle, $iStartPos + ($iBytes - $iBytesToRead));
 					if($iBytesToRead>256){
 						$mBlock = $oFsHandle->read(256);
 					}else{
@@ -197,6 +244,9 @@ class FileHandles {
 					}
 					$sBlock = is_string($mBlock) ? $mBlock : '';
 					$iBytesToRead = $iBytesToRead-strlen($sBlock);
+					//See the comment in the outer closure — persist how far this read
+					//actually got immediately, not just before the next one.
+					$this->syncPos($oFsHandle, $iStartPos + ($iBytes - $iBytesToRead));
 
 					$oEconetPacket = new EconetPacket();
 					$oEconetPacket->setDestinationNetwork($oFsRequest->getSourceNetwork());
@@ -206,16 +256,16 @@ class FileHandles {
 					$oEconetPacket->setData($sBlock);
 
 					$_this->addReplyToBuffer($oEconetPacket);
-					$oServiceDispatcher->addAckEvent($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),function(EncapsulationInterface $oAckPacket) use ($_this, $oFsRequest, $oServiceDispatcher, $iBytes, $iBytesToRead, $oFsHandle, $iDataPort, $cAckHandler){
-						($cAckHandler)($oAckPacket,$_this, $oFsRequest, $oServiceDispatcher, $iBytes, $iBytesToRead, $oFsHandle, $iDataPort, $cAckHandler);
+					$oServiceDispatcher->addAckEvent($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oEconetPacket->getSequence(),function(EncapsulationInterface $oAckPacket) use ($_this, $oFsRequest, $oServiceDispatcher, $iBytes, $iBytesToRead, $oFsHandle, $iDataPort, $iStartPos, $cAckHandler){
+						($cAckHandler)($oAckPacket,$_this, $oFsRequest, $oServiceDispatcher, $iBytes, $iBytesToRead, $oFsHandle, $iDataPort, $iStartPos, $cAckHandler);
 					});
 					$oServiceDispatcher->sendPackets($_this);
 				}
 
 			};
 
-			$oServiceDispatcher->addAckEvent($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),function(EncapsulationInterface $oAckPacket) use ($cAckHandler, $_this, $oFsRequest, $oServiceDispatcher, $iBytes, $iBytesToRead, $oFsHandle, $iDataPort) {
-				($cAckHandler)($oAckPacket, $_this, $oFsRequest, $oServiceDispatcher, $iBytes, $iBytesToRead, $oFsHandle, $iDataPort, $cAckHandler) ;
+			$oServiceDispatcher->addAckEvent($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$iSentSeq,function(EncapsulationInterface $oAckPacket) use ($cAckHandler, $_this, $oFsRequest, $oServiceDispatcher, $iBytes, $iBytesToRead, $oFsHandle, $iDataPort, $iStartPos) {
+				($cAckHandler)($oAckPacket, $_this, $oFsRequest, $oServiceDispatcher, $iBytes, $iBytesToRead, $oFsHandle, $iDataPort, $iStartPos, $cAckHandler) ;
 			});
 		});
 
@@ -319,7 +369,13 @@ class FileHandles {
 			$oReply->appendByte(0);
 			$oReply->appendByte(0x80);
 		}else{
+			//Not every VFS plugin's read() advances the handle's own position as a
+			//side effect (see syncPos()) — track and set it explicitly rather than
+			//relying on that.
+			$mPos = $oFsHandle->fsFTell();
+			$iPos = is_int($mPos) ? $mPos : 0;
 			$mByte = $oFsHandle->read(1);
+			$this->syncPos($oFsHandle, $iPos + 1);
 			$oReply->appendByte(ord(is_string($mByte) ? $mByte : ''));
 			$oReply->appendByte(0);
 		}

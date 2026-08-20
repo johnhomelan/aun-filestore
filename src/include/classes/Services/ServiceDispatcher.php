@@ -40,10 +40,20 @@ class ServiceDispatcher {
 	private array $aPortTimeLimits = [];
 	/** @var array<int,callable> */
 	private array $aHouseKeepingTasks = [];
-	/** @var array<int,array<int,callable>> */
+	/** @var array<int,array<int,array{callable:callable,seq:int,expires:int}>> */
 	private array $aAckEvents = [];
 
 	const MAX_STREAMS = 20;
+
+	/**
+	 * Default number of seconds an addAckEvent() callback is allowed to wait for its ack
+	 * before houseKeeping() gives up on it. AUN has its own retry queue (Aun\Handler) that
+	 * gives up and calls clearAckEvent() itself; this timeout is the only safety net for
+	 * encapsulations that send fire-and-forget (e.g. WebSocket, Piconet) — without it a lost
+	 * reply leaves the callback (and whatever it's holding onto, e.g. an open file handle)
+	 * registered forever.
+	*/
+	const DEFAULT_ACK_EVENT_TIMEOUT = 30;
 	/**
 	 * Keeping this class as a singleton, this is static method should be used to get references to this object
 	 *
@@ -250,19 +260,35 @@ class ServiceDispatcher {
 	/**
 	 * Adds an event for the this ack packet the a network/station
 	 *
+	 * @param int $iSeq The EconetPacket::getSequence() of the specific packet this callback is
+	 *                   waiting to see acked. An inbound ack from an encapsulation that carries
+	 *                   its own sequence number (AUN, WebSocket, a 1.2+ remote bridge relay —
+	 *                   see EncapsulationInterface::getSequence()) only fires this callback if
+	 *                   its sequence matches; one from an encapsulation with no such concept
+	 *                   (real hardware Econet, a pre-1.2 bridge relay) always does, exactly as
+	 *                   before — see ackEvents().
+	 * @param int $iTimeout Seconds houseKeeping() will wait for the ack before giving up on
+	 *                       this callback and clearing it (see DEFAULT_ACK_EVENT_TIMEOUT).
 	*/
-	public function addAckEvent(int $iNetwork, int $iStation, callable $fCallable): void
+	public function addAckEvent(int $iNetwork, int $iStation, int $iSeq, callable $fCallable, int $iTimeout = self::DEFAULT_ACK_EVENT_TIMEOUT): void
 	{
 		if(!array_key_exists($iNetwork,$this->aAckEvents)){
 			$this->aAckEvents[$iNetwork]=[];
 		}
-		$this->aAckEvents[$iNetwork][$iStation] = $fCallable;
+		$this->aAckEvents[$iNetwork][$iStation] = ['callable'=>$fCallable,'seq'=>$iSeq,'expires'=>time()+$iTimeout];
 	}
 
 	/**
 	 * Checks to see if an Ack should tirgger an event, and if so tirgger it
 	 *
-	*/ 
+	 * A registration only fires for the ack of the specific packet it was registered for
+	 * (matched by sequence number — see addAckEvent()); an ack for anything else found
+	 * registered for this (network,station) is a stray or duplicate and is ignored, leaving
+	 * the registration in place for the real one (or its timeout) to resolve it. Encapsulations
+	 * with no sequence concept of their own (getSequence() returns null — real hardware Econet,
+	 * a pre-1.2 bridge relay) can't be matched this way and fall back to firing on any ack for
+	 * the station, exactly as before this distinction existed.
+	*/
 	public function ackEvents(EncapsulationInterface $oPacket): void
 	{
 		$oEconetPacket = $oPacket->buildEconetPacket();
@@ -274,9 +300,14 @@ class ServiceDispatcher {
 		}
 
 		if(array_key_exists($iNetwork,$this->aAckEvents) AND array_key_exists($iStation,$this->aAckEvents[$iNetwork])){
-			$fCallable = $this->aAckEvents[$iNetwork][$iStation];
-			unset($this->aAckEvents[$iNetwork][$iStation]);
-			($fCallable)($oPacket);
+			$aEvent = $this->aAckEvents[$iNetwork][$iStation];
+			$iIncomingSeq = $oPacket->getSequence();
+			if($iIncomingSeq !== null AND $iIncomingSeq !== $aEvent['seq']){
+				$this->oLogger->debug("ServiceDispatcher: ignoring stray ack seq {$iIncomingSeq} for {$iNetwork}.{$iStation}, waiting on seq {$aEvent['seq']}");
+			}else{
+				unset($this->aAckEvents[$iNetwork][$iStation]);
+				($aEvent['callable'])($oPacket);
+			}
 		}
 
 		//Also relay this ack to a remote bridge peer, if this station's network
@@ -356,6 +387,21 @@ class ServiceDispatcher {
 			}
 		}
 		$this->aPortTimeLimits = $aPortTimeLimits;
-	
+
+		//Give up on ack events nothing ever replied to (e.g. a WebSocket/Piconet block that
+		//was sent fire-and-forget and never acked) — without this a lost reply leaves the
+		//callback, and anything it's holding open (e.g. a file handle), registered forever.
+		//AUN's own retry queue (Aun\Handler) already calls clearAckEvent() itself once its
+		//retries are exhausted, so this sweep is mostly a backstop for the other encapsulations.
+		$iNow = time();
+		foreach($this->aAckEvents as $iNetwork=>$aStations){
+			foreach($aStations as $iStation=>$aAckEvent){
+				if($aAckEvent['expires']<$iNow){
+					$this->oLogger->warning("ServiceDispatcher: Ack event for ".$iNetwork.".".$iStation." timed out with no reply, clearing it.");
+					unset($this->aAckEvents[$iNetwork][$iStation]);
+				}
+			}
+		}
+
 	}
 } 

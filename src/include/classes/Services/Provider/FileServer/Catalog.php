@@ -175,14 +175,27 @@ class Catalog {
 					if($sDir==""){
 						//No dir requested so use csd
 						$oFd = $this->oProvider->vfsGetFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oFsRequest->getCsd());
-						$oReply->appendString(str_pad(substr((string) $oFd->getEconetDirName(),0,10),10,' '));
-						$oMeta = $this->oProvider->vfsGetMeta($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oFd->getEconetPath());
+						$sDirName = $oFd->getEconetDirName();
+						if($sDirName=='$' OR $sDirName===''){
+							//This handle is the top of the currently visible tree — either the
+							//true root ("$") or a chroot'd root (whose econet path has a
+							//trailing "." and so reports an empty dir name). Neither has a
+							//parent listing to find itself in, so vfsGetMeta() can never
+							//resolve it. Report it as fully accessible rather than erroring out.
+							$oReply->appendString(str_pad('$',10,' '));
+							$iAccess = 15;
+						}else{
+							$oReply->appendString(str_pad(substr((string) $sDirName,0,10),10,' '));
+							$oMeta = $this->oProvider->vfsGetMeta($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oFd->getEconetPath());
+							$iAccess = $oMeta->getAccess();
+						}
 					}else{
 						$oReply->appendString(str_pad(substr((string) $sDir,0,10),10,' '));
 						$oMeta = $this->oProvider->vfsGetMeta($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sDir);
+						$iAccess = $oMeta->getAccess();
 					}
 
-					$oReply->appendByte($oMeta->getAccess());
+					$oReply->appendByte($iAccess);
 
 					//Cyle  always 0 probably should not be
 					$oReply->appendByte(0);
@@ -457,9 +470,9 @@ class Catalog {
 					//Change to parent dir
 					$oCsd = $this->oProvider->vfsGetFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oFsRequest->getCsd());
 					$sParentPath = $oCsd->getEconetParentPath();
-					$oNewCsd = $this->oProvider->vfsCreateFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sParentPath);
+					$oNewCsd = $this->oProvider->vfsCreateFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sParentPath,bDirectory: true);
 				}else{
-					$oNewCsd = $this->oProvider->vfsCreateFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sOptions);
+					$oNewCsd = $this->oProvider->vfsCreateFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sOptions,bDirectory: true);
 					if(!$oNewCsd->isDir()){
 						$this->oProvider->getLogger()->debug("User tryed to change to directory ".$oNewCsd->getEconetDirName()." however its not a directory.");
 						$oReply->setError(0xbe,"Not a directory");
@@ -480,7 +493,7 @@ class Catalog {
 		}else{
 			//No directory selected, change to the users home dir
 			try {
-				$oNewCsd = $this->oProvider->vfsCreateFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oUser->getHomedir() ?? '$');
+				$oNewCsd = $this->oProvider->vfsCreateFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oUser->getHomedirPath(),bDirectory: true);
 				$this->oProvider->vfsCloseFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oFsRequest->getCsd());
 				$oReply->DirOk();
 				$oReply->appendByte($oNewCsd->getID());
@@ -510,7 +523,7 @@ class Catalog {
 		}
 		if(strlen((string) $sOptions)>0){
 			try {
-				$oNewLib = $this->oProvider->vfsCreateFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sOptions);
+				$oNewLib = $this->oProvider->vfsCreateFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sOptions,bDirectory: true);
 				if(!$oNewLib->isDir()){
 					$this->oProvider->getLogger()->debug("User tryed to change the library to ".$oNewLib->getEconetDirName()." however its not a directory.");
 					$oReply->setError(0xbe,"Not a directory");
@@ -636,7 +649,7 @@ class Catalog {
 		$oReply = $oFsRequest->buildReply();
 		try {
 			if(strlen(trim($sOptions)) > 0){
-				$oFd = $this->oProvider->vfsCreateFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),trim($sOptions));
+				$oFd = $this->oProvider->vfsCreateFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),trim($sOptions),bDirectory: true);
 			}else{
 				$oFd = $this->oProvider->vfsGetFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oFsRequest->getCsd());
 			}

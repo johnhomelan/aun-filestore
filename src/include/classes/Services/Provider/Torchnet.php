@@ -736,7 +736,7 @@ class Torchnet implements ProviderInterface
 
     protected function cpmCreateFsHandle(int $iNet, int $iStn, string $sCpmPath, bool $bMustExist, bool $bReadOnly): FileDescriptor
     {
-        return CpmVfs::createFsHandle($iNet, $iStn, $sCpmPath, $bMustExist, $bReadOnly);
+        return CpmVfs::createFsHandle($iNet, $iStn, $sCpmPath, $bMustExist, $bReadOnly, true);
     }
 
     /**

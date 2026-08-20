@@ -504,18 +504,18 @@ class FileServer implements ProviderInterface{
 				return;
 			}
 			try {
-				$oUrd = $this->vfsCreateFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oUser->getHomedir() ?? '$');
-				$oCsd = $this->vfsCreateFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oUser->getHomedir() ?? '$');
+				$oUrd = $this->vfsCreateFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oUser->getHomedirPath(),bDirectory: true);
+				$oCsd = $this->vfsCreateFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oUser->getHomedirPath(),bDirectory: true);
 			}catch(Exception){
 				$this->oLogger->info("fileserver: Login unable to open homedirectory for user ".$oUser->getUsername());
-				$oUrd = $this->vfsCreateFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),'$');
-				$oCsd = $this->vfsCreateFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),'$');
+				$oUrd = $this->vfsCreateFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),'$',bDirectory: true);
+				$oCsd = $this->vfsCreateFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),'$',bDirectory: true);
 			}
 			try {
-				$oLib = $this->vfsCreateFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oUser->getLib() ?? '');
+				$oLib = $this->vfsCreateFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oUser->getLib() ?? '',bDirectory: true);
 			}catch(Exception){
 				$this->oLogger->info("fileserver: Login unable to open library dir setting library to $ for user ".$oUser->getUsername());
-				$oLib = $this->vfsCreateFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),'');
+				$oLib = $this->vfsCreateFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),'',bDirectory: true);
 			}
 			//Handles are now build send the reply 
 			$oReply = $oFsRequest->buildReply();
@@ -704,7 +704,7 @@ class FileServer implements ProviderInterface{
 			return;
 		}
 
-		$oServiceDispatcher->addAckEvent($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),function() use ($_this, $sFileData, $oFsRequest, $iDataPort, $oServiceDispatcher){
+		$oServiceDispatcher->addAckEvent($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oReplyEconetPacket->getSequence(),function() use ($_this, $sFileData, $oFsRequest, $iDataPort, $oServiceDispatcher){
 			//Build a 256 byte block
 			$sBlock = substr((string) $sFileData,0,256);
 			//Remove 256 byte from the string
@@ -718,6 +718,7 @@ class FileServer implements ProviderInterface{
 			$oEconetPacket->setData($sBlock);
 
 			$_this->addReplyToBuffer($oEconetPacket);
+			$iSentSeq = $oEconetPacket->getSequence();
 			$oServiceDispatcher->sendPackets($_this);
 
 			$cAckHandler = function(EncapsulationInterface $oAckPacket, FileServer $_this, FsRequest $oFsRequest, ServiceDispatcher $oServiceDispatcher, string $sFileData, int $iDataPort, \Closure &$cAckHandler): void {
@@ -735,7 +736,7 @@ class FileServer implements ProviderInterface{
 					$oEconetPacket->setData($sBlock);
 
 					$_this->addReplyToBuffer($oEconetPacket);
-					$oServiceDispatcher->addAckEvent($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),function(EncapsulationInterface $oAckPacket) use ($_this, $oFsRequest, $oServiceDispatcher, $sFileData, $iDataPort, $cAckHandler){
+					$oServiceDispatcher->addAckEvent($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oEconetPacket->getSequence(),function(EncapsulationInterface $oAckPacket) use ($_this, $oFsRequest, $oServiceDispatcher, $sFileData, $iDataPort, $cAckHandler){
 						($cAckHandler)($oAckPacket, $_this, $oFsRequest, $oServiceDispatcher, $sFileData, $iDataPort, $cAckHandler);
 					});
 					$oServiceDispatcher->sendPackets($_this);
@@ -748,7 +749,7 @@ class FileServer implements ProviderInterface{
 
 			};
 
-			$oServiceDispatcher->addAckEvent($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),function(EncapsulationInterface $oAckPacket) use ($cAckHandler, $_this, $oFsRequest, $oServiceDispatcher, $sFileData, $iDataPort) {
+			$oServiceDispatcher->addAckEvent($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$iSentSeq,function(EncapsulationInterface $oAckPacket) use ($cAckHandler, $_this, $oFsRequest, $oServiceDispatcher, $sFileData, $iDataPort) {
 				($cAckHandler)($oAckPacket, $_this, $oFsRequest, $oServiceDispatcher, $sFileData, $iDataPort, $cAckHandler) ;
 			});
 		});
@@ -854,10 +855,10 @@ class FileServer implements ProviderInterface{
 				//Change to parent dir
 				$oCsd = $this->vfsGetFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oFsRequest->getCsd());
 				$sParentPath = $oCsd->getEconetParentPath();
-				$oNewRootDir = $this->vfsCreateFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sParentPath);
+				$oNewRootDir = $this->vfsCreateFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sParentPath,bDirectory: true);
 			}else{
-				$oNewRootDir = $this->vfsCreateFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sOptions);	
-					
+				$oNewRootDir = $this->vfsCreateFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sOptions,bDirectory: true);
+
 			}
 
 			if(!$oNewRootDir->isDir()){
@@ -878,7 +879,7 @@ class FileServer implements ProviderInterface{
 		
 		//$this->vfsCloseFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oFsRequest->getCsd());
 		$this->vfsCloseFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oNewRootDir->getId());
-		$oNewCsd = $this->vfsCreateFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),'$');
+		$oNewCsd = $this->vfsCreateFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),'$',bDirectory: true);
 		$oUser->setCsd('$');
 		$this->vfsReplaceFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oFsRequest->getCsd(),$oNewCsd->getId());
 		$oReply->DirOk();
@@ -902,10 +903,22 @@ class FileServer implements ProviderInterface{
 			return;
 		}
 		$oCsd = $this->vfsGetFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oFsRequest->getCsd());
-		$sNewPath = str_replace('$',$oUser->getRoot(),(string) $oCsd->getEconetDirName());
+		//The CSD's stored econet path is always already the real, fully-resolved
+		//absolute path (Vfs::buildFullPath() resolves the chroot prefix in when the
+		//handle is built) — no need to reconstruct it via getEconetDirName(), which
+		//only returns the last path segment and would silently produce a bogus
+		//relative path here.
+		$sNewPath = $oCsd->getEconetPath();
 		$oUser->setRoot('$');
-		$this->vfsCloseFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oFsRequest->getCsd());
-		$oNewCsd = $this->vfsCreateFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sNewPath);
+		try {
+			$this->vfsCloseFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oFsRequest->getCsd());
+			$oNewCsd = $this->vfsCreateFsHandle($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$sNewPath,bDirectory: true);
+		}catch(Exception){
+			$this->oLogger->debug("chrootoff: Unable to re-open ".$sNewPath." after leaving the chroot.");
+			$oReply->setError(0xbe,"Invalid path");
+			$this->addReplyToBuffer($oReply->buildEconetpacket());
+			return;
+		}
 		$oReply->DirOk();
 		$oReply->appendByte($oNewCsd->getID());
 		$oUser->setCsd($oNewCsd->getEconetPath());
@@ -1334,8 +1347,8 @@ class FileServer implements ProviderInterface{
 	/**
 	 * @return FileDescriptor
 	*/
-	public function vfsCreateFsHandle(int $iNet, int $iStn, string $sPath, bool $bMustExist=false, bool $bReadOnly=false)
-	{ return Vfs::createFsHandle($iNet, $iStn, $sPath, $bMustExist, $bReadOnly); }
+	public function vfsCreateFsHandle(int $iNet, int $iStn, string $sPath, bool $bMustExist=false, bool $bReadOnly=false, bool $bDirectory=false)
+	{ return Vfs::createFsHandle($iNet, $iStn, $sPath, $bMustExist, $bReadOnly, $bDirectory); }
 
 	public function vfsCloseFsHandle(int $iNet, int $iStn, ?int $iHandle): void
 	{

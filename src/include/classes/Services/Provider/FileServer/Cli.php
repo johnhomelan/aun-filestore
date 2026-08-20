@@ -220,7 +220,8 @@ class Cli {
 		$oReply->append24bitIntLittleEndian($oMeta->getSize());
 		$oReply->appendByte($oMeta->getAccess());
 		$oReply->appendRaw($oMeta->getCTime());
-		$this->oProvider->addReplyToBuffer($oReply->buildEconetpacket());
+		$oReplyEconetPacket = $oReply->buildEconetpacket();
+		$this->oProvider->addReplyToBuffer($oReplyEconetPacket);
 
 		$oServiceDispatcher = $this->oProvider->getServiceDispatcher();
 		$_this = $this->oProvider;
@@ -233,6 +234,7 @@ class Cli {
 		$oServiceDispatcher->addAckEvent(
 			$oFsRequest->getSourceNetwork(),
 			$oFsRequest->getSourceStation(),
+			$oReplyEconetPacket->getSequence(),
 			function() use ($_this, $sFileData, $oFsRequest, $iDataPort, $oServiceDispatcher){
 				$sBlock = substr((string) $sFileData,0,256);
 				$sFileData = substr((string) $sFileData,256);
@@ -244,6 +246,7 @@ class Cli {
 				$oEconetPacket->setFlags(0);
 				$oEconetPacket->setData($sBlock);
 				$_this->addReplyToBuffer($oEconetPacket);
+				$iSentSeq = $oEconetPacket->getSequence();
 				$oServiceDispatcher->sendPackets($_this);
 
 				$cAckHandler = function(EncapsulationInterface $oAckPacket, FileServer $_this, FsRequest $oFsRequest, ServiceDispatcher $oServiceDispatcher, string $sFileData, int $iDataPort, \Closure &$cAckHandler): void {
@@ -258,7 +261,7 @@ class Cli {
 						$oEconetPacket->setFlags(0);
 						$oEconetPacket->setData($sBlock);
 						$_this->addReplyToBuffer($oEconetPacket);
-						$oServiceDispatcher->addAckEvent($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),function(EncapsulationInterface $oAckPacket) use ($_this, $oFsRequest, $oServiceDispatcher, $sFileData, $iDataPort, $cAckHandler){
+						$oServiceDispatcher->addAckEvent($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$oEconetPacket->getSequence(),function(EncapsulationInterface $oAckPacket) use ($_this, $oFsRequest, $oServiceDispatcher, $sFileData, $iDataPort, $cAckHandler){
 							($cAckHandler)($oAckPacket, $_this, $oFsRequest, $oServiceDispatcher, $sFileData, $iDataPort, $cAckHandler);
 						});
 						$oServiceDispatcher->sendPackets($_this);
@@ -270,7 +273,7 @@ class Cli {
 					}
 				};
 
-				$oServiceDispatcher->addAckEvent($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),function(EncapsulationInterface $oAckPacket) use ($cAckHandler, $_this, $oFsRequest, $oServiceDispatcher, $sFileData, $iDataPort){
+				$oServiceDispatcher->addAckEvent($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$iSentSeq,function(EncapsulationInterface $oAckPacket) use ($cAckHandler, $_this, $oFsRequest, $oServiceDispatcher, $sFileData, $iDataPort){
 					($cAckHandler)($oAckPacket, $_this, $oFsRequest, $oServiceDispatcher, $sFileData, $iDataPort, $cAckHandler);
 				});
 			}

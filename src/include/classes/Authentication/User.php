@@ -65,6 +65,23 @@ class User implements HasUsername {
 		return $this->sHomedir;
 	}
 
+	/**
+	 * Get the homedir as an absolute econet path (i.e. prefixed with $.)
+	 *
+	 * Homedirs are stored without the leading $. (e.g. "home.test3"), but callers
+	 * that build vfs handles need an absolute econet path.
+	*/
+	public function getHomedirPath(): string
+	{
+		if($this->sHomedir === null || $this->sHomedir === ''){
+			return '$';
+		}
+		if(str_starts_with($this->sHomedir, '$')){
+			return $this->sHomedir;
+		}
+		return '$.'.$this->sHomedir;
+	}
+
 	public function setBootOpt(int $iOpt): void
 	{
 		$this->iOpt = $iOpt;
@@ -108,8 +125,8 @@ class User implements HasUsername {
 
 	public function getCsd():?string
 	{
-		if(is_null($this->sCsd)){
-			$this->sCsd = $this->getHomedir();
+		if(is_null($this->sCsd) AND !is_null($this->sHomedir)){
+			$this->sCsd = $this->getHomedirPath();
 		}
 		return $this->sCsd;
 	}

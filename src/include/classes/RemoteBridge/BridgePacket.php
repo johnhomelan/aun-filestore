@@ -18,8 +18,17 @@ use HomeLan\FileStore\Encapsulation\EncapsulationInterface;
  * As of protocol version 1.1, a second, unrelated wire message is also
  * represented by this class — ACK <net> <stn>\n (see makeAck()) — used to
  * relay a real Econet-level ack for a station back across the bridge to
- * whichever side originated the packet being acked. See
- * docs/protocols/remote-bridge.md for the full wire format and the
+ * whichever side originated the packet being acked.
+ *
+ * As of protocol version 1.2, both messages optionally carry the
+ * EconetPacket::getSequence() value of the packet in question — SEND gains a
+ * trailing <seq> field ahead of the payload, ACK gains a trailing <seq>
+ * field of its own — so ServiceDispatcher::ackEvents() on the *originating*
+ * side of a bridge hop can tell a relayed ack apart from a stray one for the
+ * same station, exactly as it already can for purely local AUN/WebSocket
+ * traffic. Only sent/expected once both sides have negotiated 1.2 — see
+ * Connection::sendAck()/send() and the $bHasSeq parameter on fromLine().
+ * See docs/protocols/remote-bridge.md for the full wire format and the
  * conformance requirements this places on third-party bridge clients.
  *
  * @package core
@@ -34,6 +43,7 @@ class BridgePacket implements EncapsulationInterface
 	private int $iFlags = 0;
 	private string $sData = '';
 	private bool $bIsAck = false;
+	private ?int $iSeq = null;
 
 	public function getPort(): int { return $this->iPort; }
 	public function getData(): string { return $this->sData; }
@@ -42,6 +52,9 @@ class BridgePacket implements EncapsulationInterface
 	public function getSrcNetwork(): int { return $this->iSrcNetwork; }
 	public function getSrcStation(): int { return $this->iSrcStation; }
 	public function getFlags(): int { return $this->iFlags; }
+
+	/** Null for a 1.0/1.1 peer, or a 1.2+ SEND/ACK line that simply omitted it. */
+	public function getSequence(): ?int { return $this->iSeq; }
 
 	public function getPacketType(): string
 	{
@@ -53,15 +66,18 @@ class BridgePacket implements EncapsulationInterface
 
 	/**
 	 * Turns this instance into a representation of an incoming ACK <net>
-	 * <stn> line — a real Econet-level ack relayed back across the bridge
-	 * for a station whose ack-worthy packet originated from the other side.
-	 * $iNet/$iStn go into the *source* fields, matching how
+	 * <stn> [<seq>] line — a real Econet-level ack relayed back across the
+	 * bridge for a station whose ack-worthy packet originated from the other
+	 * side. $iNet/$iStn go into the *source* fields, matching how
 	 * ServiceDispatcher::ackEvents() reads a real ack (by the acking
 	 * station's own network/station, via getSourceNetwork()/
 	 * getSourceStation() on the built EconetPacket) — mirrors
-	 * PiconetPacket::makeAck()'s equivalent field mapping.
+	 * PiconetPacket::makeAck()'s equivalent field mapping. $iSeq is the
+	 * sequence number of the packet being acked (protocol 1.2+ only, see
+	 * Map::rememberAckRelay()); null on a 1.1 connection or if it was never
+	 * captured on the way in.
 	*/
-	public function makeAck(int $iNet, int $iStn): void
+	public function makeAck(int $iNet, int $iStn, ?int $iSeq = null): void
 	{
 		$this->bIsAck      = true;
 		$this->iSrcNetwork = $iNet;
@@ -71,6 +87,7 @@ class BridgePacket implements EncapsulationInterface
 		$this->iPort       = 0;
 		$this->iFlags      = 0;
 		$this->sData       = '';
+		$this->iSeq        = $iSeq;
 	}
 
 	public function decode(string $sBinaryString): void
@@ -90,26 +107,44 @@ class BridgePacket implements EncapsulationInterface
 
 	/**
 	 * Parses a SEND line from the wire into a BridgePacket.
+	 *
+	 * $bHasSeq must reflect the negotiated protocol version of the connection this line
+	 * arrived on (true for 1.2+) — it is not otherwise inferable from the line itself, since
+	 * a bare trailing field is ambiguous between "seq, no payload" and "payload, no seq".
+	 *
 	 * Returns null if the line is malformed.
 	*/
-	public static function fromLine(string $sLine): ?self
+	public static function fromLine(string $sLine, bool $bHasSeq = false): ?self
 	{
-		// Use a limit of 8 so that any spaces inside base64 (impossible, but defensive) stay in field 7.
-		$aParts = explode(' ', trim($sLine), 8);
+		// Use a limit of 9 so that any spaces inside base64 (impossible, but defensive) stay in the payload field.
+		$aParts = explode(' ', trim($sLine), 9);
 		$iCount = count($aParts);
-		// 7 fields = empty payload (base64_encode('') produces ''), 8 fields = non-empty payload.
-		if (($iCount !== 7 && $iCount !== 8) || $aParts[0] !== 'SEND') {
+		if ($aParts[0] !== 'SEND') {
 			return null;
 		}
 		$oPkt = new self();
+		if ($bHasSeq) {
+			// 8 fields = empty payload, 9 fields = non-empty payload.
+			if ($iCount !== 8 && $iCount !== 9) {
+				return null;
+			}
+			$oPkt->iSeq = (int) $aParts[7];
+			$sPayload = $aParts[8] ?? '';
+		} else {
+			// 7 fields = empty payload, 8 fields = non-empty payload.
+			if ($iCount !== 7 && $iCount !== 8) {
+				return null;
+			}
+			$sPayload = $aParts[7] ?? '';
+		}
 		$oPkt->iDstNetwork = (int) $aParts[1];
 		$oPkt->iDstStation = (int) $aParts[2];
 		$oPkt->iSrcNetwork = (int) $aParts[3];
 		$oPkt->iSrcStation = (int) $aParts[4];
 		$oPkt->iPort       = (int) $aParts[5];
 		$oPkt->iFlags      = (int) $aParts[6];
-		if ($iCount === 8 && trim($aParts[7]) !== '') {
-			$sDecoded = base64_decode(trim($aParts[7]), true);
+		if (trim($sPayload) !== '') {
+			$sDecoded = base64_decode(trim($sPayload), true);
 			$oPkt->sData = ($sDecoded !== false) ? $sDecoded : '';
 		} else {
 			$oPkt->sData = '';
@@ -119,9 +154,25 @@ class BridgePacket implements EncapsulationInterface
 
 	/**
 	 * Encodes an EconetPacket as a SEND line ready for writing to the TCP stream.
+	 *
+	 * $bIncludeSeq must reflect the negotiated protocol version of the destination connection
+	 * (true for 1.2+) — sending the extra field to a 1.1 peer would make the line unparsable.
 	*/
-	public static function encode(EconetPacket $oPacket): string
+	public static function encode(EconetPacket $oPacket, bool $bIncludeSeq = false): string
 	{
+		if ($bIncludeSeq) {
+			return sprintf(
+				"SEND %d %d %d %d %d %d %d %s\n",
+				$oPacket->getDestinationNetwork(),
+				$oPacket->getDestinationStation(),
+				$oPacket->getSourceNetwork(),
+				$oPacket->getSourceStation(),
+				$oPacket->getPort(),
+				$oPacket->getFlags(),
+				$oPacket->getSequence(),
+				base64_encode((string) $oPacket->getData())
+			);
+		}
 		return sprintf(
 			"SEND %d %d %d %d %d %d %s\n",
 			$oPacket->getDestinationNetwork(),
@@ -135,27 +186,33 @@ class BridgePacket implements EncapsulationInterface
 	}
 
 	/**
-	 * Parses an ACK <net> <stn> line (protocol version 1.1+) into a
-	 * BridgePacket. Returns null if the line is malformed.
+	 * Parses an ACK <net> <stn> [<seq>] line (protocol version 1.1+, <seq> added in 1.2) into
+	 * a BridgePacket. Returns null if the line is malformed.
 	*/
 	public static function fromAckLine(string $sLine): ?self
 	{
 		$aParts = explode(' ', trim($sLine));
-		if (count($aParts) !== 3 || $aParts[0] !== 'ACK') {
+		$iCount = count($aParts);
+		if (($iCount !== 3 && $iCount !== 4) || $aParts[0] !== 'ACK') {
 			return null;
 		}
 		$oPkt = new self();
-		$oPkt->makeAck((int) $aParts[1], (int) $aParts[2]);
+		$oPkt->makeAck((int) $aParts[1], (int) $aParts[2], $iCount === 4 ? (int) $aParts[3] : null);
 		return $oPkt;
 	}
 
 	/**
 	 * Encodes an ack for (net, stn) as an ACK line ready for writing to the
 	 * TCP stream. Only meaningful to send once both sides have negotiated
-	 * protocol version 1.1 or later — see Connection::sendAck().
+	 * protocol version 1.1 or later — see Connection::sendAck(). $iSeq is
+	 * only included (protocol 1.2+) when the caller passes one; omit it for
+	 * a 1.1 peer, which would otherwise reject the line as malformed.
 	*/
-	public static function encodeAck(int $iNet, int $iStn): string
+	public static function encodeAck(int $iNet, int $iStn, ?int $iSeq = null): string
 	{
+		if ($iSeq !== null) {
+			return sprintf("ACK %d %d %d\n", $iNet, $iStn, $iSeq);
+		}
 		return sprintf("ACK %d %d\n", $iNet, $iStn);
 	}
 

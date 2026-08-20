@@ -18,6 +18,14 @@ interface EncapsulationInterface {
 
         public function getPacketType(): string;
 
+        /**
+         * The AUN-style sequence number this packet carries, echoed back by an Ack so
+         * ServiceDispatcher::ackEvents() can tell which outstanding request it belongs to.
+         * Null for encapsulations with no such concept (real hardware Econet, or a bridge
+         * peer not carrying one) — those fall back to (network,station)-only matching.
+        */
+        public function getSequence(): ?int;
+
         public function getData(): string;
 
         public function decode(string $sBinaryString): void;

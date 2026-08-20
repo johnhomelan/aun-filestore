@@ -69,6 +69,16 @@ class PiconetPacket implements EncapsulationInterface {
 		return $this->aTypeMap[$this->sMessageType] ?? 'Unknown';
 	}
 
+	/**
+	 * Real Econet hardware has no AUN-style sequence number; Piconet\Handler already
+	 * serialises to one outstanding packet for the whole device at a time, so
+	 * ServiceDispatcher::ackEvents() falls back to (network,station)-only matching.
+	*/
+	public function getSequence(): ?int
+	{
+		return null;
+	}
+
 	public function getDstStation(): ?int
 	{
 		return $this->iDstStationNumber;

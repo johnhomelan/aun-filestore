@@ -27,8 +27,8 @@ use HomeLan\FileStore\Messages\EconetPacket;
  * common version it sends VERSION_REJECT and closes the connection.
  *
  * After authentication, both directions accept:
- *   SEND <dst_net> <dst_stn> <src_net> <src_stn> <port> <flags> <base64_data>
- *   ACK <net> <stn>                                          (protocol 1.1+)
+ *   SEND <dst_net> <dst_stn> <src_net> <src_stn> <port> <flags> [<seq>] <base64_data>
+ *   ACK <net> <stn> [<seq>]                                  (protocol 1.1+, <seq> in 1.2+)
  *   PING / PONG                                              (protocol 1.1+, see startHeartbeat())
  *
  * @package core
@@ -39,12 +39,18 @@ class Connection
 	 * Protocol versions this implementation supports, in ascending order.
 	 *
 	 * 1.1 adds the ACK <net> <stn> message (see sendAck()/handleAuthenticated())
-	 * and the PING/PONG heartbeat (see startHeartbeat()) — see
-	 * docs/protocols/remote-bridge.md for the full spec and the conformance
-	 * requirements it places on third-party bridge clients. 1.0 peers are
-	 * still fully supported; ACK and PING/PONG are simply never sent to them.
+	 * and the PING/PONG heartbeat (see startHeartbeat()). 1.2 adds an optional
+	 * trailing <seq> field to both SEND and ACK, carrying the originating
+	 * EconetPacket::getSequence() value across the bridge so
+	 * ServiceDispatcher::ackEvents() can tell a relayed ack apart from a stray
+	 * one for the same station — see BridgePacket's class doc for the wire
+	 * format and Map::rememberAckRelay()/relayAckIfKnown() for how the value
+	 * is threaded through. See docs/protocols/remote-bridge.md for the full
+	 * spec and the conformance requirements it places on third-party bridge
+	 * clients. 1.0/1.1 peers are still fully supported; ACK, PING/PONG and the
+	 * <seq> field are simply never sent to a peer that didn't negotiate them.
 	*/
-	public const SUPPORTED_VERSIONS = ['1.0', '1.1'];
+	public const SUPPORTED_VERSIONS = ['1.0', '1.1', '1.2'];
 
 	/** Seconds between PING sends once authenticated on a 1.1+ connection. */
 	private const int PING_INTERVAL_SECONDS = 3;
@@ -169,7 +175,7 @@ class Connection
 		}
 
 		if ($sCmd === 'SEND') {
-			$oPkt = BridgePacket::fromLine($sLine);
+			$oPkt = BridgePacket::fromLine($sLine, $this->hasSeq());
 			if ($oPkt === null) {
 				$this->oLogger->warning("RemoteBridge: malformed SEND line");
 				return;
@@ -183,16 +189,17 @@ class Connection
 			}
 			// Remember that this connection asked for delivery to this station, so that
 			// when our own local encapsulation observes the real hardware ack it provokes,
-			// relayAckIfKnown() knows to relay it back across this same connection — see
+			// relayAckIfKnown() knows to relay it back across this same connection, echoing
+			// $oPkt->getSequence() (protocol 1.2+, else null) — see
 			// RemoteBridge\Map::rememberAckRelay().
-			Map::rememberAckRelay($oPkt->getDstNetwork(), $oPkt->getDstStation(), $this);
+			Map::rememberAckRelay($oPkt->getDstNetwork(), $oPkt->getDstStation(), $this, $oPkt->getSequence());
 			($this->fOnPacket)($oPkt);
 			return;
 		}
 
 		if ($sCmd === 'ACK') {
-			// ACK <net> <stn> — a real Econet-level ack for a station, relayed
-			// back across the bridge (protocol 1.1+). Unlike SEND, this is
+			// ACK <net> <stn> [<seq>] — a real Econet-level ack for a station, relayed
+			// back across the bridge (protocol 1.1+, <seq> added in 1.2). Unlike SEND, this is
 			// never forwarded on or gated by aLocalNetworks: it always means
 			// "dispatch this to my own ServiceDispatcher", since the whole
 			// point is to reach whichever local addAckEvent() registration
@@ -230,9 +237,11 @@ class Connection
 	 * this connection. A no-op pre-1.1 peer, silently: sending ACK to a peer
 	 * that never advertised 1.1 support would just be ignored by a
 	 * conformant implementation, but not sending it at all avoids relying on
-	 * that.
+	 * that. $iSeq (the sequence Map::rememberAckRelay() captured off the
+	 * original SEND, if any) is only written to the wire once this
+	 * connection has negotiated 1.2 — see BridgePacket::encodeAck().
 	*/
-	public function sendAck(int $iNet, int $iStn): void
+	public function sendAck(int $iNet, int $iStn, ?int $iSeq = null): void
 	{
 		if ($this->sState !== self::STATE_AUTHENTICATED) {
 			return;
@@ -240,7 +249,13 @@ class Connection
 		if (version_compare($this->sProtocolVersion, '1.1', '<')) {
 			return;
 		}
-		$this->oTcpConn->write(BridgePacket::encodeAck($iNet, $iStn));
+		$this->oTcpConn->write(BridgePacket::encodeAck($iNet, $iStn, $this->hasSeq() ? $iSeq : null));
+	}
+
+	/** True once this connection has negotiated protocol 1.2 or later (the SEND/ACK <seq> field). */
+	private function hasSeq(): bool
+	{
+		return version_compare($this->sProtocolVersion, '1.2', '>=');
 	}
 
 	private function handleHello(string $sCmd, string $sArgs): void
@@ -403,7 +418,7 @@ class Connection
 		if ($this->sState !== self::STATE_AUTHENTICATED) {
 			return;
 		}
-		$this->oTcpConn->write(BridgePacket::encode($oPacket));
+		$this->oTcpConn->write(BridgePacket::encode($oPacket, $this->hasSeq()));
 	}
 
 	public function onClose(): void

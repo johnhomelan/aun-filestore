@@ -85,9 +85,9 @@ class SpyVfsPlugin implements PluginInterface
         }
     }
 
-    static public function _buildFiledescriptorFromEconetPath(User $oUser, FilePath $oEconetPath, bool $bMustExist, bool $bReadOnly): ?FileDescriptor
+    static public function _buildFiledescriptorFromEconetPath(User $oUser, FilePath $oEconetPath, bool $bMustExist, bool $bReadOnly,bool $bDirectory=false): ?FileDescriptor
     {
-        self::$aCallLog[] = ['method' => '_buildFiledescriptorFromEconetPath', 'args' => [$oEconetPath->getFilePath(), $bMustExist, $bReadOnly]];
+        self::$aCallLog[] = ['method' => '_buildFiledescriptorFromEconetPath', 'args' => [$oEconetPath->getFilePath(), $bMustExist, $bReadOnly, $bDirectory]];
         if (self::$fnBuildFd !== null) {
             return (self::$fnBuildFd)($oUser, $oEconetPath, $bMustExist, $bReadOnly);
         }
@@ -274,7 +274,7 @@ class SpyVfsPlugin2 implements PluginInterface
         self::$aCallLog[] = ['method' => 'houseKeeping', 'args' => []];
     }
 
-    static public function _buildFiledescriptorFromEconetPath(User $oUser, FilePath $oEconetPath, bool $bMustExist, bool $bReadOnly): ?FileDescriptor
+    static public function _buildFiledescriptorFromEconetPath(User $oUser, FilePath $oEconetPath, bool $bMustExist, bool $bReadOnly,bool $bDirectory=false): ?FileDescriptor
     {
         self::$aCallLog[] = ['method' => '_buildFiledescriptorFromEconetPath', 'args' => [$oEconetPath->getFilePath()]];
         if (self::$fnBuildFd !== null) {

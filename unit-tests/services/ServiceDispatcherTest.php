@@ -90,11 +90,17 @@ class MockEncapsulation implements EncapsulationInterface
         private int    $iPort   = 0x99,
         private int    $iSrcNet = 1,
         private int    $iSrcStn = 5,
+        // Null (the default) means "no sequence concept" — ServiceDispatcher::ackEvents() then
+        // falls back to firing on any ack for the (network,station), matching every existing
+        // test's original ack-fires-callback assumption. Tests specifically covering sequence
+        // correlation pass a real value here.
+        private ?int   $iSeq    = null,
     ) {}
 
     public function getPort(): int    { return $this->iPort; }
     public function getPacketType(): string { return $this->sType; }
     public function getData(): string { return ''; }
+    public function getSequence(): ?int { return $this->iSeq; }
     public function decode(string $s): void {}
     public function toString(): string { return "mock:{$this->sType}:{$this->iPort}"; }
 
@@ -141,9 +147,9 @@ class ServiceDispatcherTest extends TestCase
         return new ServiceDispatcher($this->oLogger, $aProviders);
     }
 
-    private function packet(string $sType = 'Unicast', int $iPort = 0x99, int $iSrcNet = 1, int $iSrcStn = 5): MockEncapsulation
+    private function packet(string $sType = 'Unicast', int $iPort = 0x99, int $iSrcNet = 1, int $iSrcStn = 5, ?int $iSeq = null): MockEncapsulation
     {
-        return new MockEncapsulation($sType, $iPort, $iSrcNet, $iSrcStn);
+        return new MockEncapsulation($sType, $iPort, $iSrcNet, $iSrcStn, $iSeq);
     }
 
     private function makeReply(int $iDstNet = 1, int $iDstStn = 5): EconetPacket
@@ -360,7 +366,7 @@ class ServiceDispatcherTest extends TestCase
     {
         $oDispatcher = $this->make([]);
         $bFired = false;
-        $oDispatcher->addAckEvent(1, 5, function() use (&$bFired) { $bFired = true; });
+        $oDispatcher->addAckEvent(1, 5, 1, function() use (&$bFired) { $bFired = true; });
         $oDispatcher->inboundPacket($this->packet('Ack', 0x99, iSrcNet: 1, iSrcStn: 5));
         $this->assertTrue($bFired);
     }
@@ -429,7 +435,7 @@ class ServiceDispatcherTest extends TestCase
     {
         $oDispatcher = $this->make([]);
         $bFired = false;
-        $oDispatcher->addAckEvent(2, 10, function() use (&$bFired) { $bFired = true; });
+        $oDispatcher->addAckEvent(2, 10, 1, function() use (&$bFired) { $bFired = true; });
         $oDispatcher->ackEvents($this->packet('Ack', 0x99, iSrcNet: 2, iSrcStn: 10));
         $this->assertTrue($bFired);
     }
@@ -438,7 +444,7 @@ class ServiceDispatcherTest extends TestCase
     {
         $oDispatcher = $this->make([]);
         $bFired = false;
-        $oDispatcher->addAckEvent(2, 10, function() use (&$bFired) { $bFired = true; });
+        $oDispatcher->addAckEvent(2, 10, 1, function() use (&$bFired) { $bFired = true; });
         $oDispatcher->ackEvents($this->packet('Ack', 0x99, iSrcNet: 3, iSrcStn: 10));
         $this->assertFalse($bFired);
     }
@@ -447,7 +453,7 @@ class ServiceDispatcherTest extends TestCase
     {
         $oDispatcher = $this->make([]);
         $bFired = false;
-        $oDispatcher->addAckEvent(2, 10, function() use (&$bFired) { $bFired = true; });
+        $oDispatcher->addAckEvent(2, 10, 1, function() use (&$bFired) { $bFired = true; });
         $oDispatcher->ackEvents($this->packet('Ack', 0x99, iSrcNet: 2, iSrcStn: 11));
         $this->assertFalse($bFired);
     }
@@ -456,7 +462,7 @@ class ServiceDispatcherTest extends TestCase
     {
         $oDispatcher = $this->make([]);
         $iCount = 0;
-        $oDispatcher->addAckEvent(1, 5, function() use (&$iCount) { $iCount++; });
+        $oDispatcher->addAckEvent(1, 5, 1, function() use (&$iCount) { $iCount++; });
         $oPkt = $this->packet('Ack', 0x99, iSrcNet: 1, iSrcStn: 5);
         $oDispatcher->ackEvents($oPkt);
         $oDispatcher->ackEvents($oPkt);   // second — event already consumed
@@ -468,16 +474,46 @@ class ServiceDispatcherTest extends TestCase
         $oDispatcher = $this->make([]);
         $oReceived   = null;
         $oPkt = $this->packet('Ack', 0x99, iSrcNet: 1, iSrcStn: 5);
-        $oDispatcher->addAckEvent(1, 5, function($p) use (&$oReceived) { $oReceived = $p; });
+        $oDispatcher->addAckEvent(1, 5, 1, function($p) use (&$oReceived) { $oReceived = $p; });
         $oDispatcher->ackEvents($oPkt);
         $this->assertSame($oPkt, $oReceived);
+    }
+
+    public function testAckEventNotFiredForMismatchedSequence(): void
+    {
+        $oDispatcher = $this->make([]);
+        $bFired = false;
+        $oDispatcher->addAckEvent(1, 5, 42, function() use (&$bFired) { $bFired = true; });
+        // Same (network,station), but a different sequence — a stray/duplicate ack.
+        $oDispatcher->ackEvents($this->packet('Ack', 0x99, iSrcNet: 1, iSrcStn: 5, iSeq: 43));
+        $this->assertFalse($bFired);
+    }
+
+    public function testAckEventFiredForMatchingSequence(): void
+    {
+        $oDispatcher = $this->make([]);
+        $bFired = false;
+        $oDispatcher->addAckEvent(1, 5, 42, function() use (&$bFired) { $bFired = true; });
+        $oDispatcher->ackEvents($this->packet('Ack', 0x99, iSrcNet: 1, iSrcStn: 5, iSeq: 42));
+        $this->assertTrue($bFired);
+    }
+
+    public function testMismatchedSequenceAckLeavesRegistrationInPlaceForTheRealOne(): void
+    {
+        $oDispatcher = $this->make([]);
+        $iCount = 0;
+        $oDispatcher->addAckEvent(1, 5, 42, function() use (&$iCount) { $iCount++; });
+        $oDispatcher->ackEvents($this->packet('Ack', 0x99, iSrcNet: 1, iSrcStn: 5, iSeq: 999));
+        $this->assertSame(0, $iCount, 'stray ack must not consume the registration');
+        $oDispatcher->ackEvents($this->packet('Ack', 0x99, iSrcNet: 1, iSrcStn: 5, iSeq: 42));
+        $this->assertSame(1, $iCount, 'the real ack must still fire it afterwards');
     }
 
     public function testClearAckEventPreventsEventFromFiring(): void
     {
         $oDispatcher = $this->make([]);
         $bFired = false;
-        $oDispatcher->addAckEvent(1, 5, function() use (&$bFired) { $bFired = true; });
+        $oDispatcher->addAckEvent(1, 5, 1, function() use (&$bFired) { $bFired = true; });
         $oDispatcher->clearAckEvent(1, 5);
         $oDispatcher->ackEvents($this->packet('Ack', 0x99, iSrcNet: 1, iSrcStn: 5));
         $this->assertFalse($bFired);
@@ -491,6 +527,47 @@ class ServiceDispatcherTest extends TestCase
     }
 
     // -------------------------------------------------------------------------
+    // addAckEvent() timeout — houseKeeping() gives up on an ack that never
+    // arrives (e.g. a WebSocket/Piconet block sent fire-and-forget that the
+    // client never got, so it never sent back an ack). Without this a lost
+    // reply would leave the callback registered forever.
+    // -------------------------------------------------------------------------
+
+    public function testHouseKeepingClearsExpiredAckEvent(): void
+    {
+        $oDispatcher = $this->make([]);
+        $bFired = false;
+        // -1 timeout so the event is immediately expired
+        $oDispatcher->addAckEvent(1, 5, 1, function() use (&$bFired) { $bFired = true; }, -1);
+        $oDispatcher->houseKeeping();
+
+        $oDispatcher->ackEvents($this->packet('Ack', 0x99, iSrcNet: 1, iSrcStn: 5));
+        $this->assertFalse($bFired);
+    }
+
+    public function testHouseKeepingKeepsNonExpiredAckEvent(): void
+    {
+        $oDispatcher = $this->make([]);
+        $bFired = false;
+        $oDispatcher->addAckEvent(1, 5, 1, function() use (&$bFired) { $bFired = true; }, 300);
+        $oDispatcher->houseKeeping();
+
+        $oDispatcher->ackEvents($this->packet('Ack', 0x99, iSrcNet: 1, iSrcStn: 5));
+        $this->assertTrue($bFired);
+    }
+
+    public function testHouseKeepingAckEventDefaultTimeoutIsNotImmediatelyExpired(): void
+    {
+        $oDispatcher = $this->make([]);
+        $bFired = false;
+        $oDispatcher->addAckEvent(1, 5, 1, function() use (&$bFired) { $bFired = true; });
+        $oDispatcher->houseKeeping();
+
+        $oDispatcher->ackEvents($this->packet('Ack', 0x99, iSrcNet: 1, iSrcStn: 5));
+        $this->assertTrue($bFired);
+    }
+
+    // -------------------------------------------------------------------------
     // ackEvents() also relays to a RemoteBridge peer, if known — see
     // docs/protocols/remote-bridge.md and RemoteBridge\Map::relayAckIfKnown()
     // -------------------------------------------------------------------------
@@ -499,7 +576,7 @@ class ServiceDispatcherTest extends TestCase
     {
         RemoteBridgeMap::init($this->oLogger, '');
         $oConn = $this->createMock(RemoteBridgeConnection::class);
-        $oConn->expects($this->once())->method('sendAck')->with(2, 10);
+        $oConn->expects($this->once())->method('sendAck')->with(2, 10, null);
         // Deliberately NOT registerPeerNetworks() — that table is for outbound SEND
         // routing to networks the peer serves, unrelated to ack relay. A relayed
         // SEND targets a network *this* instance serves, so relay eligibility is
@@ -519,7 +596,7 @@ class ServiceDispatcherTest extends TestCase
 
         $oDispatcher = $this->make([]);
         $bFired = false;
-        $oDispatcher->addAckEvent(1, 5, function() use (&$bFired) { $bFired = true; });
+        $oDispatcher->addAckEvent(1, 5, 1, function() use (&$bFired) { $bFired = true; });
         $oDispatcher->ackEvents($this->packet('Ack', 0x99, iSrcNet: 1, iSrcStn: 5));
 
         $this->assertTrue($bFired);
@@ -531,12 +608,12 @@ class ServiceDispatcherTest extends TestCase
         // ackEvents() doesn't special-case that — confirm both paths run independently.
         RemoteBridgeMap::init($this->oLogger, '');
         $oConn = $this->createMock(RemoteBridgeConnection::class);
-        $oConn->expects($this->once())->method('sendAck')->with(2, 10);
+        $oConn->expects($this->once())->method('sendAck')->with(2, 10, null);
         RemoteBridgeMap::rememberAckRelay(2, 10, $oConn);
 
         $oDispatcher = $this->make([]);
         $bFired = false;
-        $oDispatcher->addAckEvent(2, 10, function() use (&$bFired) { $bFired = true; });
+        $oDispatcher->addAckEvent(2, 10, 1, function() use (&$bFired) { $bFired = true; });
         $oDispatcher->ackEvents($this->packet('Ack', 0x99, iSrcNet: 2, iSrcStn: 10));
 
         $this->assertTrue($bFired);

@@ -120,6 +120,7 @@ class FsTestUser implements HasUsername
 
     public function getUsername(): string { return $this->sUsername; }
     public function getHomedir(): string  { return $this->sHomedir; }
+    public function getHomedirPath(): string { return $this->sHomedir; }
     public function getLib(): string      { return $this->sLib; }
     public function getBootOpt(): int     { return $this->iBootOpt; }
     public function isAdmin(): bool       { return $this->bIsAdmin; }
@@ -207,7 +208,7 @@ class FileServerTestable extends FileServer
         throw new \Exception("No handle $iHandle");
     }
 
-    public function vfsCreateFsHandle(int $iNet, int $iStn, string $sPath, bool $bMustExist=false, bool $bReadOnly=false)
+    public function vfsCreateFsHandle(int $iNet, int $iStn, string $sPath, bool $bMustExist=false, bool $bReadOnly=false, bool $bDirectory=false)
     {
         if($this->stubLockedThrows) throw new \HomeLan\FileStore\Vfs\Exception("Already open", false, true);
         if($this->stubCreateHandleThrows) throw new \Exception("Cannot create");
@@ -674,6 +675,58 @@ class FileServerTest extends TestCase
         [$oReply] = $this->dispatch($this->makeGetInfoPkt(99, 'MYFILE'));
         $aB = $this->bytes($oReply);
         $this->assertSame(0x8e, $aB[1]);
+    }
+
+    // Case 6 = EC_FS_GET_INFO_DIR with an empty path (the client asking for
+    // info about its own CSD). When the CSD is the root directory, there is
+    // no parent listing to find "$" in, so vfsGetMeta() can never resolve it
+    // — this used to always come back as "Bad INFO argument" and broke the
+    // client's boot-option lookup on login for any user without a homedir.
+    public function testGetInfoCase6ForRootCsdReturnsOkWithoutCallingMeta(): void
+    {
+        $oFd = new FakeHandle();
+        $oFd->sDirName = '$';
+        $this->oFs->stubHandle = $oFd;
+        $this->oFs->stubMetaThrows = true;
+        [$oReply] = $this->dispatch($this->makeGetInfoPkt(6, ''));
+        $aB = $this->bytes($oReply);
+        $this->assertSame(0, $aB[1]);  // OK, not the "Bad INFO argument" error
+        $this->assertSame(15, $aB[15]);  // access byte: fully accessible
+    }
+
+    // A chroot'd user's root CSD has the same "no parent to look itself up in"
+    // problem as the true root, but FileDescriptor::getEconetDirName() reports
+    // it as an empty string (not '$'), because the chroot'd econet path always
+    // ends in a trailing "." — e.g. "$.BBCMASTER.Master_128.Disk_1.". This used
+    // to fall through to the vfsGetMeta() branch and come back "Bad INFO
+    // argument" for every *. done from a chroot'd session.
+    public function testGetInfoCase6ForChrootedRootCsdReturnsOkWithoutCallingMeta(): void
+    {
+        $oFd = new FakeHandle();
+        $oFd->sDirName = '';
+        $this->oFs->stubHandle = $oFd;
+        $this->oFs->stubMetaThrows = true;
+        [$oReply] = $this->dispatch($this->makeGetInfoPkt(6, ''));
+        $aB = $this->bytes($oReply);
+        $this->assertSame(0, $aB[1]);  // OK, not the "Bad INFO argument" error
+        $this->assertSame(15, $aB[15]);  // access byte: fully accessible
+        // Dir name reported to the client should be "$", not blank
+        $sDirName = implode('', array_map('chr', array_slice($aB, 5, 10)));
+        $this->assertSame('$         ', $sDirName);
+    }
+
+    public function testGetInfoCase6ForNonRootCsdStillUsesMeta(): void
+    {
+        $oFd = new FakeHandle();
+        $oFd->sDirName = 'HOME';
+        $this->oFs->stubHandle = $oFd;
+        $oMeta = new FakeMeta();
+        $oMeta->iAccess = 0x33;
+        $this->oFs->stubMeta = $oMeta;
+        [$oReply] = $this->dispatch($this->makeGetInfoPkt(6, ''));
+        $aB = $this->bytes($oReply);
+        $this->assertSame(0, $aB[1]);
+        $this->assertSame(0x33, $aB[15]);
     }
 
     // -----------------------------------------------------------------------

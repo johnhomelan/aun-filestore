@@ -22,6 +22,7 @@ class AckChainKickoffPacket implements EncapsulationInterface
     public function getPort(): int { return $this->iPort; }
     public function getPacketType(): string { return 'Unicast'; }
     public function getData(): string { return ''; }
+    public function getSequence(): ?int { return null; }
     public function decode(string $sBinaryString): void {}
 
     public function buildEconetPacket(): EconetPacket

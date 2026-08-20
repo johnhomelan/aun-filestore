@@ -49,10 +49,12 @@ class Map
 	static private array $aNetworkConnections = [];
 
 	/**
-	 * @var array<string, Connection> "net.stn" => the connection whose peer most recently sent
-	 *      us a SEND destined for that local station. Populated by rememberAckRelay(), consulted
-	 *      by relayAckIfKnown() — see both for why this, and not $aNetworkConnections, is what
-	 *      answers "should a real local ack for this station be relayed, and to whom".
+	 * @var array<string, array{conn:Connection, seq:?int}> "net.stn" => the connection whose
+	 *      peer most recently sent us a SEND destined for that local station, and the
+	 *      sequence number that SEND carried (null pre-1.2). Populated by rememberAckRelay(),
+	 *      consulted by relayAckIfKnown() — see both for why this, and not
+	 *      $aNetworkConnections, is what answers "should a real local ack for this station be
+	 *      relayed, and to whom, with what sequence number".
 	*/
 	static private array $aPendingAckRelay = [];
 
@@ -146,10 +148,15 @@ class Map
 	 * the target of a SEND relayed in from a bridge peer, and each such
 	 * station's eventual ack must be relayed back to whichever peer actually
 	 * asked for it.
+	 *
+	 * $iSeq is the originating SEND's EconetPacket::getSequence() value (null on a pre-1.2
+	 * connection, or if the peer omitted it) — carried alongside the connection purely so
+	 * relayAckIfKnown() can echo it back on the eventual ACK line, letting the *peer's* own
+	 * ServiceDispatcher::ackEvents() correlate the relayed ack to the right addAckEvent().
 	*/
-	public static function rememberAckRelay(int $iNetwork, int $iStation, Connection $oConn): void
+	public static function rememberAckRelay(int $iNetwork, int $iStation, Connection $oConn, ?int $iSeq = null): void
 	{
-		self::$aPendingAckRelay["{$iNetwork}.{$iStation}"] = $oConn;
+		self::$aPendingAckRelay["{$iNetwork}.{$iStation}"] = ['conn' => $oConn, 'seq' => $iSeq];
 	}
 
 	/**
@@ -163,6 +170,11 @@ class Map
 	 * genuinely, purely local traffic) or if the connection hasn't
 	 * negotiated protocol 1.1+ (see Connection::sendAck()).
 	 *
+	 * The sequence number remembered by rememberAckRelay() for this (net, stn) — the
+	 * originating peer's own EconetPacket::getSequence() — is echoed on the outgoing ACK line
+	 * so that peer's ServiceDispatcher::ackEvents() can correlate it; Connection::sendAck()
+	 * only actually writes it to the wire on a 1.2+ connection.
+	 *
 	 * Single-hop only: if the peer this relays to is itself bridging the
 	 * network onward to a third instance, this does not re-relay further.
 	 *
@@ -171,11 +183,11 @@ class Map
 	*/
 	public static function relayAckIfKnown(int $iNetwork, int $iStation): bool
 	{
-		$oConn = self::$aPendingAckRelay["{$iNetwork}.{$iStation}"] ?? null;
-		if ($oConn === null) {
+		$aEntry = self::$aPendingAckRelay["{$iNetwork}.{$iStation}"] ?? null;
+		if ($aEntry === null) {
 			return false;
 		}
-		$oConn->sendAck($iNetwork, $iStation);
+		$aEntry['conn']->sendAck($iNetwork, $iStation, $aEntry['seq']);
 		return true;
 	}
 
@@ -215,8 +227,8 @@ class Map
 			}
 		}
 
-		foreach (self::$aPendingAckRelay as $sKey => $oRegistered) {
-			if ($oRegistered === $oConn) {
+		foreach (self::$aPendingAckRelay as $sKey => $aRegistered) {
+			if ($aRegistered['conn'] === $oConn) {
 				unset(self::$aPendingAckRelay[$sKey]);
 			}
 		}

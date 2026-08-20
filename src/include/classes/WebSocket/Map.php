@@ -92,6 +92,7 @@ class Map {
 			array_key_exists($iStationNumber,self::$aDynamicNetworks[$iNetworkNumber])){
 			return self::$aDynamicNetworks[$iNetworkNumber][$iStationNumber];
 		}
+		self::$oLogger->warning("websocketmapper: No websocket connection known for ".$iNetworkNumber.".".$iStationNumber.", packet dropped.");
 		return null;
 	}
 

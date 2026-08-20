@@ -97,30 +97,79 @@ class AunAckChainIntegrationTest extends TestCase
         $oHandler->setSocket($oSocket);
 
         // Kick off the chain: block 1 is sent and an addAckEvent registered
-        // for the client.
+        // for the client, keyed on block 1's own real sequence number.
         $oServices->inboundPacket(new AckChainKickoffPacket(0x99, self::CLIENT_NET, self::CLIENT_STN));
         $this->assertSame(1, $oProvider->getBlocksSent());
         $this->assertFalse($oProvider->isComplete());
-        $oProvider->getReplies(); // drain block 1 — not under test here
 
-        // Real ack #1, over the wire, matching an outbound packet Handler has in flight.
-        $oOutbound = $this->makeEconetPacket(self::CLIENT_NET, self::CLIENT_STN, 0x99);
-        $oHandler->send($oOutbound);
+        // Actually dispatch block 1 through Handler, so its own retry-queue tracks the same
+        // real outstanding sequence AckChainMockProvider registered addAckEvent() against —
+        // an ack has to match both Handler::_unQueue()'s gate and ServiceDispatcher's now.
+        // ServiceDispatcher::inboundPacket() already drained the provider's own reply buffer
+        // into its own queue (see queueReply()), so pull the actual block-1 packet from there
+        // — not a freshly-fabricated one, which wouldn't share block 1's real sequence number.
+        foreach ($oServices->getReplies() as $oReply) {
+            $oHandler->send($oReply);
+        }
         $oHandler->timer();
-        $iSeq = $oOutbound->getSequence();
+        $iSeq = $oProvider->getLastSentSeq();
+        $this->assertNotNull($iSeq);
         $oHandler->receive($this->makeAunWire(3, 0, 0, $iSeq, ''), self::CLIENT_HOST, '127.0.0.1:32768');
 
         $this->assertSame(2, $oProvider->getBlocksSent(), 'first real ack must have driven block 2');
         $this->assertFalse($oProvider->isComplete());
 
-        // Real ack #2 — completes the chain.
-        $oOutbound2 = $this->makeEconetPacket(self::CLIENT_NET, self::CLIENT_STN, 0x99);
-        $oHandler->send($oOutbound2);
+        // Real ack #2 — completes the chain. Block 2 was queued by the ack-driven continuation
+        // (ackEvents() -> the registered callback -> sendNextBlock()), which never goes through
+        // ServiceDispatcher::queueReply() the way the initial inboundPacket() dispatch did — it
+        // only ever lands in the provider's own buffer, so drain that instead here.
+        foreach ($oProvider->getReplies() as $oReply) {
+            $oHandler->send($oReply);
+        }
         $oHandler->timer();
-        $iSeq2 = $oOutbound2->getSequence();
+        $iSeq2 = $oProvider->getLastSentSeq();
         $oHandler->receive($this->makeAunWire(3, 0, 0, $iSeq2, ''), self::CLIENT_HOST, '127.0.0.1:32768');
 
         $this->assertSame(3, $oProvider->getBlocksSent());
         $this->assertTrue($oProvider->isComplete(), 'chain must be complete after the final real ack');
+    }
+
+    /**
+     * A stray ack for the same station but the wrong sequence number — e.g. a duplicate/delayed
+     * ack from an earlier, unrelated exchange — must not advance the chain; only the ack whose
+     * sequence matches the block actually in flight may.
+     */
+    public function testStrayAckWithWrongSequenceDoesNotAdvanceChain(): void
+    {
+        $oProvider = new AckChainMockProvider(0x99, 3);
+        $oServices = new ServiceDispatcher($this->oLogger, [$oProvider]);
+
+        $oPacketDispatcher = $this->createMock(PacketDispatcher::class);
+        $oHandler = new Handler($this->oLogger, $oServices, $oPacketDispatcher);
+        $oSocket = $this->createMock(DatagramSocket::class);
+        $oSocket->method('send');
+        $oHandler->setSocket($oSocket);
+
+        $oServices->inboundPacket(new AckChainKickoffPacket(0x99, self::CLIENT_NET, self::CLIENT_STN));
+
+        // The block actually in flight — dispatched through Handler so its own retry-queue
+        // tracks the same real sequence AckChainMockProvider registered addAckEvent() against.
+        // (ServiceDispatcher::inboundPacket() already drained the provider's own reply buffer
+        // into its own queue — see queueReply() — so pull it from there, not the provider.)
+        foreach ($oServices->getReplies() as $oReply) {
+            $oHandler->send($oReply);
+        }
+        $oHandler->timer();
+        $iRealSeq = $oProvider->getLastSentSeq();
+        $this->assertNotNull($iRealSeq);
+
+        // A stray ack for an unrelated sequence number, from the same station.
+        $oHandler->receive($this->makeAunWire(3, 0, 0, $iRealSeq + 1000, ''), self::CLIENT_HOST, '127.0.0.1:32768');
+        $this->assertSame(1, $oProvider->getBlocksSent(), 'a mismatched-sequence ack must not advance the chain');
+        $this->assertFalse($oProvider->isComplete());
+
+        // The real ack, arriving after the stray one, must still drive the chain.
+        $oHandler->receive($this->makeAunWire(3, 0, 0, $iRealSeq, ''), self::CLIENT_HOST, '127.0.0.1:32768');
+        $this->assertSame(2, $oProvider->getBlocksSent(), 'the correct-sequence ack must still advance the chain');
     }
 }

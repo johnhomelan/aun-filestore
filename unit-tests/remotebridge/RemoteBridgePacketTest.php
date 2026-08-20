@@ -200,6 +200,16 @@ class RemoteBridgePacketTest extends TestCase
         $this->assertNotNull($oPkt);
         $this->assertSame(3, $oPkt->getSrcNetwork());
         $this->assertSame(100, $oPkt->getSrcStation());
+        $this->assertNull($oPkt->getSequence());
+    }
+
+    public function testFromAckLineRoundTripsWithEncodeAckAndSequence(): void
+    {
+        $oPkt = BridgePacket::fromAckLine(BridgePacket::encodeAck(3, 100, 999));
+        $this->assertNotNull($oPkt);
+        $this->assertSame(3, $oPkt->getSrcNetwork());
+        $this->assertSame(100, $oPkt->getSrcStation());
+        $this->assertSame(999, $oPkt->getSequence());
     }
 
     public function testFromAckLineRejectsWrongCommand(): void
@@ -212,9 +222,19 @@ class RemoteBridgePacketTest extends TestCase
         $this->assertNull(BridgePacket::fromAckLine("ACK 2"));
     }
 
+    public function testFromAckLineAcceptsTrailingSequenceField(): void
+    {
+        // <seq> — protocol 1.2 — see BridgePacket's class doc.
+        $oPkt = BridgePacket::fromAckLine("ACK 2 254 999");
+        $this->assertNotNull($oPkt);
+        $this->assertSame(2, $oPkt->getSrcNetwork());
+        $this->assertSame(254, $oPkt->getSrcStation());
+        $this->assertSame(999, $oPkt->getSequence());
+    }
+
     public function testFromAckLineRejectsExtraFields(): void
     {
-        $this->assertNull(BridgePacket::fromAckLine("ACK 2 254 999"));
+        $this->assertNull(BridgePacket::fromAckLine("ACK 2 254 999 1"));
     }
 
     public function testFromAckLineRejectsEmptyString(): void

@@ -142,6 +142,18 @@ class JsonPacket implements EncapsulationInterface {
 	}
 
 	/**
+	 * Overrides the destination network number decoded from the client
+	 *
+	 * Used by the websocket handler to replace a client-supplied destination network of 0
+	 * (meaning "my local network" from the client's perspective) with the real network number
+	 * the destination station lives on, before the packet is dispatched or forwarded.
+	*/
+	public function setDstNetwork(int $iNetwork): void
+	{
+		$this->iDstNetworkNumber = $iNetwork;
+	}
+
+	/**
 	 * Get the binary data from the aun packet
 	 *
 	 * @return string

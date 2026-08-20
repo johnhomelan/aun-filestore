@@ -110,16 +110,44 @@ class WebSocketAckChainIntegrationTest extends TestCase
         $this->assertFalse($oProvider->isComplete());
         $oProvider->getReplies(); // drain block 1 — not under test here
 
-        // Real ack #1, over the wire.
-        $oHandler->onMessage($this->oConnection, $this->makePktJson(iSeq: 1));
+        // Real ack #1, over the wire, echoing the actual sequence block 1 was sent with.
+        $oHandler->onMessage($this->oConnection, $this->makePktJson(iSeq: $oProvider->getLastSentSeq()));
 
         $this->assertSame(2, $oProvider->getBlocksSent(), 'first real ack must have driven block 2');
         $this->assertFalse($oProvider->isComplete());
 
         // Real ack #2 — completes the chain.
-        $oHandler->onMessage($this->oConnection, $this->makePktJson(iSeq: 2));
+        $oHandler->onMessage($this->oConnection, $this->makePktJson(iSeq: $oProvider->getLastSentSeq()));
 
         $this->assertSame(3, $oProvider->getBlocksSent());
         $this->assertTrue($oProvider->isComplete(), 'chain must be complete after the final real ack');
+    }
+
+    /**
+     * A stray ack for the same station but the wrong sequence number — e.g. a duplicate/delayed
+     * ack from an earlier, unrelated exchange — must not advance the chain. WebSocket has no
+     * equivalent of AUN's own retry-queue gate (Aun\Handler::_unQueue()), so this is the case
+     * that actually reproduces the bug ServiceDispatcher::ackEvents() now guards against.
+     */
+    public function testStrayAckWithWrongSequenceDoesNotAdvanceChain(): void
+    {
+        $oProvider = new AckChainMockProvider(0x01, 3);
+        $oServices = new ServiceDispatcher($this->oLogger, [$oProvider]);
+
+        $oPacketDispatcher = $this->createMock(PacketDispatcher::class);
+        $oHandler = new Handler($this->oLogger, $oServices, $oPacketDispatcher);
+        $oHandler->onOpen($this->oConnection);
+
+        $oServices->inboundPacket(new AckChainKickoffPacket(0x01, self::CLIENT_NET, self::CLIENT_STN));
+        $oProvider->getReplies();
+
+        // A stray ack for a sequence number that doesn't match the block in flight.
+        $oHandler->onMessage($this->oConnection, $this->makePktJson(iSeq: $oProvider->getLastSentSeq() + 1000));
+        $this->assertSame(1, $oProvider->getBlocksSent(), 'a mismatched-sequence ack must not advance the chain');
+        $this->assertFalse($oProvider->isComplete());
+
+        // The real ack, arriving after the stray one, must still drive the chain.
+        $oHandler->onMessage($this->oConnection, $this->makePktJson(iSeq: $oProvider->getLastSentSeq()));
+        $this->assertSame(2, $oProvider->getBlocksSent(), 'the correct-sequence ack must still advance the chain');
     }
 }

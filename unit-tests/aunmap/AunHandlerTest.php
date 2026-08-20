@@ -707,9 +707,14 @@ class AunHandlerTest extends TestCase
 
         $oRealServices = ServiceDispatcher::create($this->oLogger, []);
 
+        // getSequence() is lazily assigned and cached on first call, so reading it here
+        // (before send() embeds it in the wire frame) locks in the same value used later.
+        $oPacket = $this->makeEconetPacket();
+        $iSeq = $oPacket->getSequence();
+
         $bFired = false;
         $oReceivedAck = null;
-        $oRealServices->addAckEvent(self::DST_NET, self::DST_STN, function ($oAckPacket) use (&$bFired, &$oReceivedAck) {
+        $oRealServices->addAckEvent(self::DST_NET, self::DST_STN, $iSeq, function ($oAckPacket) use (&$bFired, &$oReceivedAck) {
             $bFired = true;
             $oReceivedAck = $oAckPacket;
         });
@@ -720,10 +725,8 @@ class AunHandlerTest extends TestCase
         $oSocket->method('send');
         $oHandler->setSocket($oSocket);
 
-        $oPacket = $this->makeEconetPacket();
         $oHandler->send($oPacket);
-        $oHandler->timer(); // transmits, assigns sequence
-        $iSeq = $oPacket->getSequence();
+        $oHandler->timer(); // transmits
 
         $sAck = $this->makeAunWire(3, 0, 0, $iSeq, '');
         $oHandler->receive($sAck, self::DST_HOST, '127.0.0.1:32768');

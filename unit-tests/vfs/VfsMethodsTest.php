@@ -733,6 +733,57 @@ class VfsMethodsTest extends TestCase
         $this->assertSame('from-plugin-2', $sResult);
     }
 
+    // A bare "*command" name not found in the CSD must also be searched for in
+    // the user's library directory (default $.LIBRARY) before giving up — this
+    // is what lets a client's "*command" successfully load a file that only
+    // lives in the library, not just the CSD.
+    public function testGetFileFallsBackToLibraryForBareUnqualifiedName(): void
+    {
+        SpyVfsPlugin::$fnGetFile = static function($oUser, FilePath $oPath): string {
+            if($oPath->getFilePath() === '$.LIBRARY.CMD'){
+                return 'from-library';
+            }
+            throw new VfsException('Not found', false);
+        };
+        $this->loginStation(1, 5);
+
+        $sResult = $this->silent(fn() => Vfs::getFile(1, 5, 'CMD'));
+        $this->assertSame('from-library', $sResult);
+    }
+
+    public function testGetFileDoesNotFallBackToLibraryForQualifiedPath(): void
+    {
+        SpyVfsPlugin::$fnGetFile = static function (): never { throw new VfsException('Not found', false); };
+        $this->loginStation(1, 5);
+
+        $this->expectException(\Exception::class);
+        $this->silent(fn() => Vfs::getFile(1, 5, '$.HOME.CMD'));
+
+        $aQueriedPaths = array_column(SpyVfsPlugin::$aCallLog, 'args');
+        foreach($aQueriedPaths as $aArgs){
+            $this->assertNotSame('$.LIBRARY.CMD', $aArgs[0] ?? null, 'A qualified path must never trigger a library lookup');
+        }
+    }
+
+    // The library is a fixed, server-wide location — a chroot'd user must
+    // still be able to reach it for command lookup, not have "$.LIBRARY"
+    // rewritten into "<chroot-root>.LIBRARY" (which won't exist).
+    public function testGetFileLibraryFallbackIgnoresChrootPrefix(): void
+    {
+        $oUser = $this->makeUser();
+        $oUser->setRoot('$.SOMEDISK');
+        SpyVfsPlugin::$fnGetFile = static function($oUser, FilePath $oPath): string {
+            if($oPath->getFilePath() === '$.LIBRARY.CMD'){
+                return 'from-library';
+            }
+            throw new VfsException('Not found', false);
+        };
+        $this->loginStation(1, 5, $oUser);
+
+        $sResult = $this->silent(fn() => Vfs::getFile(1, 5, 'CMD'));
+        $this->assertSame('from-library', $sResult);
+    }
+
     // =========================================================================
     // getMeta()
     // =========================================================================
@@ -803,6 +854,35 @@ class VfsMethodsTest extends TestCase
 
         $oResult = $this->silent(fn() => Vfs::getMeta(1, 5, '$.HOME.SHARED'));
         $this->assertSame($oEntry, $oResult);
+    }
+
+    public function testGetMetaFallsBackToLibraryForBareUnqualifiedName(): void
+    {
+        $oEntry = $this->makeDirectoryEntry('CMD', '$.LIBRARY.CMD');
+        SpyVfsPlugin::$fnGetDirListing = static function(string $sPath, array $a) use ($oEntry) {
+            if($sPath === '$.LIBRARY'){
+                return array_merge($a, ['CMD' => $oEntry]);
+            }
+            return $a; // CSD listing does not have it
+        };
+        $this->loginStation(1, 5);
+
+        $oResult = $this->silent(fn() => Vfs::getMeta(1, 5, 'CMD'));
+        $this->assertSame($oEntry, $oResult);
+    }
+
+    public function testGetMetaDoesNotFallBackToLibraryForQualifiedPath(): void
+    {
+        SpyVfsPlugin::$fnGetDirListing = static fn(string $p, array $a) => $a;
+        $this->loginStation(1, 5);
+
+        $this->expectException(\Exception::class);
+        $this->silent(fn() => Vfs::getMeta(1, 5, '$.HOME.CMD'));
+
+        $aQueriedDirs = array_column(SpyVfsPlugin::$aCallLog, 'args');
+        foreach($aQueriedDirs as $aArgs){
+            $this->assertNotSame('$.LIBRARY', $aArgs[0] ?? null, 'A qualified path must never trigger a library lookup');
+        }
     }
 
     // =========================================================================
@@ -990,6 +1070,80 @@ class VfsMethodsTest extends TestCase
         $this->assertInstanceOf(VfsException::class, $caught);
         $this->assertTrue($caught->isHard());
         $this->assertEmpty(SpyVfsPlugin2::$aCallLog, 'Second plugin must not be tried after hard exception');
+    }
+
+    // A bare "*command" name not found in the CSD (e.g. via *RUN, or the OPEN
+    // that backs it) must also be searched for in the user's library
+    // directory before giving up.
+    public function testCreateFsHandleFallsBackToLibraryWhenPluginReturnsNullForCsd(): void
+    {
+        $oUser = $this->makeUser();
+        $oLibFd = new FileDescriptor(
+            $this->oLogger, SpyVfsPlugin::class, $oUser,
+            '/tmp/spy', '$.LIBRARY.CMD', 'spy-lib', 4, true, false
+        );
+        SpyVfsPlugin::$fnBuildFd = static function($u, FilePath $oPath) use ($oLibFd) {
+            return $oPath->getFilePath() === '$.LIBRARY.CMD' ? $oLibFd : null;
+        };
+        $this->loginStation(1, 5, $oUser);
+
+        $oResult = $this->silent(fn() => Vfs::createFsHandle(1, 5, 'CMD', true, true));
+        $this->assertSame($oLibFd, $oResult);
+    }
+
+    // Mirrors LocalFile's real behaviour for a missing bare file: it never
+    // throws, it returns a "phantom" descriptor that is neither a file nor a
+    // directory. That must also trigger the library fallback.
+    public function testCreateFsHandleFallsBackToLibraryWhenCsdDescriptorIsPhantom(): void
+    {
+        $oUser = $this->makeUser();
+        $oPhantomFd = new FileDescriptor(
+            $this->oLogger, SpyVfsPlugin::class, $oUser,
+            '/tmp/spy', '$.HOME.CMD', null, 1, false, false // neither file nor dir
+        );
+        $oLibFd = new FileDescriptor(
+            $this->oLogger, SpyVfsPlugin::class, $oUser,
+            '/tmp/spy', '$.LIBRARY.CMD', 'spy-lib', 4, true, false
+        );
+        SpyVfsPlugin::$fnBuildFd = static function($u, FilePath $oPath) use ($oPhantomFd, $oLibFd) {
+            return $oPath->getFilePath() === '$.LIBRARY.CMD' ? $oLibFd : $oPhantomFd;
+        };
+        $this->loginStation(1, 5, $oUser);
+
+        $oResult = $this->silent(fn() => Vfs::createFsHandle(1, 5, 'CMD', true, true));
+        $this->assertSame($oLibFd, $oResult);
+    }
+
+    public function testCreateFsHandleDoesNotFallBackToLibraryWhenDirectoryRequested(): void
+    {
+        $oUser = $this->makeUser();
+        $oLibFd = new FileDescriptor(
+            $this->oLogger, SpyVfsPlugin::class, $oUser,
+            '/tmp/spy', '$.LIBRARY.CMD', 'spy-lib', 4, true, false
+        );
+        SpyVfsPlugin::$fnBuildFd = static function($u, FilePath $oPath) use ($oLibFd) {
+            return $oPath->getFilePath() === '$.LIBRARY.CMD' ? $oLibFd : null;
+        };
+        $this->loginStation(1, 5, $oUser);
+
+        $this->expectException(\Exception::class);
+        $this->silent(fn() => Vfs::createFsHandle(1, 5, 'CMD', true, true, true));
+    }
+
+    public function testCreateFsHandleDoesNotFallBackToLibraryForQualifiedPath(): void
+    {
+        $oUser = $this->makeUser();
+        $oLibFd = new FileDescriptor(
+            $this->oLogger, SpyVfsPlugin::class, $oUser,
+            '/tmp/spy', '$.LIBRARY.CMD', 'spy-lib', 4, true, false
+        );
+        SpyVfsPlugin::$fnBuildFd = static function($u, FilePath $oPath) use ($oLibFd) {
+            return $oPath->getFilePath() === '$.LIBRARY.CMD' ? $oLibFd : null;
+        };
+        $this->loginStation(1, 5, $oUser);
+
+        $this->expectException(\Exception::class);
+        $this->silent(fn() => Vfs::createFsHandle(1, 5, '$.HOME.CMD', true, true));
     }
 
     // =========================================================================

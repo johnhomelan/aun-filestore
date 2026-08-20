@@ -64,6 +64,10 @@ class RawLocalAckPacket implements EncapsulationInterface
     public function getPort(): int { return 0; }
     public function getPacketType(): string { return 'Ack'; }
     public function getData(): string { return ''; }
+    // A genuine local ack's own sequence (as reported by whichever real encapsulation
+    // observed it) plays no part in what relayAckIfKnown() echoes onward — that comes
+    // entirely from Map::rememberAckRelay()'s memory of the original SEND — so this stays null.
+    public function getSequence(): ?int { return null; }
     public function decode(string $sBinaryString): void {}
 
     public function buildEconetPacket(): EconetPacket
@@ -108,11 +112,14 @@ class RemoteBridgeAckRelayIntegrationTest extends TestCase
         $oXTcp = new MockTcpConnection();
         $oYTcp = new MockTcpConnection();
 
+        // Pinned to 1.1 (no <seq> field) — see testMultiBlockAckChainCompletesAcrossTheBridgeWith1_2
+        // below for the 1.2 sequence-carrying equivalent of this same scenario.
         // X physically serves network 2 (the BBC Micro's network).
         $oConnXtoY = new Connection(
             $this->oLogger, $oXTcp, 'server', 'secret', [2],
             static function (BridgePacket $p) {},
             static function (BridgePacket $p) {},
+            ['1.0', '1.1'],
         );
         // Y serves network 1 (where the file-server-like provider lives).
         $oConnYtoX = new Connection(
@@ -121,6 +128,7 @@ class RemoteBridgeAckRelayIntegrationTest extends TestCase
             function (BridgePacket $oAckPkt) use ($oServicesY) {
                 $oServicesY->inboundPacket($oAckPkt);
             },
+            ['1.0', '1.1'],
         );
 
         // Standard 4-message handshake, plus the 5th relay delivering X's
@@ -145,7 +153,7 @@ class RemoteBridgeAckRelayIntegrationTest extends TestCase
         $oPkt->setPort(0x99);
         $oPkt->setFlags(0);
         $oPkt->setData('block1');
-        $oServicesY->addAckEvent(2, 254, function ($p) use (&$bFired, &$oReceivedPkt) {
+        $oServicesY->addAckEvent(2, 254, $oPkt->getSequence(), function ($p) use (&$bFired, &$oReceivedPkt) {
             $bFired = true;
             $oReceivedPkt = $p;
         });
@@ -235,10 +243,13 @@ class RemoteBridgeAckRelayIntegrationTest extends TestCase
         $oXTcp = new MockTcpConnection();
         $oYTcp = new MockTcpConnection();
 
+        // Pinned to 1.1 (no <seq> field) — see testMultiBlockAckChainCompletesAcrossTheBridgeWith1_2
+        // below for the 1.2 sequence-carrying equivalent of this same scenario.
         $oConnXtoY = new Connection(
             $this->oLogger, $oXTcp, 'server', 'secret', [2],
             static function (BridgePacket $p) {},
             static function (BridgePacket $p) {},
+            ['1.0', '1.1'],
         );
         $oConnYtoX = new Connection(
             $this->oLogger, $oYTcp, 'client', 'secret', [1],
@@ -246,6 +257,7 @@ class RemoteBridgeAckRelayIntegrationTest extends TestCase
             function (BridgePacket $oAckPkt) use ($oServicesY) {
                 $oServicesY->inboundPacket($oAckPkt);
             },
+            ['1.0', '1.1'],
         );
 
         // Handshake, plus the 5th relay delivering X's NETWORKS announcement to Y.
@@ -294,5 +306,80 @@ class RemoteBridgeAckRelayIntegrationTest extends TestCase
 
         $this->assertSame(3, $oProviderY->getBlocksSent());
         $this->assertTrue($oProviderY->isComplete(), 'chain must be complete after the final relayed ack');
+    }
+
+    /**
+     * Protocol 1.2: the same scenario as testMultiBlockAckChainCompletesAcrossTheBridge, but with
+     * both sides negotiating the default (1.2+) version set, so SEND and ACK carry the real
+     * sequence number end-to-end. Proves two things a bare "ACK <net> <stn>" line can't: the
+     * negotiated wire format actually includes <seq>, and — the point of the whole feature — a
+     * stray relayed ack for the wrong sequence does not fire Y's registered callback, while the
+     * correct one still does.
+     */
+    public function testStraySequenceOverTheBridgeDoesNotFireYsCallbackButCorrectOneDoes(): void
+    {
+        Map::init($this->oLogger, '');
+
+        $oProviderY = new AckChainMockProvider(0x99, 3);
+        $oServicesY = new ServiceDispatcher($this->oLogger, [$oProviderY]);
+        $oServicesX = new ServiceDispatcher($this->oLogger, []);
+
+        $oXTcp = new MockTcpConnection();
+        $oYTcp = new MockTcpConnection();
+
+        // No $aSupportedVersions override — both sides advertise the full default set, so this
+        // negotiates the highest version they share (1.2).
+        $oConnXtoY = new Connection(
+            $this->oLogger, $oXTcp, 'server', 'secret', [2],
+            static function (BridgePacket $p) {},
+            static function (BridgePacket $p) {},
+        );
+        $oConnYtoX = new Connection(
+            $this->oLogger, $oYTcp, 'client', 'secret', [1],
+            static function (BridgePacket $p) {},
+            function (BridgePacket $oAckPkt) use ($oServicesY) {
+                $oServicesY->inboundPacket($oAckPkt);
+            },
+        );
+
+        $oConnXtoY->onData($oYTcp->allWritten()); $oYTcp->aWritten = [];
+        $oConnYtoX->onData($oXTcp->allWritten()); $oXTcp->aWritten = [];
+        $oConnXtoY->onData($oYTcp->allWritten()); $oYTcp->aWritten = [];
+        $oConnYtoX->onData($oXTcp->allWritten()); $oXTcp->aWritten = [];
+        $oConnXtoY->onData($oYTcp->allWritten()); $oYTcp->aWritten = [];
+
+        $this->assertSame('1.2', $oConnXtoY->getProtocolVersion());
+        $this->assertSame('1.2', $oConnYtoX->getProtocolVersion());
+
+        // Kick off the chain on Y: block 1 sent, addAckEvent(2, 254, seq) registered.
+        $oServicesY->inboundPacket(new AckChainKickoffPacket(0x99, 2, 254));
+        $this->assertSame(1, $oProviderY->getBlocksSent());
+        $iRealSeq = $oProviderY->getLastSentSeq();
+        $this->assertNotNull($iRealSeq);
+
+        // Route block 1 across the bridge for real — on a 1.2 connection the SEND line itself
+        // now carries $iRealSeq, which is what populates X's Map::rememberAckRelay() entry.
+        foreach ($oServicesY->getReplies() as $oReply) {
+            $oConnYtoX->send($oReply);
+        }
+        $sSendLine = $oYTcp->writtenLines()[0] ?? '';
+        $this->assertStringContainsString(" {$iRealSeq} ", $sSendLine, 'SEND line must carry the sequence number on a 1.2 connection');
+        $oConnXtoY->onData($oYTcp->allWritten()); $oYTcp->aWritten = [];
+
+        // X's own local hardware ack arrives; the relayed ACK line must now include the
+        // remembered sequence number.
+        $oServicesX->inboundPacket(new RawLocalAckPacket(2, 254));
+        $this->assertSame(["ACK 2 254 {$iRealSeq}"], $oXTcp->writtenLines());
+        $oXTcp->aWritten = [];
+
+        // A stray relayed ack for the wrong sequence — simulating a duplicate/delayed relay,
+        // or simply a differently-behaving peer — must not advance Y's chain.
+        $oConnYtoX->onData("ACK 2 254 " . ($iRealSeq + 1000) . "\n");
+        $this->assertSame(1, $oProviderY->getBlocksSent(), 'a mismatched-sequence relayed ack must not advance the chain');
+        $this->assertFalse($oProviderY->isComplete());
+
+        // The real relayed ack, arriving after the stray one, must still drive the chain.
+        $oConnYtoX->onData("ACK 2 254 {$iRealSeq}\n");
+        $this->assertSame(2, $oProviderY->getBlocksSent(), 'the correct-sequence relayed ack must still advance the chain');
     }
 }

@@ -61,7 +61,7 @@ class MockVfsPlugin implements PluginInterface
     static public function init(\Psr\Log\LoggerInterface $oLogger, bool $bMultiuser = false): void {}
     static public function houseKeeping(): void {}
 
-    static public function _buildFiledescriptorFromEconetPath(User $oUser, FilePath $oEconetPath, bool $bMustExist, bool $bReadOnly): ?FileDescriptor
+    static public function _buildFiledescriptorFromEconetPath(User $oUser, FilePath $oEconetPath, bool $bMustExist, bool $bReadOnly,bool $bDirectory=false): ?FileDescriptor
     {
         return null;
     }

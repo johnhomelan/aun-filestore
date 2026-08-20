@@ -18,7 +18,8 @@ use Monolog\Logger;
 use Monolog\Handler\NullHandler;
 use HomeLan\FileStore\Authentication\User as user;
 use HomeLan\FileStore\Vfs\Plugin\LocalFile as vfspluginlocalfile;
-use HomeLan\FileStore\Vfs\FilePath; 
+use HomeLan\FileStore\Vfs\FilePath;
+use HomeLan\FileStore\Vfs\Exception as VfsException;
 
 class vfspluginlocalfileTest extends TestCase {
 	protected $oUser = NULL;
@@ -194,6 +195,58 @@ class vfspluginlocalfileTest extends TestCase {
 		vfspluginlocalfile::fsLock($this->oUser,null,false);
 		vfspluginlocalfile::fsUnlock($this->oUser,null);
 		$this->assertTrue(true);
+	}
+
+	// -----------------------------------------------------------------------
+	// _buildFiledescriptorFromEconetPath with $bDirectory=true
+	//
+	// CSD/URD/LIB handles must only ever resolve to a directory that already
+	// exists on disk. Regression coverage for a bug where a missing homedir
+	// was silently auto-created as an empty FILE (via fopen 'c+'), which then
+	// broke login entirely because opening that same "file" twice (once for
+	// URD, once for CSD) tripped the single-writer lock.
+	// -----------------------------------------------------------------------
+
+	public function testBuildFiledescriptorDirectoryTrueNeverCreatesAFile()
+	{
+		$sRoot = config::getValue('vfs_plugin_localfile_root');
+		try {
+			vfspluginlocalfile::_buildFiledescriptorFromEconetPath($this->oUser,new FilePath('$','MISSINGDIR'),false,false,true);
+			$this->fail('Expected a VfsException for a missing directory');
+		}catch(VfsException $oVfsException){
+			$this->assertSame('No such directory',$oVfsException->getMessage());
+		}
+		$this->assertFalse(file_exists($sRoot.DIRECTORY_SEPARATOR.'MISSINGDIR'));
+	}
+
+	public function testBuildFiledescriptorDirectoryTrueOpensExistingDirectory()
+	{
+		$sRoot = config::getValue('vfs_plugin_localfile_root');
+		mkdir($sRoot.DIRECTORY_SEPARATOR.'REALDIR');
+
+		$oFd = vfspluginlocalfile::_buildFiledescriptorFromEconetPath($this->oUser,new FilePath('$','REALDIR'),false,false,true);
+		$this->assertTrue($oFd->isDir());
+		$this->assertFalse($oFd->isFile());
+	}
+
+	public function testBuildFiledescriptorDirectoryTrueOnExistingFileReportsNotADirectory()
+	{
+		$sRoot = config::getValue('vfs_plugin_localfile_root');
+		file_put_contents($sRoot.DIRECTORY_SEPARATOR.'AFILE',"hello");
+
+		$oFd = vfspluginlocalfile::_buildFiledescriptorFromEconetPath($this->oUser,new FilePath('$','AFILE'),false,false,true);
+		$this->assertFalse($oFd->isDir());
+		$this->assertTrue($oFd->isFile());
+	}
+
+	public function testBuildFiledescriptorDirectoryFalseStillAutoCreatesFile()
+	{
+		//Unaffected — OPEN-style file creation must keep working when a
+		//directory handle was not requested.
+		$sRoot = config::getValue('vfs_plugin_localfile_root');
+		$oFd = vfspluginlocalfile::_buildFiledescriptorFromEconetPath($this->oUser,new FilePath('$','NEWFILE'),false,false,false);
+		$this->assertTrue($oFd->isFile());
+		$this->assertTrue(file_exists($sRoot.DIRECTORY_SEPARATOR.'NEWFILE'));
 	}
 
 }

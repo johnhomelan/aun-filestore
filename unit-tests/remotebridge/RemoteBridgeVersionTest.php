@@ -306,13 +306,13 @@ class RemoteBridgeVersionTest extends TestCase
     public function testFullHandshakeDefaultsToHighestSupportedVersion(): void
     {
         // No custom versions — both sides use SUPPORTED_VERSIONS, so they
-        // negotiate up to the highest version both understand (1.1, since
-        // that added the ACK message — see docs/protocols/remote-bridge.md).
+        // negotiate up to the highest version both understand (1.2, which
+        // added the <seq> field on SEND/ACK — see docs/protocols/remote-bridge.md).
         [$oServer, $oClient] = $this->doHandshake();
         $this->assertTrue($oServer->isAuthenticated());
         $this->assertTrue($oClient->isAuthenticated());
-        $this->assertSame('1.1', $oServer->getProtocolVersion());
-        $this->assertSame('1.1', $oClient->getProtocolVersion());
+        $this->assertSame('1.2', $oServer->getProtocolVersion());
+        $this->assertSame('1.2', $oClient->getProtocolVersion());
     }
 
     public function testFullHandshakeStillWorksWithA1_0OnlyPeer(): void

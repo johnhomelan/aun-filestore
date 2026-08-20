@@ -99,6 +99,22 @@ class Handler implements MessageComponentInterface {
 					}
 				}
 
+				//A destination network of 0 likewise means "my local network".  This server is
+				//station CONFIG_websocket_station_address on every client's local network, so a
+				//packet for that station number is for us; anything else is for another station
+				//on the client's own allocated network.
+				if ($oJsonMessage->getDstNetwork() === 0) {
+					if ($oJsonMessage->getDstStation() == config::getValueAsInt('websocket_station_address')) {
+						$oJsonMessage->setDstNetwork(config::getValueAsInt('websocket_network_address'));
+					} else {
+						$sMappedAddress = WebSocketMap::webSocketToEconetAddress($oConnection);
+						if ($sMappedAddress !== null) {
+							[$iMappedNetwork, ] = explode('.', $sMappedAddress, 2);
+							$oJsonMessage->setDstNetwork((int) $iMappedNetwork);
+						}
+					}
+				}
+
 				$iSeq    = $oJsonMessage->getSequence();
 				$iConnId = spl_object_id($oConnection);
 

@@ -24,6 +24,7 @@ class AckChainMockProvider implements ProviderInterface
     private ?ServiceDispatcher $oServiceDispatcher = null;
     private int $iBlocksSent = 0;
     private bool $bComplete = false;
+    private ?int $iLastSentSeq = null;
 
     /** @var EconetPacket[] */
     private array $aReplies = [];
@@ -72,6 +73,12 @@ class AckChainMockProvider implements ProviderInterface
         return $this->bComplete;
     }
 
+    /** The sequence number of the block most recently sent — whatever ack is currently awaited. */
+    public function getLastSentSeq(): ?int
+    {
+        return $this->iLastSentSeq;
+    }
+
     private function sendNextBlock(int $iNetwork, int $iStation): void
     {
         $this->iBlocksSent++;
@@ -83,13 +90,15 @@ class AckChainMockProvider implements ProviderInterface
         $oPkt->setFlags(0);
         $oPkt->setData("block{$this->iBlocksSent}");
         $this->aReplies[] = $oPkt;
+        $iSentSeq = $oPkt->getSequence();
+        $this->iLastSentSeq = $iSentSeq;
 
         if ($this->iBlocksSent >= $this->iTotalBlocks) {
             $this->bComplete = true;
             return;
         }
 
-        $this->oServiceDispatcher->addAckEvent($iNetwork, $iStation, function () use ($iNetwork, $iStation) {
+        $this->oServiceDispatcher->addAckEvent($iNetwork, $iStation, $iSentSeq, function () use ($iNetwork, $iStation) {
             $this->sendNextBlock($iNetwork, $iStation);
         });
     }

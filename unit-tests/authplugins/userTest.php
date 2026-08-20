@@ -47,7 +47,7 @@ class userTest extends TestCase {
 	{
 		$oUser = new user();
 		$oUser->setHomedir('home.test');
-		$this->assertSame('home.test', $oUser->getCsd());
+		$this->assertSame('$.home.test', $oUser->getCsd());
 	}
 
 	public function testGetCsdReturnNullWhenNeitherCsdNorHomedirIsSet(): void

@@ -33,6 +33,7 @@ class FakeIPv4Admin extends IPv4
     public array $aStubRoutes      = [];
     public array $aStubNatEntries  = [];
     public array $aStubConnTrack   = [];
+    public array $aStubRelayRegistrations = [];
 
     protected function createInterfaces(?string $sConfig = null): Interfaces
     {
@@ -54,6 +55,7 @@ class FakeIPv4Admin extends IPv4
     public function getRoutes(): array      { return $this->aStubRoutes; }
     public function getNatEntries(): array  { return $this->aStubNatEntries; }
     public function getConnTrack(): array   { return $this->aStubConnTrack; }
+    public function getRelayRegistrations(): array { return $this->aStubRelayRegistrations; }
 }
 
 // ---------------------------------------------------------------------------
@@ -135,7 +137,7 @@ class IPv4AdminTest extends TestCase
     public function testGetEntityTypesHasAllExpectedKeys(): void
     {
         $aTypes = $this->oAdmin->getEntityTypes();
-        foreach (['arp', 'interfaces', 'routes', 'nat', 'conntrack'] as $sKey) {
+        foreach (['arp', 'interfaces', 'routes', 'nat', 'conntrack', 'remotesocket'] as $sKey) {
             $this->assertArrayHasKey($sKey, $aTypes);
         }
     }
@@ -183,6 +185,13 @@ class IPv4AdminTest extends TestCase
         $this->assertArrayHasKey('srcip', $aFields);
         $this->assertArrayHasKey('dstip', $aFields);
         $this->assertArrayHasKey('state', $aFields);
+    }
+
+    public function testGetEntityFieldsRemoteSocketHasExpectedKeys(): void
+    {
+        $aFields = $this->oAdmin->getEntityFields('remotesocket');
+        $this->assertArrayHasKey('protocol', $aFields);
+        $this->assertArrayHasKey('port', $aFields);
     }
 
     public function testGetEntityFieldsUnknownReturnsEmpty(): void
@@ -281,6 +290,27 @@ class IPv4AdminTest extends TestCase
         $oEntity = $aEntities[0];
         $this->assertSame('8.8.8.8', $oEntity->getValue('dstip'));
         $this->assertSame('ct1', $oEntity->getId()); // id field is 'conntrack'
+    }
+
+    // -----------------------------------------------------------------------
+    // getEntities — remotesocket
+    // -----------------------------------------------------------------------
+
+    public function testGetEntitiesRemoteSocketReturnsEmptyByDefault(): void
+    {
+        $this->assertSame([], $this->oAdmin->getEntities('remotesocket'));
+    }
+
+    public function testGetEntitiesRemoteSocketCallsProviderGetRelayRegistrations(): void
+    {
+        $this->oProvider->aStubRelayRegistrations = [
+            ['protocol' => 'udp', 'port' => '32770'],
+        ];
+        $aEntities = $this->oAdmin->getEntities('remotesocket');
+        $this->assertCount(1, $aEntities);
+        $oEntity = $aEntities[0];
+        $this->assertSame('udp', $oEntity->getValue('protocol'));
+        $this->assertSame('32770', $oEntity->getId()); // id field is 'port'
     }
 
     // -----------------------------------------------------------------------

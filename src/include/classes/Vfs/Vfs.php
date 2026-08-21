@@ -829,6 +829,30 @@ class Vfs {
 
 
 	/**
+	 * Enumerates every open file/dir handle across all sessions, for admin/diagnostic use.
+	 *
+	 * @return list<array{network:int, station:int, handle:int, path:string, type:string}>
+	*/
+	static public function getOpenHandles(): array
+	{
+		$aReturn = [];
+		foreach(self::$aHandles as $iNetwork=>$aStations){
+			foreach($aStations as $iStation=>$aHandles){
+				foreach($aHandles as $iHandle=>$oHandle){
+					$aReturn[] = [
+						'network' => $iNetwork,
+						'station' => $iStation,
+						'handle'  => $iHandle,
+						'path'    => $oHandle->getEconetPath(),
+						'type'    => $oHandle->isDir() ? 'dir' : 'file',
+					];
+				}
+			}
+		}
+		return $aReturn;
+	}
+
+	/**
 	  * Gets a sin for a full econet file path
 	  *
 	  * @return int A uniqe 24bit int for a file

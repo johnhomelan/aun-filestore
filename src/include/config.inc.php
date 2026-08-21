@@ -71,6 +71,67 @@ safe_define('CONFIG_remote_bridge_enabled', false);
 safe_define('CONFIG_remote_bridge_map_file', 'remotebridge.txt');
 safe_define('CONFIG_remote_bridge_server_address', '0.0.0.0');
 
+// Remote Socket Protocol relay server (see docs/protocols/remote-socket.md).
+// remote_socket_relay_secret has no default; it must be set explicitly for the feature to work.
+safe_define('CONFIG_remote_socket_relay_enabled', false);
+safe_define('CONFIG_remote_socket_relay_listen_address', '0.0.0.0');
+safe_define('CONFIG_remote_socket_relay_listen_port', '8091');
+safe_define('CONFIG_remote_socket_relay_secret', '');
+
+safe_define('CONFIG_sharefs_share_list_file', 'sharelist.txt');
+safe_define('CONFIG_sharefs_listen_address', '0.0.0.0');
+safe_define('CONFIG_sharefs_freeway_broadcast_address', '255.255.255.255');
+safe_define('CONFIG_sharefs_freeway_port', 32770);
+safe_define('CONFIG_sharefs_accessplus_port', 32771);
+safe_define('CONFIG_sharefs_sharefsdata_port', 49171);
+safe_define('CONFIG_sharefs_host_name', '');
+safe_define('CONFIG_sharefs_webadmin_listen_address', '0.0.0.0');
+safe_define('CONFIG_sharefs_webadmin_listen_port', '8081');
+
+// sharefsd has no per-client login (real Access+ has no user-account concept - see
+// docs/protocols/sharefs.md); every ShareFS operation runs as this one fixed identity,
+// logged in once at daemon startup.
+safe_define('CONFIG_sharefs_service_username', '');
+safe_define('CONFIG_sharefs_service_password', '');
+safe_define('CONFIG_sharefs_service_network', 254);
+safe_define('CONFIG_sharefs_service_station', 1);
+
+// When enabled, sharefsd receives its Freeway/Access+/ShareFS UDP traffic over a Remote Socket
+// Protocol connection to a filestored instance instead of binding its own UDP sockets (see
+// docs/protocols/remote-socket.md). remote_socket_relay_secret must match filestored's
+// remote_socket_relay_secret.
+safe_define('CONFIG_sharefs_remote_socket_relay_enabled', false);
+safe_define('CONFIG_sharefs_remote_socket_relay_address', '127.0.0.1:8091');
+safe_define('CONFIG_sharefs_remote_socket_relay_secret', '');
+
+// dnsd answers DNS queries from a Unix-style hosts file (see docs/protocols/dns.md). It always
+// receives its UDP traffic over a Remote Socket Protocol connection to a filestored instance
+// (see docs/protocols/remote-socket.md) rather than binding a real UDP socket.
+// dns_remote_socket_relay_secret must match filestored's remote_socket_relay_secret.
+safe_define('CONFIG_dns_hosts_file', 'hosts.txt');
+safe_define('CONFIG_dns_port', 53);
+safe_define('CONFIG_dns_remote_socket_relay_address', '127.0.0.1:8091');
+safe_define('CONFIG_dns_remote_socket_relay_secret', '');
+
+// Forwards a query the hosts file can't answer to an external DNS server, asynchronously (see
+// docs/protocols/dns.md). dns_forwarder_allowed_domains, when non-empty, restricts forwarding
+// to names within those domains (comma-separated, forward and/or in-addr.arpa/ip6.arpa
+// entries mixed freely) - leave it empty to forward anything not found locally.
+safe_define('CONFIG_dns_forwarder_enabled', false);
+safe_define('CONFIG_dns_forwarder_address', '');
+safe_define('CONFIG_dns_forwarder_timeout', 2);
+safe_define('CONFIG_dns_forwarder_allowed_domains', '');
+
+// ntpd answers NTP client requests from the host system clock (see docs/protocols/ntp.md). It
+// always receives its UDP traffic over a Remote Socket Protocol connection to a filestored
+// instance (see docs/protocols/remote-socket.md) rather than binding a real UDP socket.
+// ntp_remote_socket_relay_secret must match filestored's remote_socket_relay_secret.
+safe_define('CONFIG_ntp_port', 123);
+safe_define('CONFIG_ntp_stratum', 1);
+safe_define('CONFIG_ntp_reference_id', 'LOCL');
+safe_define('CONFIG_ntp_remote_socket_relay_address', '127.0.0.1:8091');
+safe_define('CONFIG_ntp_remote_socket_relay_secret', '');
+
 safe_define('CONFIG_macemail_store_dir', '/var/lib/aun-filestore-macemail');
 safe_define('CONFIG_macemail_usergroup', 'MAIL');
 safe_define('CONFIG_macemail_max_slots', 32);

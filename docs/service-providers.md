@@ -130,7 +130,7 @@ ACKs are expected.
 | `FileServer` | `0x99`, `econet_data_stream_port` | Acorn Level 4 file server protocol |
 | `PrintServer` | `0x9F`, `0xD1` | Econet print spooler |
 | `Bridge` | `0x9C`, `0x9D` | Bridge query/reply protocol |
-| `IPv4` | several | EconetA IPv4 forwarding, ARP, NAT, ICMP |
+| `IPv4` | several | EconetA IPv4 forwarding, ARP, NAT, ICMP, and (when `remote_socket_relay_enabled`) UDP relay to an external process — see `docs/protocols/remote-socket.md` |
 | `BeebTerm` | — | SJ Research BeebTerm terminal sessions |
 | `Torchnet` | `0x90`, `0x91` | TorchNet CP/M file services |
 | `MaceMail` | several (see `docs/protocols/macemail.md`) | MaceMail electronic-mail server — logon/logoff, directory listing, mail check, send/list/read/delete mail, new-mail notifications, per-user store slots, mailbox scan/Look, and chat invites/availability, plus an admin interface for slot provisioning, forced logoff, and canned system-broadcast messages (the peer-to-peer chat text exchange itself is client-to-client and needs no server support) |

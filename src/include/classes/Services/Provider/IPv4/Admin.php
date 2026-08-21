@@ -39,7 +39,7 @@ class Admin implements AdminInterface
 	*/
 	public function getDescription(): string
 	{
-		return "Provides a IPv4 forwarding service.\nIt implements the EconetA version of IPv4 over econet, and forwards packets between econet networks.\nIt also implements ARP, to map layer 2 (econet) addressing to layer 3 (ip) addressing.\nSome ICMP messages types are implemented to allow remote host to be made aware of error conditions.\n";
+		return "Provides a IPv4 forwarding service.\nIt implements the EconetA version of IPv4 over econet, and forwards packets between econet networks.\nIt also implements ARP, to map layer 2 (econet) addressing to layer 3 (ip) addressing.\nSome ICMP messages types are implemented to allow remote host to be made aware of error conditions.\nWhen the Remote Socket Protocol relay is enabled, UDP traffic to an interface can be relayed to a registered external process instead of being dropped.\n";
 	}
 
 	/**
@@ -93,7 +93,7 @@ class Admin implements AdminInterface
 	*/
 	public function getEntityTypes(): array
 	{
-		return ['arp'=>'Arp Table','interfaces'=>'IPv4 Interfaces','routes'=>'Routing Table','nat'=>'Nat Rules','conntrack'=>'Conn Track Entries'];
+		return ['arp'=>'Arp Table','interfaces'=>'IPv4 Interfaces','routes'=>'Routing Table','nat'=>'Nat Rules','conntrack'=>'Conn Track Entries','remotesocket'=>'Remote Socket Relay'];
 	}
 
 	/**
@@ -109,6 +109,7 @@ class Admin implements AdminInterface
 			'routes'=>['network'=>'string','subnet'=>'string','gw'=>'string','metric'=>'int'],
 			'nat'=>['ip_from'=>'string','ip_to'=>'string','port_from'=>'int','port_to'=>'int'],
 			'conntrack'=>['srcip'=>'string','dstip'=>'string','srcport'=>'int','dstport'=>'int','state'=>'string','last_activity'=>'int'],
+			'remotesocket'=>['protocol'=>'string','port'=>'string'],
          	default => [],
      		};
  	}
@@ -140,6 +141,10 @@ class Admin implements AdminInterface
 			case 'conntrack':
 				$aConntrackEntires = $this->oProvider->getConnTrack();
 				$aReturn = AdminEntity::createCollection($sType,$this->getEntityFields($sType),$aConntrackEntires,null,'conntrack');
+				return $aReturn;
+			case 'remotesocket':
+				$aRegistrations = $this->oProvider->getRelayRegistrations();
+				$aReturn = AdminEntity::createCollection($sType,$this->getEntityFields($sType),$aRegistrations,null,'port');
 				return $aReturn;
 		}
 		return [];

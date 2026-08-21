@@ -24,6 +24,9 @@ use HomeLan\FileStore\Messages\TCPRequest;
 use HomeLan\FileStore\Messages\IcmpRequest;
 use HomeLan\FileStore\Messages\IcmpEchoReply;
 use HomeLan\FileStore\Messages\IcmpUnreachable;
+use HomeLan\FileStore\Messages\UdpRequest;
+use HomeLan\FileStore\Messages\UdpEconetReply;
+use HomeLan\FileStore\RemoteSocket\RelayServer;
 use HomeLan\FileStore\Services\Provider\IPv4\Arpcache;
 use HomeLan\FileStore\Services\Provider\IPv4\Interfaces;
 use HomeLan\FileStore\Services\Provider\IPv4\Routes;
@@ -53,8 +56,9 @@ class IPv4 implements ProviderInterface {
 	private Interfaces $oInterfaceTable;
 	private Routes $oRoutingTable;
 	private NAT $oNat;
+	private ?RelayServer $oRelayServer = null;
 
-	//Default time to hold IPv4 packets, waiting for an apr response in seconds 
+	//Default time to hold IPv4 packets, waiting for an apr response in seconds
 	const DEFAULT_ARP_WAIT_TIMEOUT = 30;
 
 	/**
@@ -93,6 +97,16 @@ class IPv4 implements ProviderInterface {
 	private function addReplyToBuffer(EconetPacket $oReply): void
 	{
 		$this->aReplyBuffer[]=$oReply;
+	}
+
+	/**
+	 * Wires up the Remote Socket Protocol relay server (see docs/protocols/remote-socket.md),
+	 * letting UDP traffic addressed to an interface IP be forwarded to a registered relay client
+	 * instead of being dropped. Set up by Command\React, gated on config::remote_socket_relay_enabled.
+	*/
+	public function setRelayServer(RelayServer $oRelayServer): void
+	{
+		$this->oRelayServer = $oRelayServer;
 	}
 
 	public function getName(): string
@@ -190,6 +204,8 @@ class IPv4 implements ProviderInterface {
 				if($this->oInterfaceTable->isInterfaceIP($oIPv4->getDstIP())){
 					if($oIPv4->getProtocol() === 'ICMP'){
 						$this->handleIcmpForInterface($oIPv4, $oPacket);
+					}elseif($oIPv4->getProtocol() === 'UDP'){
+						$this->handleUdpForInterface($oPacket);
 					}
 					break;
 				};
@@ -312,6 +328,60 @@ class IPv4 implements ProviderInterface {
 		$oReply->setSequence($oIcmp->getSequence());
 		$oReply->setData($oIcmp->getEchoData());
 		$this->oLogger->debug("IPv4: Sending ICMP echo reply to ".$oIPv4->getSrcIP());
+		$this->addReplyToBuffer($oReply->buildEconetpacket());
+	}
+
+	/**
+	 * Forwards a UDP datagram addressed to one of our interfaces on to the Remote Socket
+	 * Protocol relay server, if one is configured and a client is registered for this port.
+	 * Silently dropped otherwise, matching this codebase's existing behaviour for ports nothing
+	 * is listening on.
+	*/
+	private function handleUdpForInterface(EconetPacket $oPacket): void
+	{
+		if($this->oRelayServer === null){
+			return;
+		}
+
+		$oUdp = new UdpRequest($oPacket, $this->oLogger);
+		if(!$oUdp->isValid()){
+			return;
+		}
+
+		$this->oRelayServer->relayInbound('UDP', $oUdp->getDstPort(), $oUdp->getDstIP(), $oUdp->getSrcIP(), $oUdp->getSrcPort(), $oUdp->getPayload());
+	}
+
+	/**
+	 * Called by the relay server when a reply frame arrives back over the Remote Socket
+	 * Protocol connection, to be sent back out over Econet as a UDP datagram from the interface
+	 * the original request arrived on.
+	*/
+	public function injectRelayReply(string $sLocalAddr, int $iLocalPort, string $sRemoteAddr, int $iRemotePort, string $sPayload): void
+	{
+		try {
+			$aIface = $this->oInterfaceTable->getInterfaceFor($sLocalAddr);
+		}catch(InterfaceNotFound){
+			$this->oLogger->debug("IPv4: relay reply for unknown local interface {$sLocalAddr}, dropping");
+			return;
+		}
+
+		try {
+			$aEconetDst = $this->oArpTable->getNetworkAndStation($sRemoteAddr);
+		}catch(ArpEntryNotFound){
+			$this->oLogger->debug("IPv4: relay reply for {$sRemoteAddr} with no arp entry, dropping");
+			return;
+		}
+
+		$oReply = new UdpEconetReply();
+		$oReply->setSrcIP($sLocalAddr);
+		$oReply->setDstIP($sRemoteAddr);
+		$oReply->setSrcStation($aIface['station']);
+		$oReply->setSrcNetwork($aIface['network']);
+		$oReply->setDstStation($aEconetDst['station']);
+		$oReply->setDstNetwork($aEconetDst['network']);
+		$oReply->setSrcPort($iLocalPort);
+		$oReply->setDstPort($iRemotePort);
+		$oReply->setData($sPayload);
 		$this->addReplyToBuffer($oReply->buildEconetpacket());
 	}
 
@@ -454,5 +524,13 @@ class IPv4 implements ProviderInterface {
 	public function getConnTrack(): array
 	{
 		return $this->oNat->dumpConnTrack();
+	}
+
+	/**
+	 * @return array<int,array{protocol:string,port:string}>
+	*/
+	public function getRelayRegistrations(): array
+	{
+		return $this->oRelayServer?->getRegistrations() ?? [];
 	}
 }

@@ -729,6 +729,276 @@ IP address to bind the remote bridge TCP server listeners to.  Default is `0.0.0
 remote_bridge_server_address = 0.0.0.0
 ~~~~~~
 
+Remote Socket Protocol
+==
+
+These keys configure the listening (`filestored`) side of the Remote Socket Protocol relay — a WebSocket relay that forwards UDP traffic arriving at an EconetA interface to a registered client process such as `sharefsd`, and its replies back again.  See [docs/protocols/remote-socket.md](protocols/remote-socket.md) for the wire protocol, and the `sharefsd`-side keys under [ShareFS / Access+](#sharefs--access) below.
+
+**remote_socket_relay_enabled**
+
+Enables the relay server.  When `true`, a WebSocket listener is started (on a separate port from `websocket_listen_port`) and UDP traffic to an interface IP on a port a client has registered for is relayed instead of dropped.  Default is `false`.
+
+~~~~~~
+remote_socket_relay_enabled = false
+~~~~~~
+
+**remote_socket_relay_listen_address**
+
+IP address the relay WebSocket server binds to.  Default is `0.0.0.0`.
+
+~~~~~~
+remote_socket_relay_listen_address = 0.0.0.0
+~~~~~~
+
+**remote_socket_relay_listen_port**
+
+TCP port the relay WebSocket server binds to.  Default is `8091`.
+
+~~~~~~
+remote_socket_relay_listen_port = 8091
+~~~~~~
+
+**remote_socket_relay_secret**
+
+Shared secret clients must present in their `hello` frame.  Mandatory — there is no way to run the relay unauthenticated.  No default; must be set for the feature to work, and must match the corresponding `*_remote_socket_relay_secret` key on every client (`sharefs_remote_socket_relay_secret` for `sharefsd`, `dns_remote_socket_relay_secret` for `dnsd`, `ntp_remote_socket_relay_secret` for `ntpd`).
+
+~~~~~~
+remote_socket_relay_secret = a-strong-shared-secret
+~~~~~~
+
+ShareFS / Access+
+==
+
+These keys configure `sharefsd`, a **separate daemon and process** from `filestored` (own executable `src/sharefsd`, own config, own admin web UI) that serves Freeway discovery, Access+ authentication, and the ShareFS data protocol — all three are UDP/IP, not Econet encapsulations.  See [docs/SHAREFSD.md](SHAREFSD.md) for the daemon's code structure and [docs/protocols/sharefs.md](protocols/sharefs.md) for the wire protocols.  `sharefsd` also reads `vfs_plugins`, `security_mode`, `security_*`, and `housekeeping_interval` from the sections above, since it reuses the same `Vfs`/`Security`/`config` classes `filestored` does.
+
+**sharefs_share_list_file**
+
+Path to the ShareFS share list file.  This file defines the named shares exposed to ShareFS clients, and their attributes (protected/readonly/hidden).  See [docs/SHAREFSD.md](SHAREFSD.md) for the file format.  Default is `sharelist.txt`.
+
+~~~~~~
+sharefs_share_list_file = sharelist.txt
+~~~~~~
+
+**sharefs_service_username** / **sharefs_service_password**
+
+Real ShareFS/Access+ has no per-client login of its own — see [docs/protocols/sharefs.md](protocols/sharefs.md).  Every ShareFS file operation instead runs as one fixed identity, logged into the existing user database (the same one `filestored` uses) once at daemon startup.  `sharefsd` refuses to start if this login fails.  No default — must be set to a valid account.
+
+~~~~~~
+sharefs_service_username = sharefs
+sharefs_service_password = a-strong-password
+~~~~~~
+
+**sharefs_service_network** / **sharefs_service_station**
+
+The synthetic Econet network/station address the service identity above logs in at.  Only meaningful internally (there is no real Econet traffic involved) — any values not otherwise in use are fine.  Default is network `254`, station `1`.
+
+~~~~~~
+sharefs_service_network = 254
+sharefs_service_station = 1
+~~~~~~
+
+**sharefs_listen_address**
+
+IP address the server binds all three ShareFS UDP sockets (Freeway, Access+, ShareFS data) to.  Default is `0.0.0.0`.
+
+~~~~~~
+sharefs_listen_address = 0.0.0.0
+~~~~~~
+
+**sharefs_freeway_broadcast_address**
+
+Broadcast address used for the periodic Freeway share-availability announcements.  Default is `255.255.255.255`.
+
+~~~~~~
+sharefs_freeway_broadcast_address = 255.255.255.255
+~~~~~~
+
+**sharefs_freeway_port**
+
+UDP port for Freeway discovery broadcasts.  Default is `32770`.
+
+~~~~~~
+sharefs_freeway_port = 32770
+~~~~~~
+
+**sharefs_accessplus_port**
+
+UDP port for Access+ per-share-password authentication.  Default is `32771`.
+
+~~~~~~
+sharefs_accessplus_port = 32771
+~~~~~~
+
+**sharefs_sharefsdata_port**
+
+UDP port for the ShareFS file-data RPC protocol.  Default is `49171`.
+
+~~~~~~
+sharefs_sharefsdata_port = 49171
+~~~~~~
+
+**sharefs_host_name**
+
+Host name this server advertises in Freeway broadcasts.  Empty by default, which falls back to the OS hostname (`gethostname()`).
+
+~~~~~~
+sharefs_host_name =
+~~~~~~
+
+**sharefs_webadmin_listen_address**
+
+IP address to bind sharefsd's admin web server to.  Default is `0.0.0.0` (all interfaces).
+
+~~~~~~
+sharefs_webadmin_listen_address = 0.0.0.0
+~~~~~~
+
+**sharefs_webadmin_listen_port**
+
+TCP port for sharefsd's admin web interface.  Deliberately different from `webadmin_listen_port` so both daemons' admin UIs can run on the same host at once.  Default is `8081`.
+
+~~~~~~
+sharefs_webadmin_listen_port = 8081
+~~~~~~
+
+**sharefs_remote_socket_relay_enabled**
+
+When `true`, `sharefsd` receives its Freeway/Access+/ShareFS-data UDP traffic over a Remote Socket Protocol connection to a `filestored` relay instead of binding its own UDP sockets on `sharefs_freeway_port`/`sharefs_accessplus_port`/`sharefs_sharefsdata_port`.  See [Remote Socket Protocol](#remote-socket-protocol) above and [docs/protocols/remote-socket.md](protocols/remote-socket.md).  Purely additive: when `false` (the default), sharefsd behaves exactly as if this feature didn't exist.  Default is `false`.
+
+~~~~~~
+sharefs_remote_socket_relay_enabled = false
+~~~~~~
+
+**sharefs_remote_socket_relay_address**
+
+`host:port` of the `filestored` relay server to connect to.  Default is `127.0.0.1:8091`.
+
+~~~~~~
+sharefs_remote_socket_relay_address = 127.0.0.1:8091
+~~~~~~
+
+**sharefs_remote_socket_relay_secret**
+
+Shared secret sent in the relay connection's `hello` frame.  Must match `remote_socket_relay_secret` on the `filestored` side.  No default.
+
+~~~~~~
+sharefs_remote_socket_relay_secret = a-strong-shared-secret
+~~~~~~
+
+DNS
+==
+
+These keys configure `dnsd`, a **separate daemon and process** from `filestored` (own executable `src/dnsd`, own config) that answers DNS queries from a Unix-style hosts file, optionally forwarding what it can't answer to an external server.  See [docs/DNSD.md](DNSD.md) for the daemon's code structure and [docs/protocols/dns.md](protocols/dns.md) for exactly what subset of DNS is implemented.  Unlike `sharefsd`, `dnsd` has no direct-UDP mode at all — it always receives its traffic over the Remote Socket Protocol relay (see [Remote Socket Protocol](#remote-socket-protocol) above), so the first four keys below (`dns_hosts_file` through `dns_remote_socket_relay_secret`) are required for it to do anything; the `dns_forwarder_*` keys are optional.
+
+**dns_hosts_file**
+
+Path to the hosts file.  Standard Unix `/etc/hosts` syntax — see [docs/protocols/dns.md](protocols/dns.md) for the format.  Default is `hosts.txt`.
+
+~~~~~~
+dns_hosts_file = hosts.txt
+~~~~~~
+
+**dns_port**
+
+The UDP port registered with the relay server — the port Econet clients must address their DNS queries to.  Default is `53`.
+
+~~~~~~
+dns_port = 53
+~~~~~~
+
+**dns_remote_socket_relay_address**
+
+`host:port` of the `filestored` relay server to connect to.  Default is `127.0.0.1:8091`.
+
+~~~~~~
+dns_remote_socket_relay_address = 127.0.0.1:8091
+~~~~~~
+
+**dns_remote_socket_relay_secret**
+
+Shared secret sent in the relay connection's `hello` frame.  Must match `remote_socket_relay_secret` on the `filestored` side.  No default.
+
+~~~~~~
+dns_remote_socket_relay_secret = a-strong-shared-secret
+~~~~~~
+
+**dns_forwarder_enabled**
+
+When `true`, a query the hosts file can't answer (forward or reverse) is forwarded to an external DNS server instead of getting `NXDOMAIN`/`NODATA`.  Forwarding is asynchronous and never blocks the daemon from handling other queries.  See [docs/protocols/dns.md](protocols/dns.md) → "Forwarding to an external server".  Default is `false`.
+
+~~~~~~
+dns_forwarder_enabled = false
+~~~~~~
+
+**dns_forwarder_address**
+
+`host:port` of the external DNS server to forward unanswered queries to.  No default — required if `dns_forwarder_enabled` is `true`.
+
+~~~~~~
+dns_forwarder_address = 8.8.8.8:53
+~~~~~~
+
+**dns_forwarder_timeout**
+
+Seconds to wait for the external server to reply before falling back to the local `NXDOMAIN`/`NODATA` answer.  Default is `2`.
+
+~~~~~~
+dns_forwarder_timeout = 2
+~~~~~~
+
+**dns_forwarder_allowed_domains**
+
+Optional comma-separated allow-list of domains eligible for forwarding.  When empty (the default), forwarding is unrestricted.  When set, a query name is only forwarded if it is one of the listed domains or a subdomain of one; anything else falls straight back to the local answer without contacting the upstream server.  Forward and reverse domains (e.g. `example.com` and `in-addr.arpa` entries) can be mixed freely in the same list — both are matched the same way.  `dnsd` is IPv4-only, so an `ip6.arpa` entry would never actually match anything — `AAAA` queries and `ip6.arpa` names are refused before forwarding is ever considered, see [docs/protocols/dns.md](protocols/dns.md).
+
+~~~~~~
+dns_forwarder_allowed_domains = example.com,168.192.in-addr.arpa
+~~~~~~
+
+NTP
+==
+
+These keys configure `ntpd`, a **separate daemon and process** from `filestored` (own executable `src/ntpd`, own config) that answers NTP client requests from the host system clock.  See [docs/NTPD.md](NTPD.md) for the daemon's code structure and [docs/protocols/ntp.md](protocols/ntp.md) for exactly what subset of NTP is implemented.  Like `dnsd`, `ntpd` has no direct-UDP mode at all — it always receives its traffic over the Remote Socket Protocol relay (see [Remote Socket Protocol](#remote-socket-protocol) above), so all five keys below are required for it to do anything.
+
+**ntp_port**
+
+The UDP port registered with the relay server — the port Econet clients must address their NTP requests to.  Default is `123`.
+
+~~~~~~
+ntp_port = 123
+~~~~~~
+
+**ntp_stratum**
+
+Stratum reported in every reply.  Default is `1` — see [docs/protocols/ntp.md](protocols/ntp.md) → "Time source and stratum" for why.
+
+~~~~~~
+ntp_stratum = 1
+~~~~~~
+
+**ntp_reference_id**
+
+Reference ID reported in every reply.  Four ASCII characters; a shorter value is zero-padded, a longer one truncated.  Default is `LOCL`, the conventional value for a self-referencing clock with no external upstream.
+
+~~~~~~
+ntp_reference_id = LOCL
+~~~~~~
+
+**ntp_remote_socket_relay_address**
+
+`host:port` of the `filestored` relay server to connect to.  Default is `127.0.0.1:8091`.
+
+~~~~~~
+ntp_remote_socket_relay_address = 127.0.0.1:8091
+~~~~~~
+
+**ntp_remote_socket_relay_secret**
+
+Shared secret sent in the relay connection's `hello` frame.  Must match `remote_socket_relay_secret` on the `filestored` side.  No default.
+
+~~~~~~
+ntp_remote_socket_relay_secret = a-strong-shared-secret
+~~~~~~
+
 MaceMail
 ==
 

@@ -201,21 +201,86 @@ class FileHandles {
 				$iSentSeq = $oEconetPacket->getSequence();
 				$oServiceDispatcher->sendPackets($_this);
 			}else{
-				//No data to move so send the packet to say we are done, and return
-				$oReply2 = $oFsRequest->buildReply();
-				$oReply2->DoneOk();
-				$_this->addReplyToBuffer($oReply2->buildEconetpacket());
+				//No data at all was available on this call's first read (offset was already at or
+				//past EOF). The client opened its receive block expecting data on $iDataPort the
+				//moment it sent this request — nothing has landed there yet for this call, unlike
+				//the block-then-done case above where a real block already satisfied it — so a
+				//"done" reply straight on the request's own reply port arrives on a port the client
+				//isn't listening on yet and is silently discarded. Send a marker on the data port
+				//first, exactly as the shortfall-at-EOF path in the ack handler below does.
+				//
+				//That marker must be padded to the full $iBytes requested, not sent empty: the ROM's
+				//GETBYTES client (ANFS's OSBGET read-ahead refill, send_txcb_swap_addrs) precomputes
+				//the buffer end-address it expects from the byte count it originally asked for, and
+				//silently re-arms the same one-shot RXCB and waits again — without ever resending
+				//anything — if the reply it gets back doesn't advance the buffer pointer by exactly
+				//that much. An empty reply always fails that check and hangs forever; a full-size
+				//zero-padded block satisfies it exactly like the real short-block-plus-padding case
+				//below does.
+				//
+				//Critically, the "done" summary can't just be queued alongside it in the same
+				//sendPackets() call either: the client's one-shot RXCB has to be closed and reopened
+				//for the *second* port transition (data port back to the request's own reply port)
+				//just as much as for the first, and sending both together races that reopening the
+				//same way the original single-reply bug did. Gate it on an ack of the marker instead,
+				//so the reply port isn't touched until the client has actually finished with the
+				//data port and had a chance to reopen for what comes next.
+				$oEconetPacket = new EconetPacket();
+				$oEconetPacket->setDestinationNetwork($oFsRequest->getSourceNetwork());
+				$oEconetPacket->setDestinationStation($oFsRequest->getSourceStation());
+				$oEconetPacket->setFlags(0);
+				$oEconetPacket->setPort($iDataPort);
+				$oEconetPacket->setData(str_pad("",$iBytesToRead,"\x00"));
+				$_this->addReplyToBuffer($oEconetPacket);
+				$iMarkerSeq = $oEconetPacket->getSequence();
 				$oServiceDispatcher->sendPackets($_this);
+
+				$oServiceDispatcher->addAckEvent($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$iMarkerSeq,function() use ($_this, $oFsRequest, $oServiceDispatcher, $iBytes){
+					$oReply2 = $oFsRequest->buildReply();
+					$oReply2->DoneOk();
+					$oReply2->appendByte(0x80);
+					$oReply2->setFlags(0);
+					//Number of bytes sent
+					$oReply2->append24bitIntLittleEndian(0);
+					$_this->addReplyToBuffer($oReply2->buildEconetpacket());
+					$oServiceDispatcher->sendPackets($_this);
+				});
 				return;
 			}
 
 			$cAckHandler = function(EncapsulationInterface $oAckPacket, FileServer $_this, FsRequest $oFsRequest, ServiceDispatcher $oServiceDispatcher, int $iBytes, int $iBytesToRead, FileDescriptor $oFsHandle, int $iDataPort, int $iStartPos, \Closure &$cAckHandler): void {
 				if($iBytesToRead==0 OR $oFsHandle->isEof()){
-					$oReply2 = $oFsRequest->buildReply();
-					$oReply2->DoneOk();
-					//Flag
-					if($oFsHandle->isEof()){
-						//As we have hit EOF the number of bytes sent has fallen short of the ammount requested send the remaining bytes
+					//Builds and sends the "done" summary alone: only safe to batch straight in
+					//with whatever triggered this (an ack of the last real data block) when
+					//there's no new port transition involved — i.e. no padding packet is also
+					//about to be sent on $iDataPort in this same round (see below).
+					$fSendDoneReply = function() use ($_this, $oFsRequest, $oServiceDispatcher, $iBytes, $iBytesToRead, $oFsHandle){
+						$oReply2 = $oFsRequest->buildReply();
+						$oReply2->DoneOk();
+						if($oFsHandle->isEof()){
+							$oReply2->appendByte(0x80);
+							$oReply2->setFlags(0);
+						}else{
+							$oReply2->appendByte(0);
+						}
+						//Number of bytes sent
+						$oReply2->append24bitIntLittleEndian($iBytes-$iBytesToRead);
+						$_this->addReplyToBuffer($oReply2->buildEconetpacket());
+						$oServiceDispatcher->sendPackets($_this);
+					};
+					//As we have hit EOF the number of bytes sent has fallen short of the ammount
+					//requested; send the remaining bytes. Only when there actually is a shortfall
+					//to pad: a read that exactly satisfied $iBytes (iBytesToRead==0) that also
+					//happens to land on EOF has nothing left to pad, and a zero-length data packet
+					//on a data port whose one-shot RXCB the client already closed after the last
+					//real block is a frame the client was never expecting and silently discards,
+					//so the done reply below would never be requested and the transfer would hang.
+					if($oFsHandle->isEof() AND $iBytesToRead>0){
+						//The done summary goes on the request's own reply port, a different port
+						//to the padding packet below (the data port) — sending both in the same
+						//batch races the client's one-shot RXCB just as the single-reply case does
+						//(see the no-data branch above), so gate it on an ack of the padding packet
+						//instead of queuing it alongside.
 						$oEconetPacket = new EconetPacket();
 						$oEconetPacket->setDestinationNetwork($oFsRequest->getSourceNetwork());
 						$oEconetPacket->setDestinationStation($oFsRequest->getSourceStation());
@@ -223,15 +288,13 @@ class FileHandles {
 						$oEconetPacket->setFlags(0);
 						$oEconetPacket->setData(str_pad("",$iBytesToRead,"\x00"));
 						$_this->addReplyToBuffer($oEconetPacket);
-						$oReply2->appendByte(0x80);
-						$oReply2->setFlags(0);
+						$iPaddingSeq = $oEconetPacket->getSequence();
+						$oServiceDispatcher->sendPackets($_this);
+
+						$oServiceDispatcher->addAckEvent($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$iPaddingSeq,$fSendDoneReply);
 					}else{
-						$oReply2->appendByte(0);
+						($fSendDoneReply)();
 					}
-					//Number of bytes sent
-					$oReply2->append24bitIntLittleEndian($iBytes-$iBytesToRead);
-					$_this->addReplyToBuffer($oReply2->buildEconetpacket());
-					$oServiceDispatcher->sendPackets($_this);
 
 				}else{
 					//See the comment in the outer closure — explicitly position the

@@ -200,8 +200,8 @@ class TeefaxImport extends Command
 
     protected function _makeDir(string $sPath): void
     {
-        if (!is_dir($sPath)) {
-            mkdir($sPath, 0755, true);
+        if (!is_dir($sPath) && !@mkdir($sPath, 0755, true) && !is_dir($sPath)) {
+            throw new \RuntimeException('Failed to create directory ' . $sPath);
         }
     }
 
@@ -213,7 +213,9 @@ class TeefaxImport extends Command
     protected function _putFileContents(string $sPath, string $sData): void
     {
         $this->_makeDir(dirname($sPath));
-        file_put_contents($sPath, $sData);
+        if (@file_put_contents($sPath, $sData) === false) {
+            throw new \RuntimeException('Failed to write file ' . $sPath);
+        }
     }
 
     protected function _renameDir(string $sFrom, string $sTo): void

@@ -10,3 +10,18 @@ parameters:
 			identifier: requireOnce.fileNotFound
 			count: 1
 			path: src/filestored
+		-
+			message: '#^Path in require_once\(\) "/usr/share/aun-filestored/vendor/autoload\.php" is not a file or it does not exist\.$#'
+			identifier: requireOnce.fileNotFound
+			count: 1
+			path: src/sharefsd
+		-
+			message: '#^Path in require_once\(\) "/usr/share/aun-filestored/vendor/autoload\.php" is not a file or it does not exist\.$#'
+			identifier: requireOnce.fileNotFound
+			count: 1
+			path: src/dnsd
+		-
+			message: '#^Path in require_once\(\) "/usr/share/aun-filestored/vendor/autoload\.php" is not a file or it does not exist\.$#'
+			identifier: requireOnce.fileNotFound
+			count: 1
+			path: src/ntpd

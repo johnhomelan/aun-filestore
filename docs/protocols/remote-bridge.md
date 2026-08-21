@@ -72,7 +72,7 @@ Config keys: `remote_bridge_map_file`, `remote_bridge_server_address`
 
 Both sides advertise the set of protocol versions they support during the handshake. The server selects the highest version present in both lists and includes it in the `CHALLENGE` response. If there is no common version the server sends `VERSION_REJECT` and closes the connection.
 
-The current protocol version is **1.1**.
+The current protocol version is **1.2**.
 
 Version strings follow the `MAJOR.MINOR` convention and are compared semantically (e.g. `2.0 > 1.0 > 1.0-beta`). Future minor versions are backwards-compatible; a major-version bump signals a breaking change.
 
@@ -82,6 +82,7 @@ Version strings follow the `MAJOR.MINOR` convention and are compared semanticall
 |---------|------|
 | 1.0     | `HELLO`/`CHALLENGE`/`AUTH`/`AUTH_OK`/`NETWORKS` handshake; `SEND` packet forwarding. |
 | 1.1     | `ACK <net> <stn>` message (see [Packet Protocol](#packet-protocol) and [Conformance Requirements](#conformance-requirements-for-third-party-bridge-clients-protocol-11)); `PING`/`PONG` heartbeat (see [Heartbeat](#heartbeat-protocol-11)). Purely additive — a 1.0 peer is fully interoperable with a 1.1 peer, it just never sends or receives `ACK`, `PING`, or `PONG` lines. |
+| 1.2     | Optional trailing `<seq>` field on both `SEND` and `ACK` (see [Packet Protocol](#packet-protocol) and [Conformance Requirements](#conformance-requirements-for-third-party-bridge-clients-protocol-12)), carrying `EconetPacket::getSequence()` across the bridge so `ServiceDispatcher::ackEvents()` on the originating side can tell a relayed ack apart from a stray or duplicate one for the same station — the same correlation purely-local AUN/WebSocket traffic already gets. Purely additive — a 1.1 peer is fully interoperable with a 1.2 peer, it just never sends or receives the `<seq>` field, and ack correlation on that connection falls back to station-only matching, exactly as it always has. |
 
 ## Authentication Protocol
 
@@ -131,14 +132,17 @@ encoded as 64 lowercase hex characters.
 After authentication, both sides may send and receive packet lines at any time:
 
 ```
-SEND <dst_net> <dst_stn> <src_net> <src_stn> <port> <flags> <base64_data>
+SEND <dst_net> <dst_stn> <src_net> <src_stn> <port> <flags> [<seq>] <base64_data>
 ```
 
-All numeric fields are unsigned decimal integers. `<base64_data>` is the packet payload encoded with standard base64. An empty payload (zero-length data) is represented by a line with only the 6 numeric fields (no trailing base64 field).
+All numeric fields are unsigned decimal integers. `<base64_data>` is the packet payload encoded with standard base64. An empty payload (zero-length data) is represented by a line with only the numeric fields (no trailing base64 field).
 
-Example:
+`<seq>` (protocol 1.2+) is the sending side's `EconetPacket::getSequence()` for this packet — present only on a connection that negotiated 1.2 or higher, immediately before the payload field. Whether it's present is *not* self-describing from the line alone (a bare trailing field is ambiguous between "seq, no payload" and "payload, no seq") — a receiver determines it purely from the connection's own negotiated version, exactly as it already does for whether to expect `ACK` or `PING`/`PONG` at all. See [Conformance Requirements](#conformance-requirements-for-third-party-bridge-clients-protocol-12) for what a receiver must do with it.
+
+Examples:
 ```
 SEND 1 254 2 5 151 0 SGVsbG8gV29ybGQ=
+SEND 1 254 2 5 151 0 42 SGVsbG8gV29ybGQ=
 ```
 
 The server validates that the destination network in each received `SEND` matches one of its configured local networks. Packets for other networks are silently dropped as a security measure.
@@ -150,17 +154,20 @@ Real Econet traffic is itself acknowledged at the link layer: when a station rec
 Before protocol 1.1, that Ack was purely local: if the block had been forwarded to a client on the *other* side of a bridge, the Ack the remote client generated arrived at whichever instance owned that client's physical network, not at the instance whose service was waiting for it — so the transfer stalled after the first block. `ACK <net> <stn>` closes that gap by relaying the Ack back across the bridge connection that originally carried the request:
 
 ```
-ACK <net> <stn>
+ACK <net> <stn> [<seq>]
 ```
 
-Both fields are unsigned decimal integers — the network and station of the real Econet acknowledgement, using the same numbering as `SEND`'s `<src_net> <src_stn>` fields. There is no payload and no correlation to a specific prior `SEND` line; `<net> <stn>` alone is enough for the receiver to match it against its own pending transfer state.
+`<net>` and `<stn>` are unsigned decimal integers — the network and station of the real Econet acknowledgement, using the same numbering as `SEND`'s `<src_net> <src_stn>` fields. There is no payload.
 
-Example:
+`<seq>` (protocol 1.2+) is present only on a connection that negotiated 1.2 or higher, and only when the relaying side actually captured one off the original `SEND` (a 1.1 peer's `SEND` never carries one — see [Packet Protocol](#packet-protocol) above). It is the *originating* side's own `EconetPacket::getSequence()`, echoed back unchanged, letting that side's `ServiceDispatcher::ackEvents()` verify this ack is for the specific packet its `addAckEvent()` registration is waiting on rather than firing for any ack that happens to arrive for the same station. Before 1.2, `<net> <stn>` alone was all a receiver had to match an `ACK` against its own pending transfer state; a 1.2 receiver additionally checks `<seq>` when present.
+
+Examples:
 ```
 ACK 5 254
+ACK 5 254 42
 ```
 
-`ACK` is sent only over connections that negotiated protocol 1.1 or higher — see [Conformance Requirements](#conformance-requirements-for-third-party-bridge-clients-protocol-11) below for exactly when a 1.1 implementation must send and how it must handle receiving one. It carries no destination-network validation of its own (unlike `SEND`): it always means "dispatch this to my own pending transfer state," never "forward this on."
+`ACK` is sent only over connections that negotiated protocol 1.1 or higher — see [Conformance Requirements](#conformance-requirements-for-third-party-bridge-clients-protocol-11) below for exactly when a 1.1 implementation must send and how it must handle receiving one; [Conformance Requirements (1.2)](#conformance-requirements-for-third-party-bridge-clients-protocol-12) for the `<seq>` field specifically. It carries no destination-network validation of its own (unlike `SEND`): it always means "dispatch this to my own pending transfer state," never "forward this on."
 
 ## Heartbeat (protocol 1.1+)
 
@@ -205,6 +212,22 @@ This section is normative for any implementation other than this project's own t
 9. **Drop malformed or unexpected `PING`/`PONG` lines without closing the connection**, the same tolerance as required for malformed `ACK`/`SEND` lines (§5).
 
 A `1.0`-only peer is fully exempt from all of the above: it is not required to implement `ACK` or `PING`/`PONG` at all, will never receive an `ACK`, `PING`, or `PONG`, is never subject to an idle-timeout close, and its bridged multi-block transfers behave exactly as they did before protocol 1.1 existed (the first block may be the only one delivered if the destination is reached via a bridge). Upgrading only one side of a connection is safe and yields no protocol errors — it simply means `ACK` relay and the heartbeat only ever activate once *both* sides advertise `1.1`.
+
+## Conformance Requirements for Third-Party Bridge Clients (Protocol 1.2)
+
+This section is normative for any implementation other than this project's own that wants to interoperate at protocol 1.2. Everything required for 1.1 (above) still applies — 1.2 only adds the `<seq>` field described here. A 1.2 implementation **must**:
+
+1. **Opt in during the handshake**, same as 1.1's §1. If `1.2` is not the negotiated version, none of the requirements below apply — `<seq>` is simply never sent or expected on that connection, and ack correlation falls back to the 1.1 station-only behaviour.
+
+2. **Append `<seq>` to an outgoing `SEND` line whenever the packet's own sequence number is known**, immediately before the base64 payload field (or in its place, if the payload is empty) — see [Packet Protocol](#packet-protocol). Whether to include it is purely a property of the *connection's* negotiated version, not of the individual packet; never send it to a peer that negotiated only 1.0/1.1.
+
+3. **When relaying an ack for a station whose `SEND` arrived with a `<seq>`, echo that same value back on the `ACK` line** — do not substitute a locally-generated sequence number of any kind (e.g. one belonging to whatever local encapsulation observed the real hardware ack); the value is meaningful only to the side that originally assigned it. If the originating `SEND` did not carry a `<seq>` (e.g. it arrived on this connection before negotiation completed, which cannot happen, or the peer is otherwise non-conformant), omit `<seq>` from the `ACK` line rather than fabricate one.
+
+4. **When parsing a received `SEND` or `ACK` line, determine whether `<seq>` is present purely from this connection's own negotiated version** (1.2+ or not) — never by guessing by field count. A line with the wrong field count for the negotiated version (per [Packet Protocol](#packet-protocol) and the `ACK` format above) must be treated as malformed (§5 of the 1.1 requirements: log and discard, do not close the connection).
+
+5. **When dispatching a received `ACK` to local pending-transfer state, treat a present `<seq>` as a required match, not merely informational.** An `ACK` whose `<seq>` doesn't match what the local `addAckEvent()`-equivalent registration is waiting for must not fire that registration — leave it pending for the correct ack (or its own timeout) exactly as an unrelated (network,station) would. An `ACK` with no `<seq>` field (relayed from a 1.1 hop, or a 1.2 peer that had none to relay) still falls back to firing on any ack for the station, exactly as under 1.1.
+
+A `1.1` peer connected to a `1.2`-capable implementation is fully exempt from all of the above and interoperates exactly as protocol 1.1 defines: no `<seq>` field is ever sent or expected on that connection, and ack correlation stays station-only. Upgrading only one side of a connection is safe and yields no protocol errors — `<seq>` only ever appears once *both* sides advertise `1.2`.
 
 ## Reconnection
 

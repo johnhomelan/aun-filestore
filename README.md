@@ -37,6 +37,7 @@ Impliments a number of network services, that sit ontop of the econet encapsulat
     * Routes IPv4 packets between Econet networks, with a configurable routing table supporting multiple routes and metrics
     * NAT TCP proxy: maps virtual IP:port addresses (reachable from Econet) to real TCP destinations, letting BBC Micros and similar machines reach TCP services on the LAN or internet
     * Limited ICMP support (see below)
+    * Optional UDP relay (Remote Socket Protocol): forwards UDP traffic addressed to an interface IP to a separate process that's registered for that port — used by `sharefsd`, `dnsd`, and `ntpd` (see below)
 
 * BBCTerm
     * Support for Andrew Gordons, BBC Term. Which allows BBC clients on Econet, to connect a terminal application to one of the configured commands that the service allows to run on the Linux box
@@ -82,6 +83,28 @@ Impliments a number of network services, that sit ontop of the econet encapsulat
     * A transparent byte pipe once connected — no character-set translation or pacing happens server-side, since the upstream viewdata server already throttles page rendering itself.
     * BBC BASIC client software (both a plain listing and a 6502 `*command` build script) is provided under `bbc-tests/` (`VDTEST.BBC`, `VDCMD.BBC`).
 
+
+## sharefsd — RISC OS ShareFS/Access+ Server ##
+
+`sharefsd` is a **separate executable** from `filestored` — its own process, with its own config and its own admin web UI — but it shares the same codebase, the same `Vfs` layer, and the same user database, so RISC OS clients speaking ShareFS/Access+ see the same file tree and users as everything else on the server. It serves Freeway discovery, Access+ authentication, and the ShareFS file-data protocol: RISC OS's native UDP/IP file-sharing suite, distinct from the Econet Level 4/AUN file server protocol the rest of this project implements.
+
+Because ShareFS is UDP/IP rather than Econet, the optional **Remote Socket Protocol** feature lets `filestored`'s `IPv4` service relay ShareFS/Freeway/Access+ UDP traffic arriving at an EconetA interface across a WebSocket connection to a separate `sharefsd` process — meaning an Econet client with an IP stack (see IPv4 above) can reach ShareFS shares served by `sharefsd`, even though `sharefsd` itself has no Econet transport of its own.
+
+See [docs/SHAREFSD.md](docs/SHAREFSD.md) for the daemon's architecture, configuration, and share list file format, and [docs/protocols/sharefs.md](docs/protocols/sharefs.md) for the ShareFS/Freeway/Access+ wire protocols.
+
+Ports, framing, and command semantics for ShareFS/Freeway/Access+ are based on **[andrewtimmins/riscos-access-server](https://github.com/andrewtimmins/riscos-access-server)**, an open-source RISC OS Access+/Freeway/ShareFS server — thank you to Andrew Timmins for making that source available as a reference, since Acorn never published the protocol itself.
+
+## dnsd — Standalone DNS Server ##
+
+`dnsd` is another **separate executable**, using the same Remote Socket Protocol relay as `sharefsd` — but unlike `sharefsd`, it has no direct-UDP mode at all: it always receives its traffic relayed from a `filestored` EconetA interface, and answers forward (`A`) and reverse (`PTR`) queries from a plain Unix-style hosts file. It exists for the same reason as the ShareFS relay: an Econet client with an IP stack can resolve names through it exactly as it would any other DNS server, without `dnsd` needing any Econet transport of its own. Optionally, whatever the hosts file can't answer can be forwarded asynchronously to a real external DNS server, with an allow-list to restrict which domains are eligible. `dnsd` is IPv4-only throughout — EconetA has no IPv6 support, so an `AAAA` query is always refused and any `AAAA` record is actively stripped out of a forwarded response before it can reach a client.
+
+See [docs/DNSD.md](docs/DNSD.md) for the daemon's architecture and configuration, and [docs/protocols/dns.md](docs/protocols/dns.md) for exactly what subset of DNS (RFC 1035) is implemented.
+
+## ntpd — Standalone NTP Server ##
+
+`ntpd` is a third **separate executable**, using the same Remote Socket Protocol relay as `sharefsd` and `dnsd` — it also has no direct-UDP mode at all, and answers NTP client (mode 3) requests with a server (mode 4) reply built from the host system clock. It has no upstream time source of its own and no local data file to consult (unlike `dnsd`'s hosts file) — every reply reflects whatever the host machine's own clock currently reads, reported at a configurable stratum and reference ID (default `1`/`LOCL`, the conventional pairing for a self-referencing clock with nothing further upstream). It exists for the same reason as the other two: an Econet client with an IP stack can get the time through it exactly as it would any other NTP server, without `ntpd` needing any Econet transport of its own.
+
+See [docs/NTPD.md](docs/NTPD.md) for the daemon's architecture and configuration, and [docs/protocols/ntp.md](docs/protocols/ntp.md) for exactly what subset of NTP (RFC 5905) is implemented.
 
 ## Admin Web Front End ##
 A browser-based admin interface is included and starts automatically with the server.
@@ -734,7 +757,11 @@ Detailed wire-format documentation for every protocol implemented by the server:
 * [Print Server](docs/protocols/print-server.md) — printer discovery (port 0x9F) and print data (port 0xD1) protocols: enquiry/reply status word, job start/data/end framing, spool file format
 * [BeebTerm](docs/protocols/beebterm.md) — terminal multiplexer protocol: login/reject/data/terminate packet types, sequence fields, service configuration
 * [Bridge](docs/protocols/bridge.md) — Econet bridge discovery protocol: bridge-to-bridge queries, station-to-bridge localnet and netknown queries
-* [EconetA IPv4](docs/protocols/ipv4.md) — IP over Econet (port 0xD2): DCI-2 and DCI-4 ARP, IPv4 forwarding, ICMP echo and unreachable
+* [EconetA IPv4](docs/protocols/ipv4.md) — IP over Econet (port 0xD2): DCI-2 and DCI-4 ARP, IPv4 forwarding, ICMP echo and unreachable, and UDP relay via the Remote Socket Protocol
+* [ShareFS / Freeway / Access+](docs/protocols/sharefs.md) — RISC OS's native UDP/IP file-sharing suite, served by the separate `sharefsd` daemon: Freeway discovery broadcasts, Access+ share-password authentication, and the ShareFS file-data RPC protocol
+* [DNS](docs/protocols/dns.md) — the subset of RFC 1035 implemented by the separate `dnsd` daemon: IPv4-only A/PTR lookups from a hosts file, optional asynchronous forwarding to an external server (with AAAA records actively stripped from the response and a domain allow-list), NXDOMAIN/NOTIMP handling, and what's deliberately not implemented (IPv6 in any form, zone transfers, caching, other record types)
+* [NTP](docs/protocols/ntp.md) — the subset of RFC 5905 implemented by the separate `ntpd` daemon: the 48-byte base header, mode-3 requests answered from the host system clock at a configurable stratum/reference ID, and what's deliberately not implemented (extension fields, authentication, upstream forwarding, any mode but client/server)
+* [Remote Socket Protocol](docs/protocols/remote-socket.md) — versioned WebSocket relay for UDP (and, in future, TCP) traffic between a process that owns a network interface and another process elsewhere; the transport `sharefsd`, `dnsd`, and `ntpd` all use to receive traffic without an Econet transport of their own
 * [TorchNet](docs/protocols/torchnet.md) — CP/M file server for Torch workstations: all command codes with request and reply byte layouts, record I/O, drive mapping, filename conventions
 * [MaceMail](docs/protocols/macemail.md) — reverse-engineered 1985 MaceMail electronic-mail protocol: quick-command envelope, operation codes, logon/mail/store/directory/chat payload layouts
 * [Teletext](docs/protocols/teletext.md) — Econet teletext server protocol (TSERV): ports, discovery, operation codes, page/current-page payload layouts
@@ -749,6 +776,9 @@ Guides for programmers who want to extend the server:
 * [Service Providers and the Admin System](docs/service-providers.md) — how service providers and port-based routing work; how to write a new provider; how the admin web front end integrates with providers and how to add admin support
 * [Virtual File System (VFS)](docs/vfs.md) — how the plugin chain, exception model, and file locking work; how to write a new VFS plugin
 * [Authentication System](docs/authentication.md) — how the plugin-based auth layer and session management work; how to write a new auth plugin
+* [sharefsd](docs/SHAREFSD.md) — why ShareFS is a separate daemon, its class structure, and how the Remote Socket Protocol relay lets it receive traffic without an Econet transport of its own
+* [dnsd](docs/DNSD.md) — why DNS is a separate daemon with no direct-UDP mode at all, and its (much smaller) class structure
+* [ntpd](docs/NTPD.md) — the simplest of the three relay-based daemons: no local data file, no shared state with `filestored` at all beyond `config` and the relay client itself
 
 ## It would be nice if ##
 * Work has started on a WebSocket Interface for

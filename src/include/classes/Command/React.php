@@ -25,6 +25,8 @@ use Ratchet\Http\HttpServer;
 use Ratchet\WebSocket\WsServer;
 
 use HomeLan\FileStore\Services\ServiceDispatcher;
+use HomeLan\FileStore\Services\Provider\IPv4;
+use HomeLan\FileStore\RemoteSocket\RelayServer;
 use HomeLan\FileStore\WebSocket\Handler as WebSocketHandler;
 use HomeLan\FileStore\WebSocket\Map as WebSocketMap;
 use HomeLan\FileStore\Piconet\Handler as PiconetHandler;
@@ -160,7 +162,12 @@ class React extends Command {
 		if (config::getValueAsBool('remote_bridge_enabled')) {
 			$this->remoteBridgeService($oLoop, $oPacketDispatcher);
 		}
-		
+
+		//Setup the Remote Socket Protocol relay server (feature-gated)
+		if (config::getValueAsBool('remote_socket_relay_enabled')) {
+			$this->remoteSocketRelayService($oLoop);
+		}
+
 		//Send any outstanding replies, normally its one request in one reply out.  However some services (e.g. File) have direct streams that can generate 
 		//mutiple replies to an initial request.
 		$oServices = $this->oServices;
@@ -294,6 +301,40 @@ EOF;
 			$oWebSocketTransport,
 			$oLoop
 		);
+	}
+
+	/**
+	 * Adds the Remote Socket Protocol relay server to the event loop (see
+	 * docs/protocols/remote-socket.md); a separate WebSocket listener to the client-facing
+	 * websocketService() above, used by services like sharefsd to receive UDP traffic relayed
+	 * from an EconetA interface owned by this process.
+	*/
+	private function remoteSocketRelayService(LoopInterface $oLoop): void
+	{
+		$oProvider = $this->oServices->getServiceByPort(0xD2);
+		if (!$oProvider instanceof IPv4) {
+			$this->oLogger->warning("RemoteSocket: relay enabled but no IPv4 service is registered, not starting");
+			return;
+		}
+
+		$oRelayServer = new RelayServer(
+			$this->oLogger,
+			config::getValueAsString('remote_socket_relay_secret'),
+			$oProvider->injectRelayReply(...)
+		);
+		$oProvider->setRelayServer($oRelayServer);
+
+		$oRelayTransport = new \React\Socket\SocketServer(config::getValueAsString('remote_socket_relay_listen_address').':'.config::getValueAsString('remote_socket_relay_listen_port'));
+		new IoServer(
+			new HttpServer(
+				new WsServer(
+					$oRelayServer
+				)
+			),
+			$oRelayTransport,
+			$oLoop
+		);
+		$this->oLogger->info("RemoteSocket: relay server listening on ".config::getValueAsString('remote_socket_relay_listen_address').':'.config::getValueAsString('remote_socket_relay_listen_port'));
 	}
 
 	/**

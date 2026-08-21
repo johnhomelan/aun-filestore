@@ -39,7 +39,8 @@
         "symfony/http-kernel": "*",
         "symfony/routing": "*",
         "symfony/yaml": "^8.1",
-        "homelan/mdfs-disk-reader": "^1.0"
+        "homelan/mdfs-disk-reader": "^1.0",
+        "ratchet/pawl": "^0.4.3"
     },
     "minimum-stability": "dev",
     "prefer-stable": true,

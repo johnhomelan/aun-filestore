@@ -1,0 +1,12 @@
+index:
+    path: /
+    defaults: { _controller: 'HomeLan\FileStore\ShareFs\Admin\Controller\IndexController::index' }
+component_page:
+    path: /component
+    defaults: { _controller: 'HomeLan\FileStore\ShareFs\Admin\Controller\ComponentController::index' }
+live:
+    path: /kube/live
+    defaults: { _controller: 'HomeLan\FileStore\ShareFs\Admin\Controller\IndexController::kube' }
+ready:
+    path: /kube/ready
+    defaults: { _controller: 'HomeLan\FileStore\ShareFs\Admin\Controller\IndexController::kube' }

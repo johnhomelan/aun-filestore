@@ -1,0 +1,24 @@
+#!/usr/bin/php
+<?php
+if(file_exists(__DIR__."/vendor/autoload.php")){
+        require_once __DIR__."/vendor/autoload.php";
+}else{
+        require_once "/usr/share/aun-filestored/vendor/autoload.php";
+}
+
+use HomeLan\FileStore\Console\SingleCommandApplication;
+use HomeLan\FileStore\Command\ShareFsd;
+
+use Monolog\Logger;
+use Monolog\Handler\SyslogHandler;
+use Monolog\Handler\StreamHandler;
+
+$oLogger = new Logger("sharefsd");
+$oLogger->pushHandler(new SyslogHandler("sharefsd"));
+$oLogger->pushHandler(new StreamHandler('php://stdout', Logger::DEBUG));
+
+$oApplication = new SingleCommandApplication(
+	new ShareFsd($oLogger)
+);
+
+$oApplication->run();

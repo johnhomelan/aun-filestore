@@ -108,6 +108,8 @@ wire or connection type. All three implement `EncapsulationInterface`.
 | `Messages\IcmpUnreachable` | class | Builds an RFC 792 ICMP Destination Unreachable (type 3) inside an IPv4 EconetA packet |
 | `Messages\TCPRequest` | class | Decodes a TCP segment from inside an IPv4 `EconetPacket` — ports, seq/ack numbers, flags, header options |
 | `Messages\TcpIPReply` | class | Constructs a full TCP/IPv4 reply with correct IP and TCP checksums (RFC 793 pseudo-header), wrapped in an EconetA packet |
+| `Messages\UdpRequest` | class | Decodes a UDP datagram from inside an IPv4 `EconetPacket` — ports, length, payload |
+| `Messages\UdpEconetReply` | class | Builds a checksummed UDP/IPv4 reply inside an IPv4 EconetA packet, used when relaying a reply from the Remote Socket Protocol (`docs/protocols/remote-socket.md`) back out onto Econet |
 
 ### BeebTerm messages
 

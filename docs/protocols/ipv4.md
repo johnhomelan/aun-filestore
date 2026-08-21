@@ -89,6 +89,10 @@ Offset  Size  Field
 
 For Destination Unreachable, bytes 4–7 are reserved (zero) and bytes 8–27 contain the original IP header, followed by the first 8 bytes of the original datagram.
 
+## UDP Relay
+
+A UDP datagram addressed to an interface IP is, by default, simply dropped — nothing on `filestored` itself speaks UDP application protocols. When the Remote Socket Protocol relay is enabled (`remote_socket_relay_enabled`, see [docs/protocols/remote-socket.md](remote-socket.md)), it is instead forwarded over a WebSocket connection to whichever external process has registered interest in that port — `sharefsd` (ShareFS/Freeway/Access+, see `docs/SHAREFSD.md`), `dnsd` (DNS on port 53, see `docs/DNSD.md`), and `ntpd` (NTP on port 123, see `docs/NTPD.md`) are the current consumers, and the relay is generic across ports: any process that registers for a given (protocol, port) receives that traffic, with no filestored-side change needed per consumer. A reply relayed back is sent out as a fresh UDP datagram from the same interface the request arrived on, addressed back to the original sender; if that server isn't running or hasn't registered for the port, the packet is dropped exactly as it would be with the relay disabled.
+
 ## IPv4 Header Format (reference)
 
 ```

@@ -10,6 +10,6 @@ use Symfony\Component\Console\Application;
 use HomeLan\FileStore\Command\MakeCatalogueArchive;
 
 $oApp = new Application('mkcatarchive', '1.0.0');
-$oApp->add(new MakeCatalogueArchive());
+$oApp->addCommand(new MakeCatalogueArchive());
 $oApp->setDefaultCommand('mkcatarchive', true);
 $oApp->run();

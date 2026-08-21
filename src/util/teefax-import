@@ -10,6 +10,6 @@ use Symfony\Component\Console\Application;
 use HomeLan\FileStore\Command\TeefaxImport;
 
 $oApp = new Application('teefax-import', '1.0.0');
-$oApp->add(new TeefaxImport());
+$oApp->addCommand(new TeefaxImport());
 $oApp->setDefaultCommand('teefax-import', true);
 $oApp->run();

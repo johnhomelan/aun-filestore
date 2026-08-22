@@ -231,6 +231,46 @@ The optional 7th field `quota` was added to support per-user disc quotas. Lines 
 
 ---
 
+## Built-in plugin: `AuthPluginL3Password`
+
+**File:** `src/include/classes/Authentication/Plugins/AuthPluginL3Password.php`
+
+Reads and writes the binary `PASSWORD` file format used by the Acorn Level 3
+fileserver, FileStore and awServer, as documented at
+https://heyrick.eu/econet/fs/pass.html. Each user occupies a fixed 31 byte
+record, and the file is padded out to a whole 256 byte sector.
+
+| Bytes | Field | Notes |
+|---|---|---|
+| 0-19 | username | Null padded/terminated. A null (empty) username marks a deleted/unused slot. |
+| 20-25 | password | Null padded/terminated, max 6 characters. See below re. bit 7. |
+| 26-29 | quota | Unsigned 32bit little endian integer, free space in bytes. |
+| 30 | opt/priv | Low nibble = boot option (0-3); high nibble = privilege (`0x00`/`0xC0` = system, `0x80` = normal, `0xA0` = locked). |
+
+**The bit 7 quirk:** the on disk password is not documented by the above
+page, but every character has bit 7 (`0x80`) forced high. The plugin masks
+each stored byte with `0x7F` when comparing a password on login, and sets
+bit 7 high on every character again when writing a password back out
+(`setPassword`/`setPasswordAdmin`/`createUser`). Callers of the plugin
+always deal in plain ASCII passwords; the bit 7 handling is entirely
+internal to `AuthPluginL3Password`.
+
+Because the on disk format has no home directory or Unix UID fields, a
+user's home directory is always their bare username (matching the Level 3
+URD convention of e.g. `$.AMELIE`), and `getUnixUid()` is left unset so
+callers fall back to `security_default_unix_uid`. A `Locked` account (priv
+`0xA0`) is surfaced as priv `U` but is prevented from logging in; setting
+priv via `setPriv()` always clears the locked state, since the interface
+only exposes `S`/`U`.
+
+**Config keys:**
+
+| Key | Description |
+|---|---|
+| `security_plugin_l3password_file` | Path to the binary password file |
+
+---
+
 ## Registering plugins
 
 Plugins are activated via the `security_auth_plugins` config key:

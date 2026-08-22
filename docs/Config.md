@@ -74,6 +74,26 @@ Valid values:
 security_plugin_file_default_crypt = md5
 ~~~~~~
 
+##### L3Password auth plugin #####
+
+The `l3password` auth plugin reads and writes the binary `PASSWORD` file format used by the Acorn Level 3 fileserver, FileStore and awServer (see https://heyrick.eu/econet/fs/pass.html). This lets aun-filestore share user accounts with, or import discs from, a real Level 3/FileStore server.
+
+On disk each character of the stored password has bit 7 set high; the plugin transparently clears it (`& 0x7F`) when checking a password and sets it again (`| 0x80`) when writing one out, so this need not be handled by the administrator.
+
+The format has no home directory or Unix UID fields: a user's home directory is always their username (matching the Level 3 URD convention), and the Unix UID falls back to `security_default_unix_uid`. Usernames are limited to 20 characters and passwords to 6 characters, per the on disk format.
+
+~~~~~~
+security_auth_plugins = l3password
+~~~~~~
+
+**security_plugin_l3password_file**
+
+Path to the binary `PASSWORD` file used by the `l3password` auth plugin.  Default is `Passwords`.
+
+~~~~~~
+security_plugin_l3password_file = /etc/aun-filestored/Passwords
+~~~~~~
+
 
 Network
 ==

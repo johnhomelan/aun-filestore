@@ -29,6 +29,7 @@ safe_define('CONFIG_housekeeping_interval',300);
 safe_define('CONFIG_security_auth_plugins','file');
 safe_define('CONFIG_security_plugin_file_user_file','users-live.txt');
 safe_define('CONFIG_security_plugin_file_default_crypt','md5');
+safe_define('CONFIG_security_plugin_l3password_file','Passwords');
 safe_define('CONFIG_security_default_unix_uid',500);
 safe_define('CONFIG_security_max_session_idle',2400);
 

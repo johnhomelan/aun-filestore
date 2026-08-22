@@ -613,6 +613,36 @@ class TeletextTest extends TestCase
         );
     }
 
+    public function testGetPagesDelegatesToStorage(): void
+    {
+        $this->oStorage->shouldReceive('getPages')->with('1')->andReturn(['100', '101']);
+        $this->assertSame(['100', '101'], $this->oProvider->getPages('1'));
+    }
+
+    public function testGetSubpagesDelegatesToStorage(): void
+    {
+        $this->oStorage->shouldReceive('getSubpages')->with('1', '100')->andReturn([1, 2]);
+        $this->assertSame([1, 2], $this->oProvider->getSubpages('1', '100'));
+    }
+
+    public function testGetPageDataDelegatesToStorageWithDefaultSubpage(): void
+    {
+        $this->oStorage->shouldReceive('getPage')->with('1', '100', 1)->andReturn(str_repeat('A', 1024));
+        $this->assertSame(str_repeat('A', 1024), $this->oProvider->getPageData('1', '100'));
+    }
+
+    public function testGetPageDataDelegatesToStorageWithExplicitSubpage(): void
+    {
+        $this->oStorage->shouldReceive('getPage')->with('1', '100', 2)->andReturn(str_repeat('B', 1024));
+        $this->assertSame(str_repeat('B', 1024), $this->oProvider->getPageData('1', '100', 2));
+    }
+
+    public function testGetPageDataReturnsNullWhenStorageHasNothing(): void
+    {
+        $this->oStorage->shouldReceive('getPage')->with('1', '999', 1)->andReturn(null);
+        $this->assertNull($this->oProvider->getPageData('1', '999'));
+    }
+
     // -------------------------------------------------------------------------
     // Teefax refresh (housekeeping-driven background import)
     // -------------------------------------------------------------------------

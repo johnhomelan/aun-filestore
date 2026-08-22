@@ -86,6 +86,7 @@ class Admin implements AdminInterface
 	public function getCommands(): array
 	{
 		return [
+			['label' => 'Browse Pages', 'url' => '/service/teletext/browse'],
 			['label' => 'Refresh Teefax Now', 'url' => '/service/teletext/teefax-refresh'],
 		];
 	}

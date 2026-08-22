@@ -606,6 +606,30 @@ class Teletext implements ProviderInterface {
 		return $aReturn;
 	}
 
+	/**
+	 * @return array<int, string>
+	*/
+	public function getPages(string $sChannel): array
+	{
+		return $this->oStorage->getPages($sChannel);
+	}
+
+	/**
+	 * @return array<int, int>
+	*/
+	public function getSubpages(string $sChannel, string $sPage): array
+	{
+		return $this->oStorage->getSubpages($sChannel, $sPage);
+	}
+
+	/**
+	 * Returns the raw 1024-byte page/subpage data, or null if it doesn't exist
+	*/
+	public function getPageData(string $sChannel, string $sPage, int $iSubpage = 1): ?string
+	{
+		return $this->oStorage->getPage($sChannel, $sPage, $iSubpage);
+	}
+
 	// -------------------------------------------------------------------------
 	// Time wrapper — overridable in tests for deterministic assertions
 	// -------------------------------------------------------------------------

@@ -28,10 +28,48 @@ class FakeTeletextForController extends Teletext
     public bool $stubTriggerResult = true;
     public int  $capTriggerCalls   = 0;
 
+    /** @var array<int, array{channel:string,page_count:int}> */
+    public array $stubChannelSummaries = [];
+    /** @var array<int,string> */
+    public array $stubPages = [];
+    /** @var array<int,int> */
+    public array $stubSubpages = [];
+    public ?string $stubPageData = null;
+
+    /** @var array<int,string> */
+    public array $capGetPagesCalls = [];
+    /** @var array<int,array{0:string,1:string}> */
+    public array $capGetSubpagesCalls = [];
+    /** @var array<int,array{0:string,1:string,2:int}> */
+    public array $capGetPageDataCalls = [];
+
     public function triggerTeefaxImport(): bool
     {
         $this->capTriggerCalls++;
         return $this->stubTriggerResult;
+    }
+
+    public function getChannelSummaries(): array
+    {
+        return $this->stubChannelSummaries;
+    }
+
+    public function getPages(string $sChannel): array
+    {
+        $this->capGetPagesCalls[] = $sChannel;
+        return $this->stubPages;
+    }
+
+    public function getSubpages(string $sChannel, string $sPage): array
+    {
+        $this->capGetSubpagesCalls[] = [$sChannel, $sPage];
+        return $this->stubSubpages;
+    }
+
+    public function getPageData(string $sChannel, string $sPage, int $iSubpage = 1): ?string
+    {
+        $this->capGetPageDataCalls[] = [$sChannel, $sPage, $iSubpage];
+        return $this->stubPageData;
     }
 }
 
@@ -149,5 +187,147 @@ class TeletextControllerTest extends TestCase
 
         $this->assertInstanceOf(RedirectResponse::class, $oResponse);
         $this->assertStringContainsString('msg=not_started', $oResponse->getTargetUrl());
+    }
+
+    // -------------------------------------------------------------------------
+    // browse()
+    // -------------------------------------------------------------------------
+
+    public function testBrowseRedirectsWhenProviderNotFound(): void
+    {
+        $this->oController->stubProvider = null;
+        $oRequest  = Request::create('/service/teletext/browse', 'GET');
+        $oResponse = $this->oController->browse($this->oSmarty, $oRequest);
+
+        $this->assertInstanceOf(RedirectResponse::class, $oResponse);
+    }
+
+    public function testBrowseWithNoChannelListsChannelsOnly(): void
+    {
+        $this->oProvider->stubChannelSummaries = [['channel' => '1', 'page_count' => 2]];
+        $oRequest = Request::create('/service/teletext/browse', 'GET');
+        $this->oController->browse($this->oSmarty, $oRequest);
+
+        $this->assertSame('teletext-browse.tpl', $this->oController->lastTemplate);
+        $this->assertSame([['channel' => '1', 'page_count' => 2]], $this->oController->lastVars['aChannels']);
+        $this->assertSame([], $this->oController->lastVars['aPages']);
+        $this->assertSame([], $this->oProvider->capGetPagesCalls);
+    }
+
+    public function testBrowseWithChannelListsPages(): void
+    {
+        $this->oProvider->stubPages = ['100', '101'];
+        $oRequest = Request::create('/service/teletext/browse?channel=1', 'GET');
+        $this->oController->browse($this->oSmarty, $oRequest);
+
+        $this->assertSame(['1'], $this->oProvider->capGetPagesCalls);
+        $this->assertSame(['100', '101'], $this->oController->lastVars['aPages']);
+        $this->assertSame([], $this->oProvider->capGetSubpagesCalls);
+    }
+
+    public function testBrowseWithChannelAndPageDefaultsToLowestSubpage(): void
+    {
+        $this->oProvider->stubSubpages = [2, 3];
+        $oRequest = Request::create('/service/teletext/browse?channel=1&page=100', 'GET');
+        $this->oController->browse($this->oSmarty, $oRequest);
+
+        $this->assertSame([['1', '100']], $this->oProvider->capGetSubpagesCalls);
+        $this->assertSame(2, $this->oController->lastVars['iSubpage']);
+        $this->assertSame(
+            '/service/teletext/page-data?channel=1&page=100&subpage=2',
+            $this->oController->lastVars['sPageDataUrl']
+        );
+    }
+
+    public function testBrowseWithExplicitValidSubpageUsesIt(): void
+    {
+        $this->oProvider->stubSubpages = [1, 2, 3];
+        $oRequest = Request::create('/service/teletext/browse?channel=1&page=100&subpage=3', 'GET');
+        $this->oController->browse($this->oSmarty, $oRequest);
+
+        $this->assertSame(3, $this->oController->lastVars['iSubpage']);
+    }
+
+    public function testBrowseWithInvalidSubpageFallsBackToLowest(): void
+    {
+        $this->oProvider->stubSubpages = [1, 2];
+        $oRequest = Request::create('/service/teletext/browse?channel=1&page=100&subpage=99', 'GET');
+        $this->oController->browse($this->oSmarty, $oRequest);
+
+        $this->assertSame(1, $this->oController->lastVars['iSubpage']);
+    }
+
+    public function testBrowseWithPageThatDoesNotExistLeavesPageDataUrlNull(): void
+    {
+        $this->oProvider->stubSubpages = [];
+        $oRequest = Request::create('/service/teletext/browse?channel=1&page=999', 'GET');
+        $this->oController->browse($this->oSmarty, $oRequest);
+
+        $this->assertNull($this->oController->lastVars['sPageDataUrl']);
+    }
+
+    // -------------------------------------------------------------------------
+    // pageData()
+    // -------------------------------------------------------------------------
+
+    public function testPageDataReturns404WhenProviderNotFound(): void
+    {
+        $this->oController->stubProvider = null;
+        $oRequest  = Request::create('/service/teletext/page-data?channel=1&page=100', 'GET');
+        $oResponse = $this->oController->pageData($oRequest);
+
+        $this->assertSame(404, $oResponse->getStatusCode());
+    }
+
+    public function testPageDataReturns400WhenChannelOrPageMissing(): void
+    {
+        $oRequest  = Request::create('/service/teletext/page-data?channel=1', 'GET');
+        $oResponse = $this->oController->pageData($oRequest);
+
+        $this->assertSame(400, $oResponse->getStatusCode());
+    }
+
+    public function testPageDataReturns404WhenPageNotFound(): void
+    {
+        $this->oProvider->stubPageData = null;
+        $oRequest  = Request::create('/service/teletext/page-data?channel=1&page=999', 'GET');
+        $oResponse = $this->oController->pageData($oRequest);
+
+        $this->assertSame(404, $oResponse->getStatusCode());
+    }
+
+    public function testPageDataReturnsRawBytesWithOctetStreamContentType(): void
+    {
+        $this->oProvider->stubPageData = str_repeat('X', 1024);
+        $oRequest  = Request::create('/service/teletext/page-data?channel=1&page=100&subpage=2', 'GET');
+        $oResponse = $this->oController->pageData($oRequest);
+
+        $this->assertSame(200, $oResponse->getStatusCode());
+        $this->assertSame(str_repeat('X', 1024), $oResponse->getContent());
+        $this->assertSame('application/octet-stream', $oResponse->headers->get('Content-Type'));
+        $this->assertSame([['1', '100', 2]], $this->oProvider->capGetPageDataCalls);
+    }
+
+    public function testPageDataDefaultsToSubpage1WhenNotSpecified(): void
+    {
+        $this->oProvider->stubPageData = str_repeat('X', 1024);
+        $oRequest = Request::create('/service/teletext/page-data?channel=1&page=100', 'GET');
+        $this->oController->pageData($oRequest);
+
+        $this->assertSame([['1', '100', 1]], $this->oProvider->capGetPageDataCalls);
+    }
+
+    // -------------------------------------------------------------------------
+    // renderScript()
+    // -------------------------------------------------------------------------
+
+    public function testRenderScriptReturnsTheRealFileWithJavascriptContentType(): void
+    {
+        $oResponse = $this->oController->renderScript();
+
+        $sExpected = file_get_contents(__DIR__ . '/../../src/include/classes/Admin/static/teletext-render.js');
+        $this->assertSame($sExpected, $oResponse->getContent());
+        $this->assertSame('text/javascript', $oResponse->headers->get('Content-Type'));
+        $this->assertStringContainsString('max-age=3600', (string) $oResponse->headers->get('Cache-Control'));
     }
 }

@@ -9,12 +9,12 @@
     {if $sMessage eq 'started'}
         <div class="alert alert-success alert-dismissible fade show" role="alert">
             Import started in the background. Pages will appear as it completes — see docs/protocols/teletext.md for how the store directory is laid out.
-            <button type="button" class="close" data-dismiss="alert"><span>&times;</span></button>
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
         </div>
     {elseif $sMessage eq 'not_started'}
         <div class="alert alert-warning alert-dismissible fade show" role="alert">
             Import did not start — either no Teefax channel is configured (<code>teletext_teefax_channel</code>), or an import is already running.
-            <button type="button" class="close" data-dismiss="alert"><span>&times;</span></button>
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
         </div>
     {/if}
 

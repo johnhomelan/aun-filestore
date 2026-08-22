@@ -9,7 +9,7 @@
     {if $sMessage eq 'assigned'}
         <div class="alert alert-success alert-dismissible fade show" role="alert">
             Slot assigned successfully.
-            <button type="button" class="close" data-dismiss="alert"><span>&times;</span></button>
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
         </div>
     {/if}
 
@@ -20,21 +20,21 @@
     {/if}
 
     <form method="POST" action="/service/macemail/slots/assign">
-        <div class="form-group row">
+        <div class="row mb-3">
             <label class="col-sm-3 col-form-label">Slot Number</label>
             <div class="col-sm-9">
                 <input type="number" class="form-control" name="slot" min="0" required>
                 <small class="form-text text-muted">A user's slot number is what they type into the MaceMail terminal client to log on.</small>
             </div>
         </div>
-        <div class="form-group row">
+        <div class="row mb-3">
             <label class="col-sm-3 col-form-label">Filestore Username</label>
             <div class="col-sm-9">
                 <input type="text" class="form-control" name="username" placeholder="e.g. ALICE" required>
                 <small class="form-text text-muted">Must already exist as a filestore user — MaceMail has no user database of its own.</small>
             </div>
         </div>
-        <div class="form-group row">
+        <div class="row mb-3">
             <div class="col-sm-9 offset-sm-3">
                 <button type="submit" class="btn btn-success">Assign Slot</button>
             </div>
@@ -43,7 +43,7 @@
 
     <h4 class="mt-4">Current Assignments</h4>
     <table class="table table-striped table-sm">
-        <thead class="thead-dark">
+        <thead class="table-dark">
             <tr><th>Slot</th><th>Username</th><th>Online</th><th>Last Used</th></tr>
         </thead>
         <tbody>

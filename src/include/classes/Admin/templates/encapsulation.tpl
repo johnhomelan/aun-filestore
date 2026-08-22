@@ -13,7 +13,7 @@
 	<ul class="nav nav-pills mb-3" id="pills-tab" role="tablist">
 	{foreach from=$oAdmin->getEntityTypes() key="sEntityType" item="sEntityTypeName"}
 	  <li class="nav-item">
-	    <a class="nav-link {if $sEntityTypeName@iteration eq 1}active{/if}" id="pills-{$sEntityType}-tab" data-toggle="pill" href="#pills-{$sEntityType}" role="tab" aria-controls="pills-{$sEntityType}" aria-selected="true">{$sEntityTypeName}</a>
+	    <a class="nav-link {if $sEntityTypeName@iteration eq 1}active{/if}" id="pills-{$sEntityType}-tab" data-bs-toggle="pill" href="#pills-{$sEntityType}" role="tab" aria-controls="pills-{$sEntityType}" aria-selected="true">{$sEntityTypeName}</a>
 	  </li>
 	{/foreach}
 	</ul>

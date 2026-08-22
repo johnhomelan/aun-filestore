@@ -18,10 +18,10 @@
     </nav>
 
     <table class="table table-sm table-hover">
-        <thead class="thead-light">
+        <thead class="table-light">
             <tr>
                 <th>Name</th>
-                <th class="text-right">Size</th>
+                <th class="text-end">Size</th>
                 <th>Load addr</th>
                 <th>Exec addr</th>
             </tr>
@@ -51,7 +51,7 @@
                                     <i class="fas fa-file text-secondary"></i> {$sEntryName|escape}
                                 </a>
                             </td>
-                            <td class="text-right">{$oEntry->getSize()|escape}</td>
+                            <td class="text-end">{$oEntry->getSize()|escape}</td>
                             <td><code>{$oEntry->getLoadAddr()|string_format:"%08X"}</code></td>
                             <td><code>{$oEntry->getExecAddr()|string_format:"%08X"}</code></td>
                         {/if}

@@ -9,7 +9,7 @@
     {if $sMessage eq 'sent'}
         <div class="alert alert-success alert-dismissible fade show" role="alert">
             Message sent successfully.
-            <button type="button" class="close" data-dismiss="alert"><span>&times;</span></button>
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
         </div>
     {/if}
 
@@ -28,17 +28,17 @@
     </p>
 
     <form method="POST" action="/service/macemail/broadcast">
-        <div class="form-group row">
+        <div class="row mb-3">
             <label class="col-sm-3 col-form-label">Message</label>
             <div class="col-sm-9">
-                <select class="form-control" name="type" required>
+                <select class="form-select" name="type" required>
                     {foreach $aMessageTypes as $iType => $sText}
                         <option value="{$iType}">{$sText|escape}</option>
                     {/foreach}
                 </select>
             </div>
         </div>
-        <div class="form-group row">
+        <div class="row mb-3">
             <div class="col-sm-9 offset-sm-3">
                 <button type="submit" class="btn btn-warning">Send Message</button>
             </div>

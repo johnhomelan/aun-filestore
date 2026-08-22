@@ -29,7 +29,7 @@
             </dl>
             <form method="POST" action="/users/delete?username={$oUser->getUsername()|escape:'url'}">
                 <button type="submit" class="btn btn-danger">Yes, delete this user</button>
-                <a href="/users" class="btn btn-outline-secondary ml-2">Cancel</a>
+                <a href="/users" class="btn btn-outline-secondary ms-2">Cancel</a>
             </form>
         </div>
     </div>

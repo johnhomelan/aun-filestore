@@ -11,7 +11,7 @@
 		<dl class="row">
 			<dt class="col-sm-3">Name</dt><dd class="col-sm-9">{$oAdmin->getName()}</dd>
 
-			<dt class="col-sm-3">Enabled</dt><dd class="col-sm-9"><input type="checkbox" {if !$oAdmin->isDisabled()}checked{/if} data-toggle="toggle" data-onstyle="success"></dd>
+			<dt class="col-sm-3">Enabled</dt><dd class="col-sm-9"><div class="form-check form-switch"><input class="form-check-input" type="checkbox" role="switch" disabled {if !$oAdmin->isDisabled()}checked{/if}></div></dd>
 
 			<dt class="col-sm-3">Description</dt><dd class="col-sm-9">{$oAdmin->getDescription()}</dd>
 
@@ -24,7 +24,7 @@
 		{if $oAdmin->getCommands()}
 		<div class="mb-3">
 			{foreach $oAdmin->getCommands() as $aCmd}
-			<a href="{$aCmd.url|escape:'html'}" class="btn btn-primary mr-2">{$aCmd.label|escape}</a>
+			<a href="{$aCmd.url|escape:'html'}" class="btn btn-primary me-2">{$aCmd.label|escape}</a>
 			{/foreach}
 		</div>
 		{/if}
@@ -32,7 +32,7 @@
 		<ul class="nav nav-pills mb-3" id="pills-tab" role="tablist">
 		{foreach from=$oAdmin->getEntityTypes() key="sEntityType" item="sEntityTypeName"}
 		  <li class="nav-item">
-		    <a class="nav-link {if $sEntityTypeName@iteration eq 1}active{/if}" id="pills-{$sEntityType}-tab" data-toggle="pill" href="#pills-{$sEntityType}" role="tab" aria-controls="pills-{$sEntityType}" aria-selected="true">{$sEntityTypeName}</a>
+		    <a class="nav-link {if $sEntityTypeName@iteration eq 1}active{/if}" id="pills-{$sEntityType}-tab" data-bs-toggle="pill" href="#pills-{$sEntityType}" role="tab" aria-controls="pills-{$sEntityType}" aria-selected="true">{$sEntityTypeName}</a>
 		  </li>
 		{/foreach}
 		</ul>

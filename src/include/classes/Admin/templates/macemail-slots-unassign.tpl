@@ -9,7 +9,7 @@
     {if $sMessage eq 'unassigned'}
         <div class="alert alert-success alert-dismissible fade show" role="alert">
             Slot unassigned successfully.
-            <button type="button" class="close" data-dismiss="alert"><span>&times;</span></button>
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
         </div>
     {/if}
 
@@ -20,7 +20,7 @@
     {/if}
 
     <table class="table table-striped table-sm">
-        <thead class="thead-dark">
+        <thead class="table-dark">
             <tr><th>Slot</th><th>Username</th><th>Online</th><th>Last Used</th><th>Action</th></tr>
         </thead>
         <tbody>

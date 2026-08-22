@@ -68,6 +68,11 @@ class authpluginl3passwordTest extends TestCase {
 		TestAuthPluginL3Password::init($oLogger, $sData);
 	}
 
+	protected function tearDown(): void
+	{
+		config::resetValue('security_plugin_l3password_homedir_prefix');
+	}
+
 	// =========================================================================
 	// Binary decoding
 	// =========================================================================
@@ -146,6 +151,26 @@ class authpluginl3passwordTest extends TestCase {
 	{
 		$oUser = TestAuthPluginL3Password::buildUserObject('LOCKED');
 		$this->assertEquals('U', $oUser->getPriv());
+	}
+
+	public function testHomedirHasNoPrefixByDefault(): void
+	{
+		$oUser = TestAuthPluginL3Password::buildUserObject('TEST2');
+		$this->assertEquals('$.TEST2', $oUser->getHomedirPath());
+	}
+
+	public function testHomedirPrefixFromConfigIsApplied(): void
+	{
+		config::overrideValue('security_plugin_l3password_homedir_prefix', '$.homes');
+		$oUser = TestAuthPluginL3Password::buildUserObject('TEST2');
+		$this->assertEquals('$.homes.TEST2', $oUser->getHomedirPath());
+	}
+
+	public function testHomedirPrefixTrailingDotIsNotDoubled(): void
+	{
+		config::overrideValue('security_plugin_l3password_homedir_prefix', '$.homes.');
+		$oUser = TestAuthPluginL3Password::buildUserObject('TEST2');
+		$this->assertEquals('$.homes.TEST2', $oUser->getHomedirPath());
 	}
 
 	public function testDeletedSlotWithNullUsernameIsSkipped(): void

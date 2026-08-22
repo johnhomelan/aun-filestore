@@ -16,26 +16,67 @@ if(!defined('CONFIG_security_plugin_file_default_crypt')){
 include_once('include/system.inc.php');
 
 /**
- * Test double that extends AuthPluginFile and replaces _writeOutUserFile()
- * with a no-op spy so that no file is ever written during tests.
+ * Test double that extends AuthPluginFile and replaces its filesystem primitives
+ * (_fileExists/_readFile/_writeFile) with in-memory fakes, so init()'s "load from
+ * disk" path and _writeOutUserFile()'s "save to disk" path can both be exercised
+ * without ever touching the real filesystem. The real _buildUserFileContents()/
+ * _writeOutUserFile()/init() logic still runs unmodified; only the three I/O
+ * primitives are faked.
  *
- * This works because AuthPluginFile now calls static::_writeOutUserFile()
- * (late static binding), so when any inherited method is invoked as
- * TestAuthPluginFile::method(), the overridden version is called instead.
+ * This works because AuthPluginFile now calls static::_fileExists()/_readFile()/
+ * _writeFile() (late static binding), so when any inherited method is invoked as
+ * TestAuthPluginFile::method(), the overridden versions are called instead.
  */
 class TestAuthPluginFile extends AuthPluginFile
 {
 	public static int $iWriteCallCount = 0;
+	public static int $iFileExistsCallCount = 0;
+	public static int $iReadFileCallCount = 0;
+	public static string $sLastWrittenPath = '';
+	public static string $sLastWrittenContents = '';
+
+	/**
+	 * The content init() should see when it "reads" the user file. NULL simulates
+	 * the file not existing at all.
+	*/
+	public static ?string $sMockFileContents = NULL;
 
 	public static function reset(): void
 	{
 		self::$iWriteCallCount = 0;
+		self::$iFileExistsCallCount = 0;
+		self::$iReadFileCallCount = 0;
+		self::$sLastWrittenPath = '';
+		self::$sLastWrittenContents = '';
+		self::$sMockFileContents = NULL;
 	}
 
-	protected static function _writeOutUserFile(): void
+	protected static function _fileExists(string $sPath): bool
+	{
+		self::$iFileExistsCallCount++;
+		return self::$sMockFileContents !== NULL;
+	}
+
+	protected static function _readFile(string $sPath): string
+	{
+		self::$iReadFileCallCount++;
+		return self::$sMockFileContents ?? '';
+	}
+
+	protected static function _writeFile(string $sPath, string $sContents): void
 	{
 		self::$iWriteCallCount++;
+		self::$sLastWrittenPath = $sPath;
+		self::$sLastWrittenContents = $sContents;
 		// Intentional no-op — no file I/O in tests
+	}
+
+	/**
+	 * Test helper: exposes the raw stored password field (e.g. "bcrypt-$2y$...") for a user
+	*/
+	public static function getStoredPassword(string $sUsername): ?string
+	{
+		return self::$aUsers[strtoupper($sUsername)]['password'] ?? NULL;
 	}
 }
 
@@ -48,6 +89,11 @@ class authpluginfileTest extends TestCase {
 		$oLogger = new Logger("filestored-unittests");
 		$oLogger->pushHandler(new NullHandler());
 		TestAuthPluginFile::init($oLogger, $sUser);
+	}
+
+	protected function tearDown(): void
+	{
+		config::resetValue('security_plugin_file_default_crypt');
 	}
 
 	public function testLogin()
@@ -64,6 +110,98 @@ class authpluginfileTest extends TestCase {
 
 		//Should fail
 		$this->assertFalse(TestAuthPluginFile::login('TEST','testpwrong'));
+	}
+
+	// =========================================================================
+	// Filesystem mocking (init()'s load path / _writeOutUserFile()'s save path)
+	// =========================================================================
+
+	public function testInitReportsMissingFileWithoutTouchingRealFilesystem(): void
+	{
+		TestAuthPluginFile::reset();
+		//Leaving $sMockFileContents as NULL simulates the user file not existing
+		$oLogger = new Logger('test');
+		$oLogger->pushHandler(new NullHandler());
+
+		TestAuthPluginFile::init($oLogger);
+
+		$this->assertSame(1, TestAuthPluginFile::$iFileExistsCallCount);
+		$this->assertSame(0, TestAuthPluginFile::$iReadFileCallCount);
+		$this->assertSame([], TestAuthPluginFile::getAllUsers());
+	}
+
+	public function testInitLoadsUsersThroughTheFilesystemWrapperWhenFilePresent(): void
+	{
+		TestAuthPluginFile::reset();
+		TestAuthPluginFile::$sMockFileContents = "mockuser:md5-".md5('mockpw').":home.mockuser:5000:0:U";
+		$oLogger = new Logger('test');
+		$oLogger->pushHandler(new NullHandler());
+
+		TestAuthPluginFile::init($oLogger);
+
+		$this->assertSame(1, TestAuthPluginFile::$iFileExistsCallCount);
+		$this->assertSame(1, TestAuthPluginFile::$iReadFileCallCount);
+		$this->assertTrue(TestAuthPluginFile::login('mockuser', 'mockpw'));
+	}
+
+	public function testWriteOutUserFileWritesBuiltContentsThroughTheFilesystemWrapper(): void
+	{
+		TestAuthPluginFile::setPassword('TEST', 'testpw', 'newpassword');
+
+		//Proves the real serialization logic ran (not just a call-count spy) and that
+		//only the mocked low level write primitive saw it, never the real filesystem
+		$this->assertSame(config::getValueAsString('security_plugin_file_user_file'), TestAuthPluginFile::$sLastWrittenPath);
+		$this->assertStringContainsString('TEST:', TestAuthPluginFile::$sLastWrittenContents);
+		$this->assertStringContainsString(':home.test:5000:0:S', TestAuthPluginFile::$sLastWrittenContents);
+	}
+
+	// =========================================================================
+	// Salted (bcrypt) hashes
+	// =========================================================================
+
+	public function testLoginWorksWithBcryptStoredHash(): void
+	{
+		$sLine = "bcuser:bcrypt-".password_hash('testpw', PASSWORD_BCRYPT).":home.bcuser:5000:0:U";
+		$oLogger = new Logger('test');
+		$oLogger->pushHandler(new NullHandler());
+		TestAuthPluginFile::init($oLogger, $sLine);
+
+		$this->assertTrue(TestAuthPluginFile::login('bcuser', 'testpw'));
+		$this->assertFalse(TestAuthPluginFile::login('bcuser', 'wrongpw'));
+	}
+
+	public function testSetPasswordDefaultsToBcrypt(): void
+	{
+		config::overrideValue('security_plugin_file_default_crypt', 'bcrypt');
+		TestAuthPluginFile::setPassword('TEST', 'testpw', 'newpassword');
+
+		$this->assertTrue(TestAuthPluginFile::login('TEST', 'newpassword'));
+		$this->assertFalse(TestAuthPluginFile::login('TEST', 'testpw'));
+	}
+
+	public function testSetPasswordAdminDefaultsToBcrypt(): void
+	{
+		config::overrideValue('security_plugin_file_default_crypt', 'bcrypt');
+		TestAuthPluginFile::setPasswordAdmin('TEST', 'anewpass');
+
+		$this->assertTrue(TestAuthPluginFile::login('TEST', 'anewpass'));
+	}
+
+	public function testSamePasswordProducesDifferentBcryptHashesWhenSetTwice(): void
+	{
+		//This is the whole point of salting: identical passwords must not produce identical hashes
+		config::overrideValue('security_plugin_file_default_crypt', 'bcrypt');
+
+		TestAuthPluginFile::setPasswordAdmin('TEST', 'samepassword');
+		TestAuthPluginFile::setPasswordAdmin('TEST2', 'samepassword');
+
+		$sStored1 = TestAuthPluginFile::getStoredPassword('TEST');
+		$sStored2 = TestAuthPluginFile::getStoredPassword('TEST2');
+
+		$this->assertStringStartsWith('bcrypt-', (string) $sStored1);
+		$this->assertNotSame($sStored1, $sStored2);
+		$this->assertTrue(TestAuthPluginFile::login('TEST', 'samepassword'));
+		$this->assertTrue(TestAuthPluginFile::login('TEST2', 'samepassword'));
 	}
 
 	public function testChangePassword()

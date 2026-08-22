@@ -235,7 +235,7 @@ class FileHandles {
 				$iMarkerSeq = $oEconetPacket->getSequence();
 				$oServiceDispatcher->sendPackets($_this);
 
-				$oServiceDispatcher->addAckEvent($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$iMarkerSeq,function() use ($_this, $oFsRequest, $oServiceDispatcher, $iBytes){
+				$oServiceDispatcher->addAckEvent($oFsRequest->getSourceNetwork(),$oFsRequest->getSourceStation(),$iMarkerSeq,function() use ($_this, $oFsRequest, $oServiceDispatcher){
 					$oReply2 = $oFsRequest->buildReply();
 					$oReply2->DoneOk();
 					$oReply2->appendByte(0x80);

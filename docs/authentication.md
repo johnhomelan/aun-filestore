@@ -227,7 +227,7 @@ The optional 7th field `quota` was added to support per-user disc quotas. Lines 
 | Key | Description |
 |---|---|
 | `security_plugin_file_user_file` | Path to the user file |
-| `security_plugin_file_default_crypt` | Hash type for new passwords: `plain`, `sha1`, or `md5` (default) |
+| `security_plugin_file_default_crypt` | Hash type for new passwords: `plain`, `sha1`, `md5`, or `bcrypt` (default, salted) |
 
 ---
 
@@ -268,6 +268,203 @@ only exposes `S`/`U`.
 | Key | Description |
 |---|---|
 | `security_plugin_l3password_file` | Path to the binary password file |
+
+---
+
+## Built-in plugin: `AuthPluginLdap`
+
+**Files:**
+`src/include/classes/Authentication/Plugins/AuthPluginLdap.php`,
+`LdapClientContract.php` (the interface the plugin talks to — see below),
+`LdapClient.php` (the real implementation, wrapping PHP's `ext-ldap`).
+
+Authenticates against an LDAP directory. Two things make this different
+from the file-backed plugins above:
+
+1. **The plugin binds as a single configured service account for
+   everything — it never binds as the user being authenticated.** LDAP's
+   own bind-based password check isn't used at all. Instead, the plugin
+   stores its own password hash in a private `econetPasswordHash`
+   attribute (`<hashtype>-<hash>`, exactly the same format/logic as
+   `AuthPluginFile` above — `plain`/`md5`/`sha1`/`bcrypt`, defaulting to
+   `bcrypt`) and verifies it locally. This keeps Econet's plaintext-over-
+   the-wire password out of the standard `userPassword` attribute other
+   services (SSH, web login, etc.) rely on for the same identity — a hash
+   derived from a password sent in the clear shouldn't sit in a shared
+   trust anchor.
+2. **LDAP is a live, shared, remote directory**, not a file to snapshot
+   once at startup. `init()` only binds the service account; every lookup
+   goes through an in-memory, TTL-based cache (see below) before ever
+   issuing an LDAP search.
+
+### Schema
+
+Econet accounts get their own private, `AUXILIARY` objectClass —
+`econetAccount` — so it can be layered onto an existing directory entry
+(`inetOrgPerson`, `posixAccount`, etc.) rather than requiring separate
+econet-only entries. The standard `uid` attribute is reused for the
+username.
+
+| Attribute | Required | Purpose |
+|---|---|---|
+| `uid` (standard) | MUST | Econet username |
+| `econetPasswordHash` | MUST | `<hashtype>-<hash>`, same scheme as `AuthPluginFile` |
+| `econetHomeDirectory` | MUST | Econet home directory path — **must be unique across the directory** |
+| `econetPriv` | MAY | `S` or `U` |
+| `econetBootOpt` | MAY | Boot option 0-3 |
+| `econetQuota` | MAY | Disc quota in bytes, `0` = use the server default |
+
+`econetHomeDirectory` uniqueness is enforced two ways: the OpenLDAP
+`unique` overlay (authoritative, catches writes from any client) and a
+defensive pre-check search in the plugin's own `createUser()` (so a
+missing/misconfigured overlay doesn't silently allow duplicates from us).
+
+#### Installing the schema (OpenLDAP, `cn=config`)
+
+> **The OID arc below (`1.3.6.1.4.1.99999`) is a placeholder.** Register a
+> real Private Enterprise Number for free at https://pen.iana.org (or use
+> an arc your organisation already owns) and substitute it before
+> production use.
+
+Save as `econet-schema.ldif`:
+
+```ldif
+dn: cn=econet,cn=schema,cn=config
+objectClass: olcSchemaConfig
+cn: econet
+olcAttributeTypes: ( 1.3.6.1.4.1.99999.1.1.1
+  NAME 'econetPasswordHash'
+  DESC 'Econet fileserver password hash, <type>-<hash>, independent of userPassword'
+  EQUALITY caseExactMatch
+  SYNTAX 1.3.6.1.4.1.1466.115.121.1.15
+  SINGLE-VALUE )
+olcAttributeTypes: ( 1.3.6.1.4.1.99999.1.1.2
+  NAME 'econetHomeDirectory'
+  DESC 'Econet home directory path, unique across the directory'
+  EQUALITY caseIgnoreMatch
+  SYNTAX 1.3.6.1.4.1.1466.115.121.1.15
+  SINGLE-VALUE )
+olcAttributeTypes: ( 1.3.6.1.4.1.99999.1.1.3
+  NAME 'econetPriv'
+  DESC 'Econet privilege level: S (system manager) or U (user)'
+  EQUALITY caseIgnoreMatch
+  SYNTAX 1.3.6.1.4.1.1466.115.121.1.15{1}
+  SINGLE-VALUE )
+olcAttributeTypes: ( 1.3.6.1.4.1.99999.1.1.4
+  NAME 'econetBootOpt'
+  DESC 'Econet boot option (0-3)'
+  EQUALITY integerMatch
+  SYNTAX 1.3.6.1.4.1.1466.115.121.1.27
+  SINGLE-VALUE )
+olcAttributeTypes: ( 1.3.6.1.4.1.99999.1.1.5
+  NAME 'econetQuota'
+  DESC 'Econet disc quota in bytes, 0 = use server default'
+  EQUALITY integerMatch
+  SYNTAX 1.3.6.1.4.1.1466.115.121.1.27
+  SINGLE-VALUE )
+olcObjectClasses: ( 1.3.6.1.4.1.99999.1.2.1
+  NAME 'econetAccount'
+  DESC 'Acorn/SJ Research Econet fileserver account attributes'
+  AUXILIARY
+  MUST ( uid $ econetPasswordHash $ econetHomeDirectory )
+  MAY ( econetPriv $ econetBootOpt $ econetQuota ) )
+```
+
+Install it:
+
+```sh
+ldapadd -Y EXTERNAL -H ldapi:/// -f econet-schema.ldif
+```
+
+#### Enforcing `econetHomeDirectory` uniqueness
+
+Find your database's actual `olcDatabase` name first (typically `{1}mdb`):
+
+```sh
+ldapsearch -Y EXTERNAL -H ldapi:/// -b cn=config olcDatabase dn
+```
+
+Save as `econet-unique-overlay.ldif`, substituting the database name found
+above, then install:
+
+```ldif
+# Skip this first entry if the unique overlay module is already loaded
+dn: cn=module{0},cn=config
+changetype: modify
+add: olcModuleLoad
+olcModuleLoad: unique.la
+
+dn: olcOverlay=unique,olcDatabase={1}mdb,cn=config
+objectClass: olcOverlayConfig
+objectClass: olcUniqueConfig
+olcOverlay: unique
+olcUniqueUri: ldap:///?econetHomeDirectory?sub
+```
+
+```sh
+ldapadd -Y EXTERNAL -H ldapi:/// -f econet-unique-overlay.ldif
+```
+
+### Caching
+
+Every read goes through a single choke point, `_lookup()`:
+
+- A fresh (not expired) positive cache entry for the username is returned
+  directly — no LDAP search.
+- A fresh negative cache entry (a recent "this user doesn't exist" result)
+  short-circuits to "not found" — no LDAP search. This protects against a
+  login-attempt storm against an unknown/mistyped username each hitting
+  LDAP.
+- Otherwise, one LDAP search is performed and the result (positive or
+  negative) is cached.
+
+`login()` and `buildUserObject()` both go through `_lookup()`.
+`getAllUsers()` performs a single directory-wide search (gated by its own
+TTL) and warms the per-user cache for every entry it finds, instead of one
+search per user — important for the admin UI's user list and any command
+that enumerates all accounts.
+
+Every mutating method (`setPassword`, `setPasswordAdmin`, `setPriv`,
+`setOpt`, `setQuota`, `createUser`, `removeUser`) writes to LDAP via the
+service bind first, then updates (or evicts) that user's cache entry
+directly — a change is visible immediately, without waiting for the TTL to
+expire or triggering an extra round trip to re-fetch what was just written.
+
+The cache is in-process memory only, matching the lifetime of `filestored`
+(a single long-running daemon process, not a per-request fork) — there is
+no shared/external cache store.
+
+### `createUser()` semantics
+
+1. Defensive uniqueness pre-check: search for any entry with a matching
+   `econetHomeDirectory`; throw if one exists (backs up the `unique`
+   overlay).
+2. Search for an existing entry matching `uid=<username>`:
+   - **Found** → the `econetAccount` objectClass and attributes are added
+     to that entry (the common case for an org with an existing directory).
+   - **Not found** → a new minimal entry is created at
+     `security_plugin_ldap_create_dn_template` with
+     `objectClass: top, person, econetAccount`.
+
+`removeUser()` only strips the `econetAccount` objectClass and its
+attributes (an LDAP modify) — it never deletes the whole entry, since the
+underlying directory entry may be shared with other services.
+
+**Config keys:**
+
+| Key | Default | Description |
+|---|---|---|
+| `security_plugin_ldap_uri` | *(empty, plugin inactive)* | LDAP server URI, e.g. `ldaps://ldap.example.com:636` |
+| `security_plugin_ldap_start_tls` | `false` | Use STARTTLS (only relevant for a plain `ldap://` URI) |
+| `security_plugin_ldap_bind_dn` | *(empty)* | Service account DN used for every operation |
+| `security_plugin_ldap_bind_password` | *(empty)* | Service account password |
+| `security_plugin_ldap_base_dn` | *(empty)* | Search base for econet accounts |
+| `security_plugin_ldap_user_filter` | `(&(objectClass=econetAccount)(uid=%s))` | Search filter, `%s` = escaped username |
+| `security_plugin_ldap_create_dn_template` | `uid=%s,<base dn>` | DN template used when `createUser()` must create a brand new entry |
+| `security_plugin_ldap_cache_ttl` | `300` | Seconds a positive lookup stays cached |
+| `security_plugin_ldap_negative_cache_ttl` | `30` | Seconds a "not found" result stays cached |
+| `security_plugin_ldap_default_crypt` | `bcrypt` | Hash type for new passwords: `plain`, `sha1`, `md5`, or `bcrypt` |
+| `security_plugin_ldap_network_timeout` | `5` | LDAP network timeout, in seconds |
 
 ---
 
@@ -489,3 +686,6 @@ users automatically.
 | `src/include/classes/Authentication/User.php` | User data object |
 | `src/include/classes/Authentication/Plugins/AuthPluginInterface.php` | Interface every plugin must implement |
 | `src/include/classes/Authentication/Plugins/AuthPluginFile.php` | Built-in flat-file backend (reference implementation) |
+| `src/include/classes/Authentication/Plugins/AuthPluginLdap.php` | Built-in LDAP backend, with caching |
+| `src/include/classes/Authentication/Plugins/LdapClientContract.php` | Narrow interface over the LDAP client, so tests can inject a stub |
+| `src/include/classes/Authentication/Plugins/LdapClient.php` | Real `LdapClientContract`, wraps PHP's `ext-ldap` |

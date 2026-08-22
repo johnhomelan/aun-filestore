@@ -14,6 +14,13 @@ use Exception;
  * This class is a plugin for the auth system, it provides an auth backend
  * based on using a simple plain text user file.
  *
+ * Passwords are stored as `<hashtype>-<hash>`, e.g. `md5-5f4dcc3b5aa765d61d8327deb882cf99`.
+ * Supported hash types are `plain`, `md5`, `sha1` (all unsalted) and
+ * `bcrypt` (salted, via PHP's password_hash()/password_verify(), which embeds
+ * a random per-password salt and the cost in the stored hash itself).
+ * `security_plugin_file_default_crypt` controls what setPassword()/
+ * setPasswordAdmin() write out for new passwords; it defaults to `bcrypt`.
+ *
  * @package coreauth
  * @author John Brown <john@home-lan.co.uk>
  *
@@ -28,14 +35,48 @@ class AuthPluginFile implements AuthPluginInterface {
 	protected static array $aUsers = [];
 	protected static \Psr\Log\LoggerInterface $oLogger;
 
-	static protected function _writeOutUserFile(): void
+	/**
+	 * Thin wrapper around file_exists(), overridden by tests to mock the filesystem
+	*/
+	static protected function _fileExists(string $sPath): bool
+	{
+		return file_exists($sPath);
+	}
+
+	/**
+	 * Thin wrapper around file_get_contents(), overridden by tests to mock the filesystem
+	*/
+	static protected function _readFile(string $sPath): string
+	{
+		$mContents = file_get_contents($sPath);
+		return $mContents===FALSE ? '' : $mContents;
+	}
+
+	/**
+	 * Thin wrapper around file_put_contents(), overridden by tests to mock the filesystem
+	*/
+	static protected function _writeFile(string $sPath, string $sContents): void
+	{
+		file_put_contents($sPath, $sContents);
+	}
+
+	/**
+	 * Builds the flat file representation of the currently loaded users
+	*/
+	static protected function _buildUserFileContents(): string
 	{
 		$sUserFileContents = "";
-		if(strlen(config::getValueAsString('security_plugin_file_user_file'))>0){
-			foreach(AuthPluginFile::$aUsers as $aUserInfo){
-				$sUserFileContents = $sUserFileContents . $aUserInfo['username'].':'.$aUserInfo['password'].':'.$aUserInfo['homedir'].':'.$aUserInfo['unixuid'].':'.$aUserInfo['opt'].":".$aUserInfo['priv'].":".$aUserInfo['quota']."\n";
-			}
-			file_put_contents(config::getValueAsString('security_plugin_file_user_file'),$sUserFileContents);
+		foreach(AuthPluginFile::$aUsers as $aUserInfo){
+			$sUserFileContents = $sUserFileContents . $aUserInfo['username'].':'.$aUserInfo['password'].':'.$aUserInfo['homedir'].':'.$aUserInfo['unixuid'].':'.$aUserInfo['opt'].":".$aUserInfo['priv'].":".$aUserInfo['quota']."\n";
+		}
+		return $sUserFileContents;
+	}
+
+	static protected function _writeOutUserFile(): void
+	{
+		$sPath = config::getValueAsString('security_plugin_file_user_file');
+		if(strlen($sPath)>0){
+			static::_writeFile($sPath, static::_buildUserFileContents());
 		}
 	}
 
@@ -51,17 +92,20 @@ class AuthPluginFile implements AuthPluginInterface {
 
 		AuthPluginFile::$aUsers = [];
 		if(is_null($sUsers)){
-			if(!file_exists(config::getValueAsString('security_plugin_file_user_file'))){
-				self::$oLogger->error("AuthPluginFile: The user file (".config::getValueAsString('security_plugin_file_user_file').") does not exist.");
+			$sPath = config::getValueAsString('security_plugin_file_user_file');
+			if(!static::_fileExists($sPath)){
+				self::$oLogger->error("AuthPluginFile: The user file (".$sPath.") does not exist.");
 				return;
 			}
-			$sUsers = file_get_contents(config::getValueAsString('security_plugin_file_user_file'));
+			$sUsers = static::_readFile($sPath);
 		}
 		$aLines = explode("\n",(string) $sUsers);
 		foreach($aLines as $sLine){
 			$aMatches = [];
 			// Format with password hash (7-field: +quota; 6-field: legacy, quota defaults to 0)
-			if(preg_match('/([a-zA-Z0-9]+):([a-z0-9]+-[a-zA-Z0-9]+):([$a-z0-9A-Z\-._]+):([0-9]+):([0-9]):([A-Za-z]):?([0-9]*)/',$sLine,$aMatches)>0){
+			// The hash itself is matched as "anything but a colon" so salted formats
+			// (e.g. bcrypt's $2y$10$... which contains '$' and '.' and '/') parse correctly.
+			if(preg_match('/([a-zA-Z0-9]+):([a-z0-9]+-[^:]+):([$a-z0-9A-Z\-._]+):([0-9]+):([0-9]):([A-Za-z]):?([0-9]*)/',$sLine,$aMatches)>0){
 				AuthPluginFile::$aUsers[strtoupper($aMatches[1])]=['username'=>strtoupper($aMatches[1]), 'password'=>$aMatches[2], 'homedir'=>$aMatches[3], 'unixuid'=>(int) $aMatches[4], 'opt'=>$aMatches[5], 'priv'=>$aMatches[6], 'quota'=>(int)$aMatches[7]];
 			}
 			// Format with no password set (7-field: +quota; 6-field: legacy, quota defaults to 0)
@@ -90,13 +134,17 @@ class AuthPluginFile implements AuthPluginInterface {
 		if(!array_key_exists(strtoupper($sUsername),AuthPluginFile::$aUsers)){
 			return FALSE;
 		}
-		if(str_contains((string) AuthPluginFile::$aUsers[strtoupper($sUsername)]['password'],'-')){
-			[$sHashType, $sHash] = explode('-',(string) AuthPluginFile::$aUsers[strtoupper($sUsername)]['password']);
+		$sStored = (string) AuthPluginFile::$aUsers[strtoupper($sUsername)]['password'];
+		if(str_contains($sStored,'-')){
+			[$sHashType, $sHash] = explode('-',$sStored,2);
 		}else{
 			$sHashType='plain';
-			$sHash = AuthPluginFile::$aUsers[strtoupper($sUsername)]['password'];
+			$sHash = $sStored;
 		}
 		switch($sHashType){
+			case 'bcrypt':
+				//Salted, password_verify() does its own comparison so it doesn't fall through
+				return password_verify($sPassword,$sHash);
 			case 'plain':
 				if($sPassword==$sHash){
 					return TRUE;
@@ -170,10 +218,11 @@ class AuthPluginFile implements AuthPluginInterface {
 				AuthPluginFile::$aUsers[strtoupper($sUsername)]['password']=NULL;
 			}else{
 				AuthPluginFile::$aUsers[strtoupper($sUsername)]['password'] = match (config::getValueAsString('security_plugin_file_default_crypt')) {
-        'plain' => 'plain-'.$sPassword,
-        'sha1' => 'sha1-'.sha1($sPassword),
-        default => 'md5-'.md5($sPassword),
-    };
+					'plain' => 'plain-'.$sPassword,
+					'sha1' => 'sha1-'.sha1($sPassword),
+					'md5' => 'md5-'.md5($sPassword),
+					default => 'bcrypt-'.password_hash($sPassword, PASSWORD_BCRYPT),
+				};
 			}
 		}
 		static::_writeOutUserFile();
@@ -262,7 +311,8 @@ class AuthPluginFile implements AuthPluginInterface {
 		AuthPluginFile::$aUsers[strtoupper($sUsername)]['password'] = match (config::getValueAsString('security_plugin_file_default_crypt')) {
 			'plain' => 'plain-'.$sPassword,
 			'sha1'  => 'sha1-'.sha1($sPassword),
-			default => 'md5-'.md5($sPassword),
+			'md5'   => 'md5-'.md5($sPassword),
+			default => 'bcrypt-'.password_hash($sPassword, PASSWORD_BCRYPT),
 		};
 		static::_writeOutUserFile();
 	}

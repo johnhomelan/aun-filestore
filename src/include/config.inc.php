@@ -28,8 +28,23 @@ safe_define('CONFIG_housekeeping_interval',300);
 
 safe_define('CONFIG_security_auth_plugins','file');
 safe_define('CONFIG_security_plugin_file_user_file','users-live.txt');
-safe_define('CONFIG_security_plugin_file_default_crypt','md5');
+safe_define('CONFIG_security_plugin_file_default_crypt','bcrypt');
 safe_define('CONFIG_security_plugin_l3password_file','Passwords');
+safe_define('CONFIG_security_plugin_l3password_homedir_prefix','');
+safe_define('CONFIG_security_plugin_mdfspassword_file','');
+safe_define('CONFIG_security_plugin_mdfspassword_homedir_prefix','');
+safe_define('CONFIG_security_plugin_mdfspassword_accounts_file','');
+safe_define('CONFIG_security_plugin_ldap_uri','');
+safe_define('CONFIG_security_plugin_ldap_start_tls',FALSE);
+safe_define('CONFIG_security_plugin_ldap_bind_dn','');
+safe_define('CONFIG_security_plugin_ldap_bind_password','');
+safe_define('CONFIG_security_plugin_ldap_base_dn','');
+safe_define('CONFIG_security_plugin_ldap_user_filter','(&(objectClass=econetAccount)(uid=%s))');
+safe_define('CONFIG_security_plugin_ldap_create_dn_template','');
+safe_define('CONFIG_security_plugin_ldap_cache_ttl',300);
+safe_define('CONFIG_security_plugin_ldap_negative_cache_ttl',30);
+safe_define('CONFIG_security_plugin_ldap_default_crypt','bcrypt');
+safe_define('CONFIG_security_plugin_ldap_network_timeout',5);
 safe_define('CONFIG_security_default_unix_uid',500);
 safe_define('CONFIG_security_max_session_idle',2400);
 

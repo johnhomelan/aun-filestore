@@ -63,15 +63,16 @@ security_plugin_file_user_file = /etc/aun-filestored/passwd
 
 **security_plugin_file_default_crypt**
 
-Password hashing algorithm used by the `file` auth plugin when storing new or changed passwords.  Default is `md5`.
+Password hashing algorithm used by the `file` auth plugin when storing new or changed passwords.  Default is `bcrypt`.
 
 Valid values:
+* `bcrypt` — salted bcrypt hash via PHP's `password_hash()`/`password_verify()` (recommended)
 * `md5` — unsalted MD5 hash
 * `sha1` — unsalted SHA-1 hash
 * `plain` — plain text (not recommended)
 
 ~~~~~~
-security_plugin_file_default_crypt = md5
+security_plugin_file_default_crypt = bcrypt
 ~~~~~~
 
 ##### L3Password auth plugin #####
@@ -93,6 +94,111 @@ Path to the binary `PASSWORD` file used by the `l3password` auth plugin.  Defaul
 ~~~~~~
 security_plugin_l3password_file = /etc/aun-filestored/Passwords
 ~~~~~~
+
+**security_plugin_l3password_homedir_prefix**
+
+Optional subdirectory under which the `l3password` plugin's users' home directories are assumed to exist. A user's home directory is `<prefix>.<username>`. Empty (the default) means a bare username, e.g. `$.JOHN`.
+
+~~~~~~
+security_plugin_l3password_homedir_prefix = $.homes
+~~~~~~
+
+##### MdfsPassword auth plugin #####
+
+The `mdfspassword` auth plugin reads and writes the binary `%PASSWORDS` file format used by the SJ Research MDFS fileserver (see docs/authentication.md for the full format and its documented assumptions).
+
+~~~~~~
+security_auth_plugins = mdfspassword
+~~~~~~
+
+**security_plugin_mdfspassword_file**
+
+Path to the binary `%PASSWORDS` file. Empty (the default) disables the plugin.
+
+~~~~~~
+security_plugin_mdfspassword_file = /etc/aun-filestored/Passwords.mdfs
+~~~~~~
+
+**security_plugin_mdfspassword_homedir_prefix**
+
+Optional subdirectory under which users' home directories are assumed to exist. A user's home directory is `<prefix>.<username>`. Empty (the default) means a bare username.
+
+~~~~~~
+security_plugin_mdfspassword_homedir_prefix = $.homes
+~~~~~~
+
+**security_plugin_mdfspassword_accounts_file**
+
+Path to a standalone 512 byte accounts file (256 x 16-bit little endian KB balances) used to back `getQuota()`/`setQuota()`. Empty (the default) disables per-user quotas for this plugin — `getQuota()` always returns 0 (use the global default) and `setQuota()` is a no-op.
+
+~~~~~~
+security_plugin_mdfspassword_accounts_file = /etc/aun-filestored/Accounts.mdfs
+~~~~~~
+
+##### Ldap auth plugin #####
+
+The `ldap` auth plugin authenticates against an LDAP directory using a private `econetAccount` schema — see docs/authentication.md for the full schema definition, the OpenLDAP install commands, and the caching design. The plugin binds as a single configured service account for every operation; it never binds as the user being authenticated.
+
+~~~~~~
+security_auth_plugins = ldap
+~~~~~~
+
+**security_plugin_ldap_uri**
+
+LDAP server URI. Empty (the default) disables the plugin.
+
+~~~~~~
+security_plugin_ldap_uri = ldaps://ldap.example.com:636
+~~~~~~
+
+**security_plugin_ldap_start_tls**
+
+Use STARTTLS. Only relevant when `security_plugin_ldap_uri` is a plain `ldap://` URI. Default is `false`.
+
+~~~~~~
+security_plugin_ldap_start_tls = true
+~~~~~~
+
+**security_plugin_ldap_bind_dn** / **security_plugin_ldap_bind_password**
+
+DN and password of the service account used for every LDAP operation (searches and writes alike). Both empty by default.
+
+~~~~~~
+security_plugin_ldap_bind_dn = cn=filestore,ou=services,dc=example,dc=com
+security_plugin_ldap_bind_password = changeme
+~~~~~~
+
+**security_plugin_ldap_base_dn**
+
+Search base for econet accounts. Empty by default.
+
+~~~~~~
+security_plugin_ldap_base_dn = ou=people,dc=example,dc=com
+~~~~~~
+
+**security_plugin_ldap_user_filter**
+
+Search filter used to look up a single user; `%s` is replaced with the (filter-escaped) username. Default is `(&(objectClass=econetAccount)(uid=%s))`.
+
+**security_plugin_ldap_create_dn_template**
+
+DN template used by `createUser()` when no existing directory entry matches the new user's `uid`; `%s` is replaced with the username. Default is `uid=%s,<security_plugin_ldap_base_dn>`.
+
+**security_plugin_ldap_cache_ttl**
+
+Seconds a positive user lookup stays cached before the plugin will search LDAP again. Default is `300`.
+
+**security_plugin_ldap_negative_cache_ttl**
+
+Seconds a "user not found" result stays cached. Default is `30`.
+
+**security_plugin_ldap_default_crypt**
+
+Password hashing algorithm used when storing new or changed passwords in `econetPasswordHash`. Same valid values as `security_plugin_file_default_crypt` above. Default is `bcrypt`.
+
+**security_plugin_ldap_network_timeout**
+
+LDAP network timeout, in seconds. Default is `5`.
 
 
 Network

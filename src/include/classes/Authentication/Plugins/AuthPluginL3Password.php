@@ -55,6 +55,22 @@ class AuthPluginL3Password implements AuthPluginInterface {
 	protected static \Psr\Log\LoggerInterface $oLogger;
 
 	/**
+	 * Builds a user's home directory path
+	 *
+	 * The L3 password file format has no home directory field, a user's URD is their
+	 * username, optionally placed under a configured subdirectory (e.g. a
+	 * 'security_plugin_l3password_homedir_prefix' of "$.homes" gives "$.homes.username")
+	*/
+	static protected function _buildHomedir(string $sUsername): string
+	{
+		$sPrefix = rtrim(config::getValueAsString('security_plugin_l3password_homedir_prefix'), '.');
+		if(strlen($sPrefix)===0){
+			return $sUsername;
+		}
+		return $sPrefix.'.'.$sUsername;
+	}
+
+	/**
 	 * Encodes a single user record back to its 31 byte on disk representation
 	 *
 	 * @param L3PasswordUser $aUserInfo
@@ -213,8 +229,7 @@ class AuthPluginL3Password implements AuthPluginInterface {
 		if(array_key_exists($sUsername, AuthPluginL3Password::$aUsers)){
 			$aData = AuthPluginL3Password::$aUsers[$sUsername];
 			$oUser->setUsername($aData['username']);
-			//The L3 password file format has no home directory field, a user's URD is their username
-			$oUser->setHomedir($aData['username']);
+			$oUser->setHomedir(static::_buildHomedir($aData['username']));
 			$oUser->setBootOpt($aData['opt']);
 			$oUser->setPriv($aData['priv']);
 			$oUser->setQuota($aData['quota']);

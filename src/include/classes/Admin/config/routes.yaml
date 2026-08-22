@@ -55,6 +55,15 @@ macemail_broadcast:
 teletext_teefax_refresh:
     path: /service/teletext/teefax-refresh
     defaults: { _controller: 'HomeLan\FileStore\Admin\Controller\TeletextController::teefaxRefresh' }
+teletext_browse:
+    path: /service/teletext/browse
+    defaults: { _controller: 'HomeLan\FileStore\Admin\Controller\TeletextController::browse' }
+teletext_page_data:
+    path: /service/teletext/page-data
+    defaults: { _controller: 'HomeLan\FileStore\Admin\Controller\TeletextController::pageData' }
+teletext_render_js:
+    path: /static/teletext-render.js
+    defaults: { _controller: 'HomeLan\FileStore\Admin\Controller\TeletextController::renderScript' }
 live:
     path: /kube/live
     defaults: { _controller: 'HomeLan\FileStore\Admin\Controller\IndexController::kube' }

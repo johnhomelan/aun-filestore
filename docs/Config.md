@@ -892,6 +892,43 @@ Shared secret clients must present in their `hello` frame.  Mandatory — there 
 remote_socket_relay_secret = a-strong-shared-secret
 ~~~~~~
 
+Remote Provider Protocol
+==
+
+These keys configure the listening (`filestored`) side of the Remote Provider Protocol relay — the same idea as the Remote Socket Protocol above, one layer up the stack: instead of relaying raw UDP traffic under an interface, it relays whole Econet packets on ports `Services\Provider\ProxyProvider` has reserved (see `src/filestored`) to a provider process hosted elsewhere, such as `ecosyslogd`.  See [docs/protocols/remote-provider.md](protocols/remote-provider.md) for the wire protocol, and the `ecosyslogd`-side keys under [EcoSyslog](#ecosyslog) below.
+
+**remote_provider_relay_enabled**
+
+Enables the relay server.  When `true`, a WebSocket listener is started (on a separate port from both `websocket_listen_port` and `remote_socket_relay_listen_port`) and Econet packets addressed to a reserved port a provider process has registered for are relayed instead of dropped.  Default is `false`.
+
+~~~~~~
+remote_provider_relay_enabled = false
+~~~~~~
+
+**remote_provider_relay_listen_address**
+
+IP address the relay WebSocket server binds to.  Default is `0.0.0.0`.
+
+~~~~~~
+remote_provider_relay_listen_address = 0.0.0.0
+~~~~~~
+
+**remote_provider_relay_listen_port**
+
+TCP port the relay WebSocket server binds to.  Default is `8092`.
+
+~~~~~~
+remote_provider_relay_listen_port = 8092
+~~~~~~
+
+**remote_provider_relay_secret**
+
+Shared secret clients must present in their `hello` frame.  Mandatory — there is no way to run the relay unauthenticated.  No default; must be set for the feature to work, and must match the corresponding `*_remote_provider_relay_secret` key on every client (`ecosyslog_remote_provider_relay_secret` for `ecosyslogd`).
+
+~~~~~~
+remote_provider_relay_secret = a-strong-shared-secret
+~~~~~~
+
 ShareFS / Access+
 ==
 
@@ -1123,6 +1160,46 @@ Shared secret sent in the relay connection's `hello` frame.  Must match `remote_
 
 ~~~~~~
 ntp_remote_socket_relay_secret = a-strong-shared-secret
+~~~~~~
+
+EcoSyslog
+==
+
+These keys configure `ecosyslogd`, a **separate daemon and process** from `filestored` (own executable `src/ecosyslogd`, own config) that turns Econet packets addressed to port `0xB6` into log entries — an Econet version of syslog, and the sample provider for the Remote Provider Protocol.  See [docs/protocols/ecosyslog.md](protocols/ecosyslog.md) for the wire format and [docs/protocols/remote-provider.md](protocols/remote-provider.md) for the relay protocol.  `ecosyslogd` has no direct-Econet mode at all — it always receives its traffic over the Remote Provider Protocol relay (see [Remote Provider Protocol](#remote-provider-protocol) above), so the first two keys below are required for it to do anything; `filestored`'s `ProxyProvider` must also have `0xB6` in its reserved port list (see `src/filestored`).
+
+**ecosyslog_remote_provider_relay_address**
+
+`host:port` of the `filestored` relay server to connect to.  Default is `127.0.0.1:8092`.
+
+~~~~~~
+ecosyslog_remote_provider_relay_address = 127.0.0.1:8092
+~~~~~~
+
+**ecosyslog_remote_provider_relay_secret**
+
+Shared secret sent in the relay connection's `hello` frame.  Must match `remote_provider_relay_secret` on the `filestored` side.  No default.
+
+~~~~~~
+ecosyslog_remote_provider_relay_secret = a-strong-shared-secret
+~~~~~~
+
+**ecosyslog_local_enabled**
+
+When `true`, received log messages are written to the local OS syslog (via `Monolog\Handler\SyslogHandler`).  Can be enabled at the same time as `ecosyslog_remote_enabled`.  Default is `true`.
+
+~~~~~~
+ecosyslog_local_enabled = true
+~~~~~~
+
+**ecosyslog_remote_enabled** / **ecosyslog_remote_host** / **ecosyslog_remote_port** / **ecosyslog_remote_facility**
+
+When `ecosyslog_remote_enabled` is `true`, received log messages are also forwarded to an external syslog collector over UDP (via `Monolog\Handler\SyslogUdpHandler`), for centralised log storage rather than (or as well as) the local machine.  `ecosyslog_remote_facility` must name a PHP `LOG_*` syslog facility constant (e.g. `LOG_LOCAL0`..`LOG_LOCAL7`, `LOG_USER`, `LOG_DAEMON`) — an unrecognised name falls back to `LOG_LOCAL0` with a warning.  Default is `false` / *(none)* / `514` / `LOG_LOCAL0`.
+
+~~~~~~
+ecosyslog_remote_enabled = false
+ecosyslog_remote_host = syslog.example.org
+ecosyslog_remote_port = 514
+ecosyslog_remote_facility = LOG_LOCAL0
 ~~~~~~
 
 MaceMail

@@ -17,6 +17,7 @@
       <directory>unit-tests/admin/</directory>
       <directory>unit-tests/sharefs/</directory>
       <directory>unit-tests/remotesocket/</directory>
+      <directory>unit-tests/remoteprovider/</directory>
       <directory>unit-tests/dns/</directory>
       <directory>unit-tests/ntp/</directory>
     </testsuite>

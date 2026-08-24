@@ -94,6 +94,15 @@ safe_define('CONFIG_remote_socket_relay_listen_address', '0.0.0.0');
 safe_define('CONFIG_remote_socket_relay_listen_port', '8091');
 safe_define('CONFIG_remote_socket_relay_secret', '');
 
+// Remote Provider Protocol relay server (see docs/protocols/remote-provider.md) - the same idea
+// one layer up the stack: relays whole Econet packets on ports Services\Provider\ProxyProvider
+// has reserved (see src/filestored) to a provider process hosted elsewhere, e.g. ecosyslogd.
+// remote_provider_relay_secret has no default; it must be set explicitly for the feature to work.
+safe_define('CONFIG_remote_provider_relay_enabled', false);
+safe_define('CONFIG_remote_provider_relay_listen_address', '0.0.0.0');
+safe_define('CONFIG_remote_provider_relay_listen_port', '8092');
+safe_define('CONFIG_remote_provider_relay_secret', '');
+
 safe_define('CONFIG_sharefs_share_list_file', 'sharelist.txt');
 safe_define('CONFIG_sharefs_listen_address', '0.0.0.0');
 safe_define('CONFIG_sharefs_freeway_broadcast_address', '255.255.255.255');
@@ -152,6 +161,49 @@ safe_define('CONFIG_macemail_store_dir', '/var/lib/aun-filestore-macemail');
 safe_define('CONFIG_macemail_usergroup', 'MAIL');
 safe_define('CONFIG_macemail_max_slots', 32);
 
+// ecosyslogd is a sample Remote Provider Protocol host (see docs/protocols/ecosyslog.md): it
+// hosts Services\Provider\EcoSyslog, which turns Econet packets addressed to port 0xB6 into log
+// entries. It always connects to a filestored instance over the relay (see
+// docs/protocols/remote-provider.md) - ecosyslog_remote_provider_relay_secret must match
+// filestored's remote_provider_relay_secret, and filestored's ProxyProvider must have 0xB6 in
+// its reserved port list.
+safe_define('CONFIG_ecosyslog_remote_provider_relay_address', '127.0.0.1:8092');
+safe_define('CONFIG_ecosyslog_remote_provider_relay_secret', '');
+
+// Where received log messages are stored. Both may be enabled at once. Local storage goes
+// through the host OS's own syslog(3); remote storage speaks RFC 5424/3164 syslog over UDP to an
+// external log collector, via Monolog\Handler\SyslogUdpHandler - no bespoke forwarding code
+// needed.
+safe_define('CONFIG_ecosyslog_local_enabled', true);
+safe_define('CONFIG_ecosyslog_remote_enabled', false);
+safe_define('CONFIG_ecosyslog_remote_host', '');
+safe_define('CONFIG_ecosyslog_remote_port', 514);
+// Must name a PHP LOG_* syslog facility constant, e.g. LOG_LOCAL0 .. LOG_LOCAL7, LOG_USER, LOG_DAEMON.
+safe_define('CONFIG_ecosyslog_remote_facility', 'LOG_LOCAL0');
+
+// sql-serverd is a Remote Provider Protocol host (see docs/protocols/sql-server.md): it hosts
+// Services\Provider\SqlServer, which lets Econet clients authenticate, run parameterised SQL
+// queries against a configured PostgreSQL/MySQL/SQLite database, and stream paged result sets
+// back. It always connects to a filestored instance over the relay (see
+// docs/protocols/remote-provider.md) - sql_serverd_remote_provider_relay_secret must match
+// filestored's remote_provider_relay_secret, and filestored's ProxyProvider must have
+// sql_server_port in its reserved port list.
+safe_define('CONFIG_sql_server_port', 0xB7);
+safe_define('CONFIG_sql_serverd_remote_provider_relay_address', '127.0.0.1:8092');
+safe_define('CONFIG_sql_serverd_remote_provider_relay_secret', '');
+
+// Comma separated list of configured database names, e.g. "accounts,inventory". Each name then
+// needs its own set of sql_database_{name}_* keys (no defaults, since the name is arbitrary):
+//   sql_database_{name}_engine        = pgsql|mysql|sqlite
+//   sql_database_{name}_dsn           = PDO DSN, e.g. pgsql:host=localhost;dbname=accounts
+//   sql_database_{name}_user
+//   sql_database_{name}_password
+//   sql_database_{name}_allowed_users = comma list of Econet usernames, empty = any authenticated user
+safe_define('CONFIG_sql_databases', '');
+safe_define('CONFIG_sql_max_rows_per_query', 1000000);
+safe_define('CONFIG_sql_query_timeout', 30);
+safe_define('CONFIG_sql_max_connections_per_database', 20);
+
 safe_define('CONFIG_teletext_store_dir', '/var/lib/aun-filestore-teletext');
 safe_define('CONFIG_teletext_server_name', '');
 safe_define('CONFIG_teletext_max_users', 99);
@@ -159,3 +211,15 @@ safe_define('CONFIG_teletext_carousel_interval', 4);
 safe_define('CONFIG_teletext_teefax_channel', '6');
 safe_define('CONFIG_teletext_teefax_source', 'https://github.com/opless/teefax-mirror/archive/refs/heads/master.tar.gz');
 safe_define('CONFIG_teletext_teefax_refresh_interval', 86400);
+safe_define('CONFIG_teletext_news_bbc_channel', '2');
+safe_define('CONFIG_teletext_news_bbc_source', 'https://feeds.bbci.co.uk/news/rss.xml');
+safe_define('CONFIG_teletext_news_bbc_refresh_interval', 1800);
+safe_define('CONFIG_teletext_news_bbc_max_stories', 40);
+safe_define('CONFIG_teletext_news_guardian_channel', '3');
+safe_define('CONFIG_teletext_news_guardian_source', 'https://www.theguardian.com/uk/rss');
+safe_define('CONFIG_teletext_news_guardian_refresh_interval', 1800);
+safe_define('CONFIG_teletext_news_guardian_max_stories', 40);
+safe_define('CONFIG_teletext_news_sky_channel', '5');
+safe_define('CONFIG_teletext_news_sky_source', 'https://feeds.skynews.com/feeds/rss/home.xml');
+safe_define('CONFIG_teletext_news_sky_refresh_interval', 1800);
+safe_define('CONFIG_teletext_news_sky_max_stories', 40);

@@ -1,0 +1,24 @@
+#!/usr/bin/php
+<?php
+if(file_exists(__DIR__."/vendor/autoload.php")){
+        require_once __DIR__."/vendor/autoload.php";
+}else{
+        require_once "/usr/share/aun-filestored/vendor/autoload.php";
+}
+
+use HomeLan\FileStore\Console\SingleCommandApplication;
+use HomeLan\FileStore\Command\SqlServerd;
+
+use Monolog\Logger;
+use Monolog\Handler\SyslogHandler;
+use Monolog\Handler\StreamHandler;
+
+$oLogger = new Logger("sql-serverd");
+$oLogger->pushHandler(new SyslogHandler("sql-serverd"));
+$oLogger->pushHandler(new StreamHandler('php://stdout', Logger::DEBUG));
+
+$oApplication = new SingleCommandApplication(
+	new SqlServerd($oLogger)
+);
+
+$oApplication->run();

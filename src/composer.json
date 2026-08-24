@@ -16,6 +16,7 @@
     },
     "require": {
         "ext-ldap": "*",
+        "ext-pdo": "*",
         "aws/aws-sdk-php": "^3.0",
         "guzzlehttp/guzzle": "^7.15",
         "monolog/monolog": "^1.23",

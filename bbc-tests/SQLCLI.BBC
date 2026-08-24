@@ -1,0 +1,824 @@
+   10 REM ===================================================
+   20 REM SQLCLI - SqlServer sample client
+   30 REM Talks to the HomeLan aun-filestore SqlServer service
+   40 REM (Services/Provider/SqlServer.php - see
+   50 REM docs/protocols/sql-server.md), whether it's running
+   60 REM inside filestored directly or hosted out-of-process by
+   70 REM sql-serverd via the Remote Provider Protocol relay -
+   80 REM from this station's point of view it's the same one
+   90 REM Econet port, reachable at whatever network.station
+  100 REM filestored itself answers on.
+  110 REM
+  120 REM Demonstrates: LOGIN, CREATE TABLE, parameterised
+  130 REM INSERT/UPDATE/DELETE (FNexec), and a paged, parameterised
+  140 REM SELECT (PROCselect) - the whole point of the exercise:
+  150 REM a BBC has nowhere near enough RAM to hold an unbounded
+  160 REM result set, so rows are displayed a page at a time while
+  170 REM the wire-level stream keeps flowing underneath (each
+  180 REM 256-byte block is only "acked" by the ordinary Econet
+  190 REM transport receiving it - there is no separate
+  200 REM application-level ack message - so this client always
+  210 REM keeps a receive block open and reads every block
+  220 REM promptly, buffering decoded rows itself rather than
+  230 REM stalling the network to pace the user's reading, up to
+  240 REM MAXROWS% - see PROCdrainresults).
+  250 REM
+  260 REM This uses BBC BASIC's built-in 6502 assembler ([...]/OPT)
+  270 REM for the two places it earns its keep on an 8-bit machine:
+  280 REM  - appendblk: a tight byte-copy loop appending each
+  290 REM    received network block onto the pending-bytes buffer,
+  300 REM    the classic "drop to asm for a hot loop" case.
+  310 REM  - putint8/getint8: packing/unpacking the wire format's
+  320 REM    8-byte little-endian integers against BASIC's 32-bit
+  330 REM    integer variables (with sign-extension and an overflow
+  340 REM    check on decode).
+  350 REM Both use self-modifying operand bytes (PROCcallappendblk/
+  360 REM PROCcallputint8/PROCcallgetint8 poke the actual addresses
+  370 REM into the LDA/STA instructions before each CALL) rather
+  380 REM than indirect (zp),Y addressing - the 6502's indirect
+  390 REM addressing modes require the pointer to live in zero page,
+  400 REM which a DIMmed BASIC block does not.
+  410 REM
+  420 REM The actual Econet OSWORD &10/&11 / OSBYTE &32/&33/&34
+  430 REM primitives (FNtx/FNrxopen/FNrx/FNrxread/PROCrxkill below)
+  440 REM are the same proven BASIC-level CALL &FFF1/USR &FFF4
+  450 REM wrappers ECOLOG.BBC/VDTEST.BBC already use in this
+  460 REM project, rather than being re-derived by hand in asm -
+  470 REM that's already-correct, tested code; re-writing it from
+  480 REM scratch in assembler here would only add risk for no
+  490 REM benefit.
+  500 REM
+  510 REM Deliberately avoids CASE/OF/WHEN/ENDCASE and multi-line
+  520 REM IF/ENDIF throughout (BASIC IV+ only) in favour of the
+  530 REM single-line IF/THEN/ELSE style ECOLOG.BBC/VDTEST.BBC/
+  540 REM FSTEST.BBC already use, for the same reason - maximum
+  550 REM compatibility with plain BASIC II.
+  560 REM
+  570 REM NOTE: written carefully against the wire format in
+  580 REM docs/protocols/sql-server.md and the same low-level
+  590 REM primitives ECOLOG.BBC/VDTEST.BBC already use, but not
+  600 REM tested on real hardware or an emulator in this
+  610 REM environment - check buffer sizes and the asm byte
+  620 REM offsets below before relying on it.
+  630 REM ===================================================
+  640 REM Setup before running:
+  650 REM   *NET               - switch to network filing system
+  660 REM   Set iSqlStn%/iSqlNet% below to wherever filestored
+  670 REM   (or sql-serverd via the relay) is reachable, and
+  680 REM   configure at least one sql_databases entry there
+  690 REM   named "widgets" (or change sDemoDb$ below) with an
+  700 REM   engine you can freely CREATE TABLE/INSERT/UPDATE/
+  710 REM   DELETE against.
+  720 REM   CHAIN"SQLCLI" (or LOAD"SQLCLI":RUN)
+  730 :
+  740 REM --- Configuration ---
+  750 iSqlStn%=254         : REM station running SqlServer's control port
+  760 iSqlNet%=0           : REM its network number (0 = local network)
+  770 iSqlPort%=&B7        : REM SqlServer's Econet control port
+  780 iMyStreamPort%=&50   : REM port THIS station listens on for streamed results - pick anything not already in use locally
+  790 sDemoUser$="JOHN"
+  800 sDemoPass$="secret"
+  810 sDemoDb$="widgets"
+  820 iPageSize%=10        : REM rows displayed per page by PROCpage
+  830 MAXROWS%=200         : REM safety cap on rows buffered client-side - see header REM block
+  840 :
+  850 REM --- Operation codes (docs/protocols/sql-server.md) ---
+  860 OP_LOGIN%=1:OP_LOGOUT%=2:OP_LIST_DATABASES%=3:OP_QUERY%=4:OP_CANCEL%=5
+  870 :
+  880 REM --- Value wire-format type tags (used both directions) ---
+  890 TAG_NULL%=0:TAG_INTEGER%=1:TAG_FLOAT%=2:TAG_TEXT%=3:TAG_BLOB%=4
+  900 :
+  910 REM --- Econet scratch buffers ---
+  920 DIM X% 20            : REM OSWORD/OSBYTE control block
+  930 DIM code% 300        : REM assembled routines (see the ASSEMBLER section)
+  940 DIM txBuf% 599       : REM outgoing packet build buffer
+  950 DIM rxBuf% 259       : REM one incoming Econet frame (control reply, or one 256-byte stream block)
+  960 DIM rxBuf2% 259      : REM a second incoming frame - the control port and stream port are both listened to at once while draining results
+  970 DIM accBuf% 599      : REM pending/accumulated stream bytes not yet decoded into a whole row
+  980 DIM int8% 7          : REM scratch 8 bytes for PUTINT8
+  990 DIM resultover% 0    : REM 1-byte overflow flag set by GETINT8
+ 1000 :
+ 1000 REM txBuf%/accBuf% are sized for this demo's own short values and are NOT bounds-checked against overflow - keep bound TEXT/SQL text short; a value wider than accBuf% (spanning more than ~2 stream blocks) would overrun it.
+ 1010 REM --- Row buffer (paging) ---
+ 1020 DIM rowText$(MAXROWS%)
+ 1030 iRowCount%=0
+ 1040 :
+ 1050 REM --- Parameter binding scratch (see PROCbind*) ---
+ 1060 MAXPARAMS%=4
+ 1070 DIM pType%(MAXPARAMS%-1)
+ 1080 DIM pInt%(MAXPARAMS%-1)
+ 1090 DIM pText$(MAXPARAMS%-1)
+ 1100 pCount%=0
+ 1110 :
+ 1120 REM --- Query result globals, set by FNsendquery ---
+ 1130 gStatus%=0:gFlag%=0:gRowsAffected%=0:gErrMsg$=""
+ 1140 gCellText$=""        : REM set by FNdecodeint/FNdecodefloat/FNdecodetext, read by FNtrycell
+ 1150 :
+ 1160 REM =====================================================
+ 1170 REM ASSEMBLER - the two places hand-written 6502 earns its
+ 1180 REM keep here: a tight byte-copy loop (appendblk) and the
+ 1190 REM wire format's 8-byte integer packing (putint8/getint8).
+ 1200 REM Assembled before anything else uses CALL appendblk/
+ 1210 REM putint8/getint8, or pokes their self-modified operands.
+ 1220 REM Assembled twice (OPT 0 then OPT 3) - the standard BBC
+ 1230 REM BASIC two-pass idiom, so forward-referenced labels
+ 1240 REM resolve correctly on the first pass before the real
+ 1250 REM listing/error-checked pass assembles the actual code.
+ 1260 REM =====================================================
+ 1270 FOR pass%=0 TO 3 STEP 3
+ 1280 P%=code%
+ 1290 [OPT pass%
+ 1300 .appendblk
+ 1310 \ On entry: appendblk_ldop%+1/+2 and appendblk_stop%+1/+2 (the
+ 1320 \ operand bytes of the LDA/STA below) have already been poked
+ 1330 \ to the real source/destination addresses by
+ 1340 \ PROCcallappendblk, and cnt% holds (byte count - 1), since
+ 1350 \ the 6502's indirect (zp),Y addressing needs a zero-page
+ 1360 \ pointer a DIMmed BASIC block isn't - self-modifying the
+ 1370 \ operand of a plain absolute,Y instruction instead works
+ 1380 \ with any address and is itself a classic 6502 technique.
+ 1390   LDY #0
+ 1400 .appendblk_loop
+ 1410 .appendblk_ldop%
+ 1420   LDA &FFFF,Y
+ 1430 .appendblk_stop%
+ 1440   STA &FFFF,Y
+ 1450   CPY cnt%
+ 1460   BEQ appendblk_done
+ 1470   INY
+ 1480   JMP appendblk_loop
+ 1490 .appendblk_done
+ 1500   RTS
+ 1510 :
+ 1520 .putint8
+ 1530 \ Writes the 32-bit value at int8%(fixed address, no need to
+ 1540 \ patch the source operand) sign-extended, as 8 bytes little-
+ 1550 \ endian to the address patched into putint8_stop%+1/+2.
+ 1560   LDY #0
+ 1570 .putint8_loop
+ 1580   LDA int8%,Y
+ 1590 .putint8_stop%
+ 1600   STA &FFFF,Y
+ 1610   INY
+ 1620   CPY #8
+ 1630   BNE putint8_loop
+ 1640   RTS
+ 1650 :
+ 1660 .getint8
+ 1670 \ Reads the 8 bytes little-endian at the address patched into
+ 1680 \ getint8_ldop%+1/+2 (bytes 4-7, the high 32 bits) and
+ 1690 \ getint8_signop%+1/+2 (byte 3, the sign byte of the low 32
+ 1700 \ bits - same base address, patched separately since it's a
+ 1710 \ different instruction), checks the high word is a valid
+ 1720 \ sign-extension of the low word, and sets resultover% to 1
+ 1730 \ if not, 0 if it does. The low 4 bytes themselves are read
+ 1740 \ directly by BASIC (FNgetint32le) - this only needs to check
+ 1750 \ the high 4 bytes, the part BASIC's own !/? operators can't
+ 1760 \ express directly.
+ 1770   LDY #4
+ 1780 .getint8_hiloop
+ 1790 .getint8_ldop%
+ 1800   LDA &FFFF,Y
+ 1810   STA hitmp%,Y
+ 1820   INY
+ 1830   CPY #8
+ 1840   BNE getint8_hiloop
+ 1850   LDY #3
+ 1860 .getint8_signop%
+ 1870   LDA &FFFF,Y
+ 1880   BMI getint8_neg
+ 1890   LDA hitmp%+4:ORA hitmp%+5:ORA hitmp%+6:ORA hitmp%+7
+ 1900   BEQ getint8_ok
+ 1910   LDA #1:STA resultover%:RTS
+ 1920 .getint8_neg
+ 1930   LDA hitmp%+4:AND hitmp%+5:AND hitmp%+6:AND hitmp%+7
+ 1940   CMP #&FF
+ 1950   BEQ getint8_ok
+ 1960   LDA #1:STA resultover%:RTS
+ 1970 .getint8_ok
+ 1980   LDA #0:STA resultover%
+ 1990   RTS
+ 2000 :
+ 2010 \ Scratch storage used by the routines above.
+ 2020 .cnt%   EQUB 0
+ 2030 .hitmp% EQUD 0:EQUD 0
+ 2040 ]
+ 2050 NEXT pass%
+ 2060 :
+ 2070 REM PROCcallappendblk - patches appendblk's source/dest
+ 2080 REM operands and count, calls it, then advances iAccLen%
+ 2090 REM itself (ordinary BASIC arithmetic - simpler and no less
+ 2100 REM correct than round-tripping the new length back out of
+ 2110 REM the assembler).
+ 2120 DEF PROCcallappendblk(iSrcAddr%,iLen%)
+ 2130   LOCAL iDst%
+ 2140   IF iLen%=0 THEN ENDPROC
+ 2150   appendblk_ldop%?1=iSrcAddr% MOD 256
+ 2160   appendblk_ldop%?2=iSrcAddr% DIV 256
+ 2170   iDst%=accBuf%+iAccLen%
+ 2180   appendblk_stop%?1=iDst% MOD 256
+ 2190   appendblk_stop%?2=iDst% DIV 256
+ 2200   ?cnt%=iLen%-1
+ 2210   CALL appendblk
+ 2220   iAccLen%=iAccLen%+iLen%
+ 2230 ENDPROC
+ 2240 :
+ 2250 DEF PROCcallputint8(iDstAddr%,iOff%)
+ 2260   LOCAL iBase%
+ 2270   iBase%=iDstAddr%+iOff%
+ 2280   putint8_stop%?1=iBase% MOD 256
+ 2290   putint8_stop%?2=iBase% DIV 256
+ 2300   CALL putint8
+ 2310 ENDPROC
+ 2320 :
+ 2330 DEF PROCcallgetint8(iSrcAddr%,iOff%)
+ 2340   LOCAL iBase%
+ 2350   iBase%=iSrcAddr%+iOff%
+ 2360   getint8_ldop%?1=iBase% MOD 256
+ 2370   getint8_ldop%?2=iBase% DIV 256
+ 2380   getint8_signop%?1=iBase% MOD 256
+ 2390   getint8_signop%?2=iBase% DIV 256
+ 2400   CALL getint8
+ 2410 ENDPROC
+ 2420 :
+ 2430 REM =====================================================
+ 2440 REM MAIN DEMO
+ 2450 REM =====================================================
+ 2460 MODE 7
+ 2470 PRINT "SQLCLI - SqlServer sample client"
+ 2480 PRINT "Connecting to station ";iSqlNet%;".";iSqlStn%;" port &";~iSqlPort%
+ 2490 PRINT
+ 2500 ON ERROR GOTO 9000
+ 2510 :
+ 2520 PRINT "Logging in as ";sDemoUser$;"..."
+ 2530 IF NOT FNlogin(sDemoUser$,sDemoPass$) THEN PRINT "Login failed: ";gErrMsg$:END
+ 2540 PRINT "  OK"
+ 2550 PRINT
+ 2560 :
+ 2570 PRINT "Creating table (ignore an error here if it already exists)..."
+ 2580 PROCclearparams
+ 2590 iOk%=FNexec(sDemoDb$,"CREATE TABLE widgets (id INTEGER, name TEXT)")
+ 2600 PRINT
+ 2610 :
+ 2620 PRINT "Inserting rows..."
+ 2630 FOR iI%=1 TO 25
+ 2640   PROCclearparams
+ 2650   PROCbindint(iI%)
+ 2660   PROCbindtext("widget "+STR$(iI%))
+ 2670   iOk%=FNexec(sDemoDb$,"INSERT INTO widgets (id, name) VALUES (?, ?)")
+ 2680 NEXT
+ 2690 PRINT "  Inserted 25 rows (rows affected on the last insert: ";gRowsAffected%;")"
+ 2700 PRINT
+ 2710 :
+ 2720 PRINT "Updating row 1..."
+ 2730 PROCclearparams
+ 2740 PROCbindtext("renamed widget")
+ 2750 PROCbindint(1)
+ 2760 iOk%=FNexec(sDemoDb$,"UPDATE widgets SET name = ? WHERE id = ?")
+ 2770 PRINT "  Rows affected: ";gRowsAffected%
+ 2780 PRINT
+ 2790 :
+ 2800 PRINT "Deleting row 2..."
+ 2810 PROCclearparams
+ 2820 PROCbindint(2)
+ 2830 iOk%=FNexec(sDemoDb$,"DELETE FROM widgets WHERE id = ?")
+ 2840 PRINT "  Rows affected: ";gRowsAffected%
+ 2850 PRINT
+ 2860 :
+ 2870 PRINT "Selecting all widgets with id > 0, paged ";iPageSize%;" at a time..."
+ 2880 PRINT "(SPACE for next page, Q to stop early)"
+ 2890 PRINT
+ 2900 PROCclearparams
+ 2910 PROCbindint(0)
+ 2920 PROCselect(sDemoDb$,"SELECT id, name FROM widgets WHERE id > ? ORDER BY id")
+ 2930 :
+ 2940 PRINT
+ 2950 PRINT "Logging out..."
+ 2960 PROClogout
+ 2970 PRINT "Done."
+ 2980 END
+ 2990 :
+ 3000 REM =====================================================
+ 3010 REM PARAMETER BINDING - fills the module-level pType%()/
+ 3020 REM pInt%()/pText$() arrays FNexec/PROCselect send as a
+ 3030 REM QUERY's bound parameters, in the order bound.
+ 3040 REM =====================================================
+ 3050 DEF PROCclearparams
+ 3060   pCount%=0
+ 3070 ENDPROC
+ 3080 :
+ 3090 DEF PROCbindnull
+ 3100   pType%(pCount%)=TAG_NULL%
+ 3110   pCount%=pCount%+1
+ 3120 ENDPROC
+ 3130 :
+ 3140 DEF PROCbindint(iVal%)
+ 3150   pType%(pCount%)=TAG_INTEGER%
+ 3160   pInt%(pCount%)=iVal%
+ 3170   pCount%=pCount%+1
+ 3180 ENDPROC
+ 3190 :
+ 3200 DEF PROCbindtext(s$)
+ 3210   pType%(pCount%)=TAG_TEXT%
+ 3220   pText$(pCount%)=s$
+ 3230   pCount%=pCount%+1
+ 3240 ENDPROC
+ 3250 :
+ 3260 REM =====================================================
+ 3270 REM FNexec - runs a statement that returns no result set
+ 3280 REM (CREATE/INSERT/UPDATE/DELETE). Returns TRUE on success;
+ 3290 REM gRowsAffected%/gErrMsg$ are set as usual. If the server
+ 3300 REM decides the statement DOES have a result set (e.g. you
+ 3310 REM passed a SELECT here by mistake), the result set is
+ 3320 REM immediately drained and discarded with a warning - use
+ 3330 REM PROCselect for anything you expect rows back from.
+ 3340 REM =====================================================
+ 3350 DEF FNexec(sDb$,sSql$)
+ 3360   LOCAL iOk%
+ 3370   iOk%=FNsendquery(sDb$,sSql$)
+ 3380   IF NOT iOk% THEN =FALSE
+ 3390   IF gFlag%=0 THEN =TRUE
+ 3400   PRINT "  (warning: statement returned a result set - draining and discarding it)"
+ 3410   PROCdrainresults(TRUE)
+ 3420 =TRUE
+ 3430 :
+ 3440 REM =====================================================
+ 3450 REM PROCselect - runs sSql$ (with whatever's currently bound
+ 3460 REM via PROCbind*) against sDb$, expecting a result set, and
+ 3470 REM pages through it - see PROCdrainresults/PROCpage.
+ 3480 REM =====================================================
+ 3490 DEF PROCselect(sDb$,sSql$)
+ 3500   LOCAL iOk%
+ 3510   iOk%=FNsendquery(sDb$,sSql$)
+ 3520   IF NOT iOk% THEN ENDPROC
+ 3530   IF gFlag%=0 THEN PRINT "  (no result set - ";gRowsAffected%;" rows affected)":ENDPROC
+ 3540   PROCdrainresults(FALSE)
+ 3550 ENDPROC
+ 3560 :
+ 3570 REM =====================================================
+ 3580 REM FNsendquery - builds and sends a QUERY packet for sSql$
+ 3590 REM against sDb$ using the currently bound parameters
+ 3600 REM (pType%()/pInt%()/pText$()/pCount%), waits for the
+ 3610 REM immediate reply, and decodes it into gStatus%/gFlag%/
+ 3620 REM gRowsAffected%/gErrMsg$. Returns TRUE if a reply with
+ 3630 REM status 0 was received.
+ 3640 REM =====================================================
+ 3650 DEF FNsendquery(sDb$,sSql$)
+ 3660   LOCAL iRxNum%,bGot%,iTmo%,iLen%
+ 3670   PROCbuildquery(sDb$,sSql$)
+ 3680 :
+ 3690   REM Open the control-port receive block BEFORE sending, so the
+ 3700   REM reply can't arrive before we're listening for it.
+ 3710   iRxNum%=FNrxopen(iSqlStn%,iSqlPort%,rxBuf%,256)
+ 3720   IF iRxNum%=0 THEN PRINT "  No receive blocks free.":=FALSE
+ 3730 :
+ 3740   iErr%=FNtx(iSqlNet%,iSqlStn%,&80,iSqlPort%,txBuf%,iTxLen%)
+ 3750   IF iErr%<>0 THEN PRINT "  Transmit failed, code &";~iErr%:PROCrxkill(iRxNum%):=FALSE
+ 3760 :
+ 3770   iTmo%=TIME+500 : REM 5 second timeout
+ 3780   REPEAT:bGot%=FNrx(iRxNum%):UNTIL bGot% OR TIME>iTmo%
+ 3790   IF NOT bGot% THEN PRINT "  No reply (timed out).":PROCrxkill(iRxNum%):=FALSE
+ 3800 :
+ 3810   iLen%=FNrxread(iRxNum%,rxBuf%,256)
+ 3820   gStatus%=rxBuf%?0
+ 3830   IF gStatus%<>0 THEN PROCsetreplyerror(iLen%):=FALSE
+ 3840 :
+ 3850   gFlag%=rxBuf%?1
+ 3860   IF gFlag%=0 THEN gRowsAffected%=FNgetint32le(rxBuf%,2)
+ 3870 =TRUE
+ 3880 :
+ 3890 REM PROCsetreplyerror - decodes a CR-terminated error message
+ 3900 REM starting at rxBuf%?1 (as sent after a non-zero status
+ 3910 REM byte - see docs/protocols/sql-server.md) into gErrMsg$.
+ 3920 DEF PROCsetreplyerror(iLen%)
+ 3930   LOCAL iI%
+ 3940   gErrMsg$=""
+ 3950   FOR iI%=1 TO iLen%-1
+ 3960     IF rxBuf%?iI%=13 THEN ENDPROC
+ 3970     gErrMsg$=gErrMsg$+CHR$(rxBuf%?iI%)
+ 3980   NEXT
+ 3990 ENDPROC
+ 4000 :
+ 4010 REM =====================================================
+ 4020 REM PROCbuildquery - builds a QUERY payload into txBuf%,
+ 4030 REM setting iTxLen% to the total packet length (including
+ 4040 REM the leading op byte). Layout: see
+ 4050 REM docs/protocols/sql-server.md - op, db name (length-
+ 4060 REM prefixed), stream port (LE16), param count, params,
+ 4070 REM then the raw SQL text to the end of the packet.
+ 4080 REM =====================================================
+ 4090 DEF PROCbuildquery(sDb$,sSql$)
+ 4100   LOCAL iI%
+ 4110   txBuf%?0=OP_QUERY%
+ 4120   iTxLen%=1
+ 4130   PROCputlenstr(sDb$)
+ 4140   txBuf%?iTxLen%=iMyStreamPort% MOD 256:iTxLen%=iTxLen%+1
+ 4150   txBuf%?iTxLen%=iMyStreamPort% DIV 256:iTxLen%=iTxLen%+1
+ 4160   txBuf%?iTxLen%=pCount%:iTxLen%=iTxLen%+1
+ 4170   FOR iI%=0 TO pCount%-1
+ 4180     IF pType%(iI%)=TAG_NULL% THEN PROCputnull
+ 4190     IF pType%(iI%)=TAG_INTEGER% THEN PROCputint(pInt%(iI%))
+ 4200     IF pType%(iI%)=TAG_TEXT% THEN PROCputtext(pText$(iI%))
+ 4210   NEXT
+ 4220   FOR iI%=1 TO LEN(sSql$)
+ 4230     txBuf%?iTxLen%=ASC(MID$(sSql$,iI%,1)):iTxLen%=iTxLen%+1
+ 4240   NEXT
+ 4250 ENDPROC
+ 4260 :
+ 4270 REM PROCbuildlogin - builds a LOGIN payload into txBuf%.
+ 4280 DEF PROCbuildlogin(sUser$,sPass$)
+ 4290   txBuf%?0=OP_LOGIN%
+ 4300   iTxLen%=1
+ 4310   PROCputlenstr(sUser$)
+ 4320   PROCputlenstr(sPass$)
+ 4330 ENDPROC
+ 4340 :
+ 4350 REM PROCputlenstr - appends a 1-byte length + that many
+ 4360 REM bytes of s$ to txBuf% at iTxLen%, advancing it. Silently
+ 4370 REM truncates to 255 bytes (the wire format's length prefix
+ 4380 REM is a single byte).
+ 4390 DEF PROCputlenstr(s$)
+ 4400   LOCAL iI%,iN%
+ 4410   iN%=LEN(s$):IF iN%>255 THEN iN%=255
+ 4420   txBuf%?iTxLen%=iN%:iTxLen%=iTxLen%+1
+ 4430   FOR iI%=1 TO iN%
+ 4440     txBuf%?iTxLen%=ASC(MID$(s$,iI%,1)):iTxLen%=iTxLen%+1
+ 4450   NEXT
+ 4460 ENDPROC
+ 4470 :
+ 4480 REM =====================================================
+ 4490 REM VALUE ENCODING (parameters) - one tag byte then,
+ 4500 REM depending on tag, nothing/8 bytes/length+bytes. See
+ 4510 REM docs/protocols/sql-server.md "Value encoding".
+ 4520 REM =====================================================
+ 4530 DEF PROCputnull
+ 4540   txBuf%?iTxLen%=TAG_NULL%:iTxLen%=iTxLen%+1
+ 4550 ENDPROC
+ 4560 :
+ 4570 DEF PROCputint(iVal%)
+ 4580   txBuf%?iTxLen%=TAG_INTEGER%:iTxLen%=iTxLen%+1
+ 4590   !int8%=iVal%
+ 4600   IF iVal%<0 THEN int8%!4=-1 ELSE int8%!4=0
+ 4610   PROCcallputint8(txBuf%,iTxLen%)
+ 4620   iTxLen%=iTxLen%+8
+ 4630 ENDPROC
+ 4640 :
+ 4650 DEF PROCputtext(s$)
+ 4660   LOCAL iI%,iN%
+ 4670   iN%=LEN(s$):IF iN%>65535 THEN iN%=65535
+ 4680   txBuf%?iTxLen%=TAG_TEXT%:iTxLen%=iTxLen%+1
+ 4690   txBuf%?iTxLen%=iN% MOD 256:iTxLen%=iTxLen%+1
+ 4700   txBuf%?iTxLen%=iN% DIV 256:iTxLen%=iTxLen%+1
+ 4710   FOR iI%=1 TO iN%
+ 4720     txBuf%?iTxLen%=ASC(MID$(s$,iI%,1)):iTxLen%=iTxLen%+1
+ 4730   NEXT
+ 4740 ENDPROC
+ 4750 :
+ 4760 REM =====================================================
+ 4770 REM RESULT STREAMING AND PAGING
+ 4780 REM
+ 4790 REM A result set arrives on iMyStreamPort% as a continuous
+ 4800 REM byte stream (column-count+names header, then each row's
+ 4810 REM cells, self-describing - see docs/protocols/sql-server.md
+ 4820 REM "Result streaming"), packed into 256-byte Econet blocks
+ 4830 REM with NO block boundary relation to row boundaries. This
+ 4840 REM client always keeps a receive block open and reads every
+ 4850 REM block as soon as it arrives - the ordinary Econet receive
+ 4860 REM itself is the only "ack" this protocol has - decoding
+ 4870 REM whatever complete values it can from the accumulated
+ 4880 REM bytes (accBuf%/iAccLen%) and carrying over anything
+ 4890 REM incomplete to next time. Decoded rows are buffered
+ 4900 REM (rowText$()) and only *displayed* a page at a time -
+ 4910 REM see the header REM block for why paging is a display
+ 4920 REM concept here, not a network-pacing one.
+ 4930 REM
+ 4940 REM The query's completion reply (total rows sent + an EOF/
+ 4950 REM error flag) arrives separately, on the *control* port,
+ 4960 REM once the last data block has been received - this client
+ 4970 REM listens for both at once.
+ 4980 REM =====================================================
+ 4990 DEF PROCdrainresults(bDiscard%)
+ 5000   LOCAL iRxStream%,iRxCtrl%,bDone%,bCapped%,iColCount%
+ 5010   iAccLen%=0:iRowCount%=0:iColCount%=-1:bCapped%=FALSE
+ 5020 :
+ 5030   iRxStream%=FNrxopen(iSqlStn%,iMyStreamPort%,rxBuf%,256)
+ 5040   iRxCtrl%=FNrxopen(iSqlStn%,iSqlPort%,rxBuf2%,256)
+ 5050   bDone%=FALSE
+ 5060 :
+ 5070   REPEAT
+ 5080     IF iRxStream%<>0 THEN IF FNrx(iRxStream%) THEN PROCappendreceived(iRxStream%):iRxStream%=FNrxopen(iSqlStn%,iMyStreamPort%,rxBuf%,256)
+ 5090     PROCdecodeavailable(iColCount%,bCapped%)
+ 5100     IF iColCount%<>-1 AND NOT bCapped% AND iRowCount%>=MAXROWS% THEN bCapped%=TRUE
+ 5110     IF bCapped% THEN PROCstopearly(iRxStream%,iRxCtrl%):bDone%=TRUE
+ 5120     IF NOT bDone% AND iRxCtrl%<>0 THEN IF FNrx(iRxCtrl%) THEN PROCfinished(iRxCtrl%):bDone%=TRUE
+ 5130   UNTIL bDone%
+ 5140 :
+ 5150   IF NOT bDiscard% THEN PROCpage
+ 5160 ENDPROC
+ 5170 :
+ 5180 REM PROCappendreceived - reads the just-arrived block from
+ 5190 REM the OS into rxBuf%, then appends it to accBuf% (using the
+ 5200 REM asm byte-copy routine - see the ASSEMBLER section).
+ 5210 DEF PROCappendreceived(iRxNum%)
+ 5220   LOCAL iLen%
+ 5230   iLen%=FNrxread(iRxNum%,rxBuf%,256)
+ 5240   PROCcallappendblk(rxBuf%,iLen%)
+ 5250 ENDPROC
+ 5260 :
+ 5270 REM PROCfinished - decodes the completion reply (already
+ 5280 REM known to be waiting on iRxCtrl% by the caller's FNrx
+ 5290 REM check) and prints a one-line summary.
+ 5300 DEF PROCfinished(iRxCtrl%)
+ 5310   LOCAL iLen%,iEof%,iRows%
+ 5320   iLen%=FNrxread(iRxCtrl%,rxBuf2%,256)
+ 5330   iEof%=rxBuf2%?1
+ 5340   iRows%=FNgetint32le(rxBuf2%,2)
+ 5350   IF iEof%=&80 THEN PRINT "  (complete - ";iRows%;" row(s))" ELSE PRINT "  (stream ended with an error after ";iRows%;" row(s))"
+ 5360 ENDPROC
+ 5370 :
+ 5380 REM PROCstopearly - MAXROWS% reached before the server was
+ 5390 REM done: stop listening and CANCEL rather than silently
+ 5400 REM discarding further blocks, which would eventually just
+ 5410 REM time out on the server side anyway.
+ 5420 DEF PROCstopearly(iRxStream%,iRxCtrl%)
+ 5430   PRINT "  (showing the first ";MAXROWS%;" rows - cancelling the rest)"
+ 5440   IF iRxStream%<>0 THEN PROCrxkill(iRxStream%)
+ 5450   IF iRxCtrl%<>0 THEN PROCrxkill(iRxCtrl%)
+ 5460   PROCcancel
+ 5470 ENDPROC
+ 5480 :
+ 5490 REM =====================================================
+ 5500 REM PROCdecodeavailable - decodes as many complete values as
+ 5510 REM possible from the front of accBuf%(0..iAccLen%-1),
+ 5520 REM sliding any leftover partial value down to offset 0 for
+ 5530 REM next time. iColCount% is -1 until the header has been
+ 5540 REM decoded, then holds the column count for every row after.
+ 5550 REM =====================================================
+ 5560 DEF PROCdecodeavailable(RETURN iColCount%,bCapped%)
+ 5570   LOCAL iOff%
+ 5580   iOff%=0
+ 5590   IF iColCount%=-1 THEN PROCtryheader(iOff%,iColCount%):IF iColCount%=-1 THEN PROCcarry(iOff%):ENDPROC
+ 5600   REPEAT
+ 5610     IF bCapped% THEN PROCcarry(iOff%):ENDPROC
+ 5620     IF NOT FNtryrow(iOff%,iColCount%) THEN PROCcarry(iOff%):ENDPROC
+ 5630   UNTIL FALSE
+ 5640 ENDPROC
+ 5650 :
+ 5660 REM PROCtryheader - attempts to decode the [2]colcount +
+ 5670 REM colcount*{[1]namelen,name} header. Leaves iOff% unchanged
+ 5680 REM and iColCount% at -1 if not enough bytes have arrived yet.
+ 5690 DEF PROCtryheader(RETURN iOff%,RETURN iColCount%)
+ 5700   LOCAL iStart%,iN%,iI%,iNameLen%
+ 5710   iStart%=iOff%
+ 5720   IF iAccLen%-iOff%<2 THEN iColCount%=-1:ENDPROC
+ 5730   iN%=FNgetuint16le(accBuf%,iOff%):iOff%=iOff%+2
+ 5740   FOR iI%=1 TO iN%
+ 5750     IF iAccLen%-iOff%<1 THEN iOff%=iStart%:iColCount%=-1:ENDPROC
+ 5760     iNameLen%=accBuf%?iOff%:iOff%=iOff%+1
+ 5770     IF iAccLen%-iOff%<iNameLen% THEN iOff%=iStart%:iColCount%=-1:ENDPROC
+ 5780     iOff%=iOff%+iNameLen%
+ 5790   NEXT
+ 5800   iColCount%=iN%
+ 5810 ENDPROC
+ 5820 :
+ 5830 REM FNtryrow - attempts to decode one whole row (iColCount%
+ 5840 REM cells) starting at iOff% into rowText$(iRowCount%),
+ 5850 REM formatted as tab-separated printable text. Returns FALSE
+ 5860 REM (leaving iOff% unchanged) if the row isn't fully
+ 5870 REM available yet.
+ 5880 DEF FNtryrow(RETURN iOff%,iColCount%)
+ 5890   LOCAL iStart%,iI%,s$,sCell$
+ 5900   iStart%=iOff%
+ 5910   s$=""
+ 5920   FOR iI%=1 TO iColCount%
+ 5930     IF NOT FNtrycell(iOff%,sCell$) THEN iOff%=iStart%:=FALSE
+ 5940     IF iI%>1 THEN s$=s$+CHR$9
+ 5950     s$=s$+sCell$
+ 5960   NEXT
+ 5970   IF iRowCount%<MAXROWS% THEN rowText$(iRowCount%)=s$:iRowCount%=iRowCount%+1
+ 5980 =TRUE
+ 5990 :
+ 6000 REM FNtrycell - decodes one tag+value at iOff% into sCell$.
+ 6010 REM Returns FALSE (leaving iOff% unchanged) if the whole
+ 6020 REM value isn't available yet. Deliberately flat (no CASE, no
+ 6030 REM nested single-line IF/ELSE) - see FNdecodeint/
+ 6040 REM FNdecodefloat/FNdecodetext, each of which returns 0 if not
+ 6050 REM enough bytes are available yet (without touching
+ 6060 REM gCellText$), else the number of value bytes consumed
+ 6070 REM (having set gCellText$).
+ 6080 DEF FNtrycell(RETURN iOff%,RETURN sCell$)
+ 6090   LOCAL iTag%,iUsed%
+ 6100   IF iAccLen%-iOff%<1 THEN =FALSE
+ 6110   iTag%=accBuf%?iOff%
+ 6120   IF iTag%=TAG_NULL% THEN iOff%=iOff%+1:sCell$="NULL":=TRUE
+ 6130   iUsed%=0
+ 6140   IF iTag%=TAG_INTEGER% THEN iUsed%=FNdecodeint(iOff%+1)
+ 6150   IF iTag%=TAG_FLOAT% THEN iUsed%=FNdecodefloat(iOff%+1)
+ 6160   IF iTag%=TAG_TEXT% OR iTag%=TAG_BLOB% THEN iUsed%=FNdecodetext(iOff%+1)
+ 6170   IF iTag%<>TAG_INTEGER% AND iTag%<>TAG_FLOAT% AND iTag%<>TAG_TEXT% AND iTag%<>TAG_BLOB% THEN iOff%=iOff%+1:sCell$="<bad tag "+STR$(iTag%)+">":=TRUE
+ 6180   IF iUsed%=0 THEN =FALSE
+ 6190   iOff%=iOff%+1+iUsed%
+ 6200   sCell$=gCellText$
+ 6210 =TRUE
+ 6220 :
+ 6230 DEF FNdecodeint(iOff%)
+ 6240   LOCAL iVal%,iOverflow%
+ 6250   IF iAccLen%-iOff%<8 THEN =0
+ 6260   iVal%=FNgetint32le(accBuf%,iOff%)
+ 6270   PROCcallgetint8(accBuf%,iOff%)
+ 6280   iOverflow%=?resultover%
+ 6290   IF iOverflow% THEN gCellText$="<int overflow>" ELSE gCellText$=STR$(iVal%)
+ 6300 =8
+ 6310 :
+ 6320 DEF FNdecodefloat(iOff%)
+ 6330   IF iAccLen%-iOff%<8 THEN =0
+ 6340   gCellText$=FNfloatstr(accBuf%,iOff%)
+ 6350 =8
+ 6360 :
+ 6370 DEF FNdecodetext(iOff%)
+ 6380   LOCAL iLen%,iI%,s$
+ 6390   IF iAccLen%-iOff%<2 THEN =0
+ 6400   iLen%=FNgetuint16le(accBuf%,iOff%)
+ 6410   IF iAccLen%-(iOff%+2)<iLen% THEN =0
+ 6420   s$=""
+ 6430   FOR iI%=0 TO iLen%-1
+ 6440     s$=s$+CHR$(accBuf%?(iOff%+2+iI%))
+ 6450   NEXT
+ 6460   gCellText$=s$
+ 6470 =2+iLen%
+ 6480 :
+ 6490 REM PROCcarry - moves the iAccLen%-iOff% undecoded trailing
+ 6500 REM bytes at accBuf%+iOff% down to accBuf%+0, ready for more
+ 6510 REM bytes to be appended after them next time.
+ 6520 DEF PROCcarry(iOff%)
+ 6530   LOCAL iI%,iRemain%
+ 6540   iRemain%=iAccLen%-iOff%
+ 6550   IF iOff%>0 AND iRemain%>0 THEN FOR iI%=0 TO iRemain%-1:accBuf%?iI%=accBuf%?(iOff%+iI%):NEXT
+ 6560   iAccLen%=iRemain%
+ 6570 ENDPROC
+ 6580 :
+ 6590 REM FNfloatstr - decodes an 8-byte IEEE754 double (LE) at
+ 6600 REM iAddr%+iOff% into a printable string, reconstructed via
+ 6610 REM ordinary BASIC floating point arithmetic from the sign/
+ 6620 REM exponent/top-20-mantissa-bits extracted byte-by-byte
+ 6630 REM (avoiding both shift operators - not available in plain
+ 6640 REM BASIC II/IV - and any risk of a 32-bit signed integer
+ 6650 REM overflowing on a value with the top bit set). Only the
+ 6660 REM most significant ~20 bits of the 52-bit mantissa are
+ 6670 REM used, so this is not bit-exact for every value - ample
+ 6680 REM precision for a sample client; a full software-bignum
+ 6690 REM accurate IEEE754 decode is a lot of machinery this demo
+ 6700 REM doesn't need.
+ 6710 DEF FNfloatstr(iAddr%,iOff%)
+ 6720   LOCAL iB4%,iB5%,iB6%,iB7%,iSign%,iExp%,fMant,fVal
+ 6730   iB4%=iAddr%?(iOff%+4)
+ 6740   iB5%=iAddr%?(iOff%+5)
+ 6750   iB6%=iAddr%?(iOff%+6)
+ 6760   iB7%=iAddr%?(iOff%+7)
+ 6770   iSign%=(iB7% AND &80)<>0
+ 6780   iExp%=((iB7% AND &7F)*16)+(iB6% DIV 16)
+ 6790   IF iExp%=0 THEN ="0"
+ 6800   fMant=(((iB6% AND 15)*65536)+(iB5%*256)+iB4%)/1048576.0
+ 6810   fVal=(1.0+fMant)*(2.0^(iExp%-1023))
+ 6820   IF iSign% THEN fVal=-fVal
+ 6830 =STR$(fVal)
+ 6840 :
+ 6850 REM =====================================================
+ 6860 REM PROCpage - prints rowText$(0..iRowCount%-1) iPageSize%
+ 6870 REM lines at a time, pausing for SPACE (more) or Q (stop).
+ 6880 REM =====================================================
+ 6890 DEF PROCpage
+ 6900   LOCAL iI%,iShown%,iKey%
+ 6910   IF iRowCount%=0 THEN PRINT "  (no rows)":ENDPROC
+ 6920   iI%=0:iKey%=0
+ 6930   REPEAT
+ 6940     iShown%=0
+ 6950     REPEAT
+ 6960       PRINT rowText$(iI%)
+ 6970       iI%=iI%+1:iShown%=iShown%+1
+ 6980     UNTIL iI%>=iRowCount% OR iShown%>=iPageSize%
+ 6990     IF iI%<iRowCount% THEN PRINT "-- more (SPACE) or stop (Q) --";:REPEAT:iKey%=GET:UNTIL iKey%=32 OR iKey%=81 OR iKey%=113:PRINT
+ 7000   UNTIL iI%>=iRowCount% OR iKey%=81 OR iKey%=113
+ 7010 ENDPROC
+ 7020 :
+ 7030 REM =====================================================
+ 7040 REM SIMPLE OPERATIONS: LOGIN/LOGOUT/CANCEL
+ 7050 REM =====================================================
+ 7060 DEF FNlogin(sUser$,sPass$)
+ 7070   LOCAL iRxNum%,bGot%,iTmo%,iLen%
+ 7080   PROCbuildlogin(sUser$,sPass$)
+ 7090   iRxNum%=FNrxopen(iSqlStn%,iSqlPort%,rxBuf%,256)
+ 7100   IF iRxNum%=0 THEN gErrMsg$="no receive blocks free":=FALSE
+ 7110   iErr%=FNtx(iSqlNet%,iSqlStn%,&80,iSqlPort%,txBuf%,iTxLen%)
+ 7120   IF iErr%<>0 THEN gErrMsg$="Econet transmit failed (&"+STR$~(iErr%)+")":PROCrxkill(iRxNum%):=FALSE
+ 7130   iTmo%=TIME+500
+ 7140   REPEAT:bGot%=FNrx(iRxNum%):UNTIL bGot% OR TIME>iTmo%
+ 7150   IF NOT bGot% THEN gErrMsg$="timed out":PROCrxkill(iRxNum%):=FALSE
+ 7160   iLen%=FNrxread(iRxNum%,rxBuf%,256)
+ 7170   gStatus%=rxBuf%?0
+ 7180   IF gStatus%<>0 THEN PROCsetreplyerror(iLen%):=FALSE
+ 7190 =TRUE
+ 7200 :
+ 7210 DEF PROClogout
+ 7220   PROCsimpleop(OP_LOGOUT%)
+ 7230 ENDPROC
+ 7240 :
+ 7250 DEF PROCcancel
+ 7260   PROCsimpleop(OP_CANCEL%)
+ 7270 ENDPROC
+ 7280 :
+ 7290 REM PROCsimpleop - sends a fixed op with no payload and waits
+ 7300 REM for its (status-only) reply, for ops that don't need
+ 7310 REM anything more elaborate (LOGOUT, CANCEL).
+ 7320 DEF PROCsimpleop(iOp%)
+ 7330   LOCAL iRxNum%,bGot%,iTmo%,iLen%
+ 7340   txBuf%?0=iOp%:iTxLen%=1
+ 7350   iRxNum%=FNrxopen(iSqlStn%,iSqlPort%,rxBuf%,256)
+ 7360   IF iRxNum%=0 THEN ENDPROC
+ 7370   iErr%=FNtx(iSqlNet%,iSqlStn%,&80,iSqlPort%,txBuf%,iTxLen%)
+ 7380   IF iErr%<>0 THEN PROCrxkill(iRxNum%):ENDPROC
+ 7390   iTmo%=TIME+500
+ 7400   REPEAT:bGot%=FNrx(iRxNum%):UNTIL bGot% OR TIME>iTmo%
+ 7410   IF NOT bGot% THEN PROCrxkill(iRxNum%):ENDPROC
+ 7420   iLen%=FNrxread(iRxNum%,rxBuf%,256)
+ 7430 ENDPROC
+ 7440 :
+ 7450 REM =====================================================
+ 7460 REM LOW-LEVEL WIRE-VALUE HELPERS not worth their own asm
+ 7470 REM (16/32-bit little-endian reads - BASIC's own !/? operators
+ 7480 REM already do the byte-level work efficiently for these).
+ 7490 REM =====================================================
+ 7500 DEF FNgetuint16le(iAddr%,iOff%)
+ 7510 =(iAddr%?iOff%)+((iAddr%?(iOff%+1))*256)
+ 7520 :
+ 7530 REM FNgetint32le - reads the low 4 bytes at iAddr%+iOff% as a
+ 7540 REM signed 32-bit BASIC integer (used for the wire format's
+ 7550 REM 32-bit fields: rows-affected and total-rows-sent, and the
+ 7560 REM low half of a wire INTEGER value).
+ 7570 DEF FNgetint32le(iAddr%,iOff%)
+ 7580 =iAddr%!iOff%
+ 7590 :
+ 7600 REM =====================================================
+ 7610 REM Low level Econet primitives (OSWORD &10/&11, OSBYTE
+ 7620 REM &32/&33/&34) - unmodified from VDTEST.BBC/ECOLOG.BBC
+ 7630 REM (see the header REM block for why these stay as proven
+ 7640 REM BASIC-level wrappers rather than hand-assembled here).
+ 7650 REM Adapted from J.G.Harston's BLib.Net library
+ 7660 REM (https://mdfs.net/System/Library/BLib/Net.bas) and the
+ 7670 REM OSWORD &10/&11 reference at
+ 7680 REM https://mdfs.net/Docs/Comp/BBC/Oswords
+ 7690 REM =====================================================
+ 7700 DEF FNtx(iNet%,iStn%,iCtrl%,iPort%,iAddr%,iLen%)
+ 7710   LOCAL iE%,iTry%
+ 7720   X%?1=iPort%:X%?2=iStn%:X%?3=iNet%:X%!4=iAddr%:X%!8=iAddr%+iLen%:X%!12=0
+ 7730   iTry%=5
+ 7740   REPEAT
+ 7750     REPEAT:X%?0=iCtrl%:A%=&10:CALL&FFF1:UNTIL X%?0<>0
+ 7760     REPEAT:iE%=FNbyte(&32,0,0):UNTIL iE%<&80
+ 7770     IF iE%=&41 OR iE%=&42 THEN iTry%=iTry%-1:PROCdelay(50)
+ 7780   UNTIL(iE%<>&41 AND iE%<>&42)OR iTry%<1
+ 7790 =iE%
+ 7800 :
+ 7810 REM FNrxopen - opens a receive block listening on iPort% for
+ 7820 REM packets from iStn%. Returns the block handle, or 0 if no
+ 7830 REM receive blocks are free.
+ 7840 DEF FNrxopen(iStn%,iPort%,iAddr%,iLen%)
+ 7850   X%?0=0:X%?1=&7F:X%?2=iPort%:X%!3=iStn%:X%!5=iAddr%:X%!9=iAddr%+iLen%
+ 7860   A%=&11:CALL&FFF1
+ 7870 =X%?0
+ 7880 :
+ 7890 REM FNrx - TRUE if the receive block iRxNum% has data waiting
+ 7900 REM (non-blocking poll).
+ 7910 DEF FNrx(iRxNum%)
+ 7920 =(FNbyte(&33,iRxNum%,0)AND&80)<>0
+ 7930 :
+ 7940 REM FNrxread - reads and frees receive block iRxNum%. Returns
+ 7950 REM the number of data bytes received.
+ 7960 DEF FNrxread(iRxNum%,iAddr%,iLen%)
+ 7970   X%?0=iRxNum%:X%!5=iAddr%:X%!9=iAddr%+iLen%
+ 7980   A%=&11:CALL&FFF1
+ 7990 =X%!9-iAddr%
+ 8000 :
+ 8010 REM PROCrxkill - abandons a receive block that was opened but
+ 8020 REM never triggered.
+ 8030 DEF PROCrxkill(iRxNum%)
+ 8040   iE%=FNbyte(&34,iRxNum%,0)
+ 8050 ENDPROC
+ 8060 :
+ 8070 REM FNbyte - OSBYTE wrapper. Parameter names deliberately
+ 8080 REM shadow A%/X%/Y% - USR reads the current scope's A%/X%/Y%
+ 8090 REM to load the 6502 registers before calling.
+ 8100 DEF FNbyte(A%,X%,Y%)=((USR&FFF4)AND&FF00)DIV256
+ 8110 :
+ 8120 DEF PROCdelay(iCs%)
+ 8130   LOCAL iT%
+ 8140   iT%=TIME+iCs%
+ 8150   REPEAT UNTIL TIME>iT%
+ 8160 ENDPROC
+ 8170 :
+ 8180 REM =====================================================
+ 8190 REM FATAL ERROR HANDLER
+ 8200 REM =====================================================
+ 8210 9000 PRINT '"Error ";ERR;": ";REPORT$
+ 8220 9010 ON ERROR OFF
+ 8230 9020 END

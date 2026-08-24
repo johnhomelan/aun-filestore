@@ -1,0 +1,143 @@
+   10 REM ===================================================
+   20 REM ECOLOG - EcoSyslog Client (Econet version of syslog)
+   30 REM Talks to the HomeLan aun-filestore EcoSyslog service
+   40 REM (Services/Provider/EcoSyslog.php - see
+   50 REM docs/protocols/ecosyslog.md), whether it's running
+   60 REM inside filestored directly or hosted out-of-process by
+   70 REM ecosyslogd via the Remote Provider Protocol relay - from
+   80 REM this station's point of view it's the same one Econet
+   90 REM port, reachable at whatever network.station filestored
+  100 REM itself answers on.
+  110 REM
+  120 REM This is a library of PROC/FN definitions (FNekolog and
+  130 REM its per-severity wrappers below) meant to be called from
+  140 REM your own program - copy the DEF PROC/FN blocks below
+  150 REM (and the config/buffers they need) into it. Running this
+  160 REM file directly (CHAIN"ECOLOG") sends one test message at
+  170 REM every severity, to prove connectivity.
+  180 REM
+  190 REM Unlike VDTEST/FSTEST/PSTEST, EcoSyslog is fire-and-forget
+  200 REM at the application level - there is no login, no session,
+  210 REM and no reply to wait for, exactly like real UDP syslog.
+  220 REM Every message is a single Econet transmit; nothing here
+  230 REM ever opens a receive block. FNekolog()'s return value is
+  240 REM only the *Econet* delivery status (did the packet reach
+  250 REM the station), not confirmation the message was logged.
+  260 REM
+  270 REM Low-level Econet raw transmit control block layout
+  280 REM adapted from J.G.Harston's BLib.Net library
+  290 REM (https://mdfs.net/System/Library/BLib/Net.bas) and the
+  300 REM OSWORD &10 reference at https://mdfs.net/Docs/Comp/BBC/Oswords
+  310 REM - the same primitive VDTEST.BBC uses, minus everything
+  320 REM receive-side, which EcoSyslog has no use for.
+  330 REM ===================================================
+  340 REM Setup before running the self-test:
+  350 REM   *NET               - switch to network filing system
+  360 REM   Set iLogStn%/iLogNet% below to wherever filestored is
+  370 REM   CHAIN"ECOLOG" (or LOAD"ECOLOG":RUN)
+  380 :
+  390 REM --- Configuration ---
+  400 iLogStn%=254         : REM station running filestored (or wherever EcoSyslog's port is reachable)
+  410 iLogNet%=0           : REM its network number (0 = local network)
+  420 iLogPort%=&B6        : REM EcoSyslog's Econet port
+  430 :
+  440 REM --- Severity levels (byte 0 of the payload) - see docs/protocols/ecosyslog.md ---
+  450 iEkoEmergency%=0:iEkoAlert%=1:iEkoCritical%=2:iEkoError%=3
+  460 iEkoWarning%=4:iEkoNotice%=5:iEkoInfo%=6:iEkoDebug%=7
+  470 :
+  480 REM --- Econet scratch buffers ---
+  490 DIM X% 20             : REM OSWORD/OSBYTE control block
+  500 DIM txBuf% 199        : REM severity byte + up to 199 bytes of message text
+  510 :
+  520 PROCselftest
+  530 END
+  540 :
+  550 REM =====================================================
+  560 REM PROCselftest - sends one message at every severity,
+  570 REM so running this file directly proves connectivity.
+  580 REM Delete this and PROCekotest below if you only want the
+  590 REM library (everything from FNekolog downwards).
+  600 REM =====================================================
+  610 DEF PROCselftest
+  620   PRINT "ECOLOG self-test"
+  630   PRINT "Sending to station ";iLogNet%;".";iLogStn%;" port &";~iLogPort%
+  640   PRINT
+  650   PROCekotest(iEkoEmergency%,"emergency test message")
+  660   PROCekotest(iEkoAlert%,    "alert test message")
+  670   PROCekotest(iEkoCritical%, "critical test message")
+  680   PROCekotest(iEkoError%,    "error test message")
+  690   PROCekotest(iEkoWarning%,  "warning test message")
+  700   PROCekotest(iEkoNotice%,   "notice test message")
+  710   PROCekotest(iEkoInfo%,     "informational test message")
+  720   PROCekotest(iEkoDebug%,    "debug test message")
+  730   PRINT
+  740   PRINT "Done."
+  750 ENDPROC
+  760 :
+  770 DEF PROCekotest(iSeverity%,sMsg$)
+  780   LOCAL iErr%
+  790   iErr%=FNekolog(iSeverity%,sMsg$)
+  800   PRINT "  [";iSeverity%;"] ";sMsg$;" -> ";
+  810   IF iErr%=0 THEN PRINT "sent" ELSE PRINT "FAILED (Econet error &";~iErr%;")"
+  820 ENDPROC
+  830 :
+  840 REM =====================================================
+  850 REM FNekolog - sends sMsg$ to the EcoSyslog service at the
+  860 REM given severity (0=Emergency .. 7=Debug, see the
+  870 REM iEko*% constants above). Messages longer than the
+  880 REM buffer are truncated. Returns 0 if the Econet transmit
+  890 REM succeeded, else an Econet error code - see FNtx below.
+  900 REM =====================================================
+  910 DEF FNekolog(iSeverity%,sMsg$)
+  920   LOCAL iLen%,iI%
+  930   iLen%=LEN(sMsg$)
+  940   IF iLen%>199 THEN iLen%=199
+  950   txBuf%?0=iSeverity%
+  960   FOR iI%=1 TO iLen%
+  970     txBuf%?iI%=ASC(MID$(sMsg$,iI%,1))
+  980   NEXT
+  990 =FNtx(iLogNet%,iLogStn%,&80,iLogPort%,txBuf%,iLen%+1)
+ 1000 :
+ 1010 REM --- One convenience wrapper per severity - all fire-and-forget, ---
+ 1020 REM --- returning the same Econet delivery status as FNekolog.      ---
+ 1030 DEF FNekolog_emergency(sMsg$)=FNekolog(iEkoEmergency%,sMsg$)
+ 1040 DEF FNekolog_alert(sMsg$)    =FNekolog(iEkoAlert%,sMsg$)
+ 1050 DEF FNekolog_critical(sMsg$) =FNekolog(iEkoCritical%,sMsg$)
+ 1060 DEF FNekolog_error(sMsg$)    =FNekolog(iEkoError%,sMsg$)
+ 1070 DEF FNekolog_warning(sMsg$)  =FNekolog(iEkoWarning%,sMsg$)
+ 1080 DEF FNekolog_notice(sMsg$)   =FNekolog(iEkoNotice%,sMsg$)
+ 1090 DEF FNekolog_info(sMsg$)     =FNekolog(iEkoInfo%,sMsg$)
+ 1100 DEF FNekolog_debug(sMsg$)    =FNekolog(iEkoDebug%,sMsg$)
+ 1110 :
+ 1120 REM =====================================================
+ 1130 REM Low level Econet primitive (OSWORD &10, OSBYTE &32).
+ 1140 REM Adapted from J.G.Harston's BLib.Net - see header
+ 1150 REM comment for source. Same shape as VDTEST.BBC/FSTEST.BBC's
+ 1160 REM own FNtx, just also taking a network number explicitly
+ 1170 REM rather than always assuming network 0.
+ 1180 REM =====================================================
+ 1190 :
+ 1200 REM FNtx - transmit iLen% bytes from iAddr% to iNet%.iStn%
+ 1210 REM on iPort% with control byte iCtrl% (bit 7 must be set).
+ 1220 REM Returns 0 on success, else an Econet error code.
+ 1230 DEF FNtx(iNet%,iStn%,iCtrl%,iPort%,iAddr%,iLen%)
+ 1240   LOCAL iE%,iTry%
+ 1250   X%?1=iPort%:X%?2=iStn%:X%?3=iNet%:X%!4=iAddr%:X%!8=iAddr%+iLen%:X%!12=0
+ 1260   iTry%=5
+ 1270   REPEAT
+ 1280     REPEAT:X%?0=iCtrl%:A%=&10:CALL&FFF1:UNTIL X%?0<>0
+ 1290     REPEAT:iE%=FNbyte(&32,0,0):UNTIL iE%<&80
+ 1300     IF iE%=&41 OR iE%=&42 THEN iTry%=iTry%-1:PROCdelay(50)
+ 1310   UNTIL(iE%<>&41 AND iE%<>&42)OR iTry%<1
+ 1320 =iE%
+ 1330 :
+ 1340 REM FNbyte - OSBYTE wrapper. Parameter names deliberately
+ 1350 REM shadow A%/X%/Y% - USR reads the current scope's A%/X%/
+ 1360 REM Y% to load the 6502 registers before calling.
+ 1370 DEF FNbyte(A%,X%,Y%)=((USR&FFF4)AND&FF00)DIV256
+ 1380 :
+ 1390 DEF PROCdelay(iCs%)
+ 1400   LOCAL iT%
+ 1410   iT%=TIME+iCs%
+ 1420   REPEAT UNTIL TIME>iT%
+ 1430 ENDPROC

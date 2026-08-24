@@ -61,6 +61,29 @@ final class NewsFeedDefinitions
 				sBannerText: 'BBC NEWS HEADLINES',
 				iBannerForeground: NewsPageComposer::WHITE,
 				iBannerBackground: NewsPageComposer::RED,
+				iHeadlineForeground: NewsPageComposer::WHITE,
+				iHeadlineBackground: NewsPageComposer::RED,
+				// BBC publishes a separate RSS feed per news section (see
+				// bbc.co.uk/news/10628494) - fetching each and tagging its
+				// stories with the section they came from is what drives the
+				// index page's category grouping (see NewsPageComposer and
+				// NewsImport::_fetchItems()). Ordered specific-to-generic so
+				// a story that appears in both a section feed and the
+				// generic front page only keeps its specific section - the
+				// generic "Top Stories" feed is listed last purely as a
+				// catch-all for anything not yet in a section feed.
+				aCategoryFeeds: [
+					'UK' => 'https://feeds.bbci.co.uk/news/uk/rss.xml',
+					'World' => 'https://feeds.bbci.co.uk/news/world/rss.xml',
+					'Politics' => 'https://feeds.bbci.co.uk/news/politics/rss.xml',
+					'Business' => 'https://feeds.bbci.co.uk/news/business/rss.xml',
+					'Technology' => 'https://feeds.bbci.co.uk/news/technology/rss.xml',
+					'Science & Environment' => 'https://feeds.bbci.co.uk/news/science_and_environment/rss.xml',
+					'Health' => 'https://feeds.bbci.co.uk/news/health/rss.xml',
+					'Entertainment & Arts' => 'https://feeds.bbci.co.uk/news/entertainment_and_arts/rss.xml',
+					'Education & Family' => 'https://feeds.bbci.co.uk/news/education/rss.xml',
+					'Top Stories' => 'https://feeds.bbci.co.uk/news/rss.xml',
+				],
 			),
 			'guardian' => new NewsFeedDefinition(
 				sKey: 'guardian',
@@ -88,6 +111,8 @@ final class NewsFeedDefinitions
 				sBannerText: 'THE GUARDIAN',
 				iBannerForeground: NewsPageComposer::WHITE,
 				iBannerBackground: NewsPageComposer::BLUE,
+				iHeadlineForeground: NewsPageComposer::WHITE,
+				iHeadlineBackground: NewsPageComposer::BLUE,
 			),
 			'sky' => new NewsFeedDefinition(
 				sKey: 'sky',
@@ -120,6 +145,12 @@ final class NewsFeedDefinitions
 				// without needing a filled colour block.
 				iBannerForeground: NewsPageComposer::RED,
 				iBannerBackground: NewsPageComposer::BLACK,
+				// Unlike the banner, a story headline's background must never
+				// be black (it needs to read as a distinct coloured block on
+				// the article page) - red-with-white keeps Sky's own red
+				// identity while still being a filled, non-black block.
+				iHeadlineForeground: NewsPageComposer::WHITE,
+				iHeadlineBackground: NewsPageComposer::RED,
 			),
 		];
 	}

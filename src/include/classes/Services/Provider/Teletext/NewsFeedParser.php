@@ -19,7 +19,7 @@ namespace HomeLan\FileStore\Services\Provider\Teletext;
 class NewsFeedParser
 {
 	/**
-	 * @return array<int, array{title: string, link: string, pubDate: ?string}>
+	 * @return array<int, array{title: string, link: string, pubDate: ?string, category: string}>
 	 */
 	public function parse(string $sXml, string $sLinkFilterPattern): array
 	{
@@ -51,10 +51,23 @@ class NewsFeedParser
 			}
 
 			$sPubDate = trim((string) $oItem->pubDate);
+
+			// RSS 2.0 allows multiple <category> elements per item; this
+			// project only groups the index by a single category per story,
+			// so the first non-empty one wins.
+			$sCategory = '';
+			foreach ($oItem->category as $oCategory) {
+				$sCategory = trim((string) $oCategory);
+				if ($sCategory !== '') {
+					break;
+				}
+			}
+
 			$aItems[] = [
-				'title'   => $sTitle,
-				'link'    => $sLink,
-				'pubDate' => $sPubDate === '' ? null : $sPubDate,
+				'title'    => $sTitle,
+				'link'     => $sLink,
+				'pubDate'  => $sPubDate === '' ? null : $sPubDate,
+				'category' => $sCategory,
 			];
 		}
 

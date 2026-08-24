@@ -17,6 +17,7 @@ include_once(__DIR__ . '/../../src/include/system.inc.php');
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\Console\Tester\CommandTester;
 use HomeLan\FileStore\Command\NewsImport;
+use HomeLan\FileStore\Services\Provider\Teletext\NewsFeedDefinitions;
 
 // ---------------------------------------------------------------------------
 // Testable subclass — replaces _downloadFeed()/_downloadArticle() with stubs
@@ -152,8 +153,11 @@ class NewsImportTest extends TestCase
 
     public function testEachFeedResolvesItsOwnChannelAndSource(): void
     {
+        // BBC has its own category-feeds behaviour (see
+        // testBbcDownloadsEveryCategoryFeed below) - Guardian/Sky have no
+        // NewsFeedDefinition::$aCategoryFeeds of their own, so they still
+        // download exactly their one configured source.
         $aExpected = [
-            'bbc'      => ['2', 'https://example.invalid/bbc.xml'],
             'guardian' => ['3', 'https://example.invalid/guardian.xml'],
             'sky'      => ['5', 'https://example.invalid/sky.xml'],
         ];
@@ -166,6 +170,56 @@ class NewsImportTest extends TestCase
             $this->assertSame([$sSource], $oCommand->capDownloadUrls, $sFeed . ' source');
             $this->assertFileExists($this->sStoreDir . '/' . $sChannel . '/100.dat', $sFeed . ' channel');
         }
+    }
+
+    // -------------------------------------------------------------------------
+    // BBC's category feeds - see NewsFeedDefinitions::all()['bbc']->aCategoryFeeds
+    // -------------------------------------------------------------------------
+
+    public function testBbcDownloadsEveryCategoryFeed(): void
+    {
+        $oCommand = new TestableNewsImport();
+        $oCommand->stubFeed = $this->_feedXml([]);
+        $this->_run($oCommand, ['--feed' => 'bbc']);
+
+        $this->assertSame(
+            array_values(NewsFeedDefinitions::get('bbc')->aCategoryFeeds),
+            $oCommand->capDownloadUrls
+        );
+        $this->assertFileExists($this->sStoreDir . '/2/100.dat');
+    }
+
+    public function testBbcSourceOptionOverridesCategoryFeedsWithASingleDownload(): void
+    {
+        $oCommand = new TestableNewsImport();
+        $oCommand->stubFeed = $this->_feedXml([]);
+        $this->_run($oCommand, ['--feed' => 'bbc', '--source' => 'https://example.invalid/single-bbc.xml']);
+
+        $this->assertSame(['https://example.invalid/single-bbc.xml'], $oCommand->capDownloadUrls);
+    }
+
+    public function testBbcStoriesAreTaggedWithTheirCategoryAndDeduplicatedAcrossFeeds(): void
+    {
+        $oCommand = new TestableNewsImport();
+        // Every BBC category feed shares one stub fixture in this test, so
+        // the same story XML is "downloaded" from each section feed -
+        // _fetchItems() must still keep it only once, tagged with whichever
+        // category is listed first in NewsFeedDefinitions.
+        $oCommand->stubFeed = $this->_feedXml([
+            ['title' => 'Shared headline', 'link' => 'https://example.invalid/news/articles/shared'],
+        ]);
+        $oCommand->articleFixtures['https://example.invalid/news/articles/shared'] = $this->_articleHtml('Shared headline', 'Body.');
+
+        $oTester = $this->_run($oCommand, ['--feed' => 'bbc']);
+
+        $this->assertSame(0, $oTester->getStatusCode());
+        $this->assertFileExists($this->sStoreDir . '/2/101.dat');
+        $this->assertFileDoesNotExist($this->sStoreDir . '/2/102.dat', 'the shared story must be deduplicated, not imported once per category feed');
+
+        $aCategories = array_keys(NewsFeedDefinitions::get('bbc')->aCategoryFeeds);
+        $sFirstCategory = $aCategories[0];
+        $sIndexPlain = preg_replace('/[\x00-\x1f]/', '', file_get_contents($this->sStoreDir . '/2/100.dat'));
+        $this->assertStringContainsString(strtoupper($sFirstCategory), $sIndexPlain);
     }
 
     public function testChannelOptionOverridesConfig(): void

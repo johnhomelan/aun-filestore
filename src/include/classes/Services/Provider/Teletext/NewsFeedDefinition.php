@@ -6,6 +6,13 @@ namespace HomeLan\FileStore\Services\Provider\Teletext;
  * Everything needed to import one RSS news feed into its own teletext
  * channel - see NewsFeedDefinitions for the concrete BBC/Guardian/Sky
  * instances and NewsImport (Command) for how it's consumed.
+ *
+ * A source with more than one real-world category feed (currently just
+ * BBC) lists them in $aCategoryFeeds, keyed by the category label to tag
+ * their stories with (see NewsPageComposer's category-grouped index) - see
+ * NewsImport::_fetchItems() for how that's merged/deduplicated across
+ * multiple downloads. Left empty, a feed is downloaded from
+ * $sDefaultSource/--source as a single ungrouped list, same as before.
  */
 final class NewsFeedDefinition
 {
@@ -23,6 +30,9 @@ final class NewsFeedDefinition
 		public readonly string $sBannerText,
 		public readonly int $iBannerForeground,
 		public readonly int $iBannerBackground,
+		public readonly int $iHeadlineForeground,
+		public readonly int $iHeadlineBackground,
+		public readonly array $aCategoryFeeds = [],
 	) {
 	}
 }

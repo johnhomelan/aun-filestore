@@ -25,14 +25,16 @@ class NewsFeedParserTest extends TestCase
         $this->oParser = new NewsFeedParser();
     }
 
-    protected function _item(string $sTitle, string $sLink, ?string $sPubDate = 'Sat, 22 Aug 2026 19:28:14 GMT'): string
+    protected function _item(string $sTitle, string $sLink, ?string $sPubDate = 'Sat, 22 Aug 2026 19:28:14 GMT', array $aCategories = []): string
     {
         $sPubDateTag = $sPubDate === null ? '' : '<pubDate>' . $sPubDate . '</pubDate>';
+        $sCategoryTags = implode('', array_map(fn (string $s) => '<category>' . $s . '</category>', $aCategories));
         return '<item>'
             . '<title><![CDATA[' . $sTitle . ']]></title>'
             . '<description><![CDATA[Some description]]></description>'
             . '<link>' . $sLink . '</link>'
             . $sPubDateTag
+            . $sCategoryTags
             . '</item>';
     }
 
@@ -85,6 +87,43 @@ class NewsFeedParserTest extends TestCase
         ]);
 
         $this->assertSame([], $this->oParser->parse($sXml, NewsFeedDefinitions::get('bbc')->sLinkFilterPattern));
+    }
+
+    // -------------------------------------------------------------------------
+    // Category
+    // -------------------------------------------------------------------------
+
+    public function testCategoryIsCaptured(): void
+    {
+        $sXml = $this->_feed([
+            $this->_item('A story', 'https://www.bbc.co.uk/news/articles/cat1', aCategories: ['Politics']),
+        ]);
+
+        $aItems = $this->oParser->parse($sXml, NewsFeedDefinitions::get('bbc')->sLinkFilterPattern);
+
+        $this->assertSame('Politics', $aItems[0]['category']);
+    }
+
+    public function testFirstNonEmptyCategoryWinsWhenMultiplePresent(): void
+    {
+        $sXml = $this->_feed([
+            $this->_item('A story', 'https://www.bbc.co.uk/news/articles/cat2', aCategories: ['', 'World', 'Politics']),
+        ]);
+
+        $aItems = $this->oParser->parse($sXml, NewsFeedDefinitions::get('bbc')->sLinkFilterPattern);
+
+        $this->assertSame('World', $aItems[0]['category']);
+    }
+
+    public function testMissingCategoryIsEmptyString(): void
+    {
+        $sXml = $this->_feed([
+            $this->_item('A story', 'https://www.bbc.co.uk/news/articles/nocat'),
+        ]);
+
+        $aItems = $this->oParser->parse($sXml, NewsFeedDefinitions::get('bbc')->sLinkFilterPattern);
+
+        $this->assertSame('', $aItems[0]['category']);
     }
 
     // -------------------------------------------------------------------------

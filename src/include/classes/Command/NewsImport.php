@@ -8,6 +8,7 @@ use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Output\OutputInterface;
 use HomeLan\FileStore\Services\Provider\Teletext\NewsFeedDefinitions;
+use HomeLan\FileStore\Services\Provider\Teletext\NewsFeedDefinition;
 use HomeLan\FileStore\Services\Provider\Teletext\NewsFeedParser;
 use HomeLan\FileStore\Services\Provider\Teletext\ArticleExtractor;
 use HomeLan\FileStore\Services\Provider\Teletext\NewsPageComposer;
@@ -24,8 +25,14 @@ use config;
  *
  * Which feed to import is selected with --feed (bbc|guardian|sky), each
  * with its own channel/source/max-stories config - see
- * src/include/config.inc.php's teletext_news_{feed}_* keys. Structured the
- * same way as TeefaxImport - see
+ * src/include/config.inc.php's teletext_news_{feed}_* keys. A feed can
+ * define several real section feeds of its own instead of one plain source
+ * (currently just BBC - see NewsFeedDefinitions::$aCategoryFeeds); when it
+ * does, _fetchItems() downloads every section feed and tags each story with
+ * the section it came from, which is what drives the category-grouped
+ * index page (see NewsPageComposer). --source still overrides that with a
+ * single ad-hoc feed, same as for a source with no sections of its own.
+ * Structured the same way as TeefaxImport - see
  * src/include/classes/Command/TeefaxImport.php - right down to the atomic
  * staging-dir install, but with one important difference: a single
  * article's fetch/extraction failing is logged and skipped rather than
@@ -87,8 +94,7 @@ class NewsImport extends Command
         $sStagingDir = $sStoreDir . '/.news-staging-' . $sChannel;
 
         try {
-            $oOutput->writeln('Downloading ' . $sSource . ' ...');
-            $aItems = (new NewsFeedParser())->parse($this->_downloadFeed($sSource), $oFeed->sLinkFilterPattern);
+            $aItems = $this->_fetchItems($oFeed, $mSource, $sSource, $oOutput);
             if ($iMaxStories > 0 && count($aItems) > $iMaxStories) {
                 $aItems = array_slice($aItems, 0, $iMaxStories);
             }
@@ -116,7 +122,16 @@ class NewsImport extends Command
                         throw new \RuntimeException('No body content extracted');
                     }
                     $sHeadline = $aArticle['headline'] !== '' ? $aArticle['headline'] : $aItem['title'];
-                    $aBuffers  = $oComposer->composeStory($sPage, $sHeadline, $aArticle['published'], $aArticle['blocks'], $oNow, $oFeed->sMastheadTitle);
+                    $aBuffers  = $oComposer->composeStory(
+                        $sPage,
+                        $sHeadline,
+                        $aArticle['published'],
+                        $aArticle['blocks'],
+                        $oNow,
+                        $oFeed->sMastheadTitle,
+                        $oFeed->iHeadlineForeground,
+                        $oFeed->iHeadlineBackground
+                    );
                 } catch (\Throwable $e) {
                     $oOutput->writeln('<comment>Skipping ' . $aItem['link'] . ': ' . $e->getMessage() . '</comment>');
                     $iStoriesSkipped++;
@@ -124,7 +139,7 @@ class NewsImport extends Command
                 }
 
                 $iPagesWritten += $this->_writeBuffers($sStagingDir, $sPage, $aBuffers, $bDryRun);
-                $aIndexEntries[] = ['page' => $sPage, 'headline' => $sHeadline];
+                $aIndexEntries[] = ['page' => $sPage, 'headline' => $sHeadline, 'category' => $aItem['category'] ?? ''];
                 $iPageNumber++;
             }
 
@@ -183,6 +198,42 @@ class NewsImport extends Command
         }
         $this->_renameDir($sStagingDir, $sLiveDir);
         $this->_deleteDir($sOldDir);
+    }
+
+    /**
+     * Downloads and parses either one plain feed (--source override, or a
+     * feed with no category feeds of its own - Guardian/Sky) or, for a feed
+     * like BBC that defines $aCategoryFeeds, every one of those section
+     * feeds - tagging each story with the section it was downloaded from
+     * (overriding whatever <category> tag, if any, NewsFeedParser found in
+     * the XML itself, since the section a story was fetched from is the
+     * more reliable signal). A story appearing in more than one section
+     * feed is kept only once, under whichever section's feed is listed
+     * first in NewsFeedDefinition::$aCategoryFeeds.
+     *
+     * @return array<int, array{title: string, link: string, pubDate: ?string, category: string}>
+     */
+    protected function _fetchItems(NewsFeedDefinition $oFeed, mixed $mSourceOption, string $sSource, OutputInterface $oOutput): array
+    {
+        if ($mSourceOption !== null || $oFeed->aCategoryFeeds === []) {
+            $oOutput->writeln('Downloading ' . $sSource . ' ...');
+            return (new NewsFeedParser())->parse($this->_downloadFeed($sSource), $oFeed->sLinkFilterPattern);
+        }
+
+        $aItems = [];
+        $aSeenLinks = [];
+        foreach ($oFeed->aCategoryFeeds as $sCategory => $sUrl) {
+            $oOutput->writeln('Downloading ' . $sCategory . ' (' . $sUrl . ') ...');
+            foreach ((new NewsFeedParser())->parse($this->_downloadFeed($sUrl), $oFeed->sLinkFilterPattern) as $aItem) {
+                if (isset($aSeenLinks[$aItem['link']])) {
+                    continue;
+                }
+                $aSeenLinks[$aItem['link']] = true;
+                $aItem['category'] = $sCategory;
+                $aItems[] = $aItem;
+            }
+        }
+        return $aItems;
     }
 
     // -------------------------------------------------------------------------

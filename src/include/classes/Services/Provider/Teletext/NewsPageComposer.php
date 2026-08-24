@@ -50,11 +50,23 @@ class NewsPageComposer
 	/** Body rows available on continuation subpages (rows 3-23, after a single-height headline recap). */
 	protected const int CONT_SUBPAGE_BODY_ROWS = 21;
 
-	/** Headline entries per index subpage (rows 3-23, after the masthead + double-height banner). */
-	protected const int INDEX_ENTRIES_PER_SUBPAGE = 21;
+	/** Rows available to index content per subpage (rows 4-23, after the masthead, double-height banner, and the blank row separating the banner from the first article title). */
+	protected const int INDEX_BODY_ROWS = 20;
 
 	/**
-	 * @param array<int, array{page: string, headline: string}> $aEntries
+	 * Trailing "column" reserved on every index title row for the page
+	 * number: a blank gap byte, a colour byte, then a 3-digit page number -
+	 * kept blank (no title text) on wrapped continuation lines so the page
+	 * number reads as its own separate column rather than text just
+	 * trailing off the first line.
+	 */
+	protected const int INDEX_PAGE_FIELD_WIDTH = 5;
+
+	/** Usable width for an index title line, including its own leading colour byte. */
+	protected const int INDEX_TITLE_WIDTH = self::ROW_WIDTH - self::INDEX_PAGE_FIELD_WIDTH;
+
+	/**
+	 * @param array<int, array{page: string, headline: string, category?: string}> $aEntries
 	 * @return array<int, string>
 	 */
 	public function composeIndex(
@@ -66,21 +78,19 @@ class NewsPageComposer
 		int $iBannerFg,
 		int $iBannerBg
 	): array {
-		$aChunks = array_chunk($aEntries, self::INDEX_ENTRIES_PER_SUBPAGE);
-		if ($aChunks === []) {
-			$aChunks = [[]];
-		}
-		$iTotal = count($aChunks);
+		$aSubpageRows = $this->_packIndexBlocks($this->_indexBlocks($aEntries));
+		$iTotal = count($aSubpageRows);
 
 		$aBuffers = [];
-		foreach ($aChunks as $iIndex => $aChunk) {
+		foreach ($aSubpageRows as $iIndex => $aBodyRows) {
 			$aRows = [];
 			$aRows[0] = $this->_masthead($sPageNumber, $sTitle, $oNow);
 			[$aRows[1], $aRows[2]] = $this->_bannerRows($sBannerText, $iBannerFg, $iBannerBg);
+			$aRows[3] = $this->_blankRow();
 
-			$iRow = 3;
-			foreach ($aChunk as $aEntry) {
-				$aRows[$iRow] = $this->_entryRow($aEntry);
+			$iRow = 4;
+			foreach ($aBodyRows as $sRow) {
+				$aRows[$iRow] = $sRow;
 				$iRow++;
 			}
 			for (; $iRow <= 23; $iRow++) {
@@ -105,7 +115,9 @@ class NewsPageComposer
 		?string $sPublished,
 		array $aBlocks,
 		\DateTimeImmutable $oNow,
-		string $sTitle
+		string $sTitle,
+		int $iHeadlineFg,
+		int $iHeadlineBg
 	): array {
 		$aBodyLines = $this->_bodyLines($aBlocks);
 
@@ -119,10 +131,15 @@ class NewsPageComposer
 		} while ($aRemaining !== []);
 		$iTotal = count($aPages);
 
+		// Available text width for the double-height headline: ROW_WIDTH
+		// minus the 4-byte coloured-background/height preamble and the
+		// 1-byte left margin rendered in front of the text (see below).
+		$iHeadlineWidth = self::ROW_WIDTH - 5;
+
 		$sPlainHeadline = $this->_stripMarkers($sHeadline);
-		$aHeadlineLines = $this->_wrapText($sPlainHeadline, 39);
+		$aHeadlineLines = $this->_wrapText($sPlainHeadline, $iHeadlineWidth);
 		if (count($aHeadlineLines) > 2) {
-			$aHeadlineLines = [$aHeadlineLines[0], rtrim(substr($aHeadlineLines[1], 0, 36)) . '...'];
+			$aHeadlineLines = [$aHeadlineLines[0], rtrim(substr($aHeadlineLines[1], 0, $iHeadlineWidth - 3)) . '...'];
 		}
 
 		$aBuffers = [];
@@ -131,12 +148,22 @@ class NewsPageComposer
 			$aRows[0] = $this->_masthead($sPageNumber, $sTitle, $oNow);
 
 			if ($iIndex === 0) {
+				// Double-height glyphs are drawn across two physical screen
+				// rows on real teletext hardware, so the coloured background
+				// has to be re-asserted (text-free) on the row below each
+				// headline line too, the same way _bannerRows fills its
+				// second row - otherwise the block's bottom half would
+				// revert to the default black background.
+				$sPreamble = chr($iHeadlineBg) . chr(self::NEW_BACKGROUND) . chr($iHeadlineFg) . chr(self::DOUBLE_HEIGHT);
 				$iRow = 1;
 				foreach ([$aHeadlineLines[0] ?? '', $aHeadlineLines[1] ?? ''] as $sHLine) {
-					$aRows[$iRow] = $sHLine === ''
-						? $this->_blankRow()
-						: $this->_fitRow(chr(self::WHITE) . chr(self::DOUBLE_HEIGHT) . $sHLine);
-					$aRows[$iRow + 1] = $this->_blankRow();
+					if ($sHLine === '') {
+						$aRows[$iRow] = $this->_blankRow();
+						$aRows[$iRow + 1] = $this->_blankRow();
+					} else {
+						$aRows[$iRow] = $this->_fitRow($sPreamble . ' ' . $sHLine);
+						$aRows[$iRow + 1] = $this->_fitRow(chr($iHeadlineBg) . chr(self::NEW_BACKGROUND));
+					}
 					$iRow += 2;
 				}
 				$aRows[5] = $sPublished !== null
@@ -144,7 +171,7 @@ class NewsPageComposer
 					: $this->_blankRow();
 				$iBodyStart = 6;
 			} else {
-				$aRows[1] = $this->_fitRow(chr(self::WHITE) . $this->_truncate($sPlainHeadline, 39));
+				$aRows[1] = $this->_fitRow(chr(self::YELLOW) . $this->_truncate($sPlainHeadline, 39));
 				$aRows[2] = $this->_blankRow();
 				$iBodyStart = 3;
 			}
@@ -190,12 +217,119 @@ class NewsPageComposer
 		return [$sRow1, $sRow2];
 	}
 
-	/** @param array{page: string, headline: string} $aEntry */
-	protected function _entryRow(array $aEntry): string
+	/**
+	 * Groups index entries into "blocks" - a category heading (when any
+	 * entry carries a category) followed by its entries, each rendered as
+	 * its own atomic group of rows - in first-appearance order. Entries with
+	 * no category are bucketed under a "General" heading once any other
+	 * entry has one; when none do, entries are returned flat with no
+	 * headings at all, unchanged from the pre-category behaviour.
+	 *
+	 * @param array<int, array{page: string, headline: string, category?: string}> $aEntries
+	 * @return array<int, array{type: string, rows: array<int, string>}>
+	 */
+	protected function _indexBlocks(array $aEntries): array
 	{
-		$s = chr(self::CYAN) . str_pad($aEntry['page'], 3) . ' ' . chr(self::WHITE);
-		$s .= $this->_truncate($aEntry['headline'], self::ROW_WIDTH - strlen($s));
-		return $this->_fitRow($s);
+		$bAnyCategory = false;
+		$aGroups = [];
+		foreach ($aEntries as $aEntry) {
+			$sCategory = trim((string) ($aEntry['category'] ?? ''));
+			if ($sCategory !== '') {
+				$bAnyCategory = true;
+			}
+			$aGroups[$sCategory][] = $aEntry;
+		}
+
+		$aBlocks = [];
+		if (!$bAnyCategory) {
+			foreach ($aEntries as $aEntry) {
+				$aBlocks[] = ['type' => 'entry', 'rows' => $this->_entryRows($aEntry)];
+			}
+			return $aBlocks;
+		}
+
+		foreach ($aGroups as $sCategory => $aGroupEntries) {
+			$sLabel = $sCategory === '' ? 'General' : $sCategory;
+			$aBlocks[] = ['type' => 'heading', 'rows' => [$this->_fitRow(chr(self::YELLOW) . strtoupper($sLabel))]];
+			foreach ($aGroupEntries as $aEntry) {
+				$aBlocks[] = ['type' => 'entry', 'rows' => $this->_entryRows($aEntry)];
+			}
+		}
+		return $aBlocks;
+	}
+
+	/**
+	 * Packs index blocks into subpages by row budget (rather than a fixed
+	 * entry count per subpage, since a wrapped title takes more rows than a
+	 * one-line one) - a category heading is kept glued to the entry that
+	 * follows it so a subpage never ends on an orphaned heading.
+	 *
+	 * @param array<int, array{type: string, rows: array<int, string>}> $aBlocks
+	 * @return array<int, array<int, string>>
+	 */
+	protected function _packIndexBlocks(array $aBlocks): array
+	{
+		$aSubpages = [];
+		$aCurrent  = [];
+		$iBudget   = self::INDEX_BODY_ROWS;
+
+		foreach ($aBlocks as $i => $aBlock) {
+			$iNeeded = count($aBlock['rows']);
+			if ($aBlock['type'] === 'heading' && isset($aBlocks[$i + 1])) {
+				$iNeeded += count($aBlocks[$i + 1]['rows']);
+			}
+			if ($aCurrent !== [] && $iNeeded > $iBudget) {
+				$aSubpages[] = $aCurrent;
+				$aCurrent = [];
+				$iBudget  = self::INDEX_BODY_ROWS;
+			}
+			foreach ($aBlock['rows'] as $sRow) {
+				$aCurrent[] = $sRow;
+			}
+			$iBudget -= count($aBlock['rows']);
+		}
+		if ($aCurrent !== [] || $aSubpages === []) {
+			$aSubpages[] = $aCurrent;
+		}
+		return $aSubpages;
+	}
+
+	/**
+	 * Renders one index entry as 2-3 rows: a title line (wrapped to a
+	 * second line when it doesn't fit), then a blank spacer row. The
+	 * rightmost INDEX_PAGE_FIELD_WIDTH bytes are reserved as the page
+	 * number's own column on every title line - the page number itself is
+	 * only placed there on the first line, and left blank (not title text)
+	 * on a wrapped second line, so the column reads as a separate column
+	 * rather than text running under the number.
+	 *
+	 * @param array{page: string, headline: string, category?: string} $aEntry
+	 * @return array<int, string>
+	 */
+	protected function _entryRows(array $aEntry): array
+	{
+		$iTextWidth = self::INDEX_TITLE_WIDTH - 1;
+		$aLines = $this->_wrapText($this->_stripMarkers($aEntry['headline']), $iTextWidth);
+		if (count($aLines) > 2) {
+			$aLines = [$aLines[0], rtrim(substr($aLines[1], 0, max(0, $iTextWidth - 3))) . '...'];
+		}
+
+		$sBlankPageField = str_repeat(' ', self::INDEX_PAGE_FIELD_WIDTH);
+		$sPageField = ' ' . chr(self::CYAN) . str_pad(substr($aEntry['page'], 0, 3), 3, ' ', STR_PAD_LEFT);
+
+		$aRows = [];
+		$aRows[] = chr(self::WHITE)
+			. str_pad($this->_truncate($aLines[0] ?? '', $iTextWidth), $iTextWidth, ' ')
+			. $sPageField;
+
+		if (($aLines[1] ?? '') !== '') {
+			$aRows[] = chr(self::WHITE)
+				. str_pad($this->_truncate($aLines[1], $iTextWidth), $iTextWidth, ' ')
+				. $sBlankPageField;
+		}
+
+		$aRows[] = $this->_blankRow();
+		return $aRows;
 	}
 
 	protected function _blankRow(): string

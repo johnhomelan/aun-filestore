@@ -8,6 +8,7 @@ use Symfony\Component\HttpFoundation\Request;
 use HomeLan\FileStore\Admin\Service\Smarty;
 use HomeLan\FileStore\Services\ServiceDispatcher;
 use HomeLan\FileStore\Services\Provider\Teletext;
+use HomeLan\FileStore\Services\Provider\Teletext\NewsFeedDefinitions;
 
 class TeletextController extends AbstractController
 {
@@ -24,6 +25,31 @@ class TeletextController extends AbstractController
         }
 
         return $this->renderTemplate($oSmartyService, 'teletext-teefax-refresh.tpl', [
+            'sMessage' => (string) $oRequest->query->get('msg', ''),
+        ]);
+    }
+
+    public function newsRefresh(Smarty $oSmartyService, Request $oRequest): Response
+    {
+        $oProvider = $this->findProvider();
+        if ($oProvider === null) {
+            return new RedirectResponse('/?error=' . urlencode('Teletext service not found'));
+        }
+
+        $sFeedKey = (string) $oRequest->query->get('feed', '');
+        $oFeed = NewsFeedDefinitions::get($sFeedKey);
+        if ($oFeed === null) {
+            return new RedirectResponse('/?error=' . urlencode('Unknown news feed "' . $sFeedKey . '"'));
+        }
+
+        if ($oRequest->getMethod() === 'POST') {
+            $bStarted = $oProvider->triggerNewsImport($sFeedKey);
+            return new RedirectResponse('/service/teletext/news-refresh?feed=' . urlencode($sFeedKey) . '&msg=' . ($bStarted ? 'started' : 'not_started'));
+        }
+
+        return $this->renderTemplate($oSmartyService, 'teletext-news-refresh.tpl', [
+            'sFeedKey' => $sFeedKey,
+            'sLabel' => $oFeed->sLabel,
             'sMessage' => (string) $oRequest->query->get('msg', ''),
         ]);
     }

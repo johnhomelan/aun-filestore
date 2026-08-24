@@ -85,9 +85,16 @@ class Admin implements AdminInterface
 	*/
 	public function getCommands(): array
 	{
-		return [
+		$aCommands = [
 			['label' => 'Browse Pages', 'url' => '/service/teletext/browse'],
 			['label' => 'Refresh Teefax Now', 'url' => '/service/teletext/teefax-refresh'],
 		];
+		foreach (NewsFeedDefinitions::all() as $oFeed) {
+			$aCommands[] = [
+				'label' => 'Refresh ' . $oFeed->sLabel . ' Now',
+				'url'   => '/service/teletext/news-refresh?feed=' . urlencode($oFeed->sKey),
+			];
+		}
+		return $aCommands;
 	}
 }

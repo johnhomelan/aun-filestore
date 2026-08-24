@@ -11,6 +11,7 @@ use HomeLan\FileStore\Services\ProviderInterface;
 use HomeLan\FileStore\Services\Provider\AdminInterface;
 use HomeLan\FileStore\Services\Provider\Teletext\Storage;
 use HomeLan\FileStore\Services\Provider\Teletext\Admin;
+use HomeLan\FileStore\Services\Provider\Teletext\NewsFeedDefinitions;
 use HomeLan\FileStore\Services\ServiceDispatcher;
 use HomeLan\FileStore\Messages\TeletextRequest;
 use HomeLan\FileStore\Messages\TeletextReply;
@@ -100,6 +101,16 @@ class Teletext implements ProviderInterface {
 	*/
 	protected ?Process $oTeefaxProcess = null;
 
+	/**
+	 * The currently in-flight news import background process for each feed
+	 * (see NewsFeedDefinitions), keyed by feed key. Same "is one already
+	 * running" guard as $oTeefaxProcess, kept per-feed so one feed's slow
+	 * run never blocks another's.
+	 *
+	 * @var array<string, ?Process>
+	*/
+	protected array $aNewsProcesses = [];
+
 	public function __construct(protected readonly \Psr\Log\LoggerInterface $oLogger, ?Storage $oStorage = null)
 	{
 		$this->oStorage = $oStorage ?? new Storage(config::getValueAsString('teletext_store_dir'));
@@ -151,6 +162,11 @@ class Teletext implements ProviderInterface {
 		$oServiceDispatcher->addHousingKeepingTask(function () use ($_this, $oLoop) {
 			$_this->checkTeefaxRefresh($oLoop);
 		});
+		foreach (NewsFeedDefinitions::keys() as $sFeedKey) {
+			$oServiceDispatcher->addHousingKeepingTask(function () use ($_this, $oLoop, $sFeedKey) {
+				$_this->checkNewsRefresh($sFeedKey, $oLoop);
+			});
+		}
 	}
 
 	public function broadcastPacketIn(EconetPacket $oPacket): void
@@ -575,6 +591,116 @@ class Teletext implements ProviderInterface {
 	protected function _now(): int
 	{
 		return time();
+	}
+
+	// -------------------------------------------------------------------------
+	// News feed refresh (housekeeping-driven background import — see
+	// registerService(), NewsFeedDefinitions, and
+	// src/include/classes/Command/NewsImport.php). Structured identically
+	// to the Teefax refresh methods above, just keyed by feed and reading
+	// that feed's teletext_news_{feed}_* config keys and its own channel's
+	// `.imported` marker.
+	// -------------------------------------------------------------------------
+
+	/**
+	 * Runs on every housekeeping tick, once per configured feed. A no-op
+	 * unless that feed's channel is configured, no import for it is already
+	 * running, and the last import (recorded by NewsImport itself, in the
+	 * channel's own `.imported` marker file) is older than
+	 * teletext_news_{feed}_refresh_interval — in which case this spawns
+	 * `src/util/news-import --feed={feed}` as a detached background process
+	 * via ReactPHP.
+	*/
+	public function checkNewsRefresh(string $sFeedKey, ?\React\EventLoop\LoopInterface $oLoop = null): void
+	{
+		$sChannel = $this->_newsChannel($sFeedKey);
+		if (!preg_match('/^[0-9]$/', $sChannel)) {
+			return;
+		}
+		if (!$this->isNewsRefreshDue($sFeedKey, $sChannel)) {
+			return;
+		}
+		$this->_startNewsImport($sFeedKey, $sChannel, $oLoop);
+	}
+
+	/**
+	 * Starts a news import for the given feed right now regardless of
+	 * whether one is due, for the admin web front end's "refresh now"
+	 * action. Returns false (without starting anything) if no channel is
+	 * configured for that feed or an import for it is already running.
+	*/
+	public function triggerNewsImport(string $sFeedKey): bool
+	{
+		$sChannel = $this->_newsChannel($sFeedKey);
+		if (!preg_match('/^[0-9]$/', $sChannel)) {
+			return false;
+		}
+		return $this->_startNewsImport($sFeedKey, $sChannel, ServiceDispatcher::create()->getLoop());
+	}
+
+	/**
+	 * Shared by checkNewsRefresh() and triggerNewsImport(): spawns the
+	 * background import, guarding against launching a second one for the
+	 * same feed while one is already running.
+	*/
+	protected function _startNewsImport(string $sFeedKey, string $sChannel, ?\React\EventLoop\LoopInterface $oLoop): bool
+	{
+		$oExisting = $this->aNewsProcesses[$sFeedKey] ?? null;
+		if ($oExisting !== null && $oExisting->isRunning()) {
+			return false;
+		}
+
+		$this->oLogger->info("Teletext: starting background " . $sFeedKey . " news import for channel " . $sChannel);
+		$oProcess = $this->_spawnNewsImport($sFeedKey, $sChannel);
+		$this->aNewsProcesses[$sFeedKey] = $oProcess;
+		if ($oLoop !== null) {
+			$oProcess->start($oLoop);
+		}
+		return true;
+	}
+
+	/**
+	 * True if the given feed's channel has never had a news import, or its
+	 * last import is older than that feed's configured refresh interval.
+	*/
+	public function isNewsRefreshDue(string $sFeedKey, string $sChannel): bool
+	{
+		$iLastImported = $this->_readNewsImportedMarker($sChannel);
+		if ($iLastImported === null) {
+			return true;
+		}
+		$iInterval = config::getValueAsInt('teletext_news_' . $sFeedKey . '_refresh_interval');
+		return ($this->_now() - $iLastImported) >= $iInterval;
+	}
+
+	protected function _newsChannel(string $sFeedKey): string
+	{
+		return config::getValueAsString('teletext_news_' . $sFeedKey . '_channel');
+	}
+
+	protected function _readNewsImportedMarker(string $sChannel): ?int
+	{
+		$sPath = (config::getValueAsString('teletext_store_dir')) . '/' . $sChannel . '/.imported';
+		if (!file_exists($sPath)) {
+			return null;
+		}
+		$sContent = file_get_contents($sPath);
+		return $sContent === false ? null : (int) trim($sContent);
+	}
+
+	/**
+	 * Builds (but does not start) the background import process, passing
+	 * through the currently-active config directory if one was set, so the
+	 * spawned process reads the same configuration as this one.
+	*/
+	protected function _spawnNewsImport(string $sFeedKey, string $sChannel): Process
+	{
+		$sBinary = dirname(__DIR__, 4) . '/util/news-import';
+		$sCommand = escapeshellarg($sBinary) . ' --feed=' . escapeshellarg($sFeedKey) . ' --channel=' . escapeshellarg($sChannel);
+		if (defined('CONFIG_CONF_FILE_PATH') && is_scalar(CONFIG_CONF_FILE_PATH)) {
+			$sCommand .= ' --config=' . escapeshellarg((string) CONFIG_CONF_FILE_PATH);
+		}
+		return new Process($sCommand);
 	}
 
 	// -------------------------------------------------------------------------

@@ -18,6 +18,7 @@ use HomeLan\FileStore\Services\Provider\Torchnet;
 use HomeLan\FileStore\Services\Provider\MaceMail;
 use HomeLan\FileStore\Services\Provider\Teletext;
 use HomeLan\FileStore\Services\Provider\Viewdata;
+use HomeLan\FileStore\Services\Provider\ProxyProvider;
 
 use Monolog\Logger;
 use Monolog\Handler\SyslogHandler;
@@ -41,7 +42,12 @@ $oApplication = new SingleCommandApplication(
 				new Torchnet($oLogger),
 				new MaceMail($oLogger),
 				new Teletext($oLogger),
-				new Viewdata($oLogger)
+				new Viewdata($oLogger),
+				// Ports reserved for provider processes hosted out-of-process over the Remote
+				// Provider Protocol relay (see docs/protocols/remote-provider.md) - add a port
+				// here for each such provider you register (0xB6 is ecosyslogd's, 0xB7 is
+				// sql-serverd's - see docs/protocols/sql-server.md).
+				new ProxyProvider($oLogger, [0xB6, 0xB7])
 			]
 		)
 	)

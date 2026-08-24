@@ -712,6 +712,97 @@ class ServiceDispatcherTest extends TestCase
     }
 
     // =========================================================================
+    // bindStreamPort()
+    // =========================================================================
+
+    public function testBindStreamPortRoutesUnicastToService(): void
+    {
+        $oA = new MockServiceProvider([0x99]);
+        $oDispatcher = $this->make([$oA]);
+        $oDispatcher->bindStreamPort(25, $oA);
+        $oDispatcher->inboundPacket($this->packet('Unicast', 25));
+        $this->assertSame(1, $oA->iUnicastCalls);
+    }
+
+    public function testBindStreamPortIsFreedByHouseKeepingOnExpiry(): void
+    {
+        $oA = new MockServiceProvider([0x99]);
+        $oDispatcher = $this->make([$oA]);
+        $oDispatcher->bindStreamPort(25, $oA, -1);
+        $oDispatcher->houseKeeping();
+        $oDispatcher->inboundPacket($this->packet('Unicast', 25));
+        $this->assertSame(0, $oA->iUnicastCalls);
+    }
+
+    public function testBindStreamPortMatchesWhatClaimStreamPortWouldHaveChosen(): void
+    {
+        // Refactor sanity check: claimStreamPort() must still pick the first free slot in the
+        // stream range exactly as before, now that it delegates to bindStreamPort() internally.
+        $oA = new MockServiceProvider([0x99]);
+        $oDispatcher = $this->make([$oA]);
+        $iPort = $oDispatcher->claimStreamPort($oA);
+        $this->assertSame(20, $iPort);
+    }
+
+    // =========================================================================
+    // fireAckEvent()
+    // =========================================================================
+
+    public function testFireAckEventFiresTheMatchingCallback(): void
+    {
+        $oDispatcher = $this->make([]);
+        $bFired = false;
+        $oDispatcher->addAckEvent(2, 10, 1, function () use (&$bFired): void {
+            $bFired = true;
+        });
+        $oDispatcher->fireAckEvent(2, 10, 1);
+        $this->assertTrue($bFired);
+    }
+
+    public function testFireAckEventIsOneShot(): void
+    {
+        $oDispatcher = $this->make([]);
+        $iCount = 0;
+        $oDispatcher->addAckEvent(1, 5, 1, function () use (&$iCount): void {
+            $iCount++;
+        });
+        $oDispatcher->fireAckEvent(1, 5, 1);
+        $oDispatcher->fireAckEvent(1, 5, 1);
+        $this->assertSame(1, $iCount);
+    }
+
+    public function testFireAckEventIgnoresMismatchedSequence(): void
+    {
+        $oDispatcher = $this->make([]);
+        $bFired = false;
+        $oDispatcher->addAckEvent(1, 5, 42, function () use (&$bFired): void {
+            $bFired = true;
+        });
+        $oDispatcher->fireAckEvent(1, 5, 43);
+        $this->assertFalse($bFired);
+    }
+
+    public function testFireAckEventFiresOnNullSequenceRegardlessOfWhatWasRegistered(): void
+    {
+        // Mirrors ackEvents()'s own tolerance for encapsulations with no sequence concept.
+        $oDispatcher = $this->make([]);
+        $bFired = false;
+        $oDispatcher->addAckEvent(1, 5, 42, function () use (&$bFired): void {
+            $bFired = true;
+        });
+        $oDispatcher->fireAckEvent(1, 5, null);
+        $this->assertTrue($bFired);
+    }
+
+    public function testFireAckEventDoesNothingWhenNoEventIsRegistered(): void
+    {
+        $oDispatcher = $this->make([]);
+        // Reaching here without an exception is the assertion.
+        $oDispatcher->fireAckEvent(9, 9, null);
+        $this->addToAssertionCount(1);
+    }
+
+    // =========================================================================
     // houseKeeping()
     // =========================================================================
 

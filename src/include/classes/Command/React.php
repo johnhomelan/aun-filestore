@@ -26,7 +26,9 @@ use Ratchet\WebSocket\WsServer;
 
 use HomeLan\FileStore\Services\ServiceDispatcher;
 use HomeLan\FileStore\Services\Provider\IPv4;
+use HomeLan\FileStore\Services\Provider\ProxyProvider;
 use HomeLan\FileStore\RemoteSocket\RelayServer;
+use HomeLan\FileStore\RemoteProvider\RelayServer as RemoteProviderRelayServer;
 use HomeLan\FileStore\WebSocket\Handler as WebSocketHandler;
 use HomeLan\FileStore\WebSocket\Map as WebSocketMap;
 use HomeLan\FileStore\Piconet\Handler as PiconetHandler;
@@ -166,6 +168,11 @@ class React extends Command {
 		//Setup the Remote Socket Protocol relay server (feature-gated)
 		if (config::getValueAsBool('remote_socket_relay_enabled')) {
 			$this->remoteSocketRelayService($oLoop);
+		}
+
+		//Setup the Remote Provider Protocol relay server (feature-gated)
+		if (config::getValueAsBool('remote_provider_relay_enabled')) {
+			$this->remoteProviderRelayService($oLoop);
 		}
 
 		//Send any outstanding replies, normally its one request in one reply out.  However some services (e.g. File) have direct streams that can generate 
@@ -335,6 +342,47 @@ EOF;
 			$oLoop
 		);
 		$this->oLogger->info("RemoteSocket: relay server listening on ".config::getValueAsString('remote_socket_relay_listen_address').':'.config::getValueAsString('remote_socket_relay_listen_port'));
+	}
+
+	/**
+	 * Adds the Remote Provider Protocol relay server to the event loop (see
+	 * docs/protocols/remote-provider.md); a separate WebSocket listener again, used by standalone
+	 * processes (e.g. ecosyslogd) hosting a ProviderInterface implementation that ServiceDispatcher
+	 * here delegates to via Services\Provider\ProxyProvider.
+	*/
+	private function remoteProviderRelayService(LoopInterface $oLoop): void
+	{
+		$oProxyProvider = null;
+		foreach ($this->oServices->getServices() as $oService) {
+			if ($oService instanceof ProxyProvider) {
+				$oProxyProvider = $oService;
+				break;
+			}
+		}
+		if ($oProxyProvider === null) {
+			$this->oLogger->warning("RemoteProvider: relay enabled but no ProxyProvider is registered, not starting");
+			return;
+		}
+
+		$oRelayServer = new RemoteProviderRelayServer(
+			$this->oLogger,
+			config::getValueAsString('remote_provider_relay_secret'),
+			$oProxyProvider->injectReply(...),
+			$oProxyProvider->claimStreamPort(...)
+		);
+		$oProxyProvider->setRelayServer($oRelayServer);
+
+		$oRelayTransport = new \React\Socket\SocketServer(config::getValueAsString('remote_provider_relay_listen_address').':'.config::getValueAsString('remote_provider_relay_listen_port'));
+		new IoServer(
+			new HttpServer(
+				new WsServer(
+					$oRelayServer
+				)
+			),
+			$oRelayTransport,
+			$oLoop
+		);
+		$this->oLogger->info("RemoteProvider: relay server listening on ".config::getValueAsString('remote_provider_relay_listen_address').':'.config::getValueAsString('remote_provider_relay_listen_port'));
 	}
 
 	/**

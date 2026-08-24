@@ -17,6 +17,8 @@ use HomeLan\FileStore\Encapsulation\EncapsulationTypeMap;
 use HomeLan\FileStore\Encapsulation\EncapsulationInterface;
 use HomeLan\FileStore\Piconet\Handler as PiconetHandler;
 use HomeLan\FileStore\RemoteBridge\Map as RemoteBridgeMap;
+use HomeLan\FileStore\RemoteProvider\AckRelayMap;
+use HomeLan\FileStore\RemoteProvider\Messages\RelayedAck;
 use config;
 
 /**
@@ -171,12 +173,26 @@ class ServiceDispatcher {
 	{
 		for($i=$this->iStreamPortStart;$i<($this->iStreamPortStart+self::MAX_STREAMS);$i++){
 			if(!array_key_exists($i,$this->aPorts)){
-				$this->aPorts[$i] = $oService;
-				$this->aPortTimeLimits[$i] = time ()+$iTimeOut;
+				$this->bindStreamPort($i, $oService, $iTimeOut);
 				return $i;
 			}
 		}
 		throw new Exception("Unable to allocte a stream port as there where none free");
+	}
+
+	/**
+	 * Binds a specific port number to a service, with the same timeout-based expiry
+	 * claimStreamPort() gives the port it picks itself - used by
+	 * Services\Provider\ProxyProvider to bind, on a remote provider host's own
+	 * ServiceDispatcher instance, the exact port number filestored's ServiceDispatcher already
+	 * chose for it via claimStreamPort() (see docs/protocols/remote-provider.md § Stream
+	 * Claims) - the two processes' independent port counters would otherwise have no reason to
+	 * agree on the same number.
+	*/
+	public function bindStreamPort(int $iPort, ProviderInterface $oService, int $iTimeOut=60): void
+	{
+		$this->aPorts[$iPort] = $oService;
+		$this->aPortTimeLimits[$iPort] = time()+$iTimeOut;
 	}
 
 	/**
@@ -317,6 +333,45 @@ class ServiceDispatcher {
 		//local to us or bridge-relayed, never both, so this and the local match
 		//above are not expected to both apply to the same ack.
 		RemoteBridgeMap::relayAckIfKnown($iNetwork, $iStation);
+
+		//Also relay this ack to a Remote Provider Protocol connection, if this (network,
+		//station) pair is one a remotely-hosted provider most recently sent a stream block to -
+		//see docs/protocols/remote-provider.md § Ack Relay and AckRelayMap::rememberAckRelay(),
+		//called by RemoteProvider\RelayServer on every such send. This is what lets that
+		//provider's own addAckEvent() callback - registered on its own, separate
+		//ServiceDispatcher instance in another process - ever actually fire; see fireAckEvent().
+		AckRelayMap::relayAckIfKnown($iNetwork, $iStation, $oPacket->getSequence());
+	}
+
+	/**
+	 * Fires a registered addAckEvent() callback purely from (network, station[, sequence]) -
+	 * without a real EncapsulationInterface instance to pass it. Used by RemoteProvider\Host
+	 * when an ack relayed from filestored (see AckRelayMap/docs/protocols/remote-provider.md §
+	 * Ack Relay) arrives for a provider hosted in this process; the genuine ack packet never
+	 * reaches this process; the callback receives a synthetic RelayedAck instead of a real
+	 * encapsulation. Every current callback (see FileServer's GETBYTES/PUTBYTES streaming)
+	 * ignores its EncapsulationInterface argument entirely, so this is safe, but a callback
+	 * should not rely on decoding real data from it.
+	 *
+	 * Deliberately independent of ackEvents() rather than sharing its body via delegation -
+	 * that would mean a real, local ack's callback also receiving a synthetic object instead of
+	 * the genuine encapsulation, changing behaviour for the path this codebase actually depends
+	 * on today.
+	*/
+	public function fireAckEvent(int $iNetwork, int $iStation, ?int $iSeq): void
+	{
+		if(!array_key_exists($iNetwork,$this->aAckEvents) OR !array_key_exists($iStation,$this->aAckEvents[$iNetwork])){
+			return;
+		}
+
+		$aEvent = $this->aAckEvents[$iNetwork][$iStation];
+		if($iSeq !== null AND $iSeq !== $aEvent['seq']){
+			$this->oLogger->debug("ServiceDispatcher: ignoring stray relayed ack seq {$iSeq} for {$iNetwork}.{$iStation}, waiting on seq {$aEvent['seq']}");
+			return;
+		}
+
+		unset($this->aAckEvents[$iNetwork][$iStation]);
+		($aEvent['callable'])(new RelayedAck($iNetwork, $iStation, $iSeq));
 	}
 
 	public function clearAckEvent(int $iNetwork, int $iStation):void

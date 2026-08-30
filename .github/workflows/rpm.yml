@@ -1,0 +1,71 @@
+name: Build RPMs
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'RPM version (X.Y.Z). Defaults to a dev version.'
+        required: false
+        default: ''
+
+permissions:
+  contents: write
+
+jobs:
+  rpm:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Current Fedora releases + one prior. Bump these as Fedora moves on.
+          - { target: fedora-44, image: "fedora:44",                     dist: ".fc44" }
+          - { target: fedora-43, image: "fedora:43",                     dist: ".fc43" }
+          - { target: fedora-42, image: "fedora:42",                     dist: ".fc42" }
+          # Enterprise Linux. CentOS 7 / 8 are EOL - build-in-container.sh
+          # repoints them at vault.centos.org and pulls PHP from remi.
+          - { target: centos-7,  image: "centos:7",                      dist: ".el7"  }
+          - { target: centos-8,  image: "quay.io/centos/centos:stream8", dist: ".el8"  }
+          - { target: rocky-9,   image: "rockylinux:9",                  dist: ".el9"  }
+          - { target: rocky-10,  image: "rockylinux:10",                 dist: ".el10" }
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Determine version
+        id: ver
+        run: |
+          V="${{ github.event.release.tag_name || inputs.version }}"
+          V="${V#v}"
+          [ -n "$V" ] || V="0.0.0.$(date +%Y%m%d%H%M%S)"
+          echo "version=$V" >> "$GITHUB_OUTPUT"
+          echo "release=1"  >> "$GITHUB_OUTPUT"
+          echo "Building RPM $V-1${{ matrix.dist }} for ${{ matrix.target }}"
+
+      - name: Build RPM in ${{ matrix.image }}
+        run: |
+          docker run --rm \
+            -v "$PWD":/work -w /work \
+            -e RPM_VERSION="${{ steps.ver.outputs.version }}" \
+            -e RPM_RELEASE="${{ steps.ver.outputs.release }}" \
+            -e RPM_DIST="${{ matrix.dist }}" \
+            -e OUTPUT_DIR="/work/build/${{ matrix.target }}" \
+            -e HOST_UID="$(id -u)" -e HOST_GID="$(id -g)" \
+            "${{ matrix.image }}" \
+            bash packaging/rpm/build-in-container.sh
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: rpm-${{ matrix.target }}
+          path: build/${{ matrix.target }}/*.rpm
+          if-no-files-found: error
+
+      - name: Attach to GitHub release
+        if: github.event_name == 'release'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: build/${{ matrix.target }}/*.rpm

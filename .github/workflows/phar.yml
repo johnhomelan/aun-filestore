@@ -1,0 +1,60 @@
+name: Build phar
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version for the phar tarball name (X.Y.Z). Defaults to a dev version.'
+        required: false
+        default: ''
+
+permissions:
+  contents: write
+
+jobs:
+  phar:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up PHP and Composer
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          tools: composer:v2
+          extensions: ldap, pdo, sockets, pcntl, mbstring, curl, gd, soap, zip, bcmath, intl, ctype, dom, xml
+          ini-values: phar.readonly=0
+
+      - name: Determine version
+        id: ver
+        run: |
+          VERSION="${{ github.event.release.tag_name || inputs.version }}"
+          VERSION="${VERSION#v}"
+          if [ -z "$VERSION" ]; then
+            VERSION="0.0.0-$(date +%Y%m%d%H%M%S)"
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Building phar version $VERSION"
+
+      - name: Build phar
+        run: make phar PHAR_VERSION="${{ steps.ver.outputs.version }}"
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: filestore-phar
+          path: |
+            build/filestore.phar
+            build/*-phar.tgz
+          if-no-files-found: error
+
+      - name: Attach to GitHub release
+        if: github.event_name == 'release'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            build/filestore.phar
+            build/*-phar.tgz

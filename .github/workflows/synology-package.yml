@@ -1,0 +1,62 @@
+name: Build Synology package
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Package version (X.Y.Z or X.Y.Z-N). Defaults to a dev version.'
+        required: false
+        default: ''
+
+permissions:
+  contents: write
+
+jobs:
+  spk:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up PHP and Composer
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          tools: composer:v2
+          extensions: ldap, pdo, sockets, pcntl, mbstring, curl, gd, soap, zip, bcmath
+
+      - name: Install ImageMagick
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends imagemagick
+
+      - name: Determine version
+        id: ver
+        run: |
+          VERSION="${{ github.event.release.tag_name || inputs.version }}"
+          VERSION="${VERSION#v}"
+          if [ -z "$VERSION" ]; then
+            VERSION="0.0.0-$(date +%Y%m%d%H%M%S)"
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Building SPK version $VERSION"
+
+      - name: Build .spk
+        run: make synopackage SPK_VERSION="${{ steps.ver.outputs.version }}"
+
+      - name: Locate artifact
+        id: spk
+        run: echo "path=$(ls build/*.spk | head -1)" >> "$GITHUB_OUTPUT"
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: synology-package
+          path: build/*.spk
+          if-no-files-found: error
+
+      - name: Attach to GitHub release
+        if: github.event_name == 'release'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ steps.spk.outputs.path }}

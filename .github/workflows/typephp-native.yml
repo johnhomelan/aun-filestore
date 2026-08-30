@@ -1,0 +1,180 @@
+name: Build TypePHP native binaries
+
+# Ahead-of-time compiles every packaging/typephp target (aun_filestored,
+# sharefsd, dnsd, ntpd, ecosyslogd, sql_serverd, teletext_import) with
+# swoole/typephp and publishes one tarball per architecture:
+#
+#   aun-filestore-typephp-<version>-x86_64.tar.gz
+#   aun-filestore-typephp-<version>-arm64.tar.gz
+#
+# Each tarball carries the binaries plus their whole shared-library closure
+# (libphp / libphpx / curl / openssl / ldap / libpq / ...), so the target host
+# only needs a compatible glibc. See packaging/typephp/ci/assemble-dist.sh.
+#
+# On a published release the tarballs are attached to it; a manual run uploads
+# them as workflow artifacts instead.
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version string for the tarball name (defaults to a dev stamp).'
+        required: false
+        default: ''
+      arch:
+        description: 'Which architectures to build.'
+        type: choice
+        options: [both, x86_64, arm64]
+        default: both
+
+permissions:
+  contents: write
+
+concurrency:
+  group: typephp-native-${{ github.event.release.tag_name || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  matrix:
+    runs-on: ubuntu-latest
+    outputs:
+      arches: ${{ steps.pick.outputs.arches }}
+    steps:
+      - id: pick
+        run: |
+          sel='${{ (github.event_name == 'workflow_dispatch' && inputs.arch) || 'both' }}'
+          x86='{"arch":"x86_64","runner":"ubuntu-latest"}'
+          # GitHub-hosted arm64 Linux runners are free for public repositories;
+          # private repos need a plan that includes them. fail-fast:false below
+          # keeps the x86_64 tarball shipping if arm64 is unavailable.
+          arm='{"arch":"arm64","runner":"ubuntu-24.04-arm"}'
+          case "$sel" in
+            x86_64) out="[$x86]" ;;
+            arm64)  out="[$arm]" ;;
+            *)      out="[$x86,$arm]" ;;
+          esac
+          echo "arches=$out" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: matrix
+    strategy:
+      fail-fast: false
+      matrix:
+        target: ${{ fromJSON(needs.matrix.outputs.arches) }}
+    runs-on: ${{ matrix.target.runner }}
+    timeout-minutes: 180
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Determine version
+        id: ver
+        run: |
+          V="${{ github.event.release.tag_name || inputs.version }}"
+          [ -n "$V" ] || V="0.0.0-$(date +%Y%m%d%H%M%S)"
+          echo "version=$V" >> "$GITHUB_OUTPUT"
+          echo "Building TypePHP natives $V for ${{ matrix.target.arch }}"
+
+      - name: Install build prerequisites
+        run: |
+          set -eux
+          command -v docker >/dev/null
+          if ! command -v php >/dev/null; then
+            sudo apt-get update -qq
+            sudo apt-get install -y -qq php-cli php-xml php-mbstring php-curl
+          fi
+          command -v composer >/dev/null || sudo apt-get install -y -qq composer
+          command -v rsync >/dev/null
+
+      - name: Set up PHP 8.4 (host, for Smarty template pre-compilation)
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: dom, mbstring, xml, curl
+          tools: composer:v2
+
+      - name: composer install (src/)
+        working-directory: src
+        run: composer install --no-dev --no-progress --no-interaction --prefer-dist
+
+      - name: Build the TypePHP toolchain image
+        run: |
+          docker build \
+            -t localhost/aun-filestore-typephp \
+            -f packaging/typephp/Containerfile \
+            packaging/typephp
+
+      - name: Compile every native target
+        env:
+          PODMAN: docker
+          TYPEPHP_NO_BUILD_IMAGE: '1'
+          TYPEPHP_DRY: '0'
+        run: make native-daemons teletext-typephp
+
+      - name: Reclaim ownership of container-written output
+        run: sudo chown -R "$(id -u):$(id -g)" build
+
+      - name: Smoke test
+        run: |
+          set -eu
+          img=localhost/aun-filestore-typephp
+          ld=/opt/typephp/vendor/swoole/phpx/lib
+          # relay-client daemons: connect out, fail, back off, stay in the loop
+          for b in dnsd ntpd ecosyslogd sql_serverd; do
+            rc=0
+            docker run --rm --network=none -e LD_LIBRARY_PATH="$ld" \
+              -v "$PWD":/src:Z -w /src --entrypoint timeout "$img" 4 "/src/build/typephp/$b" || rc=$?
+            [ "$rc" = 124 ] || { echo "::error::$b exited $rc (expected to still be running)"; exit 1; }
+            echo "$b: ran 4s and stayed up"
+          done
+          # teletext-import with no sub-command prints usage and exits 2
+          rc=0
+          docker run --rm --network=none -e LD_LIBRARY_PATH="$ld" \
+            -v "$PWD":/src:Z -w /src --entrypoint /src/build/typephp/teletext_import "$img" || rc=$?
+          [ "$rc" = 2 ] || { echo "::error::teletext_import exited $rc (expected 2)"; exit 1; }
+          echo "teletext_import: usage ok"
+
+      - name: Assemble the distribution tarball
+        id: pkg
+        env:
+          PODMAN: docker
+          RELEASE_TAG: ${{ steps.ver.outputs.version }}
+        run: bash packaging/typephp/ci/assemble-dist.sh "${{ matrix.target.arch }}"
+
+      - name: Verify the tarball is self-contained
+        run: |
+          set -eu
+          tb=$(ls dist/*.tar.gz)
+          # extract + run in a clean Debian with no PHP and no toolchain - only
+          # the bundled lib/ closure. debian:bookworm matches the build image's
+          # base (glibc 2.36), the lowest the binaries will run on.
+          docker run --rm --network=none -v "$PWD/$tb":/t.tgz:ro \
+            docker.io/library/debian:bookworm-slim bash -c '
+              set -e
+              cd /tmp && tar xzf /t.tgz && cd aun-filestore-typephp-*/
+              ./configure.sh
+              rc=0; timeout 3 ./bin/dnsd || rc=$?
+              [ "$rc" = 124 ] || { echo "::error::bundled dnsd exited $rc"; exit 1; }
+              rc=0; ./bin/teletext-import || rc=$?
+              [ "$rc" = 2 ] || { echo "::error::bundled teletext-import exited $rc"; exit 1; }
+              echo "bundled binaries run with only the packaged libraries"
+            '
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: aun-filestore-typephp-${{ matrix.target.arch }}
+          path: |
+            dist/*.tar.gz
+            dist/*.sha256
+          if-no-files-found: error
+
+      - name: Attach to the GitHub release
+        if: github.event_name == 'release'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/*.tar.gz
+            dist/*.sha256

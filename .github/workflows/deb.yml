@@ -1,0 +1,62 @@
+name: Build debs
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Package version (X.Y.Z). Defaults to a dev version.'
+        required: false
+        default: ''
+
+permissions:
+  contents: write
+
+jobs:
+  deb:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { target: debian-13,    image: "debian:trixie"  }
+          - { target: debian-12,    image: "debian:bookworm" }
+          - { target: ubuntu-24.04, image: "ubuntu:24.04"    }
+          - { target: ubuntu-22.04, image: "ubuntu:22.04"    }
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Determine version
+        id: ver
+        run: |
+          V="${{ github.event.release.tag_name || inputs.version }}"
+          V="${V#v}"
+          [ -n "$V" ] || V="0.0.0+$(date +%Y%m%d%H%M%S)"
+          echo "version=$V" >> "$GITHUB_OUTPUT"
+          echo "Building .deb $V for ${{ matrix.target }}"
+
+      - name: Build .deb in ${{ matrix.image }}
+        run: |
+          docker run --rm \
+            -v "$PWD":/work -w /work \
+            -e DEB_VERSION="${{ steps.ver.outputs.version }}" \
+            -e OUTPUT_DIR="/work/build/${{ matrix.target }}" \
+            -e HOST_UID="$(id -u)" -e HOST_GID="$(id -g)" \
+            "${{ matrix.image }}" \
+            bash packaging/deb/build-in-container.sh
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: deb-${{ matrix.target }}
+          path: build/${{ matrix.target }}/*.deb
+          if-no-files-found: error
+
+      - name: Attach to GitHub release
+        if: github.event_name == 'release'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: build/${{ matrix.target }}/*.deb

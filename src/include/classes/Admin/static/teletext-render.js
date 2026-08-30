@@ -382,6 +382,13 @@
 		});
 	}
 
+	// Exposed so a page that changes what a canvas should show after load can
+	// redraw it, instead of reimplementing the decoder. init() only runs once and
+	// only fetches each canvas's data-teletext-src as it was at that moment,
+	// which is all the "Browse Pages" viewer needs but not enough for the
+	// teletext-font-editor, whose preview bytes change with every edit.
+	window.teletextRender = render;
+
 	if (document.readyState === 'loading') {
 		document.addEventListener('DOMContentLoaded', init);
 	} else {

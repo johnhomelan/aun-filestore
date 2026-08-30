@@ -1292,6 +1292,98 @@ Minimum number of seconds between automatic Teefax refreshes, checked on every h
 teletext_teefax_refresh_interval = 86400
 ~~~~~~
 
+**teletext_weather_channel**
+
+Which channel (0-9) the BBC Weather importer (`weather-import`) writes its index and per-city forecast pages into.  Default is `2`, the same channel as the BBC News feed (`teletext_news_bbc_channel`) - BBC News's own page 100 carries a channel-hub index linking to both, see NewsFeedDefinitions's `aChannelIndexEntries`.
+
+~~~~~~
+teletext_weather_channel = 2
+~~~~~~
+
+**teletext_weather_index_page**
+
+Page number the weather importer's index is written to; each city's forecast then gets its own page counting up from the page after it (page + 1, + 2, ...).  Default is `600`, matching the page number BBC News's channel-hub index links to.
+
+~~~~~~
+teletext_weather_index_page = 600
+~~~~~~
+
+**teletext_weather_refresh_interval**
+
+Minimum number of seconds between automatic weather refreshes, checked on every housekeeping tick.  Default is `3600` (one hour).
+
+~~~~~~
+teletext_weather_refresh_interval = 3600
+~~~~~~
+
+**teletext_tvguide_channel**
+
+Which channel (0-9) the TV Guide importer (`tv-guide-import`) writes its index and per-channel listing pages into.  Default is `4`.
+
+~~~~~~
+teletext_tvguide_channel = 4
+~~~~~~
+
+**teletext_tvguide_source**
+
+Base URL of the TVHeadend instance to pull the EPG from, e.g. `http://tvheadend.local:9981` - the importer requests `{source}/api/epg/events/grid`.  Empty by default, which disables the feature entirely (the import fails with an error until this is set) - unlike the other importers here, this points at a private instance you run yourself, not a public feed.
+
+~~~~~~
+teletext_tvguide_source =
+~~~~~~
+
+**teletext_tvguide_username**, **teletext_tvguide_password**
+
+Optional HTTP Basic Auth credentials sent with every TVHeadend request, for instances that put their API behind the same access control as their web UI.  Both empty by default, which sends no Authorization header at all.
+
+~~~~~~
+teletext_tvguide_username =
+teletext_tvguide_password =
+~~~~~~
+
+**teletext_tvguide_index_page**
+
+Page number the TV Guide importer's index is written to; each UK Freeview channel (see TvGuideChannels) then gets its own 2-day (today/tomorrow) listing page counting up from the page after it (page + 1, + 2, ...).  Default is `700`.
+
+~~~~~~
+teletext_tvguide_index_page = 700
+~~~~~~
+
+**teletext_tvguide_refresh_interval**
+
+Minimum number of seconds between automatic TV guide refreshes, checked on every housekeeping tick.  Default is `3600` (one hour).
+
+~~~~~~
+teletext_tvguide_refresh_interval = 3600
+~~~~~~
+
+**teletext_webfax_webfax1_channel**, **teletext_webfax_webfax2_channel**
+
+Which channel (0-9) to automatically keep populated from the [Webfax 1](https://github.com/Webfax-Teletext/Webfax-Teletext) and [Webfax 2](https://github.com/Webfax-Teletext/Webfax2-Teletext) teletext archives — see the "Webfax import" section of docs/protocols/teletext.md.  Defaults are `7` and `8` respectively.
+
+~~~~~~
+teletext_webfax_webfax1_channel = 7
+teletext_webfax_webfax2_channel = 8
+~~~~~~
+
+**teletext_webfax_webfax1_source**, **teletext_webfax_webfax2_source**
+
+Tarball URLs the importer downloads each Webfax service's content from.  Default to each repository's `main` branch archive.
+
+~~~~~~
+teletext_webfax_webfax1_source = https://github.com/Webfax-Teletext/Webfax-Teletext/archive/refs/heads/main.tar.gz
+teletext_webfax_webfax2_source = https://github.com/Webfax-Teletext/Webfax2-Teletext/archive/refs/heads/main.tar.gz
+~~~~~~
+
+**teletext_webfax_webfax1_refresh_interval**, **teletext_webfax_webfax2_refresh_interval**
+
+Minimum number of seconds between automatic refreshes of each Webfax service, checked on every housekeeping tick.  Default is `86400` (one day) for both.
+
+~~~~~~
+teletext_webfax_webfax1_refresh_interval = 86400
+teletext_webfax_webfax2_refresh_interval = 86400
+~~~~~~
+
 
 Viewdata
 ==

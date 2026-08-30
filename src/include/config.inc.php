@@ -89,8 +89,8 @@ safe_define('CONFIG_remote_bridge_server_address', '0.0.0.0');
 
 // Remote Socket Protocol relay server (see docs/protocols/remote-socket.md).
 // remote_socket_relay_secret has no default; it must be set explicitly for the feature to work.
-safe_define('CONFIG_remote_socket_relay_enabled', false);
-safe_define('CONFIG_remote_socket_relay_listen_address', '0.0.0.0');
+safe_define('CONFIG_remote_socket_relay_enabled', true);
+safe_define('CONFIG_remote_socket_relay_listen_address', '127.0.0.1');
 safe_define('CONFIG_remote_socket_relay_listen_port', '8091');
 safe_define('CONFIG_remote_socket_relay_secret', '');
 
@@ -98,7 +98,7 @@ safe_define('CONFIG_remote_socket_relay_secret', '');
 // one layer up the stack: relays whole Econet packets on ports Services\Provider\ProxyProvider
 // has reserved (see src/filestored) to a provider process hosted elsewhere, e.g. ecosyslogd.
 // remote_provider_relay_secret has no default; it must be set explicitly for the feature to work.
-safe_define('CONFIG_remote_provider_relay_enabled', false);
+safe_define('CONFIG_remote_provider_relay_enabled', true);
 safe_define('CONFIG_remote_provider_relay_listen_address', '0.0.0.0');
 safe_define('CONFIG_remote_provider_relay_listen_port', '8092');
 safe_define('CONFIG_remote_provider_relay_secret', '');
@@ -223,3 +223,18 @@ safe_define('CONFIG_teletext_news_sky_channel', '5');
 safe_define('CONFIG_teletext_news_sky_source', 'https://feeds.skynews.com/feeds/rss/home.xml');
 safe_define('CONFIG_teletext_news_sky_refresh_interval', 1800);
 safe_define('CONFIG_teletext_news_sky_max_stories', 40);
+safe_define('CONFIG_teletext_weather_channel', '2');
+safe_define('CONFIG_teletext_weather_refresh_interval', 3600);
+safe_define('CONFIG_teletext_weather_index_page', 600);
+safe_define('CONFIG_teletext_tvguide_channel', '2');
+safe_define('CONFIG_teletext_tvguide_refresh_interval', 3600);
+safe_define('CONFIG_teletext_tvguide_index_page', 700);
+safe_define('CONFIG_teletext_webfax_webfax1_channel', '7');
+safe_define('CONFIG_teletext_webfax_webfax1_source', 'https://github.com/Webfax-Teletext/Webfax-Teletext/archive/refs/heads/main.tar.gz');
+safe_define('CONFIG_teletext_webfax_webfax1_refresh_interval', 86400);
+safe_define('CONFIG_teletext_webfax_webfax2_channel', '8');
+safe_define('CONFIG_teletext_webfax_webfax2_source', 'https://github.com/Webfax-Teletext/Webfax2-Teletext/archive/refs/heads/main.tar.gz');
+safe_define('CONFIG_teletext_webfax_webfax2_refresh_interval', 86400);
+safe_define('CONFIG_teletext_tvguide_source','http://192.168.0.42:9981/');
+safe_define('CONFIG_teletext_tvguide_username','teletext');
+safe_define('CONFIG_teletext_tvguide_password','ceefax');

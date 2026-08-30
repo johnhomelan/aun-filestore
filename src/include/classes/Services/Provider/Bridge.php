@@ -223,6 +223,7 @@ class Bridge implements ProviderInterface {
 				break;
 			default:
 				$this->oLogger->warning("Bridge: unrecognised function code, ignoring");
+				break;
 		}
 	}
 

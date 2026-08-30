@@ -55,7 +55,7 @@ class RelayedAck implements EncapsulationInterface
         return $oPacket;
     }
 
-    public function toString(): string
+    public function asString(): string
     {
         return "RelayedAck net={$this->iNetwork} stn={$this->iStation} seq=" . ($this->iSeq ?? 'null');
     }

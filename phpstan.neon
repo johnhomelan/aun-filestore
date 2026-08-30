@@ -1,4 +1,9 @@
 parameters:
+	excludePaths:
+		# Machine-generated Smarty compiled templates (built by
+		# src/util/compile-templates for the phar / TypePHP packages).
+		- src/include/classes/*/templates_c/*
+		- src/include/classes/*/*/templates_c/*
 	ignoreErrors:
 		-
 			message: '#^Call to function is_countable\(\) with array<mixed> will always evaluate to true\.$#'

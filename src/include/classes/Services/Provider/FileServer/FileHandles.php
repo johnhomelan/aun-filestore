@@ -248,7 +248,7 @@ class FileHandles {
 				return;
 			}
 
-			$cAckHandler = function(EncapsulationInterface $oAckPacket, FileServer $_this, FsRequest $oFsRequest, ServiceDispatcher $oServiceDispatcher, int $iBytes, int $iBytesToRead, FileDescriptor $oFsHandle, int $iDataPort, int $iStartPos, \Closure &$cAckHandler): void {
+			$cAckHandler = function(EncapsulationInterface $oAckPacket, FileServer $_this, FsRequest $oFsRequest, ServiceDispatcher $oServiceDispatcher, int $iBytes, int $iBytesToRead, FileDescriptor $oFsHandle, int $iDataPort, int $iStartPos, \Closure $cAckHandler): void {
 				if($iBytesToRead==0 OR $oFsHandle->isEof()){
 					//Builds and sends the "done" summary alone: only safe to batch straight in
 					//with whatever triggered this (an ack of the last real data block) when

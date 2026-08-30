@@ -3,22 +3,30 @@
 <project name="aun-fileserver" default="rpm">
 
  <!-- Build Types -->
-	 <!-- Default rpm build job -->
-	 <target name="rpm" description="Builds an rpm" depends="loadrpmvars,tarbuild,rpmbuild,rpmsign,clean"/>
-	 <!-- Increments the release number and builds the rpm -->
-	 <target name="newrelease" description="Increments the release number and builds the rpm" depends="increment_rpm_release,loadrpmvars,tarbuild,rpmbuild,rpmsign,clean"/>
-	 <!-- Increments the minor version and builds the rpm -->
-	 <target name="newversion" description="Increments the minor version and builds the rpm" depends="increment_rpm_version_minor,loadrpmvars,tarbuild,rpmbuild,rpmsign,clean"/>
-	 <!-- Increments the major version and builds the rpm -->
-	 <target name="newmajorversion" description="Increments the major version and builds the rpm" depends="increment_rpm_version_major,loadrpmvars,tarbuild,rpmbuild,rpmsign,clean"/>
-	 <!-- Installs the RPM on the system defined in the the variable TESTHOST -->
-	 <target name="testhost" description="Installs the last RPM on a remote system" depends="loadrpmvars,rpm_remote_install" />
-	 <!-- Builds the debian package -->
- 	 <target name="deb" description="Builds a debian package" depends="loadrpmvars,debsourcetreebuild" />
-	 <!-- Builds the Synology package -->
- 	 <target name="syno" description="Builds a package for Synology NAS boxes" depends="loadrpmvars,synosourcetreebuild,syno_build_pkg_tar,syno_replace_vars" />
-	 <!-- Builds a tar archive containing a phar package -->
-	 <target name="phar" description="Builds a TGZ containing a phar version of the fileserver and the necessary config files etc to run the system from cli" depends="pharbundle" />
+	 <!-- RPM build (delegates to packaging/rpm/build-rpm.sh, same as "make rpm") -->
+	 <target name="rpm" description="Builds an rpm">
+		<exec executable="packaging/rpm/build-rpm.sh" failonerror="true">
+			<env key="OUTPUT_DIR" value="${basedir}/build"/>
+		</exec>
+	 </target>
+	 <!-- Builds the Debian package (delegates to packaging/deb/build-deb.sh, same as "make deb") -->
+ 	 <target name="deb" description="Builds a debian package">
+		<exec executable="packaging/deb/build-deb.sh" failonerror="true">
+			<env key="OUTPUT_DIR" value="${basedir}/build"/>
+		</exec>
+	 </target>
+	 <!-- Builds the Synology package (delegates to packaging/syno/build-spk.sh, same as "make synopackage") -->
+ 	 <target name="syno" description="Builds a package for Synology NAS boxes">
+		<exec executable="packaging/syno/build-spk.sh" failonerror="true">
+			<env key="OUTPUT_DIR" value="${basedir}/build"/>
+		</exec>
+	 </target>
+	 <!-- Builds a tar archive containing a phar package (delegates to packaging/phar/build-phar.sh, same as "make phar") -->
+	 <target name="phar" description="Builds a TGZ containing a phar version of the fileserver and the necessary config files etc to run the system from cli">
+		<exec executable="packaging/phar/build-phar.sh" failonerror="true">
+			<env key="OUTPUT_DIR" value="${basedir}/build"/>
+		</exec>
+	 </target>
 
  <!-- RPM Operations -->
 	 <!-- Loads all the vars needed to build the rpm -->
@@ -167,93 +175,12 @@
 		<scp file="${output_dir}/${rpm_full_path}" todir="root@${remote_host}:/tmp/" />
 		<sshexec host="${remote_host}" username="root" command="rpm -Uvh /tmp/${rpm_full_path}"/> 
 	 </target>
- <!-- Deb targets -->
+ <!-- Deb target: see packaging/deb/build-deb.sh (invoked by the "deb" target above) -->
 
-	 <target name="debsourcetreebuild" depends="create_deb_dir">
-		<copy todir="${output_dir}/debian/${rpm_name}-${rpm_version}">
-			<fileset dir="src">
-			</fileset>
-			<fileset dir="packaging/debian">
-			</fileset>
-		</copy>
-			
-	 </target>
-	
-	 <target name="create_deb_dir" depends="check_deb_dir_exits" unless="dir.exits">
-		<exec executable="mkdir">
-			<arg line="-p ${output_dir}/debian/${rpm_name}-${rpm_version}" />
-		</exec>
-	 </target>
+ <!-- Syno targets: see packaging/syno/build-spk.sh (invoked by the "syno" target above) -->
 
-	 <target name="check_deb_dir_exits" >
-		<condition property="dir.exists">
-			<available file="${output_dir}/debian/${rpm_name}-${rpm_version}" type="dir"/>	
-		</condition>
-	 </target>
+ <!-- Phar target: see packaging/phar/build-phar.sh (invoked by the "phar" target above) -->
 
- <!-- Syno targets -->
-
-	 <target name="synosourcetreebuild" depends="create_syno_dir">
-		<copy todir="${output_dir}/syno/${rpm_name}-${rpm_version}">
-			<fileset dir="packaging/syno">
-			</fileset>
-		</copy>
-			
-	 </target>
-	
-	 <target name="create_syno_dir" depends="check_syno_dir_exits" unless="dir.exits">
-		<exec executable="mkdir">
-			<arg line="-p ${output_dir}/syno/${rpm_name}-${rpm_version}" />
-		</exec>
-	 </target>
-
-	 <target name="check_syno_dir_exits" >
-		<condition property="dir.exists">
-			<available file="${output_dir}/syno/${rpm_name}-${rpm_version}" type="dir"/>	
-		</condition>
-	 </target>
-
-	 <target name="syno_build_pkg_tar">
-		<tar destfile="${output_dir}/syno/${rpm_name}-${rpm_version}/package.tgz" compression="gzip">
-			<!-- Ant has a default file exclude for .svn files so we don't need to worry about them -->
-			<tarfileset dir="src" prefix="">
-			</tarfileset>
-		</tar>
-	 </target>
-
-	<target name="syno_replace_vars">
-		<checksum file="${output_dir}/syno/${rpm_name}-${rpm_version}/package.tgz" property="syno_pkg_checksum"/>
-		<replace file="${output_dir}/syno/${rpm_name}-${rpm_version}/INFO" token="@version@" value="${rpm_version}"/>
-		<replace file="${output_dir}/syno/${rpm_name}-${rpm_version}/INFO" token="@checksum@" value="${syno_pkg_checksum}"/>
-	</target>
-		
-
-	<!-- Create the phar archive -->
-	<target name="pharbuild">
-		<exec executable="php">
-			<arg line="packaging/phar/create-phar.php"/>
-		</exec>
-	</target>
-
-	<!-- Build the tgz to distrobute the phar in -->
-	<target name="pharbundle" depends="pharbuild,loadrpmvars">
-		<tar destfile="${output_dir}/${rpm_name}-${rpm_version}-${rpm_release}-phar.tgz" compression="gzip" >
-			<tarfileset dir="build" prefix="filestore">
-				<include name="filestore.phar"/>
-			</tarfileset>
-			<tarfileset dir="packaging/phar" prefix="filestore"  >
-				<include name="README" />	
-				<include name="default.conf" />	
-				<include name="users.txt" />	
-				<include name="file-root" />	
-				<include name="print-spool" />	
-			</tarfileset>
-			<tarfileset dir="packaging/phar" prefix="filestore" filemode="755" >
-				<include name="run.sh" />	
-			</tarfileset>
-		</tar>
-	
-	</target>
  <!-- None rpm related targets -->
 
 	 <!-- Runs all the functional php-unit tests -->

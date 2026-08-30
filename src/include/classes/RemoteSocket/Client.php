@@ -8,6 +8,7 @@ use Ratchet\Client\Connector;
 use Ratchet\Client\WebSocket;
 use Ratchet\RFC6455\Messaging\MessageInterface;
 use React\EventLoop\LoopInterface;
+use React\EventLoop\TimerInterface;
 
 /**
  * The connecting side of the Remote Socket Protocol (see docs/protocols/remote-socket.md) -
@@ -44,17 +45,24 @@ class Client
 
     public function connect(): void
     {
-        $oConnector = new Connector($this->oLoop);
+        // Pass a plaintext React connector: the relay URL is ws:// (never wss://),
+        // and this keeps the default Connector from pulling in SecureConnector +
+        // its openssl dependency (which matters for the ahead-of-time build - see
+        // packaging/typephp).
+        $oConnector = new Connector($this->oLoop, new \React\Socket\Connector(['tls' => false], $this->oLoop));
         $oConnector->__invoke($this->sUrl)->then(
             function (mixed $mConnection): void {
                 if (!$mConnection instanceof WebSocket) {
                     return;
                 }
                 $this->oConnection = $mConnection;
-                $mConnection->on('message', function (MessageInterface $oMessage): void {
+                // pawl's WebSocket emits 'message' as [$msg, $conn] and 'close'
+                // as [$code, $reason, $conn]; declare the trailing params even
+                // though they are unused (strict arg-count under TypePHP).
+                $mConnection->on('message', function (MessageInterface $oMessage, mixed $mConn = null): void {
                     $this->handleFrame((string) $oMessage);
                 });
-                $mConnection->on('close', function (): void {
+                $mConnection->on('close', function (mixed $mCode = null, mixed $mReason = null, mixed $mConn = null): void {
                     $this->onDisconnected();
                 });
                 $this->rawSend(Frame::hello($this->sSecret)->encode());
@@ -76,7 +84,7 @@ class Client
 
     private function scheduleReconnect(): void
     {
-        $this->oLoop->addTimer(self::RECONNECT_DELAY_SECONDS, function (): void {
+        $this->oLoop->addTimer(self::RECONNECT_DELAY_SECONDS, function (?TimerInterface $oTimer = null): void {
             $this->connect();
         });
     }

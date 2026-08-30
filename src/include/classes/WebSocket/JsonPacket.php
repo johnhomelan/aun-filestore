@@ -353,6 +353,7 @@ class JsonPacket implements EncapsulationInterface {
 						}
 						return $sJson;
 				}
+				break;
 		}
 		return null;
 	}
@@ -386,7 +387,7 @@ class JsonPacket implements EncapsulationInterface {
 	 *
 	 * @return string
 	*/
-	public function toString(): string
+	public function asString(): string
 	{
 		$aPkt = unpack('C*',$this->getData());
 		if($aPkt === false){

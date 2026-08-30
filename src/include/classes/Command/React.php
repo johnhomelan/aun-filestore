@@ -1,7 +1,6 @@
 <?php
 
-namespace HomeLan\FileStore\Command; 
-declare(ticks = 1);
+namespace HomeLan\FileStore\Command;
 
 include_once(__DIR__.'/../../system.inc.php');
 
@@ -49,7 +48,6 @@ use HomeLan\FileStore\Encapsulation\EncapsulationTypeMap;
 use HomeLan\FileStore\React\UnixSerialDeviceConnector;
  
 use config;
-use Exception;
 
 /**
  * filestored is the main loop of the application.  It deals with all the socket operations, dispatches and collects
@@ -106,21 +104,6 @@ class React extends Command {
 
 		//Initialize the security system
 		Security::init($this->oLogger);
-
-
-		//Initialize the system
-		try {
-			//Setup signle handler
-			pcntl_signal(SIGCHLD,$this->sigHandler(...));
-			pcntl_signal(SIGTERM,$this->sigHandler(...));
-
-
-		}catch(Exception $oException){
-			//Failed to initialize log and exit none 0
-			$this->oLogger->debug($oException->getMessage());
-			$this->oLogger->emergency("Un-abale to initialize the server, shutting down.");
-			exit(1);
-		}
 
 		$this->MainLoop();
   		return \Symfony\Component\Console\Command\Command::SUCCESS;
@@ -235,25 +218,6 @@ EOF;
 				'Cause filestored to write the PID of the deamonized process to a file'
 			)->setHelp($sHelp);
 				
-	}
-
-	/**
-	 * Handles any unix signals 
-	 *
-	 * The main signal this handles is SIGALARM, that is used to perform the house keeping tasks
-	 * @param int $iSigno
-	*/
-	public function sigHandler(int $iSigno): void
-	{
-		switch($iSigno){
-			case SIGTERM:
-				$this->oLogger->info("Shutting down filestored");
-				break;
-			case SIGCHLD:
-			default:
-				//Ignore
-				break;
-		}
 	}
 
 	/**

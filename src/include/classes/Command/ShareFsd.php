@@ -1,7 +1,6 @@
 <?php
 
 namespace HomeLan\FileStore\Command;
-declare(ticks = 1);
 
 include_once(__DIR__ . '/../../system.inc.php');
 
@@ -28,7 +27,6 @@ use HomeLan\FileStore\RemoteSocket\Client as RemoteSocketClient;
 use HomeLan\FileStore\RemoteSocket\Exceptions\AuthenticationFailedException;
 
 use config;
-use Exception;
 
 /**
  * sharefsd is the main loop of the standalone ShareFS/Access+ daemon. It runs its own
@@ -83,15 +81,6 @@ class ShareFsd extends Command
         $iServiceStation = config::getValueAsInt('sharefs_service_station');
         if (!Security::login($iServiceNetwork, $iServiceStation, config::getValueAsString('sharefs_service_username'), config::getValueAsString('sharefs_service_password'))) {
             $this->oLogger->emergency('sharefsd: unable to log in as the configured service identity (sharefs_service_username/sharefs_service_password), shutting down.');
-            exit(1);
-        }
-
-        try {
-            pcntl_signal(SIGCHLD, $this->sigHandler(...));
-            pcntl_signal(SIGTERM, $this->sigHandler(...));
-        } catch (Exception $oException) {
-            $this->oLogger->debug($oException->getMessage());
-            $this->oLogger->emergency('Un-able to initialize sharefsd, shutting down.');
             exit(1);
         }
 
@@ -167,18 +156,6 @@ EOF;
                 InputOption::VALUE_OPTIONAL,
                 'Cause sharefsd to write the PID of the deamonized process to a file'
             )->setHelp($sHelp);
-    }
-
-    public function sigHandler(int $iSigno): void
-    {
-        switch ($iSigno) {
-            case SIGTERM:
-                $this->oLogger->info('Shutting down sharefsd');
-                break;
-            case SIGCHLD:
-            default:
-                break;
-        }
     }
 
     private function freewayService(LoopInterface $oLoop, ?RemoteSocketClient $oRelayClient): FreewayHandler

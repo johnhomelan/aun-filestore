@@ -674,10 +674,10 @@ class Torchnet implements ProviderInterface
             }
         }
 
-        foreach ($this->aSearchState as $sKey => $aState) {
-            if (!array_key_exists($sKey, $aStations)) {
-                [$iNet, $iStn] = explode('.', $sKey, 2);
-                $aStations[$sKey] = [
+        foreach ($this->aSearchState as $sStateKey => $aState) {
+            if (!array_key_exists($sStateKey, $aStations)) {
+                [$iNet, $iStn] = explode('.', $sStateKey, 2);
+                $aStations[$sStateKey] = [
                     'network'      => (int) $iNet,
                     'station'      => (int) $iStn,
                     'open_handles' => 0,

@@ -15,10 +15,10 @@ project, whose author describes it as talking "the same protocol as the
 backed by "a bunch of binary page data dumps instantaneously available in a
 directory" rather than a real receiver. See
 [This project's implementation](#this-projects-implementation) below for
-how that maps onto the wire protocol, [Teefax import](#teefax-import) for
-how one channel can be kept automatically populated from a real teletext
-archive, and [Provenance and confidence](#provenance-and-confidence) for
-sourcing.
+how that maps onto the wire protocol, [Teefax import](#teefax-import) and
+[Webfax import](#webfax-import) for how channels can be kept automatically
+populated from real teletext archives, and
+[Provenance and confidence](#provenance-and-confidence) for sourcing.
 
 ## Ports
 
@@ -267,6 +267,40 @@ own.
 
 Run `src/util/teefax-import --help` to use the importer directly (e.g.
 `--dry-run` to see what a refresh would do without writing anything).
+
+## Webfax import
+
+Alongside Teefax, the server can keep two further channels automatically
+stocked from [Webfax 1](https://github.com/Webfax-Teletext/Webfax-Teletext)
+and [Webfax 2](https://github.com/Webfax-Teletext/Webfax2-Teletext) —
+independent teletext services, each its own GitHub repository, in exactly
+the same MRG `.tti` format Teefax uses (verified directly against live
+files from both repos), so `WebfaxImport` reuses `TeefaxTtiParser` as-is
+rather than needing a parser of its own. Structured identically to Teefax
+import above — same tarball download, `.tti` conversion, and atomic
+staging-dir install — but selectable with `--service` (`webfax1` or
+`webfax2`) since there are two independent sources rather than one, the
+same way `NewsImport` selects a feed with `--feed`.
+
+**Configuration:**
+
+| Key | Default | Purpose |
+|---|---|---|
+| `teletext_webfax_webfax1_channel` | `7` | Which channel Webfax 1 is imported into. |
+| `teletext_webfax_webfax1_source` | Webfax 1's `main` branch tarball URL | Where to download Webfax 1 from. |
+| `teletext_webfax_webfax1_refresh_interval` | `86400` (1 day) | Minimum seconds between automatic Webfax 1 refreshes. |
+| `teletext_webfax_webfax2_channel` | `8` | Which channel Webfax 2 is imported into. |
+| `teletext_webfax_webfax2_source` | Webfax 2's `main` branch tarball URL | Where to download Webfax 2 from. |
+| `teletext_webfax_webfax2_refresh_interval` | `86400` (1 day) | Minimum seconds between automatic Webfax 2 refreshes. |
+
+The admin web front end's "Refresh Webfax 1 Now" / "Refresh Webfax 2 Now"
+buttons (on the Teletext service page) trigger each service's background
+import on demand, bypassing the due-time check — same as Teefax's
+"Refresh Teefax Now".
+
+Run `src/util/webfax-import --service=webfax1 --help` to use the importer
+directly (e.g. `--dry-run` to see what a refresh would do without writing
+anything).
 
 ## Provenance and confidence
 

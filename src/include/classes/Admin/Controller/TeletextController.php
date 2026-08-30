@@ -9,6 +9,7 @@ use HomeLan\FileStore\Admin\Service\Smarty;
 use HomeLan\FileStore\Services\ServiceDispatcher;
 use HomeLan\FileStore\Services\Provider\Teletext;
 use HomeLan\FileStore\Services\Provider\Teletext\NewsFeedDefinitions;
+use HomeLan\FileStore\Services\Provider\Teletext\WebfaxSourceDefinitions;
 
 class TeletextController extends AbstractController
 {
@@ -50,6 +51,65 @@ class TeletextController extends AbstractController
         return $this->renderTemplate($oSmartyService, 'teletext-news-refresh.tpl', [
             'sFeedKey' => $sFeedKey,
             'sLabel' => $oFeed->sLabel,
+            'sMessage' => (string) $oRequest->query->get('msg', ''),
+        ]);
+    }
+
+    public function weatherRefresh(Smarty $oSmartyService, Request $oRequest): Response
+    {
+        $oProvider = $this->findProvider();
+        if ($oProvider === null) {
+            return new RedirectResponse('/?error=' . urlencode('Teletext service not found'));
+        }
+
+        if ($oRequest->getMethod() === 'POST') {
+            $bStarted = $oProvider->triggerWeatherImport();
+            return new RedirectResponse('/service/teletext/weather-refresh?msg=' . ($bStarted ? 'started' : 'not_started'));
+        }
+
+        return $this->renderTemplate($oSmartyService, 'teletext-weather-refresh.tpl', [
+            'sMessage' => (string) $oRequest->query->get('msg', ''),
+        ]);
+    }
+
+    public function tvGuideRefresh(Smarty $oSmartyService, Request $oRequest): Response
+    {
+        $oProvider = $this->findProvider();
+        if ($oProvider === null) {
+            return new RedirectResponse('/?error=' . urlencode('Teletext service not found'));
+        }
+
+        if ($oRequest->getMethod() === 'POST') {
+            $bStarted = $oProvider->triggerTvGuideImport();
+            return new RedirectResponse('/service/teletext/tvguide-refresh?msg=' . ($bStarted ? 'started' : 'not_started'));
+        }
+
+        return $this->renderTemplate($oSmartyService, 'teletext-tvguide-refresh.tpl', [
+            'sMessage' => (string) $oRequest->query->get('msg', ''),
+        ]);
+    }
+
+    public function webfaxRefresh(Smarty $oSmartyService, Request $oRequest): Response
+    {
+        $oProvider = $this->findProvider();
+        if ($oProvider === null) {
+            return new RedirectResponse('/?error=' . urlencode('Teletext service not found'));
+        }
+
+        $sServiceKey = (string) $oRequest->query->get('service', '');
+        $oService = WebfaxSourceDefinitions::get($sServiceKey);
+        if ($oService === null) {
+            return new RedirectResponse('/?error=' . urlencode('Unknown Webfax service "' . $sServiceKey . '"'));
+        }
+
+        if ($oRequest->getMethod() === 'POST') {
+            $bStarted = $oProvider->triggerWebfaxImport($sServiceKey);
+            return new RedirectResponse('/service/teletext/webfax-refresh?service=' . urlencode($sServiceKey) . '&msg=' . ($bStarted ? 'started' : 'not_started'));
+        }
+
+        return $this->renderTemplate($oSmartyService, 'teletext-webfax-refresh.tpl', [
+            'sServiceKey' => $sServiceKey,
+            'sLabel' => $oService->sLabel,
             'sMessage' => (string) $oRequest->query->get('msg', ''),
         ]);
     }

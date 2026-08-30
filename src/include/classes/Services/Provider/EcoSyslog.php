@@ -5,7 +5,6 @@ namespace HomeLan\FileStore\Services\Provider;
 use HomeLan\FileStore\Services\ProviderInterface;
 use HomeLan\FileStore\Services\ServiceDispatcher;
 use HomeLan\FileStore\Messages\EconetPacket;
-use Psr\Log\LogLevel;
 
 /**
  * An Econet version of syslog - the sample provider for the Remote Provider Protocol (see
@@ -25,19 +24,27 @@ class EcoSyslog implements ProviderInterface
 {
     private const int SERVICE_PORT = 0xB6;
 
-    /** @var array<int,string> */
+    /**
+     * Wire severity byte (0=Emergency..7=Debug) to PSR-3 log level. These are
+     * the literal values of the Psr\Log\LogLevel::* constants, spelled out so
+     * this file has no compile-time dependency on the psr/log package (it is
+     * one of the providers compiled ahead-of-time - see packaging/typephp).
+     * PSR-3 fixes these strings, so they will not drift.
+     *
+     * @var array<int,string>
+     */
     private const array SEVERITY_MAP = [
-        0 => LogLevel::EMERGENCY,
-        1 => LogLevel::ALERT,
-        2 => LogLevel::CRITICAL,
-        3 => LogLevel::ERROR,
-        4 => LogLevel::WARNING,
-        5 => LogLevel::NOTICE,
-        6 => LogLevel::INFO,
-        7 => LogLevel::DEBUG,
+        0 => 'emergency',
+        1 => 'alert',
+        2 => 'critical',
+        3 => 'error',
+        4 => 'warning',
+        5 => 'notice',
+        6 => 'info',
+        7 => 'debug',
     ];
 
-    private const string DEFAULT_SEVERITY = LogLevel::INFO;
+    private const string DEFAULT_SEVERITY = 'info';
 
     public function __construct(private readonly \Psr\Log\LoggerInterface $oLogger)
     {

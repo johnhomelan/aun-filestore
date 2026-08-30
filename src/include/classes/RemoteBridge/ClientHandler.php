@@ -50,7 +50,10 @@ class ClientHandler
 		$aState = &$this->aEntryState[$sKey];
 		$aEntry = $aState['entry'];
 
-		$oConnector = new \React\Socket\Connector($this->oLoop);
+		// Bridge-to-bridge links are plaintext TCP; 'tls' => false keeps the
+		// Connector from pulling in SecureConnector (and its openssl dependency),
+		// which also matters for the ahead-of-time build (see packaging/typephp).
+		$oConnector = new \React\Socket\Connector(['tls' => false], $this->oLoop);
 		$this->oLogger->info("RemoteBridge: connecting to {$sKey}");
 
 		$oConnector->connect("tcp://{$aEntry['host']}:{$aEntry['port']}")->then(

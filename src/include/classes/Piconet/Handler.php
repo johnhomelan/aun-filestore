@@ -255,7 +255,7 @@ class Handler {
 					$this->oLogger->warning("Piconet Handler: Discarding malformed RX packet: " . $oEx->getMessage());
 					break;
 				}
-				$this->oLogger->debug("Piconet Handler: RX Packet ".$oPacket->toString());
+				$this->oLogger->debug("Piconet Handler: RX Packet ".$oPacket->asString());
 
 				// In monitor mode (when remote bridge is enabled) filter local-network unicast
 				// packets not addressed to our station, and forward inter-network packets via bridge.

@@ -229,7 +229,7 @@ class BridgePacket implements EncapsulationInterface
 		return $oEconetPacket;
 	}
 
-	public function toString(): string
+	public function asString(): string
 	{
 		return sprintf(
 			'RemoteBridge dst:%d.%d src:%d.%d port:%d flags:%d',

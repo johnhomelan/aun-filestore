@@ -249,7 +249,7 @@ class Cli {
 				$iSentSeq = $oEconetPacket->getSequence();
 				$oServiceDispatcher->sendPackets($_this);
 
-				$cAckHandler = function(EncapsulationInterface $oAckPacket, FileServer $_this, FsRequest $oFsRequest, ServiceDispatcher $oServiceDispatcher, string $sFileData, int $iDataPort, \Closure &$cAckHandler): void {
+				$cAckHandler = function(EncapsulationInterface $oAckPacket, FileServer $_this, FsRequest $oFsRequest, ServiceDispatcher $oServiceDispatcher, string $sFileData, int $iDataPort, \Closure $cAckHandler): void {
 					if(strlen($sFileData)>0){
 						$sBlock = substr($sFileData,0,256);
 						$sFileData = substr($sFileData,256);

@@ -141,18 +141,27 @@ class AuthPluginFile implements AuthPluginInterface {
 			$sHashType='plain';
 			$sHash = $sStored;
 		}
+		// The non-bcrypt arms deliberately cascade: a 'plain' entry also
+		// matches a value that sha1()s or md5()s to the stored string, and a
+		// 'sha1' entry also matches one that md5()s to it. That used to be
+		// expressed as switch-case fall-through; it is spelled out here as
+		// explicit checks per arm so each case self-terminates (TypePHP - see
+		// packaging/typephp - rejects implicit fall-through) with no change
+		// in behaviour.
 		switch($sHashType){
 			case 'bcrypt':
-				//Salted, password_verify() does its own comparison so it doesn't fall through
+				//Salted, password_verify() does its own comparison so it doesn't cascade
 				return password_verify($sPassword,$sHash);
 			case 'plain':
-				if($sPassword==$sHash){
+				if($sPassword==$sHash || sha1($sPassword)==$sHash || md5($sPassword)==$sHash){
 					return TRUE;
 				}
+				break;
 			case 'sha1':
-				if(sha1($sPassword)==$sHash){
+				if(sha1($sPassword)==$sHash || md5($sPassword)==$sHash){
 					return TRUE;
 				}
+				break;
 			case 'md5':
 			default:
 				if(md5($sPassword)==$sHash){

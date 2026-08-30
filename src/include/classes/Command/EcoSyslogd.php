@@ -1,7 +1,6 @@
 <?php
 
 namespace HomeLan\FileStore\Command;
-declare(ticks = 1);
 
 include_once(__DIR__ . '/../../system.inc.php');
 
@@ -23,7 +22,6 @@ use Monolog\Handler\SyslogHandler;
 use Monolog\Handler\SyslogUdpHandler;
 
 use config;
-use Exception;
 
 /**
  * ecosyslogd is the sample Remote Provider Protocol host (see docs/protocols/remote-provider.md
@@ -64,15 +62,6 @@ class EcoSyslogd extends Command
 
         if ($bDaemonize) {
             $this->daemonize($sPidFile);
-        }
-
-        try {
-            pcntl_signal(SIGCHLD, $this->sigHandler(...));
-            pcntl_signal(SIGTERM, $this->sigHandler(...));
-        } catch (Exception $oException) {
-            $this->oLogger->debug($oException->getMessage());
-            $this->oLogger->emergency('Un-able to initialize ecosyslogd, shutting down.');
-            exit(1);
         }
 
         $this->MainLoop();
@@ -167,18 +156,6 @@ EOF;
                 InputOption::VALUE_OPTIONAL,
                 'Cause ecosyslogd to write the PID of the deamonized process to a file'
             )->setHelp($sHelp);
-    }
-
-    public function sigHandler(int $iSigno): void
-    {
-        switch ($iSigno) {
-            case SIGTERM:
-                $this->oLogger->info('Shutting down ecosyslogd');
-                break;
-            case SIGCHLD:
-            default:
-                break;
-        }
     }
 
     public function daemonize(string $sPidFile): void

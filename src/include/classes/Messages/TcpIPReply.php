@@ -322,7 +322,7 @@ class TcpIPReply extends Reply {
 		return $this->iWindow;
 	}
 
-	public function toString():string
+	public function asString():string
 	{
 		return "TCP:  Src| ".$this->sSrcIP.":".$this->iSrcPort." Dst| ".$this->sDstIP.":".$this->iDstPort."  Seq| ".$this->iSeq." Ack| ".$this->iAck." Syn| ".$this->bSyn." Ack| ".$this->bAck." Fin| ".$this->bFin." Reset|".$this->bReset." Data Len|".strlen($this->sData)." Data|".$this->sData;
 	}

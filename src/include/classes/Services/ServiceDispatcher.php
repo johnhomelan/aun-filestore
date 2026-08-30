@@ -205,7 +205,7 @@ class ServiceDispatcher {
 			case 'Immediate':
 			case 'Unicast':
 				if(array_key_exists($oPacket->getPort(),$this->aPorts)){
-					$this->oLogger->debug("Unicast Packet in:  ".$oPacket->toString());
+					$this->oLogger->debug("Unicast Packet in:  ".$oPacket->asString());
 					$this->aPorts[$oPacket->getPort()]->unicastPacketIn($oPacket->buildEconetPacket());
 					$aReplies = $this->aPorts[$oPacket->getPort()]->getReplies();
 					foreach($aReplies as $oReply){
@@ -218,7 +218,7 @@ class ServiceDispatcher {
 				break;
 			case 'Broadcast':
 				if(array_key_exists($oPacket->getPort(),$this->aPorts)){
-					$this->oLogger->debug("Broadcast Packet in:  ".$oPacket->toString());
+					$this->oLogger->debug("Broadcast Packet in:  ".$oPacket->asString());
 					$this->aPorts[$oPacket->getPort()]->broadcastPacketIn($oPacket->buildEconetPacket());
 					$aReplies = $this->aPorts[$oPacket->getPort()]->getReplies();
 					foreach($aReplies as $oReply){
@@ -227,7 +227,7 @@ class ServiceDispatcher {
 				}
 				break;
 			default:
-				$this->oLogger->error("Unicast Packet in of unknown type: ".$oPacket->toString());
+				$this->oLogger->error("Unicast Packet in of unknown type: ".$oPacket->asString());
 				break;
 		}
 

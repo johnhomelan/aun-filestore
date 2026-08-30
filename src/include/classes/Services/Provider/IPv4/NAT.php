@@ -251,7 +251,7 @@ class NAT
 	private function _sendDataViaSocket(string $sKey, IPv4Request $oIPv4, TCPRequest $oTcp):void
 	{
 
-		$this->oLogger->debug("NAT: Recived data, sending to remote sock ".$oTcp->toString());
+		$this->oLogger->debug("NAT: Recived data, sending to remote sock ".$oTcp->asString());
 		$aEntry = $this->aConnTrack[$sKey];
 		if($oTcp->getSequence()==$aEntry['sequence']){
 			$this->oLogger->debug("NAT: Duplicate packet seq : ".$oTcp->getSequence()." dropping.");
@@ -322,7 +322,7 @@ class NAT
 		}
 		//Add the data to the tcp stream 
 		$oTcpIpPkt->setData("");
-		$this->oLogger->debug("NAT: Replied with tcp pkt ".$oTcpIpPkt->toString() );
+		$this->oLogger->debug("NAT: Replied with tcp pkt ".$oTcpIpPkt->asString() );
 		//Build the econet packet, and dipatch it 
 		$oEconetPacket = $oTcpIpPkt->buildEconetpacket();
 		$oIP = new IPv4Request($oEconetPacket, $this->oProvider->getLogger());
@@ -384,7 +384,7 @@ class NAT
 		$aEntry = $this->aConnTrack[$sKey];
 		$aEntry['state'] = 'connected';
 		$this->aConnTrack[$sKey] = $aEntry;
-		$this->oLogger->debug("NAT: Replied with tcp pkt ".$oTcp->toString() );
+		$this->oLogger->debug("NAT: Replied with tcp pkt ".$oTcp->asString() );
 		$oEconetPacket = $oTcp->buildEconetpacket();
 		$oIPv4 = new IPv4Request($oEconetPacket,$this->oLogger);
 		$this->oProvider->processUnicastIPv4Pkt($oIPv4,$oEconetPacket);
@@ -466,7 +466,7 @@ class NAT
 		}
 		//Add the data to the tcp stream 
 		$oTcpIpPkt->setData($sData);
-		$this->oLogger->debug("NAT: Replied with tcp pkt ".$oTcpIpPkt->toString() );
+		$this->oLogger->debug("NAT: Replied with tcp pkt ".$oTcpIpPkt->asString() );
 		//Build the econet packet, and dipatch it 
 		$oEconetPacket = $oTcpIpPkt->buildEconetpacket();
 		$oIP = new IPv4Request($oEconetPacket, $this->oProvider->getLogger());

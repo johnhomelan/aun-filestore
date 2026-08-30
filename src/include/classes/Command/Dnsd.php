@@ -1,7 +1,6 @@
 <?php
 
 namespace HomeLan\FileStore\Command;
-declare(ticks = 1);
 
 include_once(__DIR__ . '/../../system.inc.php');
 
@@ -20,7 +19,6 @@ use HomeLan\FileStore\RemoteSocket\Client as RemoteSocketClient;
 use HomeLan\FileStore\RemoteSocket\Exceptions\AuthenticationFailedException;
 
 use config;
-use Exception;
 
 /**
  * dnsd is a standalone DNS server that answers queries from a Unix-style hosts file, optionally
@@ -66,15 +64,6 @@ class Dnsd extends Command
 
         HostsFile::init($this->oLogger);
 
-        try {
-            pcntl_signal(SIGCHLD, $this->sigHandler(...));
-            pcntl_signal(SIGTERM, $this->sigHandler(...));
-        } catch (Exception $oException) {
-            $this->oLogger->debug($oException->getMessage());
-            $this->oLogger->emergency('Un-able to initialize dnsd, shutting down.');
-            exit(1);
-        }
-
         $this->MainLoop();
         return \Symfony\Component\Console\Command\Command::SUCCESS;
     }
@@ -108,7 +97,10 @@ class Dnsd extends Command
         $oRelayClient->connect();
 
         $oTransport = $oRelayClient->getTransport(config::getValueAsInt('dns_port'));
-        $oTransport->on('message', function (string $sMessage, string $sSrcAddress) use ($oHandler) {
+        // RelayedUdpTransport emits ($payload, $srcAddr, $socket); the third arg
+        // is unused here but declared so the AOT (TypePHP) build's strict
+        // callback arity is satisfied.
+        $oTransport->on('message', function (string $sMessage, string $sSrcAddress, mixed $mSocket = null) use ($oHandler) {
             $oHandler->receive($sMessage, $sSrcAddress);
         });
         $oHandler->setSocket($oTransport);
@@ -147,18 +139,6 @@ EOF;
                 InputOption::VALUE_OPTIONAL,
                 'Cause dnsd to write the PID of the deamonized process to a file'
             )->setHelp($sHelp);
-    }
-
-    public function sigHandler(int $iSigno): void
-    {
-        switch ($iSigno) {
-            case SIGTERM:
-                $this->oLogger->info('Shutting down dnsd');
-                break;
-            case SIGCHLD:
-            default:
-                break;
-        }
     }
 
     public function daemonize(string $sPidFile): void

@@ -184,6 +184,7 @@ class Viewdata implements ProviderInterface {
 				break;
 			default:
 				$this->oLogger->warning("Viewdata: Unrecognised message type ".var_export($sType,true).", ignoring");
+				break;
 		}
 	}
 

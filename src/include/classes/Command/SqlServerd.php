@@ -1,7 +1,6 @@
 <?php
 
 namespace HomeLan\FileStore\Command;
-declare(ticks = 1);
 
 include_once(__DIR__ . '/../../system.inc.php');
 
@@ -11,6 +10,7 @@ use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Command\Command;
 
 use React\EventLoop\Factory as ReactFactory;
+use React\EventLoop\TimerInterface;
 
 use HomeLan\FileStore\Services\ServiceDispatcher;
 use HomeLan\FileStore\Services\Provider\SqlServer;
@@ -19,7 +19,6 @@ use HomeLan\FileStore\RemoteProvider\Host as RemoteProviderHost;
 use HomeLan\FileStore\RemoteProvider\Exceptions\AuthenticationFailedException;
 
 use config;
-use Exception;
 
 /**
  * sql-serverd hosts Services\Provider\SqlServer (see
@@ -65,15 +64,6 @@ class SqlServerd extends Command
             $this->daemonize($sPidFile);
         }
 
-        try {
-            pcntl_signal(SIGCHLD, $this->sigHandler(...));
-            pcntl_signal(SIGTERM, $this->sigHandler(...));
-        } catch (Exception $oException) {
-            $this->oLogger->debug($oException->getMessage());
-            $this->oLogger->emergency('Un-able to initialize sql-serverd, shutting down.');
-            exit(1);
-        }
-
         $this->MainLoop();
         return \Symfony\Component\Console\Command\Command::SUCCESS;
     }
@@ -98,10 +88,12 @@ class SqlServerd extends Command
         // Mirrors Command\React's own two timers: a 1-second drain for reply/unsolicited output
         // (see Host::flush()) and a separate, configurable-interval one for housekeeping tasks
         // (SqlServer's own stale-connection sweep - see SqlServer::sweepStaleConnections()).
-        $oLoop->addPeriodicTimer(1, function () use ($oHost) {
+        // The ?TimerInterface param is unused but declared so the AOT (TypePHP)
+        // build's strict callback arity is satisfied - the loop passes the timer.
+        $oLoop->addPeriodicTimer(1, function (?TimerInterface $oTimer = null) use ($oHost) {
             $oHost->flush();
         });
-        $oLoop->addPeriodicTimer(config::getValueAsFloat('housekeeping_interval'), function () use ($oServiceDispatcher) {
+        $oLoop->addPeriodicTimer(config::getValueAsFloat('housekeeping_interval'), function (?TimerInterface $oTimer = null) use ($oServiceDispatcher) {
             $oServiceDispatcher->houseKeeping();
         });
 
@@ -139,18 +131,6 @@ EOF;
                 InputOption::VALUE_OPTIONAL,
                 'Cause sql-serverd to write the PID of the deamonized process to a file'
             )->setHelp($sHelp);
-    }
-
-    public function sigHandler(int $iSigno): void
-    {
-        switch ($iSigno) {
-            case SIGTERM:
-                $this->oLogger->info('Shutting down sql-serverd');
-                break;
-            case SIGCHLD:
-            default:
-                break;
-        }
     }
 
     public function daemonize(string $sPidFile): void

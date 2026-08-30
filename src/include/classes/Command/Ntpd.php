@@ -1,7 +1,6 @@
 <?php
 
 namespace HomeLan\FileStore\Command;
-declare(ticks = 1);
 
 include_once(__DIR__ . '/../../system.inc.php');
 
@@ -17,7 +16,6 @@ use HomeLan\FileStore\RemoteSocket\Client as RemoteSocketClient;
 use HomeLan\FileStore\RemoteSocket\Exceptions\AuthenticationFailedException;
 
 use config;
-use Exception;
 
 /**
  * ntpd is a standalone NTP server that answers client requests from the host system clock (see
@@ -58,15 +56,6 @@ class Ntpd extends Command
             $this->daemonize($sPidFile);
         }
 
-        try {
-            pcntl_signal(SIGCHLD, $this->sigHandler(...));
-            pcntl_signal(SIGTERM, $this->sigHandler(...));
-        } catch (Exception $oException) {
-            $this->oLogger->debug($oException->getMessage());
-            $this->oLogger->emergency('Un-able to initialize ntpd, shutting down.');
-            exit(1);
-        }
-
         $this->MainLoop();
         return \Symfony\Component\Console\Command\Command::SUCCESS;
     }
@@ -92,7 +81,10 @@ class Ntpd extends Command
         $oRelayClient->connect();
 
         $oTransport = $oRelayClient->getTransport(config::getValueAsInt('ntp_port'));
-        $oTransport->on('message', function (string $sMessage, string $sSrcAddress) use ($oHandler) {
+        // RelayedUdpTransport emits ($payload, $srcAddr, $socket); the third arg
+        // is unused here but declared so the AOT (TypePHP) build's strict
+        // callback arity is satisfied.
+        $oTransport->on('message', function (string $sMessage, string $sSrcAddress, mixed $mSocket = null) use ($oHandler) {
             $oHandler->receive($sMessage, $sSrcAddress);
         });
         $oHandler->setSocket($oTransport);
@@ -131,18 +123,6 @@ EOF;
                 InputOption::VALUE_OPTIONAL,
                 'Cause ntpd to write the PID of the deamonized process to a file'
             )->setHelp($sHelp);
-    }
-
-    public function sigHandler(int $iSigno): void
-    {
-        switch ($iSigno) {
-            case SIGTERM:
-                $this->oLogger->info('Shutting down ntpd');
-                break;
-            case SIGCHLD:
-            default:
-                break;
-        }
     }
 
     public function daemonize(string $sPidFile): void

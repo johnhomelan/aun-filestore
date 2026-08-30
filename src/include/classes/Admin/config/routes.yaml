@@ -55,9 +55,18 @@ macemail_broadcast:
 teletext_teefax_refresh:
     path: /service/teletext/teefax-refresh
     defaults: { _controller: 'HomeLan\FileStore\Admin\Controller\TeletextController::teefaxRefresh' }
+teletext_weather_refresh:
+    path: /service/teletext/weather-refresh
+    defaults: { _controller: 'HomeLan\FileStore\Admin\Controller\TeletextController::weatherRefresh' }
 teletext_news_refresh:
     path: /service/teletext/news-refresh
     defaults: { _controller: 'HomeLan\FileStore\Admin\Controller\TeletextController::newsRefresh' }
+teletext_webfax_refresh:
+    path: /service/teletext/webfax-refresh
+    defaults: { _controller: 'HomeLan\FileStore\Admin\Controller\TeletextController::webfaxRefresh' }
+teletext_tvguide_refresh:
+    path: /service/teletext/tvguide-refresh
+    defaults: { _controller: 'HomeLan\FileStore\Admin\Controller\TeletextController::tvGuideRefresh' }
 teletext_browse:
     path: /service/teletext/browse
     defaults: { _controller: 'HomeLan\FileStore\Admin\Controller\TeletextController::browse' }

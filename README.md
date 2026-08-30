@@ -839,11 +839,225 @@ At the moment there are no rpm and deb packages built for easy install (this wil
 
 ## RPM ##
 
-An rpm can be built using ant from the source.
+An RPM can be built with a make target (`ant rpm` runs the same script):
 
 ~~~
 git clone https://github.com/johnhomelan/aun-filestore.git
 cd aun-filestore
-ant rpm
+make rpm                     # writes build/aun-filestored-<version>-<release>.noarch.rpm
 ~~~
+
+The build needs `rpmbuild` (the `rpm-build` package), `composer` and `rsync`.
+The Composer dependencies are installed with `--no-dev` and vendored into the
+source tarball, so `rpmbuild` itself needs no network access.
+
+Overrides: `make rpm RPM_VERSION=2.0.2 RPM_RELEASE=3`. The build script also
+honours `RPM_DIST`, `RPM_ARCH`, `RPM_PHP_MIN` (minimum PHP the package requires,
+default `8.4`), `RPM_SRPM=1` (also emit the source RPM) and `RPM_SIGN=1`
+(`rpm --addsign`, needs `%_gpg_name` in `~/.rpmmacros`). The spec lives at
+`packaging/rpm/aun-filestored.spec` and the build script at
+`packaging/rpm/build-rpm.sh`.
+
+The package installs:
+
+* all the daemons and helper scripts under `/usr/libexec/aun-filestore/`
+  (`filestored`, `sharefsd`, `dnsd`, `ntpd`, `ecosyslogd`, `sql-serverd` and the
+  `*-import` / `s3upload` / `mkcatarchive` tools) - `esc2ps` is **not** included;
+* the application code and Composer dependencies under
+  `/usr/share/aun-filestored/` (plus the `symfony-console` entry point);
+* one **systemd** unit per daemon in `/usr/lib/systemd/system/` (these replace
+  the old SysV init script). `aun-dnsd`, `aun-ntpd`, `aun-ecosyslogd` and
+  `aun-sql-serverd` reach Econet only through `filestored`'s relay, so their
+  units carry `Requires=`/`After=`/`PartOf=aun-filestored.service`;
+  `aun-sharefsd` is a standalone peer and only has `After=`. Nothing is enabled
+  automatically - `systemctl enable --now aun-filestored.service` to start.
+* config templates in `/etc/aun-filestored/` (`%config(noreplace)`).
+
+### Release builds (GitHub Actions)
+
+`.github/workflows/rpm.yml` builds the RPM for a matrix of distributions when a
+release is published (and on demand from the Actions tab):
+
+* Fedora 44, 43, 42 (native PHP 8.4);
+* CentOS 7, CentOS Stream 8, Rocky Linux 9, Rocky Linux 10 - PHP is pulled from
+  [remi](https://rpms.remirepo.net/); the two EOL CentOS images are repointed at
+  `vault.centos.org` by `packaging/rpm/build-in-container.sh`.
+
+Each build runs in its distro's container (`packaging/rpm/build-in-container.sh`)
+and the resulting `.el7` / `.el8` / `.el9` / `.el10` / `.fcNN` RPMs are uploaded
+as workflow artifacts and attached to the release.
+
+## Debian / Ubuntu (.deb) ##
+
+A `.deb` can be built with a make target (`ant deb` runs the same script):
+
+~~~
+git clone https://github.com/johnhomelan/aun-filestore.git
+cd aun-filestore
+make deb                     # writes build/aun-filestored_<version>_all.deb
+~~~
+
+The build needs `dpkg-dev`, `debhelper` (>= 13), `composer` and `rsync`. The
+Composer dependencies are installed with `--no-dev` and vendored into the source
+tree, so `dpkg-buildpackage` needs no network access.
+
+Overrides: `make deb DEB_VERSION=2.0.2`. `DEB_PHP_MIN` sets the `php-cli`
+version floor in `Depends:` (default `2:8.4` - Debian's PHP carries epoch `2:`);
+clear it for a distribution whose newest PHP is older.
+
+Layout matches the RPM: daemons and helper scripts in
+`/usr/libexec/aun-filestore/` (no `esc2ps`), application code and Composer
+dependencies in `/usr/share/aun-filestored/`, the same six systemd units in
+`/usr/lib/systemd/system/` (installed with `dh_installsystemd --no-enable
+--no-start`, so nothing starts until you `systemctl enable --now
+aun-filestored.service`), and config templates in `/etc/aun-filestored/` as
+conffiles. Sources live in `packaging/deb/` (`debian/`, `build-deb.sh`).
+
+### Release builds (GitHub Actions)
+
+`.github/workflows/deb.yml` builds the `.deb` in a container for Debian 13 /
+Debian 12 / Ubuntu 24.04 / Ubuntu 22.04 when a release is published (and on
+demand). The packages are the same on every target (arch `all`); the matrix just
+exercises each distribution's `debhelper`. On Debian &le; 12 and Ubuntu &le;
+24.04 the runtime needs PHP 8.4 from [Ondřej Surý's
+repository](https://deb.sury.org/).
+
+## OpenWrt / Alpine (.ipk) ##
+
+An opkg package can be built with a make target:
+
+~~~
+git clone https://github.com/johnhomelan/aun-filestore.git
+cd aun-filestore
+make ipk                     # writes build/aun-filestored_<version>_all.ipk
+~~~
+
+The build needs `opkg-utils` (`opkg-build`), `composer` and `rsync`. The `.ipk`
+is architecture-independent, so it can be built anywhere `opkg-build` runs (the
+CI builds it in a Debian container - Alpine does not package `opkg-utils`).
+
+Overrides: `make ipk IPK_VERSION=2.0.2` and `IPK_DEPENDS="php8-cli"` (the
+control `Depends:` field, empty by default - install PHP with your own package
+manager).
+
+Layout matches the RPM/deb: daemons and helper scripts in
+`/usr/libexec/aun-filestore/` (no `esc2ps`), application code and Composer
+dependencies in `/usr/share/aun-filestored/`, config templates in
+`/etc/aun-filestored/` (conffiles). Instead of systemd units the package carries
+**both** procd (OpenWrt) and OpenRC (Alpine) init scripts under
+`/usr/libexec/aun-filestore/init/`; the `postinst` copies the set matching the
+running init system into `/etc/init.d/`. Nothing is enabled - use
+`/etc/init.d/aun-filestored enable && /etc/init.d/aun-filestored start` (procd)
+or `rc-update add aun-filestored && rc-service aun-filestored start` (OpenRC).
+The provider scripts (`aun-dnsd`, `aun-ntpd`, `aun-ecosyslogd`,
+`aun-sql-serverd`) depend on `aun-filestored`: a hard `need aun-filestored` under
+OpenRC, and a start-order + running check under procd.
+
+`.github/workflows/ipk.yml` builds the `.ipk` on release (and on demand) and
+then installs it with `opkg` in `alpine:latest` and `openwrt/rootfs` containers
+as a smoke test. Sources are in `packaging/ipk/` (`build-ipk.sh`, `control.in`,
+`CONTROL/`, `init/`).
+
+## Synology Package (.spk) ##
+
+A Synology package can be built with a make target (`ant syno` does the same
+thing):
+
+~~~
+git clone https://github.com/johnhomelan/aun-filestore.git
+cd aun-filestore
+make synopackage            # writes build/aun-filestored-<version>.spk
+~~~
+
+The build needs `composer` and ImageMagick (`magick`/`convert`) on the build
+host. Override the version with `make synopackage SPK_VERSION=2.0.2-1`.
+
+Install it from **Package Center → Manual Install**. On DSM 7 you must first set
+**Package Center → Settings → Trust Level → Any publisher** to allow an unsigned
+package.
+
+What the package does:
+
+* Installs the PHP application under `/var/packages/aun-filestored/target`.
+* Declares a dependency on the Synology **PHP 8.2** package and runs `filestored`
+  with its PHP CLI. The daemon needs the `pcntl`, `sockets` and `pdo` extensions
+  to be present in that PHP build; if PHP lives elsewhere, set `AUN_PHP_BIN` in
+  the service environment.
+* Runs `filestored` as a DSM service — start/stop/status from Package Center.
+* Config lives in `/var/packages/aun-filestored/etc/` (`default.conf`,
+  `users.txt`, `aunmap.txt`), seeded on first install and preserved across
+  upgrades. The virtual file root defaults to
+  `/var/packages/aun-filestored/var/root`; point `vfs_plugin_localfile_root` at a
+  shared folder to keep the econet tree on a normal volume.
+* Adds an **AUN Filestore** icon to the DSM main menu / desktop that opens the
+  admin web front end (served by `filestored` itself on `webadmin_listen_port`,
+  default `8080`). Package Center's **Open** button does the same.
+
+The packaging sources are in `packaging/syno/` (`INFO.in`, `scripts/`, `ui/`,
+`default.conf`) and the build script is `packaging/syno/build-spk.sh`.
+
+Publishing a GitHub release runs `.github/workflows/synology-package.yml`, which
+builds the `.spk` (version taken from the release tag) and attaches it to that
+release as a downloadable asset. The workflow can also be run manually from the
+Actions tab.
+
+## Phar ##
+
+The whole server can be bundled into a single self-contained `filestore.phar`:
+
+~~~
+git clone https://github.com/johnhomelan/aun-filestore.git
+cd aun-filestore
+make phar
+~~~
+
+This writes two files into `build/`:
+
+* `filestore.phar` — the standalone archive. Run it with
+  `php filestore.phar -c <config-dir>` (add `-d -p <pidfile>` to daemonize).
+* `aun-filestored-<version>-phar.tgz` — the archive plus `run.sh`, a sample
+  `default.conf` / `users.txt` and empty `file-root/` and `print-spool/`
+  directories, ready to unpack and run.
+
+The build stages `src/`, installs the Composer dependencies with `--no-dev` and
+**pre-warms the Symfony admin container cache** so the phar can serve the admin
+web front end without ever writing inside itself. It needs `composer`, `rsync`
+and PHP 8.4+ (with `phar.readonly=0` for the packaging step — the make target
+passes this). Override the version with `make phar PHAR_VERSION=2.0.2`.
+
+The packaging sources are in `packaging/phar/` (`build-phar.sh`,
+`create-phar.php`, `warm-admin-cache.php`, `stub.php`, sample config). `ant phar`
+runs the same build script.
+
+Publishing a GitHub release runs `.github/workflows/phar.yml`, which builds the
+phar and its tarball and attaches both to the release; it can also be run
+manually from the Actions tab.
+
+## TypePHP (AOT, experimental) ##
+
+[TypePHP](https://github.com/swoole/typephp) is an ahead-of-time compiler that
+lowers PHP to C++17 and then to native code. `make typephp` runs it against the
+project inside a **podman** container:
+
+~~~
+make typephp                    # podman build + a --dry run (generate C++ only)
+TYPEPHP_DRY=0 make typephp      # full build: compile + link a native binary
+PODMAN=docker make typephp      # use docker instead
+~~~
+
+The only host requirement is `podman` (or `docker` via `PODMAN=`); PHP 8.4, the
+C++ toolchain, `tpc` and the PHPX native library all live in the container built
+from `packaging/typephp/Containerfile`. Generated C++ lands in
+`build/typephp/obj/`, a native binary in `build/typephp/aun_filestored`.
+
+On a host with a very large routing table, rootless podman's pasta backend can
+fail to build the image — run `TYPEPHP_BUILD_ARGS=--network=host make typephp`.
+
+Today this compiles only a `main()` stub (`packaging/typephp/main.php`).
+TypePHP supports a defined subset of PHP, and aun-filestore (Symfony DI +
+reflection, ReactPHP, Ratchet, Smarty, `pcntl`, top-level launcher code) is well
+outside it, so a full build of the real sources is not expected to work.
+`packaging/typephp/` holds a correct `project.yml`, the entry point and the
+container so the supported subset can be grown one module at a time — see
+`packaging/typephp/README.md`.
 

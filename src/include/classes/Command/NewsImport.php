@@ -18,10 +18,16 @@ use config;
  * Downloads one configured RSS news feed (BBC/Guardian/Sky - see
  * NewsFeedDefinitions) and turns it into this project's own
  * `{channel}/{page}.dat` / `{page}_{subpage}.dat` page store: a styled
- * index on page 100 (with as many subpages as needed to list every story)
- * and one page per story starting at 101 (with as many subpages as needed
- * to hold its full body text), ready for the Teletext service provider to
- * serve directly.
+ * index (with as many subpages as needed to list every story) and one page
+ * per story after it (with as many subpages as needed to hold its full body
+ * text), ready for the Teletext service provider to serve directly.
+ *
+ * Normally that index is page 100 and stories start at 101. A feed whose
+ * NewsFeedDefinition::$aChannelIndexEntries isn't empty (currently just
+ * BBC, sharing its channel with Weather) instead gets a channel-hub page on
+ * 100 - see NewsPageComposer::composeChannelIndex() - linking out to every
+ * $aChannelIndexEntries destination alongside this feed's own index, which
+ * moves to 101; that feed's stories then start at 102 instead.
  *
  * Which feed to import is selected with --feed (bbc|guardian|sky), each
  * with its own channel/source/max-stories config - see
@@ -33,11 +39,19 @@ use config;
  * index page (see NewsPageComposer). --source still overrides that with a
  * single ad-hoc feed, same as for a source with no sections of its own.
  * Structured the same way as TeefaxImport - see
- * src/include/classes/Command/TeefaxImport.php - right down to the atomic
- * staging-dir install, but with one important difference: a single
- * article's fetch/extraction failing is logged and skipped rather than
- * failing the whole run, since a source's live site being flaky for one
- * story must not block the rest of that feed's news from refreshing.
+ * src/include/classes/Command/TeefaxImport.php - building a fully-populated
+ * staging directory before touching the live channel, but with two
+ * important differences: a single article's fetch/extraction failing is
+ * logged and skipped rather than failing the whole run, since a source's
+ * live site being flaky for one story must not block the rest of that
+ * feed's news from refreshing; and _installChannel() only ever writes or
+ * overwrites individual page files into the live channel directory (each a
+ * plain rename(), atomic per file) - unlike TeefaxImport's whole-directory
+ * swap, it never deletes the live directory or anything in it, so a page
+ * that drops out of this run (a story rotated off teletext_news_*_max_stories,
+ * or its article failing to fetch/extract) is simply left in place rather
+ * than removed, until some later run's own output happens to overwrite that
+ * same page number again.
  *
  * Normally launched as a detached background process by Teletext's own
  * housekeeping check (see Teletext::checkNewsRefresh()) rather than run by
@@ -108,8 +122,9 @@ class NewsImport extends Command
             $oComposer  = new NewsPageComposer();
             $oNow       = $this->now();
 
+            $sIndexPage      = $oFeed->aChannelIndexEntries !== [] ? '101' : '100';
             $aIndexEntries   = [];
-            $iPageNumber     = 101;
+            $iPageNumber     = ((int) $sIndexPage) + 1;
             $iPagesWritten   = 0;
             $iStoriesSkipped = 0;
 
@@ -139,12 +154,17 @@ class NewsImport extends Command
                 }
 
                 $iPagesWritten += $this->_writeBuffers($sStagingDir, $sPage, $aBuffers, $bDryRun);
-                $aIndexEntries[] = ['page' => $sPage, 'headline' => $sHeadline, 'category' => $aItem['category'] ?? ''];
+                $aIndexEntries[] = ['page' => $sPage, 'headline' => $sHeadline, 'category' => $aItem['category']];
                 $iPageNumber++;
             }
 
-            $aIndexBuffers = $oComposer->composeIndex('100', $aIndexEntries, $oNow, $oFeed->sMastheadTitle, $oFeed->sBannerText, $oFeed->iBannerForeground, $oFeed->iBannerBackground);
-            $iPagesWritten += $this->_writeBuffers($sStagingDir, '100', $aIndexBuffers, $bDryRun);
+            $aIndexBuffers = $oComposer->composeIndex($sIndexPage, $aIndexEntries, $oNow, $oFeed->sMastheadTitle, $oFeed->sBannerText, $oFeed->iBannerForeground, $oFeed->iBannerBackground, $oFeed->aIndexMosaicHeading);
+            $iPagesWritten += $this->_writeBuffers($sStagingDir, $sIndexPage, $aIndexBuffers, $bDryRun);
+
+            if ($oFeed->aChannelIndexEntries !== []) {
+                $aHubBuffers = $oComposer->composeChannelIndex('100', $oFeed->aChannelIndexEntries, $oNow, $oFeed->sMastheadTitle);
+                $iPagesWritten += $this->_writeBuffers($sStagingDir, '100', $aHubBuffers, $bDryRun);
+            }
 
             if ($bDryRun) {
                 $oOutput->writeln('[dry-run] Would write ' . $iPagesWritten . ' page(s) for ' . count($aIndexEntries) . ' stor(y/ies), ' . $iStoriesSkipped . ' skipped.');
@@ -184,20 +204,22 @@ class NewsImport extends Command
     }
 
     /**
-     * Atomically installs a fully-populated staging directory as the live
-     * channel directory - identical to TeefaxImport::_installChannel().
+     * Installs a fully-populated staging directory into the live channel
+     * directory one file at a time - each a plain rename() (atomic per
+     * file, same filesystem), which for a name that already exists in the
+     * live directory just replaces that one page. Unlike
+     * TeefaxImport::_installChannel()'s whole-directory swap, this never
+     * deletes the live directory or removes anything from it that this run
+     * didn't itself produce a replacement for - so a page dropped from this
+     * run (see the class docblock) is left alone rather than deleted.
     */
     protected function _installChannel(string $sStoreDir, string $sChannel, string $sStagingDir): void
     {
         $sLiveDir = $sStoreDir . '/' . $sChannel;
-        $sOldDir  = $sStoreDir . '/.news-old-' . $sChannel;
-
-        $this->_deleteDir($sOldDir);
-        if ($this->_isDir($sLiveDir)) {
-            $this->_renameDir($sLiveDir, $sOldDir);
+        $this->_makeDir($sLiveDir);
+        foreach ($this->_scanDir($sStagingDir) as $sEntry) {
+            $this->_renameDir($sStagingDir . '/' . $sEntry, $sLiveDir . '/' . $sEntry);
         }
-        $this->_renameDir($sStagingDir, $sLiveDir);
-        $this->_deleteDir($sOldDir);
     }
 
     /**
@@ -272,11 +294,6 @@ class NewsImport extends Command
     {
         $aEntries = scandir($sPath);
         return $aEntries === false ? [] : array_values(array_diff($aEntries, ['.', '..']));
-    }
-
-    protected function _isDir(string $sPath): bool
-    {
-        return is_dir($sPath);
     }
 
     protected function _makeDir(string $sPath): void

@@ -98,13 +98,12 @@ class DirectoryEntry {
 	public function getCTime(): string
 	{
 		//Add current date
-		$iDay = date('j',$this->iCTime);
+		$iDay = (int) date('j',$this->iCTime);
 		$sDate = pack('C',$iDay);
 		//The last byte is month and year, first 4 bits year, last 4 bits month
-		$iYear= date('y',$this->iCTime);
-		$iYear = $iYear << 4;
-		$iYear = $iYear+date('n',$this->iCTime);
-		$sDate = $sDate.pack('C',$iYear);
+		$iYear = (int) date('y',$this->iCTime);
+		$iMonthYear = ($iYear << 4) + (int) date('n',$this->iCTime);
+		$sDate = $sDate.pack('C',$iMonthYear);
 		return $sDate;
 	}
 

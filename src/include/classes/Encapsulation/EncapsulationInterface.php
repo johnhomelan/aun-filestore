@@ -32,6 +32,6 @@ interface EncapsulationInterface {
 
         public function buildEconetPacket(): \HomeLan\FileStore\Messages\EconetPacket;
 
-        public function toString(): string;
+        public function asString(): string;
 
 } 

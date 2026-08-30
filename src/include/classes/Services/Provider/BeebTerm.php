@@ -209,6 +209,7 @@ class BeebTerm implements ProviderInterface {
 				break;
 			default:
 				$this->oLogger->warning("BeebTerm: Unrecognised message type ".var_export($sType,true).", ignoring");
+				break;
 		}
 	}
 

@@ -721,7 +721,7 @@ class FileServer implements ProviderInterface{
 			$iSentSeq = $oEconetPacket->getSequence();
 			$oServiceDispatcher->sendPackets($_this);
 
-			$cAckHandler = function(EncapsulationInterface $oAckPacket, FileServer $_this, FsRequest $oFsRequest, ServiceDispatcher $oServiceDispatcher, string $sFileData, int $iDataPort, \Closure &$cAckHandler): void {
+			$cAckHandler = function(EncapsulationInterface $oAckPacket, FileServer $_this, FsRequest $oFsRequest, ServiceDispatcher $oServiceDispatcher, string $sFileData, int $iDataPort, \Closure $cAckHandler): void {
 				if(strlen($sFileData)>0){
 					//Build a 256 byte block
 					$sBlock = substr($sFileData,0,256);

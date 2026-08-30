@@ -1,0 +1,19 @@
+[Unit]
+Description=AUN Filestore - Econet NetFS/NetPrint file server
+Documentation=https://github.com/johnhomelan/aun-filestore
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# Runs as root: every client's file access happens as the user this service
+# runs as (see the "Admin Web Front End" / auth notes in the README).
+User=root
+ExecStart=/usr/bin/php /usr/libexec/aun-filestore/filestored -c /etc/aun-filestored
+Restart=on-failure
+RestartSec=5
+KillMode=mixed
+TimeoutStopSec=15
+
+[Install]
+WantedBy=multi-user.target

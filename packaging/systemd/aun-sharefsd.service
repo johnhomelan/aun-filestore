@@ -1,0 +1,20 @@
+[Unit]
+Description=AUN Filestore - RISC OS ShareFS / Access+ file server
+Documentation=https://github.com/johnhomelan/aun-filestore
+After=network-online.target aun-filestored.service
+Wants=network-online.target
+# sharefsd is a standalone peer of filestored (its own process, config and admin
+# UI). It only talks to filestored when sharefs_remote_socket_relay_enabled is
+# set, so there is no hard dependency here - just start after it when both run.
+
+[Service]
+Type=simple
+User=root
+ExecStart=/usr/bin/php /usr/libexec/aun-filestore/sharefsd -c /etc/aun-filestored
+Restart=on-failure
+RestartSec=5
+KillMode=mixed
+TimeoutStopSec=15
+
+[Install]
+WantedBy=multi-user.target

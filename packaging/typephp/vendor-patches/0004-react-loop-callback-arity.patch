@@ -1,0 +1,44 @@
+--- a/vendor/react/stream/src/ReadableResourceStream.php
++++ b/vendor/react/stream/src/ReadableResourceStream.php
+@@ -130,7 +130,7 @@
+     }
+ 
+     /** @internal */
+-    public function handleData()
++    public function handleData($stream = null)
+     {
+         $error = null;
+         \set_error_handler(function ($errno, $errstr, $errfile, $errline) use (&$error) {
+--- a/vendor/react/stream/src/WritableResourceStream.php
++++ b/vendor/react/stream/src/WritableResourceStream.php
+@@ -123,7 +123,7 @@
+     }
+ 
+     /** @internal */
+-    public function handleWrite()
++    public function handleWrite($stream = null)
+     {
+         $error = null;
+         \set_error_handler(function ($_, $errstr) use (&$error) {
+--- a/vendor/react/datagram/src/Socket.php
++++ b/vendor/react/datagram/src/Socket.php
+@@ -78,7 +78,7 @@
+         }
+     }
+ 
+-    public function onReceive()
++    public function onReceive($stream = null)
+     {
+         try {
+             $data = $this->handleReceive($peer);
+--- a/vendor/react/datagram/src/Buffer.php
++++ b/vendor/react/datagram/src/Buffer.php
+@@ -35,7 +35,7 @@
+         }
+     }
+ 
+-    public function onWritable()
++    public function onWritable($stream = null)
+     {
+         list($data, $remoteAddress) = \array_shift($this->outgoing);
+ 

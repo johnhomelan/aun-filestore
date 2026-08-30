@@ -1,0 +1,13 @@
+--- a/vendor/cboden/ratchet/src/Ratchet/Server/IoServer.php
++++ b/vendor/cboden/ratchet/src/Ratchet/Server/IoServer.php
+@@ -91,7 +91,9 @@
+     public function handleConnect(SocketConnection $conn) {
+         // assign dynamic `$decor` property used by Ratchet without raising notice on PHP 8.2+
+         // need this hack because we can't use `#[\AllowDynamicProperties]` on vendor code
+-        set_error_handler(function () { }, E_DEPRECATED);
++        // TypePHP (packaging/typephp): error handlers are invoked with 4 args;
++        // strict arg-count rejects a 0-arg closure here.
++        set_error_handler(function (...$aIgnored) { }, E_DEPRECATED);
+         $conn->decor = new IoConnection($conn);
+         restore_error_handler();
+ 

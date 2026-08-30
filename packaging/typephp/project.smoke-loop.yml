@@ -1,0 +1,22 @@
+# PORTING-REACT.md Stage 1 smoke binary. Run with:
+#   TYPEPHP_PROJECT=packaging/typephp/project.smoke-loop.yml TYPEPHP_DRY=0 \
+#     TYPEPHP_NO_BUILD_IMAGE=1 packaging/typephp/build-typephp.sh
+name: smoke-loop
+mode: bin
+php-version: "8.5"
+optimize: 0
+job: 4
+cxx-std: c++17
+sources:
+  - smoke/loop.php
+  - ../../build/typephp/stage/vendor/evenement/evenement/src
+  - ../../build/typephp/stage/vendor/react/promise/src
+  - ../../build/typephp/stage/vendor/react/event-loop/src/TimerInterface.php
+  - ../../build/typephp/stage/vendor/react/event-loop/src/Timer
+  - ../../build/typephp/stage/vendor/react/event-loop/src/Tick
+  - ../../build/typephp/stage/vendor/react/event-loop/src/SignalsHandler.php
+  - ../../build/typephp/stage/vendor/react/event-loop/src/LoopInterface.php
+  - ../../build/typephp/stage/vendor/react/event-loop/src/StreamSelectLoop.php
+  - ../../build/typephp/stage/vendor/react/stream/src
+ignore:
+  - ../../build/typephp/stage/vendor/react/promise/src/functions_include.php

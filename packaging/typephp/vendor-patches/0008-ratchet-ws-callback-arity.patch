@@ -1,0 +1,27 @@
+--- a/vendor/cboden/ratchet/src/Ratchet/WebSocket/WsServer.php
++++ b/vendor/cboden/ratchet/src/Ratchet/WebSocket/WsServer.php
+@@ -139,11 +139,11 @@
+ 
+         $streamer = new MessageBuffer(
+             $this->closeFrameChecker,
+-            function(MessageInterface $msg) use ($wsConn) {
++            function(MessageInterface $msg, $mIgnoredBuffer = null) use ($wsConn) {
+                 $cb = $this->msgCb;
+                 $cb($wsConn, $msg);
+             },
+-            function(FrameInterface $frame) use ($wsConn) {
++            function(FrameInterface $frame, $mIgnoredBuffer = null) use ($wsConn) {
+                 $this->onControlFrame($frame, $wsConn);
+             },
+             true,
+--- a/vendor/ratchet/rfc6455/src/Messaging/MessageBuffer.php
++++ b/vendor/ratchet/rfc6455/src/Messaging/MessageBuffer.php
+@@ -73,7 +73,7 @@
+         $this->exceptionFactory = $exceptionFactory ?: static fn (string $msg) => new \UnderflowException($msg);
+ 
+         $this->onMessage = $onMessage;
+-        $this->onControl = $onControl ?: static function (): void {};
++        $this->onControl = $onControl ?: static function (...$aIgnored): void {};
+ 
+         $this->sender = $sender;
+ 

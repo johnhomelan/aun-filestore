@@ -1,0 +1,96 @@
+# Fast compile-check of ONLY the project's own domain classes (no ReactPHP,
+# no main loop) - the pre-Stage-3 configuration. Kept for quick "does the
+# domain code still fit the subset" checks:
+#   TYPEPHP_PROJECT=packaging/typephp/project.domain-only.yml make typephp
+# The shipped project.yml now builds the full native daemon.
+#
+# TypePHP (swoole/typephp) build configuration for aun-filestore.
+#
+#   https://github.com/swoole/typephp
+#   docs/en/COMPILER_CLI.md  -  full key list and CLI precedence
+#
+# Build it through the container:  make typephp   (packaging/typephp/build-typephp.sh)
+#
+# WHAT THIS BUILDS: the wrapper entry point (main.php) plus the project's own
+# strongly-typed domain code - the packet/message value objects, the Econet
+# encapsulation layer, the AUN/Piconet/DNS/NTP handlers' data classes, the VFS,
+# the authentication core and most of the service providers. ~142 of the
+# project's ~185 first-party class files under src/include/classes compile to
+# C++ and link into a native binary this way.
+#
+# WHAT IT DOES NOT BUILD: the framework glue. The Symfony admin (Kernel,
+# controllers, DI container), the ReactPHP event loop, Ratchet WebSocket
+# servers, the Smarty runtime and the CLI entry points under src/ are all
+# outside the PHP subset TypePHP supports and are not listed here. A handful of
+# individual domain files also use idioms TypePHP rejects and are named in
+# `ignore` below with the reason - those are the incremental to-do list.
+
+name: aun-filestored
+mode: bin                       # bin | lib | ext   (repo alias for this key: build-mode)
+php-version: "8.5"              # accepted syntax level: 8.4 or 8.5
+optimize: 2                     # 0-3   (CLI override: -O)
+job: 4                          # parallel compile jobs   (CLI override: -j)
+cxx-std: c++17
+
+# Paths below are resolved relative to THIS file (packaging/typephp/), so repo
+# sources are reached with ../../ . build-typephp.sh passes --build-dir on the
+# command line (resolved from the repo root) so generated C++ lands in build/.
+sources:
+  - main.php
+
+  # AOT replacements for the pcntl_* functions the server uses, backed by direct
+  # POSIX C calls (the linked libphp has posix but not pcntl). Compile-only -
+  # never autoloaded, so no clash with the real pcntl extension.
+  - shims/signals.php
+  - shims/pcntl_posix.stub.php
+  - shims/pcntl_posix.cc
+
+  # The project's own domain code. Whole directories are listed; the files
+  # within them that TypePHP can't take yet are named in `ignore` below.
+  - ../../src/include/classes/Messages
+  - ../../src/include/classes/Encapsulation
+  - ../../src/include/classes/Ntp
+  - ../../src/include/classes/Dns
+  - ../../src/include/classes/Aun
+  - ../../src/include/classes/Piconet
+  - ../../src/include/classes/RemoteProvider
+  - ../../src/include/classes/RemoteSocket
+  - ../../src/include/classes/RemoteBridge
+  - ../../src/include/classes/WebSocket
+  - ../../src/include/classes/Authentication
+  - ../../src/include/classes/Vfs
+  - ../../src/include/classes/Services
+
+  # The Admin Smarty templates are pre-compiled by build-typephp.sh
+  # (src/util/compile-templates) into templates_c/ next to templates/, and
+  # HomeLan\FileStore\Admin\Service\Smarty then runs with compile_check off, so
+  # Smarty's template *compiler* is off the runtime path - but the Admin code
+  # itself (Symfony controllers, Kernel) is still outside the subset, so the
+  # Admin/ and ShareFs/ trees are not listed here.
+
+ignore:
+  - ../../src/include/external
+
+  # The only files left out are the ReactPHP / Ratchet network server shells:
+  # they `extends Evenement\EventEmitter` or `implements
+  # Ratchet\MessageComponentInterface`, and TypePHP fatally errors on a
+  # parent/interface it can't resolve. Pulling those vendor packages into
+  # `sources` just to satisfy the symbol would drag in React + Guzzle PSR-7
+  # and still only produce inert code (the event loop they plug into isn't
+  # compiled), so they stay out. Everything else under the `sources`
+  # directories now compiles - see packaging/typephp/README.md for the
+  # blockers that were ported rather than ignored.
+  - ../../src/include/classes/RemoteProvider/Client.php
+  - ../../src/include/classes/RemoteProvider/RelayServer.php
+  - ../../src/include/classes/RemoteSocket/RelayServer.php
+  - ../../src/include/classes/RemoteSocket/RelayedUdpTransport.php
+  - ../../src/include/classes/WebSocket/Handler.php
+
+# ext-deps emits ZEND_MOD_REQUIRED entries: the compiled module refuses to load
+# unless every named Zend extension is present in the linked libphp. For a `bin`
+# build that libphp is whatever TypePHP links (currently just posix, pdo_sqlite,
+# curl, mbstring, dom, ... - no pcntl, gd, ldap, sockets, soap, bcmath), so
+# requiring any of those would guarantee a startup failure. pcntl in particular
+# is provided by the shims below, not the extension. Leave this empty for `bin`;
+# populate it for a `mode: ext` build against a full PHP.
+# ext-deps: []

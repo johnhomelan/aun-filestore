@@ -1,0 +1,11 @@
+--- a/vendor/react/socket/src/Connector.php
++++ b/vendor/react/socket/src/Connector.php
+@@ -56,7 +56,7 @@
+     public function __construct($context = array(), $loop = null)
+     {
+         // swap arguments for legacy constructor signature
+-        if (($context instanceof LoopInterface || $context === null) && (\func_num_args() <= 1 || \is_array($loop))) {
++        if (($context instanceof LoopInterface || $context === null) && ($loop === null || \is_array($loop))) {
+             $swap = $loop === null ? array(): $loop;
+             $loop = $context;
+             $context = $swap;

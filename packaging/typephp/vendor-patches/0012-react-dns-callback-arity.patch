@@ -1,0 +1,72 @@
+--- a/vendor/react/dns/src/Query/CoopExecutor.php
++++ b/vendor/react/dns/src/Query/CoopExecutor.php
+@@ -60,9 +60,9 @@
+ 
+             $pending =& $this->pending;
+             $counts =& $this->counts;
+-            $promise->then(function () use ($key, &$pending, &$counts) {
++            $promise->then(function ($mIgnored = null) use ($key, &$pending, &$counts) {
+                 unset($pending[$key], $counts[$key]);
+-            }, function () use ($key, &$pending, &$counts) {
++            }, function ($mIgnored = null) use ($key, &$pending, &$counts) {
+                 unset($pending[$key], $counts[$key]);
+             });
+         }
+--- a/vendor/react/dns/src/Query/TimeoutExecutor.php
++++ b/vendor/react/dns/src/Query/TimeoutExecutor.php
+@@ -56,7 +56,7 @@
+             }
+ 
+             // start timeout timer which will cancel the pending promise
+-            $timer = $loop->addTimer($time, function () use ($time, &$promise, $reject, $query) {
++            $timer = $loop->addTimer($time, function (?\React\EventLoop\TimerInterface $tIgnored = null) use ($time, &$promise, $reject, $query) {
+                 $reject(new TimeoutException(
+                     'DNS query for ' . $query->describe() . ' timed out'
+                 ));
+--- a/vendor/react/dns/src/Query/TcpTransportExecutor.php
++++ b/vendor/react/dns/src/Query/TcpTransportExecutor.php
+@@ -374,7 +374,7 @@
+     {
+         if ($this->idleTimer === null && !$this->names) {
+             $that = $this;
+-            $this->idleTimer = $this->loop->addTimer($this->idlePeriod, function () use ($that) {
++            $this->idleTimer = $this->loop->addTimer($this->idlePeriod, function (?\React\EventLoop\TimerInterface $tIgnored = null) use ($that) {
+                 $that->closeError('Idle timeout');
+             });
+         }
+--- a/vendor/react/socket/src/TimeoutConnector.php
++++ b/vendor/react/socket/src/TimeoutConnector.php
+@@ -56,7 +56,7 @@
+             }
+ 
+             // start timeout timer which will cancel the pending promise
+-            $timer = $loop->addTimer($time, function () use ($time, &$promise, $reject, $uri) {
++            $timer = $loop->addTimer($time, function (?\React\EventLoop\TimerInterface $tIgnored = null) use ($time, &$promise, $reject, $uri) {
+                 $reject(new \RuntimeException(
+                     'Connection to ' . $uri . ' timed out after ' . $time . ' seconds (ETIMEDOUT)',
+                     \defined('SOCKET_ETIMEDOUT') ? \SOCKET_ETIMEDOUT : 110
+--- a/vendor/react/socket/src/HappyEyeBallsConnectionBuilder.php
++++ b/vendor/react/socket/src/HappyEyeBallsConnectionBuilder.php
+@@ -93,11 +93,11 @@
+                     // discard all IPv4 addresses if cancelled
+                     $ips = array();
+                 });
+-                $timer = $that->loop->addTimer($that::RESOLUTION_DELAY, function () use ($deferred, $ips) {
++                $timer = $that->loop->addTimer($that::RESOLUTION_DELAY, function (?\React\EventLoop\TimerInterface $tIgnored = null) use ($deferred, $ips) {
+                     $deferred->resolve($ips);
+                 });
+ 
+-                $that->resolverPromises[Message::TYPE_AAAA]->then(function () use ($that, $timer, $deferred, &$ips) {
++                $that->resolverPromises[Message::TYPE_AAAA]->then(function ($mIgnored = null) use ($that, $timer, $deferred, &$ips) {
+                     $that->loop->cancelTimer($timer);
+                     $deferred->resolve($ips);
+                 });
+@@ -218,7 +218,7 @@
+         // Allow next connection attempt in 100ms: https://tools.ietf.org/html/rfc8305#section-5
+         // Only start timer when more IPs are queued or when DNS query is still pending (might add more IPs)
+         if ($this->nextAttemptTimer === null && (\count($this->connectQueue) > 0 || $this->resolved[Message::TYPE_A] === false || $this->resolved[Message::TYPE_AAAA] === false)) {
+-            $this->nextAttemptTimer = $this->loop->addTimer(self::CONNECTION_ATTEMPT_DELAY, function () use ($that, $resolve, $reject) {
++            $this->nextAttemptTimer = $this->loop->addTimer(self::CONNECTION_ATTEMPT_DELAY, function (?\React\EventLoop\TimerInterface $tIgnored = null) use ($that, $resolve, $reject) {
+                 $that->nextAttemptTimer = null;
+ 
+                 if ($that->connectQueue) {

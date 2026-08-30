@@ -1,0 +1,47 @@
+--- a/vendor/guzzlehttp/psr7/src/Query.php
++++ b/vendor/guzzlehttp/psr7/src/Query.php
+@@ -25,14 +25,20 @@
+             return $result;
+         }
+ 
++        // TypePHP (packaging/typephp): a single local can't hold both a string
++        // callable and a Closure; every branch is a Closure here. Equivalent.
+         if ($urlEncoding === true) {
+             $decoder = function ($value) {
+                 return rawurldecode(str_replace('+', ' ', (string) $value));
+             };
+         } elseif ($urlEncoding === PHP_QUERY_RFC3986) {
+-            $decoder = 'rawurldecode';
++            $decoder = function ($value) {
++                return rawurldecode((string) $value);
++            };
+         } elseif ($urlEncoding === PHP_QUERY_RFC1738) {
+-            $decoder = 'urldecode';
++            $decoder = function ($value) {
++                return urldecode((string) $value);
++            };
+         } else {
+             $decoder = function ($str) {
+                 return $str;
+@@ -77,14 +83,19 @@
+             return '';
+         }
+ 
++        // TypePHP (packaging/typephp): every branch is a Closure - see parse().
+         if ($encoding === false) {
+             $encoder = function (string $str): string {
+                 return $str;
+             };
+         } elseif ($encoding === PHP_QUERY_RFC3986) {
+-            $encoder = 'rawurlencode';
++            $encoder = function (string $str): string {
++                return rawurlencode($str);
++            };
+         } elseif ($encoding === PHP_QUERY_RFC1738) {
+-            $encoder = 'urlencode';
++            $encoder = function (string $str): string {
++                return urlencode($str);
++            };
+         } else {
+             throw new \InvalidArgumentException('Invalid type');
+         }

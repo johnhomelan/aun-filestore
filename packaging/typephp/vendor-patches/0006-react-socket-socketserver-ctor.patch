@@ -1,0 +1,43 @@
+--- a/vendor/react/socket/src/SocketServer.php
++++ b/vendor/react/socket/src/SocketServer.php
+@@ -50,10 +50,13 @@
+             $scheme = \substr($uri, 0, $pos);
+         }
+ 
++        // TypePHP (packaging/typephp): assign each concrete server straight into
++        // the untyped $this->server rather than a single local, which cannot
++        // hold UnixServer|FdServer|TcpServer|SecureServer in turn. Equivalent.
+         if ($scheme === 'unix') {
+-            $server = new UnixServer($uri, $loop, $context['unix']);
++            $this->server = new UnixServer($uri, $loop, $context['unix']);
+         } elseif ($scheme === 'php') {
+-            $server = new FdServer($uri, $loop);
++            $this->server = new FdServer($uri, $loop);
+         } else {
+             if (preg_match('#^(?:\w+://)?\d+$#', $uri)) {
+                 throw new \InvalidArgumentException(
+@@ -62,20 +65,18 @@
+                 );
+             }
+ 
+-            $server = new TcpServer(str_replace('tls://', '', $uri), $loop, $context['tcp']);
++            $this->server = new TcpServer(str_replace('tls://', '', $uri), $loop, $context['tcp']);
+ 
+             if ($scheme === 'tls') {
+-                $server = new SecureServer($server, $loop, $context['tls']);
++                $this->server = new SecureServer($this->server, $loop, $context['tls']);
+             }
+         }
+ 
+-        $this->server = $server;
+-
+         $that = $this;
+-        $server->on('connection', function (ConnectionInterface $conn) use ($that) {
++        $this->server->on('connection', function (ConnectionInterface $conn) use ($that) {
+             $that->emit('connection', array($conn));
+         });
+-        $server->on('error', function (\Exception $error) use ($that) {
++        $this->server->on('error', function (\Exception $error) use ($that) {
+             $that->emit('error', array($error));
+         });
+     }

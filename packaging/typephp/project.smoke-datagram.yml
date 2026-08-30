@@ -1,0 +1,30 @@
+name: smoke-datagram
+mode: bin
+php-version: "8.5"
+optimize: 0
+job: 4
+cxx-std: c++17
+sources:
+  - smoke/datagram.php
+  - ../../build/typephp/stage/vendor/evenement/evenement/src
+  - ../../build/typephp/stage/vendor/react/promise/src
+  - ../../build/typephp/stage/vendor/react/event-loop/src/TimerInterface.php
+  - ../../build/typephp/stage/vendor/react/event-loop/src/Timer
+  - ../../build/typephp/stage/vendor/react/event-loop/src/Tick
+  - ../../build/typephp/stage/vendor/react/event-loop/src/SignalsHandler.php
+  - ../../build/typephp/stage/vendor/react/event-loop/src/LoopInterface.php
+  - ../../build/typephp/stage/vendor/react/event-loop/src/StreamSelectLoop.php
+  - ../../build/typephp/stage/vendor/react/stream/src
+  - ../../build/typephp/stage/vendor/react/socket/src/ConnectionInterface.php
+  - ../../build/typephp/stage/vendor/react/socket/src/ServerInterface.php
+  - ../../build/typephp/stage/vendor/react/socket/src/ConnectorInterface.php
+  - ../../build/typephp/stage/vendor/react/socket/src/Connection.php
+  - ../../build/typephp/stage/vendor/react/socket/src/TcpServer.php
+  - ../../build/typephp/stage/vendor/react/socket/src/UnixServer.php
+  - ../../build/typephp/stage/vendor/react/socket/src/TcpConnector.php
+  - ../../build/typephp/stage/vendor/react/socket/src/UnixConnector.php
+  - ../../build/typephp/stage/vendor/react/socket/src/FixedUriConnector.php
+  - ../../build/typephp/stage/vendor/react/socket/src/LimitingServer.php
+  - ../../build/typephp/stage/vendor/react/datagram/src
+ignore:
+  - ../../build/typephp/stage/vendor/react/promise/src/functions_include.php

@@ -1,0 +1,31 @@
+--- a/vendor/react/child-process/src/Process.php
++++ b/vendor/react/child-process/src/Process.php
+@@ -261,18 +261,22 @@
+             $meta = \stream_get_meta_data($fd);
+             $mode = $meta['mode'] === '' ? ($this->fds[$n][1] === 'r' ? 'w' : 'r') : $meta['mode'];
+ 
++            // TypePHP (packaging/typephp): one $stream local can't hold
++            // Duplex/Writable/ReadableResourceStream in turn; assign each
++            // straight into $this->pipes[$n]. Equivalent.
+             if ($mode === 'r+') {
+-                $stream = new DuplexResourceStream($fd, $loop);
+-                $stream->on('close', $streamCloseHandler);
++                $duplexPipe = new DuplexResourceStream($fd, $loop);
++                $duplexPipe->on('close', $streamCloseHandler);
+                 $closeCount++;
++                $this->pipes[$n] = $duplexPipe;
+             } elseif ($mode === 'w') {
+-                $stream = new WritableResourceStream($fd, $loop);
++                $this->pipes[$n] = new WritableResourceStream($fd, $loop);
+             } else {
+-                $stream = new ReadableResourceStream($fd, $loop);
+-                $stream->on('close', $streamCloseHandler);
++                $readablePipe = new ReadableResourceStream($fd, $loop);
++                $readablePipe->on('close', $streamCloseHandler);
+                 $closeCount++;
++                $this->pipes[$n] = $readablePipe;
+             }
+-            $this->pipes[$n] = $stream;
+         }
+ 
+         $this->stdin  = isset($this->pipes[0]) ? $this->pipes[0] : null;

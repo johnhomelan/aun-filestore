@@ -1,0 +1,20 @@
+--- a/vendor/react/dns/src/Protocol/BinaryDumper.php
++++ b/vendor/react/dns/src/Protocol/BinaryDumper.php
+@@ -152,6 +152,7 @@
+                 default:
+                     // RDATA is already stored as binary value for unknown record types
+                     $binary = $record->data;
++                    break;
+             }
+ 
+             $data .= $this->domainNameToBinary($record->name);
+--- a/vendor/react/dns/src/Resolver/Resolver.php
++++ b/vendor/react/dns/src/Resolver/Resolver.php
+@@ -70,6 +70,7 @@
+                     break;
+                 default:
+                     $message = 'Unknown error response code ' . $code;
++                    break;
+             }
+             throw new RecordNotFoundException(
+                 'DNS query for ' . $query->describe() . ' returned an error response (' . $message . ')',

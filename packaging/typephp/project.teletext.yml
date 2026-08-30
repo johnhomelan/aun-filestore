@@ -1,0 +1,39 @@
+# TypePHP build of the teletext fetch scripts (news / teefax / tvguide /
+# weather / webfax import) as ONE binary, build/typephp/teletext-import,
+# dispatching on argv[1]. Built by `make teletext-typephp`. Replaces the five
+# Symfony Console wrappers under src/util/*-import.
+#
+# Plain CLI - no ReactPHP, no event loop. Symfony Console is replaced by
+# teletext/shim-console.php + teletext/cli.php (argv parser + stdout writer).
+name: teletext-import
+mode: bin
+php-version: "8.5"
+optimize: 2
+job: 4
+cxx-std: c++17
+sources:
+  - main-teletext.php
+  # shared Symfony Console + argv/stdout + safe_define shims (also used by the
+  # dnsd / ntpd daemon builds - see packaging/typephp/shims/)
+  - shims/symfony_console.php
+  - shims/console_runtime.php
+  - shims/safe_define.php
+  - teletext/runners.php
+
+  # config: the class + the generated const defaults (the stage/ reference also
+  # makes build-typephp.sh run its stage+config_defines step).
+  - ../../src/include/classes/config.php
+  - ../../build/typephp/stage/config_defines.php
+
+  # the five import commands + the teletext page-composition domain
+  - ../../build/typephp/stage/cmd/NewsImport.php
+  - ../../build/typephp/stage/cmd/TeefaxImport.php
+  - ../../build/typephp/stage/cmd/TvGuideImport.php
+  - ../../build/typephp/stage/cmd/WeatherImport.php
+  - ../../build/typephp/stage/cmd/WebfaxImport.php
+  - ../../src/include/classes/Services/Provider/Teletext
+
+ignore:
+  - ../../src/include/external
+  # Admin.php is the Symfony admin panel for the Teletext provider - not used here.
+  - ../../src/include/classes/Services/Provider/Teletext/Admin.php

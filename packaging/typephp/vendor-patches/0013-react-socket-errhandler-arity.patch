@@ -1,0 +1,33 @@
+--- a/vendor/react/socket/src/TcpConnector.php
++++ b/vendor/react/socket/src/TcpConnector.php
+@@ -126,7 +126,7 @@
+                         // This is only known to work on Linux, Mac and Windows are known to not support this.
+                         $errno = 0;
+                         $errstr = '';
+-                        \set_error_handler(function ($_, $error) use (&$errno, &$errstr) {
++                        \set_error_handler(function ($_, $error, $mErrFile = null, $mErrLine = null) use (&$errno, &$errstr) {
+                             // Match errstr from PHP's warning message.
+                             // fwrite(): send of 1 bytes failed with errno=111 Connection refused
+                             \preg_match('/errno=(\d+) (.+)/', $error, $m);
+--- a/vendor/react/socket/src/UnixServer.php
++++ b/vendor/react/socket/src/UnixServer.php
+@@ -69,7 +69,7 @@
+ 
+         $errno = 0;
+         $errstr = '';
+-        \set_error_handler(function ($_, $error) use (&$errno, &$errstr) {
++        \set_error_handler(function ($_, $error, $mErrFile = null, $mErrLine = null) use (&$errno, &$errstr) {
+             // PHP does not seem to report errno/errstr for Unix domain sockets (UDS) right now.
+             // This only applies to UDS server sockets, see also https://3v4l.org/NAhpr.
+             // Parse PHP warning message containing unknown error, HHVM reports proper info at least.
+--- a/vendor/react/socket/src/FdServer.php
++++ b/vendor/react/socket/src/FdServer.php
+@@ -95,7 +95,7 @@
+ 
+         $errno = 0;
+         $errstr = '';
+-        \set_error_handler(function ($_, $error) use (&$errno, &$errstr) {
++        \set_error_handler(function ($_, $error, $mErrFile = null, $mErrLine = null) use (&$errno, &$errstr) {
+             // Match errstr from PHP's warning message.
+             // fopen(php://fd/3): Failed to open stream: Error duping file descriptor 3; possibly it doesn't exist: [9]: Bad file descriptor
+             \preg_match('/\[(\d+)\]: (.*)/', $error, $m);

@@ -1,0 +1,110 @@
+# TypePHP (swoole/typephp) build configuration for aun-filestored.
+#
+#   make typephp            -> podman build + a --dry transpile (generate C++)
+#   TYPEPHP_DRY=0 make typephp  -> full build: compile + link the native binary
+#
+# This builds the REAL native daemon: main.php (a de-dynamised port of
+# Command\React::MainLoop) + the project's own domain code + the vendored
+# ReactPHP event loop / sockets / datagram and the Ratchet WebSocket stack
+# (guzzlehttp/psr7 + ratchet/rfc6455 + cboden/ratchet). See
+# packaging/typephp/PORTING-REACT.md for how each piece was brought in and
+# packaging/typephp/vendor-patches/ for the (small) vendor changes.
+#
+# Not compiled: the Symfony admin UI (Admin/, ShareFs/), the outbound
+# RemoteBridge client (needs react/dns), and Monolog (replaced by
+# shims/StderrLogger.php). The Piconet serial interface IS compiled and wired
+# (UnixSerialDeviceConnector via react/socket) - it just can't be exercised
+# here without an Econet serial device attached.
+name: dnsprobe
+mode: bin
+php-version: "8.5"
+optimize: 2
+job: 4
+cxx-std: c++17
+sources:
+  - main.php
+  - shims/signals.php
+  - shims/pcntl_posix.stub.php
+  - shims/pcntl_posix.cc
+  - shims/StderrLogger.php
+  - shims/deprecation_contracts.php
+
+  # config: the class + the generated const defaults (see build-typephp.sh)
+  - ../../src/include/classes/config.php
+  - ../../build/typephp/stage/config_defines.php
+
+  # psr/log contract
+  - ../../build/typephp/stage/vendor/psr/log/Psr/Log/LoggerInterface.php
+
+  # --- the project's own domain code (mirrors project.yml) ------------------
+  - ../../src/include/classes/Messages
+  - ../../src/include/classes/Encapsulation
+  - ../../src/include/classes/Ntp
+  - ../../src/include/classes/Dns
+  - ../../src/include/classes/Aun
+  - ../../src/include/classes/Piconet
+  - ../../src/include/classes/RemoteProvider
+  - ../../src/include/classes/RemoteSocket
+  - ../../src/include/classes/RemoteBridge
+  - ../../src/include/classes/WebSocket
+  - ../../src/include/classes/Authentication
+  - ../../src/include/classes/Vfs
+  - ../../src/include/classes/Services
+  - ../../src/include/classes/React
+
+  # --- Stage 1-2 vendored ReactPHP -----------------------------------------
+  - ../../build/typephp/stage/vendor/evenement/evenement/src
+  - ../../build/typephp/stage/vendor/react/promise/src
+  - ../../build/typephp/stage/vendor/react/event-loop/src/TimerInterface.php
+  - ../../build/typephp/stage/vendor/react/event-loop/src/Timer
+  - ../../build/typephp/stage/vendor/react/event-loop/src/Tick
+  - ../../build/typephp/stage/vendor/react/event-loop/src/SignalsHandler.php
+  - ../../build/typephp/stage/vendor/react/event-loop/src/LoopInterface.php
+  - ../../build/typephp/stage/vendor/react/event-loop/src/StreamSelectLoop.php
+  - ../../build/typephp/stage/vendor/react/stream/src
+  - ../../build/typephp/stage/vendor/react/socket/src/ConnectionInterface.php
+  - ../../build/typephp/stage/vendor/react/socket/src/ServerInterface.php
+  - ../../build/typephp/stage/vendor/react/socket/src/ConnectorInterface.php
+  - ../../build/typephp/stage/vendor/react/socket/src/Connection.php
+  - ../../build/typephp/stage/vendor/react/socket/src/TcpServer.php
+  - ../../build/typephp/stage/vendor/react/socket/src/UnixServer.php
+  - ../../build/typephp/stage/vendor/react/socket/src/TcpConnector.php
+  - ../../build/typephp/stage/vendor/react/socket/src/UnixConnector.php
+  - ../../build/typephp/stage/vendor/react/socket/src/FixedUriConnector.php
+  - ../../build/typephp/stage/vendor/react/socket/src/LimitingServer.php
+  - ../../build/typephp/stage/vendor/react/datagram/src
+  - ../../build/typephp/stage/vendor/react/child-process/src
+
+  # --- Stage 4: PSR-7 / HTTP / Ratchet WebSocket --------------------------
+  - ../../build/typephp/stage/vendor/psr/http-message/src
+  - ../../build/typephp/stage/vendor/psr/http-factory/src
+  - ../../build/typephp/stage/vendor/fig/http-message-util/src
+  - ../../build/typephp/stage/vendor/ralouphie/getallheaders/src
+  - ../../build/typephp/stage/vendor/guzzlehttp/psr7/src
+  - ../../build/typephp/stage/vendor/ratchet/rfc6455/src
+  - ../../build/typephp/stage/vendor/cboden/ratchet/src
+
+  - ../../build/typephp/stage/vendor/react/socket/src/SocketServer.php
+  - ../../build/typephp/stage/vendor/react/socket/src/SecureServer.php
+  - ../../build/typephp/stage/vendor/react/cache/src
+  - ../../build/typephp/stage/vendor/react/dns/src
+  - ../../build/typephp/stage/vendor/react/socket/src/DnsConnector.php
+  - ../../build/typephp/stage/vendor/react/socket/src/HappyEyeBallsConnector.php
+  - ../../build/typephp/stage/vendor/react/socket/src/HappyEyeBallsConnectionBuilder.php
+  - ../../build/typephp/stage/vendor/react/socket/src/TimeoutConnector.php
+  - ../../build/typephp/stage/vendor/react/socket/src/Connector.php
+
+ignore:
+  - ../../src/include/external
+  - ../../build/typephp/stage/vendor/react/promise/src/functions_include.php
+  - ../../src/include/classes/RemoteProvider/Client.php
+  - ../../src/include/classes/RemoteSocket/Client.php
+  - ../../src/include/classes/RemoteSocket/RelayedUdpTransport.php
+  - ../../build/typephp/stage/vendor/cboden/ratchet/src/Ratchet/Session
+  - ../../build/typephp/stage/vendor/ralouphie/getallheaders/src/getallheaders.php
+  - ../../build/typephp/stage/vendor/guzzlehttp/psr7/src/StreamWrapper.php
+  - ../../build/typephp/stage/vendor/guzzlehttp/psr7/src/InflateStream.php
+  - ../../build/typephp/stage/vendor/cboden/ratchet/src/Ratchet/Wamp
+  - ../../build/typephp/stage/vendor/cboden/ratchet/src/Ratchet/Http/Router.php
+  - ../../build/typephp/stage/vendor/cboden/ratchet/src/Ratchet/Http/OriginCheck.php
+  - ../../build/typephp/stage/vendor/cboden/ratchet/src/Ratchet/Server/FlashPolicy.php

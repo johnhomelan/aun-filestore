@@ -1,0 +1,61 @@
+# Container image for running the TypePHP (tpc) AOT compiler against
+# aun-filestore. Built and driven by packaging/typephp/build-typephp.sh with
+# podman ("make typephp").
+#
+# TypePHP needs PHP 8.4 + php-config, a C++17 toolchain, CMake, GMP and MPFR.
+# The official php:8.4 image provides PHP 8.4 with php-config and the dom /
+# mbstring / xml extensions tpc needs (8.5 is not usable: swoole/phpx 2.6.x
+# fails to compile against 8.5's ext/hash headers). The C/C++ toolchain, CMake,
+# GMP and MPFR are only used for a full native link (a --dry run, the script
+# default, does not touch them) but are installed so a full build can be tried.
+#
+# Pinned to the -bookworm variant (Debian 12, glibc 2.36) rather than the
+# default (Debian 13 / trixie, glibc 2.41): the natively-linked binaries carry
+# that glibc as their floor, and 2.36 covers far more deployment targets. Bump
+# to a newer Debian only when the release tarballs' minimum glibc can move.
+
+FROM php:8.4-cli-bookworm
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# apt drops to the _apt user for downloads; that fails under rootless podman
+# (single mapped uid), so keep apt running as root.
+RUN echo 'APT::Sandbox::User "root";' > /etc/apt/apt.conf.d/00no-sandbox
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        git unzip ca-certificates \
+        build-essential cmake pkg-config \
+        libgmp-dev libmpfr-dev \
+        libldap2-dev \
+        libpq-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Add the pgsql and mysql PDO drivers so the native sql-serverd build can talk
+# to those engines and not just SQLite (the stock php:8.4 image is built with
+# only --with-pdo-sqlite). docker-php-ext-install builds them as shared
+# modules + a conf.d `extension=` ini; tpc-compiled binaries start PHP through
+# the embed SAPI (php_embed_init -> php_module_startup), which scans
+# /usr/local/etc/php/conf.d and dlopen()s them exactly as the CLI does.
+RUN docker-php-ext-install -j"$(nproc)" pdo_pgsql pdo_mysql \
+    && php -m | grep -E '^pdo_(pgsql|mysql)$'
+
+COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
+
+# Install the compiler into /opt/typephp (its own composer project so the app's
+# dependencies never mix with the compiler's).
+WORKDIR /opt/typephp
+RUN composer require --no-interaction --no-progress --no-audit swoole/typephp
+
+# tpc needs the PHPX native library (libphpx) built before it will run, even for
+# a --dry (C++-generation-only) pass. Build it from the bundled source.
+RUN cmake -S vendor/swoole/phpx -B vendor/swoole/phpx/build -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_CXX_FLAGS=-fpermissive \
+    && cmake --build vendor/swoole/phpx/build -j"$(nproc)"
+
+# So a natively-linked binary (mode: bin, non --dry) can find libphpx at runtime
+# when executed inside this image.
+ENV LD_LIBRARY_PATH=/opt/typephp/vendor/swoole/phpx/lib
+
+WORKDIR /src
+ENTRYPOINT ["php", "/opt/typephp/vendor/bin/tpc.php"]
+CMD ["--help"]

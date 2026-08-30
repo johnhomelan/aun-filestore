@@ -1,0 +1,15 @@
+--- a/vendor/react/stream/src/Util.php
++++ b/vendor/react/stream/src/Util.php
+@@ -67,8 +67,10 @@
+     public static function forwardEvents($source, $target, array $events)
+     {
+         foreach ($events as $event) {
+-            $source->on($event, function () use ($event, $target) {
+-                $target->emit($event, \func_get_args());
++            // TypePHP (packaging/typephp): a closure calling func_get_args()
++            // does not compile; an explicit by-value variadic is equivalent.
++            $source->on($event, function (...$args) use ($event, $target) {
++                $target->emit($event, $args);
+             });
+         }
+     }

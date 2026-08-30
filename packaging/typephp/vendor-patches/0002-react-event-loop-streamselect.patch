@@ -1,0 +1,68 @@
+--- a/vendor/react/event-loop/src/StreamSelectLoop.php
++++ b/vendor/react/event-loop/src/StreamSelectLoop.php
+@@ -270,50 +270,25 @@
+     private function streamSelect(array &$read, array &$write, $timeout)
+     {
+         if ($read || $write) {
+-            // We do not usually use or expose the `exceptfds` parameter passed to the underlying `select`.
+-            // However, Windows does not report failed connection attempts in `writefds` passed to `select` like most other platforms.
+-            // Instead, it uses `writefds` only for successful connection attempts and `exceptfds` for failed connection attempts.
+-            // We work around this by adding all sockets that look like a pending connection attempt to `exceptfds` automatically on Windows and merge it back later.
+-            // This ensures the public API matches other loop implementations across all platforms (see also test suite or rather test matrix).
+-            // Lacking better APIs, every write-only socket that has not yet read any data is assumed to be in a pending connection attempt state.
+-            // @link https://docs.microsoft.com/de-de/windows/win32/api/winsock2/nf-winsock2-select
++            // TypePHP (packaging/typephp): upstream wraps stream_select() in a
++            // try/catch plus a temporary error handler that (a) swallows the
++            // EINTR warning raised when a signal interrupts the select and
++            // (b) forwards any other warning to a previously registered handler,
++            // and on Windows also fills `exceptfds` to detect failed connects.
++            // TypePHP's codegen cannot carry the by-reference $read/$write across
++            // that lambda/try boundary. This build is Linux-only (no Windows
++            // exceptfds path), installs no outer error handler to chain to, and
++            // treats an EINTR the same as any other "nothing ready" (return
++            // false, loop iterates again), so the select is done directly with a
++            // one-syscall-wide handler that suppresses the interrupt warning.
+             $except = null;
+-            if (\DIRECTORY_SEPARATOR === '\\') {
+-                $except = array();
+-                foreach ($write as $key => $socket) {
+-                    if (!isset($read[$key]) && @\ftell($socket) === 0) {
+-                        $except[$key] = $socket;
+-                    }
+-                }
+-            }
+ 
+-            /** @var ?callable $previous */
+-            $previous = \set_error_handler(function ($errno, $errstr) use (&$previous) {
+-                // suppress warnings that occur when `stream_select()` is interrupted by a signal
+-                // PHP defines `EINTR` through `ext-sockets` or `ext-pcntl`, otherwise use common default (Linux & Mac)
+-                $eintr = \defined('SOCKET_EINTR') ? \SOCKET_EINTR : (\defined('PCNTL_EINTR') ? \PCNTL_EINTR : 4);
+-                if ($errno === \E_WARNING && \strpos($errstr, '[' . $eintr .']: ') !== false) {
+-                    return;
+-                }
+-
+-                // forward any other error to registered error handler or print warning
+-                return ($previous !== null) ? \call_user_func_array($previous, \func_get_args()) : false;
++            \set_error_handler(static function (...$aIgnored): bool {
++                return true;
+             });
++            $ret = \stream_select($read, $write, $except, $timeout === null ? null : 0, $timeout);
++            \restore_error_handler();
+ 
+-            try {
+-                $ret = \stream_select($read, $write, $except, $timeout === null ? null : 0, $timeout);
+-                \restore_error_handler();
+-            } catch (\Throwable $e) { // @codeCoverageIgnoreStart
+-                \restore_error_handler();
+-                throw $e;
+-            } catch (\Exception $e) {
+-                \restore_error_handler();
+-                throw $e;
+-            } // @codeCoverageIgnoreEnd
+-
+-            if ($except) {
+-                $write = \array_merge($write, $except);
+-            }
+             return $ret;
+         }
+ 

@@ -1,0 +1,54 @@
+<?xml version="1.0"?>
+<ruleset name="AunFilestore">
+    <description>
+        PSR-12 derived house style: tab indentation, and control keywords written
+        tight against the parenthesis - if(...) / elseif(...) / for(...) /
+        foreach(...) / while(...) / switch(...) / catch(...) / match(...) - with
+        one space before the "{" and the body tab-indented.
+    </description>
+
+    <arg name="tab-width" value="4"/>
+    <arg name="extensions" value="php"/>
+    <arg name="colors"/>
+    <arg value="sp"/>
+
+    <!-- What to lint -->
+    <file>src/include</file>
+    <file>src/filestored</file>
+    <file>src/sharefsd</file>
+    <file>src/dnsd</file>
+    <file>src/ntpd</file>
+    <file>src/ecosyslogd</file>
+    <file>src/sql-serverd</file>
+    <file>src/symfony-console</file>
+    <file>src/util</file>
+
+    <!-- Never lint third-party code -->
+    <exclude-pattern>*/vendor/*</exclude-pattern>
+
+    <!-- Base: PSR-12, minus the bits we deliberately override below -->
+    <rule ref="PSR12">
+        <!-- PSR-12 mandates 4-space indent; we use tabs -->
+        <exclude name="Generic.WhiteSpace.DisallowTabIndent"/>
+        <exclude name="Generic.WhiteSpace.ScopeIndent"/>
+
+        <!-- PSR-12 wants "if (" with a space; our KeywordParenthesisSpacing
+             sniff wants "if(". Drop just that one check so they don't fight
+             (the rest of ControlSignature - brace placement, "} else {"
+             spacing, etc. - stays on). -->
+        <exclude name="Squiz.ControlStructures.ControlSignature.SpaceAfterKeyword"/>
+    </rule>
+
+    <!-- Tabs, not spaces -->
+    <rule ref="Generic.WhiteSpace.DisallowSpaceIndent"/>
+    <rule ref="Generic.WhiteSpace.ScopeIndent">
+        <properties>
+            <property name="indent" value="4"/>
+            <property name="tabIndent" value="true"/>
+        </properties>
+    </rule>
+
+    <!-- if(...) / elseif(...) / for(...) / foreach(...) / while(...) /
+         switch(...) / catch(...) / match(...) : no space before the paren -->
+    <rule ref="tools/phpcs/AunFilestore/Sniffs/ControlStructures/KeywordParenthesisSpacingSniff.php"/>
+</ruleset>

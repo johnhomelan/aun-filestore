@@ -1,0 +1,27 @@
+#!/sbin/openrc-run
+# AUN Filestore - @DESC@ (OpenRC / Alpine)
+#
+# Out-of-process service provider: reaches Econet only through filestored's
+# relay, hence the hard "need aun-filestored" dependency.
+
+description="AUN Filestore - @DESC@"
+
+find_php() {
+	for p in php php84 php83 php82 php8-cli php-cli php8; do
+		if command -v "$p" >/dev/null 2>&1; then command -v "$p"; return 0; fi
+	done
+	echo /usr/bin/php
+}
+
+command="$(find_php)"
+command_args="/usr/libexec/aun-filestore/@DAEMON@ -c /etc/aun-filestored"
+command_background=true
+pidfile="/run/aun-@DAEMON@.pid"
+output_log="/var/log/aun-@DAEMON@.log"
+error_log="/var/log/aun-@DAEMON@.log"
+retry="TERM/15/KILL/5"
+
+depend() {
+	need net aun-filestored
+	after firewall
+}

@@ -1,0 +1,25 @@
+#!/bin/sh /etc/rc.common
+# AUN Filestore - @DESC@ (procd / OpenWrt)
+
+USE_PROCD=1
+START=95
+STOP=10
+
+PROG=/usr/libexec/aun-filestore/@DAEMON@
+CONFDIR=/etc/aun-filestored
+
+find_php() {
+	for p in php php84 php83 php82 php8-cli php-cli php8; do
+		if command -v "$p" >/dev/null 2>&1; then command -v "$p"; return 0; fi
+	done
+	echo /usr/bin/php
+}
+
+start_service() {
+	procd_open_instance @DAEMON@
+	procd_set_param command "$(find_php)" "$PROG" -c "$CONFDIR"
+	procd_set_param respawn 3600 5 0
+	procd_set_param stdout 1
+	procd_set_param stderr 1
+	procd_close_instance
+}

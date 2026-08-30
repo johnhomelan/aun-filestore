@@ -1,0 +1,15 @@
+#!/bin/sh
+set -e
+
+SERVICES="aun-sql-serverd aun-ecosyslogd aun-ntpd aun-dnsd aun-sharefsd aun-filestored"
+
+for s in ${SERVICES}; do
+	[ -e "/etc/init.d/${s}" ] || continue
+	# Stop and de-register with whichever init system placed it here.
+	"/etc/init.d/${s}" stop      >/dev/null 2>&1 || true
+	"/etc/init.d/${s}" disable   >/dev/null 2>&1 || true
+	rc-update del "${s}"         >/dev/null 2>&1 || true
+	rm -f "/etc/init.d/${s}"
+done
+
+exit 0

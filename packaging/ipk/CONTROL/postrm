@@ -1,0 +1,5 @@
+#!/bin/sh
+set -e
+# The virtual file root (/var/lib/aun-filestore-root) and the print spool are
+# left in place on purge - they hold user data.
+exit 0

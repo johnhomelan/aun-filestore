@@ -1,0 +1,32 @@
+#!/bin/sh
+set -e
+
+INIT_SRC=/usr/libexec/aun-filestore/init
+SERVICES="aun-filestored aun-sharefsd aun-dnsd aun-ntpd aun-ecosyslogd aun-sql-serverd"
+
+install_variant() {
+	variant="$1"
+	mkdir -p /etc/init.d
+	for s in ${SERVICES}; do
+		[ -f "${INIT_SRC}/${variant}/${s}" ] || continue
+		cp "${INIT_SRC}/${variant}/${s}" "/etc/init.d/${s}"
+		chmod 0755 "/etc/init.d/${s}"
+	done
+	echo "aun-filestored: installed ${variant} init scripts into /etc/init.d/"
+}
+
+if [ -f /etc/openwrt_release ] || [ -f /etc/rc.common ]; then
+	install_variant procd
+elif [ -x /sbin/openrc-run ] || command -v rc-service >/dev/null 2>&1; then
+	install_variant openrc
+else
+	echo "aun-filestored: no supported init system detected;" >&2
+	echo "  init scripts are available under ${INIT_SRC}/{procd,openrc}/" >&2
+fi
+
+# First-run virtual file root layout
+mkdir -p /var/lib/aun-filestore-root/LIBRARY
+mkdir -p /var/lib/aun-filestore-root/HOME/SYST
+mkdir -p /var/spool/aun-filestore-print
+
+exit 0

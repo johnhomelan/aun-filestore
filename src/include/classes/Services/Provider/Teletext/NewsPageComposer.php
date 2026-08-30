@@ -50,23 +50,52 @@ class NewsPageComposer
 	/** Body rows available on continuation subpages (rows 3-23, after a single-height headline recap). */
 	protected const int CONT_SUBPAGE_BODY_ROWS = 21;
 
-	/** Rows available to index content per subpage (rows 4-23, after the masthead, double-height banner, and the blank row separating the banner from the first article title). */
+	/**
+	 * Rows available to index content per subpage when the header is the
+	 * plain double-height banner (rows 4-23, after the masthead, banner,
+	 * and the blank row separating the banner from the first article
+	 * title). A mosaic heading (see composeIndex()'s $aMosaicHeading and
+	 * composeChannelIndex()) is itself 3 rows rather than the banner's 2,
+	 * so its own blank separator pushes the body one row further down -
+	 * see MOSAIC_HEADING_INDEX_BODY_ROWS.
+	 */
 	protected const int INDEX_BODY_ROWS = 20;
+
+	/** Rows available to index content per subpage when the header is a mosaic heading - one fewer than INDEX_BODY_ROWS, see there. */
+	protected const int MOSAIC_HEADING_INDEX_BODY_ROWS = self::INDEX_BODY_ROWS - 1;
+
+	/** Word/font/colour for the channel-hub page's heading - see composeChannelIndex()/_hubHeadingRows(). */
+	protected const string HUB_TITLE_WORD = 'BBC';
+	protected const string HUB_TITLE_FONT = 'blocks';
+	protected const int HUB_TITLE_COLOUR = self::WHITE;
+	protected const string HUB_SUBTITLE_WORD = 'INDEX';
+	protected const string HUB_SUBTITLE_FONT = 'chonk';
+	protected const int HUB_SUBTITLE_COLOUR = self::CYAN;
 
 	/**
 	 * Trailing "column" reserved on every index title row for the page
-	 * number: a blank gap byte, a colour byte, then a 3-digit page number -
-	 * kept blank (no title text) on wrapped continuation lines so the page
-	 * number reads as its own separate column rather than text just
-	 * trailing off the first line.
+	 * number: a blank gap byte, a colour byte, a 3-digit page number, then a
+	 * trailing blank byte so the number doesn't sit flush against the hard
+	 * right edge of the screen - kept blank (no title text) on wrapped
+	 * continuation lines so the page number reads as its own separate
+	 * column rather than text just trailing off the first line.
 	 */
-	protected const int INDEX_PAGE_FIELD_WIDTH = 5;
+	protected const int INDEX_PAGE_FIELD_WIDTH = 6;
 
 	/** Usable width for an index title line, including its own leading colour byte. */
 	protected const int INDEX_TITLE_WIDTH = self::ROW_WIDTH - self::INDEX_PAGE_FIELD_WIDTH;
 
 	/**
+	 * $aMosaicHeading (BBC's own news index only - see NewsFeedDefinitions'
+	 * $aIndexMosaicHeading and NewsImport) swaps the plain double-height
+	 * colour-block banner (rows 1-2, plus row 3 as a blank spacer) for a
+	 * two-word mosaic heading occupying the same 3 rows (see
+	 * _mosaicHeadingRows()) - $sBannerText/$iBannerFg/$iBannerBg are then
+	 * ignored. Left null (Guardian/Sky, and BBC's own default), the banner
+	 * renders as before.
+	 *
 	 * @param array<int, array{page: string, headline: string, category?: string}> $aEntries
+	 * @param ?array{word1: string, font1: string, colour1: int, word2: string, font2: string, colour2: int} $aMosaicHeading
 	 * @return array<int, string>
 	 */
 	public function composeIndex(
@@ -76,19 +105,91 @@ class NewsPageComposer
 		string $sTitle,
 		string $sBannerText,
 		int $iBannerFg,
-		int $iBannerBg
+		int $iBannerBg,
+		?array $aMosaicHeading = null
 	): array {
-		$aSubpageRows = $this->_packIndexBlocks($this->_indexBlocks($aEntries));
+		$iBudget = $aMosaicHeading !== null ? self::MOSAIC_HEADING_INDEX_BODY_ROWS : self::INDEX_BODY_ROWS;
+		$aSubpageRows = $this->_packIndexBlocks($this->_indexBlocks($aEntries), $iBudget);
 		$iTotal = count($aSubpageRows);
 
 		$aBuffers = [];
 		foreach ($aSubpageRows as $iIndex => $aBodyRows) {
 			$aRows = [];
 			$aRows[0] = $this->_masthead($sPageNumber, $sTitle, $oNow);
-			[$aRows[1], $aRows[2]] = $this->_bannerRows($sBannerText, $iBannerFg, $iBannerBg);
-			$aRows[3] = $this->_blankRow();
+			if ($aMosaicHeading !== null) {
+				[$aRows[1], $aRows[2], $aRows[3]] = $this->_mosaicHeadingRows(
+					$aMosaicHeading['word1'],
+					$aMosaicHeading['font1'],
+					$aMosaicHeading['colour1'],
+					$aMosaicHeading['word2'],
+					$aMosaicHeading['font2'],
+					$aMosaicHeading['colour2']
+				);
+				$aRows[4] = $this->_blankRow();
+				$iBodyStart = 5;
+			} else {
+				[$aRows[1], $aRows[2]] = $this->_bannerRows($sBannerText, $iBannerFg, $iBannerBg);
+				$aRows[3] = $this->_blankRow();
+				$iBodyStart = 4;
+			}
 
-			$iRow = 4;
+			$iRow = $iBodyStart;
+			foreach ($aBodyRows as $sRow) {
+				$aRows[$iRow] = $sRow;
+				$iRow++;
+			}
+			for (; $iRow <= 23; $iRow++) {
+				$aRows[$iRow] = $this->_blankRow();
+			}
+			$aRows[24] = $iTotal > 1
+				? $this->_fitRow(chr(self::WHITE) . 'Subpage ' . ($iIndex + 1) . '/' . $iTotal)
+				: $this->_blankRow();
+
+			$aBuffers[] = $this->_assemble($aRows);
+		}
+		return $aBuffers;
+	}
+
+	/**
+	 * Composes the channel-hub page (page 100 on BBC's channel - see
+	 * NewsImport) that links out to the other services sharing that channel
+	 * (the real news index, now on page 101, and Weather's own index) rather
+	 * than listing stories directly. Same masthead/body/pagination shape as
+	 * composeIndex(), but with a mosaic "BBC INDEX" heading (see
+	 * _hubHeadingRows()) in place of the double-height colour-block banner,
+	 * since this page isn't any one source's own masthead banner - and, since
+	 * there are only ever a handful of these entries (one per service on the
+	 * channel, not one per story), each is rendered double-height (see
+	 * _entryRows()'s $bDoubleHeight parameter) rather than composeIndex()'s
+	 * normal single-height entry rows.
+	 *
+	 * @param array<int, array{page: string, headline: string, category?: string}> $aEntries
+	 * @return array<int, string>
+	 */
+	public function composeChannelIndex(
+		string $sPageNumber,
+		array $aEntries,
+		\DateTimeImmutable $oNow,
+		string $sTitle
+	): array {
+		$aSubpageRows = $this->_packIndexBlocks($this->_indexBlocks($aEntries, true), self::MOSAIC_HEADING_INDEX_BODY_ROWS);
+		$iTotal = count($aSubpageRows);
+
+		$aBuffers = [];
+		foreach ($aSubpageRows as $iIndex => $aBodyRows) {
+			$aRows = [];
+			$aRows[0] = $this->_masthead($sPageNumber, $sTitle, $oNow);
+			[$aRows[1], $aRows[2], $aRows[3]] = $this->_mosaicHeadingRows(
+				self::HUB_TITLE_WORD,
+				self::HUB_TITLE_FONT,
+				self::HUB_TITLE_COLOUR,
+				self::HUB_SUBTITLE_WORD,
+				self::HUB_SUBTITLE_FONT,
+				self::HUB_SUBTITLE_COLOUR
+			);
+			$aRows[4] = $this->_blankRow();
+
+			$iRow = 5;
 			foreach ($aBodyRows as $sRow) {
 				$aRows[$iRow] = $sRow;
 				$iRow++;
@@ -218,6 +319,40 @@ class NewsPageComposer
 	}
 
 	/**
+	 * Renders a two-word mosaic heading, e.g. the channel-hub page's "BBC" +
+	 * "INDEX" (see composeChannelIndex()) or the BBC news index's own "BBC"
+	 * + "NEWS" (see composeIndex()'s $aMosaicHeading): $sWord1 in $sFont1,
+	 * $sWord2 in $sFont2 immediately after it on the same teletext rows,
+	 * baseline-aligned - when the two fonts differ in row height (e.g.
+	 * blocks' 3 rows vs chonk/title's 2), the shorter word starts one row
+	 * group down so both words' bottoms line up, the way differently
+	 * capitalled type would in print, leaving the shorter word's leading row
+	 * slot(s) blank.
+	 *
+	 * @return array<int, string>
+	 */
+	protected function _mosaicHeadingRows(string $sWord1, string $sFont1, int $iColour1, string $sWord2, string $sFont2, int $iColour2): array
+	{
+		$oRegistry = new MosaicFontRegistry();
+		$oFont1 = $oRegistry->getByName($sFont1);
+		$oFont2 = $oRegistry->getByName($sFont2);
+		if ($oFont1 === null || $oFont2 === null) {
+			throw new \RuntimeException('MosaicFontRegistry is missing a font needed for a mosaic heading');
+		}
+
+		$aRows1 = $oFont1->renderWord($sWord1, $iColour1);
+		$aRows2 = $oFont2->renderWord($sWord2, $iColour2);
+		$iOffset = count($aRows1) - count($aRows2);
+
+		$aRows = [];
+		foreach ($aRows1 as $i => $sRow1) {
+			$sRow2 = $i >= $iOffset ? $aRows2[$i - $iOffset] : '';
+			$aRows[] = $this->_fitRow(' ' . $sRow1 . '  ' . $sRow2);
+		}
+		return $aRows;
+	}
+
+	/**
 	 * Groups index entries into "blocks" - a category heading (when any
 	 * entry carries a category) followed by its entries, each rendered as
 	 * its own atomic group of rows - in first-appearance order. Entries with
@@ -225,10 +360,15 @@ class NewsPageComposer
 	 * entry has one; when none do, entries are returned flat with no
 	 * headings at all, unchanged from the pre-category behaviour.
 	 *
+	 * $bDoubleHeight is threaded straight through to _entryRows() - see
+	 * there - composeIndex() leaves it false (normal single-height story
+	 * entries), composeChannelIndex() passes true (its handful of
+	 * service-link entries are double-height).
+	 *
 	 * @param array<int, array{page: string, headline: string, category?: string}> $aEntries
 	 * @return array<int, array{type: string, rows: array<int, string>}>
 	 */
-	protected function _indexBlocks(array $aEntries): array
+	protected function _indexBlocks(array $aEntries, bool $bDoubleHeight = false): array
 	{
 		$bAnyCategory = false;
 		$aGroups = [];
@@ -243,16 +383,16 @@ class NewsPageComposer
 		$aBlocks = [];
 		if (!$bAnyCategory) {
 			foreach ($aEntries as $aEntry) {
-				$aBlocks[] = ['type' => 'entry', 'rows' => $this->_entryRows($aEntry)];
+				$aBlocks[] = ['type' => 'entry', 'rows' => $this->_entryRows($aEntry, $bDoubleHeight)];
 			}
 			return $aBlocks;
 		}
 
-		foreach ($aGroups as $sCategory => $aGroupEntries) {
-			$sLabel = $sCategory === '' ? 'General' : $sCategory;
+		foreach ($aGroups as $sGroupKey => $aGroupEntries) {
+			$sLabel = $sGroupKey === '' ? 'General' : $sGroupKey;
 			$aBlocks[] = ['type' => 'heading', 'rows' => [$this->_fitRow(chr(self::YELLOW) . strtoupper($sLabel))]];
 			foreach ($aGroupEntries as $aEntry) {
-				$aBlocks[] = ['type' => 'entry', 'rows' => $this->_entryRows($aEntry)];
+				$aBlocks[] = ['type' => 'entry', 'rows' => $this->_entryRows($aEntry, $bDoubleHeight)];
 			}
 		}
 		return $aBlocks;
@@ -263,15 +403,18 @@ class NewsPageComposer
 	 * entry count per subpage, since a wrapped title takes more rows than a
 	 * one-line one) - a category heading is kept glued to the entry that
 	 * follows it so a subpage never ends on an orphaned heading.
+	 * $iPerSubpageBudget is the caller's own INDEX_BODY_ROWS or
+	 * MOSAIC_HEADING_INDEX_BODY_ROWS, depending on which header shape it's
+	 * packing body rows underneath - see composeIndex()/composeChannelIndex().
 	 *
 	 * @param array<int, array{type: string, rows: array<int, string>}> $aBlocks
 	 * @return array<int, array<int, string>>
 	 */
-	protected function _packIndexBlocks(array $aBlocks): array
+	protected function _packIndexBlocks(array $aBlocks, int $iPerSubpageBudget): array
 	{
 		$aSubpages = [];
 		$aCurrent  = [];
-		$iBudget   = self::INDEX_BODY_ROWS;
+		$iBudget   = $iPerSubpageBudget;
 
 		foreach ($aBlocks as $i => $aBlock) {
 			$iNeeded = count($aBlock['rows']);
@@ -281,7 +424,7 @@ class NewsPageComposer
 			if ($aCurrent !== [] && $iNeeded > $iBudget) {
 				$aSubpages[] = $aCurrent;
 				$aCurrent = [];
-				$iBudget  = self::INDEX_BODY_ROWS;
+				$iBudget  = $iPerSubpageBudget;
 			}
 			foreach ($aBlock['rows'] as $sRow) {
 				$aCurrent[] = $sRow;
@@ -303,27 +446,41 @@ class NewsPageComposer
 	 * on a wrapped second line, so the column reads as a separate column
 	 * rather than text running under the number.
 	 *
+	 * $bDoubleHeight (composeChannelIndex() only - see _indexBlocks())
+	 * inserts DOUBLE_HEIGHT right after each title line's leading colour
+	 * byte, covering the page-number field too since it follows on the same
+	 * row. No background re-assertion is needed on the blank spacer row
+	 * beneath it (unlike _bannerRows()'s double-height banner) - the text
+	 * sits on the page's default black background throughout, so that
+	 * already-blank row is a correct bottom half as-is.
+	 *
 	 * @param array{page: string, headline: string, category?: string} $aEntry
 	 * @return array<int, string>
 	 */
-	protected function _entryRows(array $aEntry): array
+	protected function _entryRows(array $aEntry, bool $bDoubleHeight = false): array
 	{
-		$iTextWidth = self::INDEX_TITLE_WIDTH - 1;
+		// The DOUBLE_HEIGHT control byte occupies a 41st cell alongside the
+		// leading colour byte both already budgeted for by "- 1" - so it
+		// must shrink the available text width by one more column itself,
+		// or the page-number field gets pushed past ROW_WIDTH and truncated
+		// by _fitRow().
+		$iTextWidth = self::INDEX_TITLE_WIDTH - 1 - ($bDoubleHeight ? 1 : 0);
 		$aLines = $this->_wrapText($this->_stripMarkers($aEntry['headline']), $iTextWidth);
 		if (count($aLines) > 2) {
 			$aLines = [$aLines[0], rtrim(substr($aLines[1], 0, max(0, $iTextWidth - 3))) . '...'];
 		}
 
 		$sBlankPageField = str_repeat(' ', self::INDEX_PAGE_FIELD_WIDTH);
-		$sPageField = ' ' . chr(self::CYAN) . str_pad(substr($aEntry['page'], 0, 3), 3, ' ', STR_PAD_LEFT);
+		$sPageField = ' ' . chr(self::CYAN) . str_pad(substr($aEntry['page'], 0, 3), 3, ' ', STR_PAD_LEFT) . ' ';
+		$sHeightMarker = $bDoubleHeight ? chr(self::DOUBLE_HEIGHT) : '';
 
 		$aRows = [];
-		$aRows[] = chr(self::WHITE)
+		$aRows[] = chr(self::WHITE) . $sHeightMarker
 			. str_pad($this->_truncate($aLines[0] ?? '', $iTextWidth), $iTextWidth, ' ')
 			. $sPageField;
 
 		if (($aLines[1] ?? '') !== '') {
-			$aRows[] = chr(self::WHITE)
+			$aRows[] = chr(self::WHITE) . $sHeightMarker
 				. str_pad($this->_truncate($aLines[1], $iTextWidth), $iTextWidth, ' ')
 				. $sBlankPageField;
 		}

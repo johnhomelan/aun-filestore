@@ -88,11 +88,19 @@ class Admin implements AdminInterface
 		$aCommands = [
 			['label' => 'Browse Pages', 'url' => '/service/teletext/browse'],
 			['label' => 'Refresh Teefax Now', 'url' => '/service/teletext/teefax-refresh'],
+			['label' => 'Refresh Weather Now', 'url' => '/service/teletext/weather-refresh'],
+			['label' => 'Refresh TV Guide Now', 'url' => '/service/teletext/tvguide-refresh'],
 		];
 		foreach (NewsFeedDefinitions::all() as $oFeed) {
 			$aCommands[] = [
 				'label' => 'Refresh ' . $oFeed->sLabel . ' Now',
 				'url'   => '/service/teletext/news-refresh?feed=' . urlencode($oFeed->sKey),
+			];
+		}
+		foreach (WebfaxSourceDefinitions::all() as $oService) {
+			$aCommands[] = [
+				'label' => 'Refresh ' . $oService->sLabel . ' Now',
+				'url'   => '/service/teletext/webfax-refresh?service=' . urlencode($oService->sKey),
 			];
 		}
 		return $aCommands;

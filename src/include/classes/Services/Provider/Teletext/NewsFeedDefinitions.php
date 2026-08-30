@@ -84,6 +84,33 @@ final class NewsFeedDefinitions
 					'Education & Family' => 'https://feeds.bbci.co.uk/news/education/rss.xml',
 					'Top Stories' => 'https://feeds.bbci.co.uk/news/rss.xml',
 				],
+				// BBC shares channel 2 with Weather (see
+				// config.inc.php's teletext_weather_channel /
+				// teletext_weather_index_page) - this puts a channel-hub
+				// page on 100 linking to both, pushing BBC's own story
+				// index to 101 (see NewsImport). Guardian/Sky are alone on
+				// their own channels, so they leave this empty and keep
+				// their index on 100.
+				aChannelIndexEntries: [
+					['page' => '101', 'headline' => 'News'],
+					['page' => '600', 'headline' => 'Weather'],
+					['page' => '700', 'headline' => 'TV Guide'],
+				],
+				// Replaces the plain "BBC NEWS HEADLINES" double-height
+				// banner on BBC's own story index (page 101 - see
+				// $aChannelIndexEntries above) with a mosaic heading: "BBC"
+				// in the bold "blocks" font, "NEWS" immediately after it in
+				// the "title" font (TitleFont - reverse-measured from an
+				// archived page whose own heading reads "NEWS", see its
+				// docblock) in BBC's own red.
+				aIndexMosaicHeading: [
+					'word1' => 'BBC',
+					'font1' => 'blocks',
+					'colour1' => NewsPageComposer::WHITE,
+					'word2' => 'NEWS',
+					'font2' => 'title',
+					'colour2' => NewsPageComposer::RED,
+				],
 			),
 			'guardian' => new NewsFeedDefinition(
 				sKey: 'guardian',

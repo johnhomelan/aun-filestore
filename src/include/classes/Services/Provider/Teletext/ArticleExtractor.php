@@ -82,9 +82,16 @@ class ArticleExtractor
 	}
 
 	/**
+	 * The \DOMNode / \DOMElement / \DOMNodeList type hints are given in PHPDoc
+	 * only, not natively: the TypePHP AOT compiler segfaults at call time when a
+	 * PHP-Dom node object is passed through a parameter or return typed as one of
+	 * those internal classes (\DOMXPath and \DOMDocument are fine). PHPDoc keeps
+	 * PHPStan's view intact. See packaging/typephp/PORTING-REACT.md.
+	 *
 	 * @param array<int, string> $aXPaths
+	 * @return \DOMNode|null
 	 */
-	protected function _findContainer(\DOMXPath $oXPath, array $aXPaths): ?\DOMNode
+	protected function _findContainer(\DOMXPath $oXPath, array $aXPaths)
 	{
 		foreach ($aXPaths as $sXPath) {
 			$oNode = $this->_item($this->_query($oXPath, $sXPath), 0);
@@ -95,7 +102,10 @@ class ArticleExtractor
 		return null;
 	}
 
-	protected function _bodyXPath(\DOMXPath $oXPath, \DOMNode $oContainer, ArticleProfile $oProfile): string
+	/**
+	 * @param \DOMNode $oContainer
+	 */
+	protected function _bodyXPath(\DOMXPath $oXPath, $oContainer, ArticleProfile $oProfile): string
 	{
 		$sParagraphXPath = $oProfile->sParagraphStrategy === 'class-substring'
 			? ".//p[contains(@class,'" . $oProfile->sParagraphClassSubstring . "')]"
@@ -117,8 +127,10 @@ class ArticleExtractor
 	 * Used for sources (Guardian, Sky) whose CSS-in-JS class names are
 	 * hashed per-deploy and so have no stable semantic substring to match,
 	 * unlike BBC's.
+	 *
+	 * @param \DOMNode $oContainer
 	 */
-	protected function _majorityClassXPath(\DOMXPath $oXPath, \DOMNode $oContainer, string $sTag): string
+	protected function _majorityClassXPath(\DOMXPath $oXPath, $oContainer, string $sTag): string
 	{
 		$aCounts = [];
 		foreach ($this->_query($oXPath, './/' . $sTag, $oContainer) as $oNode) {
@@ -156,7 +168,10 @@ class ArticleExtractor
 		return false;
 	}
 
-	protected function _published(\DOMXPath $oXPath, \DOMNode $oContainer, ArticleProfile $oProfile): ?string
+	/**
+	 * @param \DOMNode $oContainer
+	 */
+	protected function _published(\DOMXPath $oXPath, $oContainer, ArticleProfile $oProfile): ?string
 	{
 		if ($oProfile->sPublishedStrategy === 'time-element') {
 			$oTime = $this->_item($this->_query($oXPath, './/time[@datetime]', $oContainer), 0);
@@ -185,9 +200,10 @@ class ArticleExtractor
 	 * real node list, so that's narrowed away in one place instead of
 	 * repeating the check at each call site.
 	 *
+	 * @param \DOMNode|null $oContextNode
 	 * @return \DOMNodeList<\DOMNameSpaceNode|\DOMNode>
 	 */
-	protected function _query(\DOMXPath $oXPath, string $sExpression, ?\DOMNode $oContextNode = null): \DOMNodeList
+	protected function _query(\DOMXPath $oXPath, string $sExpression, $oContextNode = null)
 	{
 		$oResult = $oContextNode !== null ? $oXPath->query($sExpression, $oContextNode) : $oXPath->query($sExpression);
 		if ($oResult === false) {
@@ -202,8 +218,9 @@ class ArticleExtractor
 	 * back to plain DOMNode (DOMElement/DOMAttr/... all extend it).
 	 *
 	 * @param \DOMNodeList<\DOMNameSpaceNode|\DOMNode> $oList
+	 * @return \DOMNode|null
 	 */
-	protected function _item(\DOMNodeList $oList, int $iIndex): ?\DOMNode
+	protected function _item($oList, int $iIndex)
 	{
 		$oNode = $oList->item($iIndex);
 		return $oNode instanceof \DOMNode ? $oNode : null;
@@ -216,8 +233,10 @@ class ArticleExtractor
 	 * colour-change control codes. <a> is unwrapped to its visible text
 	 * (href dropped); <br> forces a line break; everything else not
 	 * recognised is still descended into so its own text is captured.
+	 *
+	 * @param \DOMNode $oNode
 	 */
-	protected function _inlineText(\DOMNode $oNode): string
+	protected function _inlineText($oNode): string
 	{
 		$sOut = '';
 		foreach ($oNode->childNodes as $oChild) {

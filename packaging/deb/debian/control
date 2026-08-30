@@ -1,0 +1,33 @@
+Source: aun-filestored
+Section: net
+Priority: optional
+Maintainer: John Brown <john@home-lan.co.uk>
+Build-Depends: debhelper-compat (= 13)
+Standards-Version: 4.6.2
+Homepage: https://github.com/johnhomelan/aun-filestore
+Rules-Requires-Root: no
+
+Package: aun-filestored
+Architecture: all
+Depends: ${misc:Depends},
+ php-cli (>= @PHP_MIN@),
+ php-common,
+ php-soap,
+ php-xml,
+ php-mbstring,
+ php-gd,
+ php-ldap,
+ php-bcmath,
+ php-zip,
+ php-curl
+Recommends: php-mysql, php-pgsql
+Description: Econet (AUN) NetFS/NetPrint file server for BBC Micro and RISC OS
+ aun-filestore is an Econet fileserver implementation (using AUN) for Linux,
+ written in PHP. It provides file and print services to Acorn RISC machines and
+ emulated BBC Micros on top of a layer 2 emulation of Econet, and includes a
+ browser-based admin interface.
+ .
+ The package ships systemd units for the main server (aun-filestored) and the
+ optional out-of-process service providers (sharefsd, dnsd, ntpd, ecosyslogd,
+ sql-serverd). None are enabled by default; the provider units require
+ aun-filestored.service.

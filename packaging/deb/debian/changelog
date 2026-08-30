@@ -1,0 +1,7 @@
+aun-filestored (1.1.0) unstable; urgency=medium
+
+  * Packaging rebuilt from the make-based build system (packaging/deb).
+  * Ship systemd units for filestored and the sharefsd / dnsd / ntpd /
+    ecosyslogd / sql-serverd service providers; the SysV init script is gone.
+
+ -- John Brown <john@home-lan.co.uk>  Mon, 01 Jan 2024 00:00:00 +0000

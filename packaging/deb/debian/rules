@@ -1,0 +1,45 @@
+#!/usr/bin/make -f
+# Build the aun-filestored .deb.
+#
+# The Composer dependencies are already vendored into src/vendor by
+# packaging/deb/build-deb.sh, and the systemd units + config templates are
+# staged into debian/ by the same script, so this only lays the files out.
+
+export DH_VERBOSE = 1
+
+PKGDIR = debian/aun-filestored
+LIBEXEC = $(PKGDIR)/usr/libexec/aun-filestore
+DATADIR = $(PKGDIR)/usr/share/aun-filestored
+UNITDIR = $(PKGDIR)/usr/lib/systemd/system
+
+DAEMONS = filestored sharefsd dnsd ntpd ecosyslogd sql-serverd
+
+%:
+	dh $@
+
+override_dh_auto_configure:
+override_dh_auto_build:
+override_dh_auto_test:
+override_dh_auto_clean:
+
+override_dh_auto_install:
+	install -d $(LIBEXEC) $(DATADIR) $(UNITDIR)
+	install -d $(PKGDIR)/etc/aun-filestored
+	install -d $(PKGDIR)/var/lib/aun-filestore-root
+	install -d $(PKGDIR)/var/spool/aun-filestore-print
+	# Application code + Composer dependencies
+	cp -r src/include $(DATADIR)/
+	cp -r src/vendor  $(DATADIR)/
+	# Daemons
+	set -e; for f in $(DAEMONS); do install -m 0755 src/$$f $(LIBEXEC)/$$f; done
+	# Helper / import scripts
+	set -e; for f in src/util/*; do install -m 0755 "$$f" $(LIBEXEC)/; done
+	# Symfony console entry point (resolves ./vendor and ./include beside itself)
+	install -m 0755 src/symfony-console $(DATADIR)/symfony-console
+	# systemd units (replace the old SysV init script)
+	install -m 0644 debian/systemd/*.service $(UNITDIR)/
+	# Config templates - dh treats everything under /etc as conffiles
+	cp -r debian/config/* $(PKGDIR)/etc/aun-filestored/
+
+override_dh_installsystemd:
+	dh_installsystemd --no-enable --no-start

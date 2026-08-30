@@ -1,5 +1,15 @@
 #!/bin/sh
-# load all functions
-. `dirname $0`/functions.sh
-# call function with same name as this script
-`basename $0`
+# Keep a copy of the live config so an upgrade can never clobber it, even if a
+# future DSM stops preserving /var/packages/<pkg>/etc across upgrades.
+
+PKGNAME="aun-filestored"
+PKGETC="${SYNOPKG_PKGETC:-/var/packages/${PKGNAME}/etc}"
+STASH="/var/tmp/${PKGNAME}.etc.upgrade"
+
+if [ -d "${PKGETC}" ]; then
+	rm -rf "${STASH}"
+	mkdir -p "${STASH}"
+	cp -a "${PKGETC}/." "${STASH}/" 2>/dev/null || true
+fi
+
+exit 0

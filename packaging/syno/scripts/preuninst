@@ -1,1 +1,3 @@
 #!/bin/sh
+# Package Center stops the service (start-stop-status stop) before this runs.
+exit 0

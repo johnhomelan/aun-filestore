@@ -1,0 +1,12 @@
+{
+	".url": {
+		"SYNO.SDS._ThirdParty.App.aunfilestore": {
+			"type": "url",
+			"allUsers": true,
+			"title": "AUN Filestore",
+			"desc": "AUN Econet file server admin interface",
+			"icon": "images/aun-filestored_{0}.png",
+			"url": "/webman/3rdparty/aun-filestored/index.cgi"
+		}
+	}
+}

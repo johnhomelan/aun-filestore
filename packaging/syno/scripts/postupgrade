@@ -1,1 +1,15 @@
 #!/bin/sh
+# Restore any config stashed by preupgrade, without overwriting files that the
+# new postinst / the admin has already put in place.
+
+PKGNAME="aun-filestored"
+PKGETC="${SYNOPKG_PKGETC:-/var/packages/${PKGNAME}/etc}"
+STASH="/var/tmp/${PKGNAME}.etc.upgrade"
+
+if [ -d "${STASH}" ]; then
+	mkdir -p "${PKGETC}"
+	cp -an "${STASH}/." "${PKGETC}/" 2>/dev/null || true
+	rm -rf "${STASH}"
+fi
+
+exit 0

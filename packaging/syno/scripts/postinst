@@ -1,11 +1,25 @@
 #!/bin/sh
+# First install: lay out the writable state and seed the config directory
+# from the templates shipped inside the package.
 
-#Create the default share econet to hold our virtual file root for the filestore
-synoshare --get econet
-if [ $? != 0 ]; then 
-	//share folder does not exist 
-	VOLUME=`/usr/syno/bin/servicetool --get-alive-volume`
-	synoshare --add econet "" /$VOLUME/econet "" "admin,guest" "" 1 0 
-fi 
+PKGNAME="aun-filestored"
+PKGDEST="${SYNOPKG_PKGDEST:-/var/packages/${PKGNAME}/target}"
+PKGVAR="${SYNOPKG_PKGVAR:-/var/packages/${PKGNAME}/var}"
+PKGETC="${SYNOPKG_PKGETC:-/var/packages/${PKGNAME}/etc}"
 
+mkdir -p "${PKGETC}"
+mkdir -p "${PKGVAR}/root"
+mkdir -p "${PKGVAR}/print-spool"
 
+# The in-process Symfony admin kernel writes its compiled container and logs
+# under <target>/var - make sure those exist and are writable.
+mkdir -p "${PKGDEST}/var/cache"
+mkdir -p "${PKGDEST}/var/log"
+chmod -R 0777 "${PKGDEST}/var"
+
+# Seed config only if it is not already there (fresh install).
+[ -f "${PKGETC}/default.conf" ] || cp "${PKGDEST}/default.conf.example" "${PKGETC}/default.conf"
+[ -f "${PKGETC}/users.txt" ]    || cp "${PKGDEST}/users.txt.example"    "${PKGETC}/users.txt"
+[ -f "${PKGETC}/aunmap.txt" ]   || cp "${PKGDEST}/aunmap.txt.example"   "${PKGETC}/aunmap.txt"
+
+exit 0

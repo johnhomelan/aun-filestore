@@ -1,1 +1,4 @@
 #!/bin/sh
+# Nothing to check here: the PHP runtime dependency is declared in INFO
+# (install_dep_packages) and enforced by Package Center before this runs.
+exit 0

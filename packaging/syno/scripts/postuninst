@@ -1,1 +1,5 @@
 #!/bin/sh
+# DSM removes /var/packages/aun-filestored (target, var and etc) itself.
+# The virtual file root and any config the admin pointed elsewhere are left
+# untouched on purpose.
+exit 0

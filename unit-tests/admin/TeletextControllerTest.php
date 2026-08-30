@@ -27,6 +27,13 @@ class FakeTeletextForController extends Teletext
 {
     public bool $stubTriggerResult = true;
     public int  $capTriggerCalls   = 0;
+    public bool $stubWeatherTriggerResult = true;
+    public int  $capWeatherTriggerCalls   = 0;
+    public bool $stubTvGuideTriggerResult = true;
+    public int  $capTvGuideTriggerCalls   = 0;
+    public bool $stubWebfaxTriggerResult = true;
+    /** @var array<int, string> service keys passed to triggerWebfaxImport(), in call order */
+    public array $capWebfaxTriggerCalls = [];
 
     /** @var array<int, array{channel:string,page_count:int}> */
     public array $stubChannelSummaries = [];
@@ -47,6 +54,24 @@ class FakeTeletextForController extends Teletext
     {
         $this->capTriggerCalls++;
         return $this->stubTriggerResult;
+    }
+
+    public function triggerWeatherImport(): bool
+    {
+        $this->capWeatherTriggerCalls++;
+        return $this->stubWeatherTriggerResult;
+    }
+
+    public function triggerTvGuideImport(): bool
+    {
+        $this->capTvGuideTriggerCalls++;
+        return $this->stubTvGuideTriggerResult;
+    }
+
+    public function triggerWebfaxImport(string $sServiceKey): bool
+    {
+        $this->capWebfaxTriggerCalls[] = $sServiceKey;
+        return $this->stubWebfaxTriggerResult;
     }
 
     public function getChannelSummaries(): array
@@ -184,6 +209,195 @@ class TeletextControllerTest extends TestCase
         $this->oProvider->stubTriggerResult = false;
         $oRequest  = Request::create('/service/teletext/teefax-refresh', 'POST');
         $oResponse = $this->oController->teefaxRefresh($this->oSmarty, $oRequest);
+
+        $this->assertInstanceOf(RedirectResponse::class, $oResponse);
+        $this->assertStringContainsString('msg=not_started', $oResponse->getTargetUrl());
+    }
+
+    // -------------------------------------------------------------------------
+    // weatherRefresh() — mirrors teefaxRefresh() above (single source, same
+    // shape).
+    // -------------------------------------------------------------------------
+
+    public function testWeatherRefreshRedirectsWhenProviderNotFound(): void
+    {
+        $this->oController->stubProvider = null;
+        $oRequest  = Request::create('/service/teletext/weather-refresh', 'GET');
+        $oResponse = $this->oController->weatherRefresh($this->oSmarty, $oRequest);
+
+        $this->assertInstanceOf(RedirectResponse::class, $oResponse);
+    }
+
+    public function testWeatherRefreshGetRendersConfirmationTemplate(): void
+    {
+        $oRequest = Request::create('/service/teletext/weather-refresh', 'GET');
+        $this->oController->weatherRefresh($this->oSmarty, $oRequest);
+
+        $this->assertSame('teletext-weather-refresh.tpl', $this->oController->lastTemplate);
+        $this->assertSame(0, $this->oProvider->capWeatherTriggerCalls);
+    }
+
+    public function testWeatherRefreshGetPassesQueryMessageToTemplate(): void
+    {
+        $oRequest = Request::create('/service/teletext/weather-refresh?msg=started', 'GET');
+        $this->oController->weatherRefresh($this->oSmarty, $oRequest);
+
+        $this->assertSame('started', $this->oController->lastVars['sMessage']);
+    }
+
+    public function testWeatherRefreshPostCallsTriggerWeatherImport(): void
+    {
+        $oRequest = Request::create('/service/teletext/weather-refresh', 'POST');
+        $this->oController->weatherRefresh($this->oSmarty, $oRequest);
+
+        $this->assertSame(1, $this->oProvider->capWeatherTriggerCalls);
+    }
+
+    public function testWeatherRefreshPostRedirectsWithStartedMessageOnSuccess(): void
+    {
+        $this->oProvider->stubWeatherTriggerResult = true;
+        $oRequest  = Request::create('/service/teletext/weather-refresh', 'POST');
+        $oResponse = $this->oController->weatherRefresh($this->oSmarty, $oRequest);
+
+        $this->assertInstanceOf(RedirectResponse::class, $oResponse);
+        $this->assertStringContainsString('msg=started', $oResponse->getTargetUrl());
+    }
+
+    public function testWeatherRefreshPostRedirectsWithNotStartedMessageOnFailure(): void
+    {
+        $this->oProvider->stubWeatherTriggerResult = false;
+        $oRequest  = Request::create('/service/teletext/weather-refresh', 'POST');
+        $oResponse = $this->oController->weatherRefresh($this->oSmarty, $oRequest);
+
+        $this->assertInstanceOf(RedirectResponse::class, $oResponse);
+        $this->assertStringContainsString('msg=not_started', $oResponse->getTargetUrl());
+    }
+
+    // -------------------------------------------------------------------------
+    // tvGuideRefresh() — mirrors weatherRefresh() above (single source, same
+    // shape).
+    // -------------------------------------------------------------------------
+
+    public function testTvGuideRefreshRedirectsWhenProviderNotFound(): void
+    {
+        $this->oController->stubProvider = null;
+        $oRequest  = Request::create('/service/teletext/tvguide-refresh', 'GET');
+        $oResponse = $this->oController->tvGuideRefresh($this->oSmarty, $oRequest);
+
+        $this->assertInstanceOf(RedirectResponse::class, $oResponse);
+    }
+
+    public function testTvGuideRefreshGetRendersConfirmationTemplate(): void
+    {
+        $oRequest = Request::create('/service/teletext/tvguide-refresh', 'GET');
+        $this->oController->tvGuideRefresh($this->oSmarty, $oRequest);
+
+        $this->assertSame('teletext-tvguide-refresh.tpl', $this->oController->lastTemplate);
+        $this->assertSame(0, $this->oProvider->capTvGuideTriggerCalls);
+    }
+
+    public function testTvGuideRefreshGetPassesQueryMessageToTemplate(): void
+    {
+        $oRequest = Request::create('/service/teletext/tvguide-refresh?msg=started', 'GET');
+        $this->oController->tvGuideRefresh($this->oSmarty, $oRequest);
+
+        $this->assertSame('started', $this->oController->lastVars['sMessage']);
+    }
+
+    public function testTvGuideRefreshPostCallsTriggerTvGuideImport(): void
+    {
+        $oRequest = Request::create('/service/teletext/tvguide-refresh', 'POST');
+        $this->oController->tvGuideRefresh($this->oSmarty, $oRequest);
+
+        $this->assertSame(1, $this->oProvider->capTvGuideTriggerCalls);
+    }
+
+    public function testTvGuideRefreshPostRedirectsWithStartedMessageOnSuccess(): void
+    {
+        $this->oProvider->stubTvGuideTriggerResult = true;
+        $oRequest  = Request::create('/service/teletext/tvguide-refresh', 'POST');
+        $oResponse = $this->oController->tvGuideRefresh($this->oSmarty, $oRequest);
+
+        $this->assertInstanceOf(RedirectResponse::class, $oResponse);
+        $this->assertStringContainsString('msg=started', $oResponse->getTargetUrl());
+    }
+
+    public function testTvGuideRefreshPostRedirectsWithNotStartedMessageOnFailure(): void
+    {
+        $this->oProvider->stubTvGuideTriggerResult = false;
+        $oRequest  = Request::create('/service/teletext/tvguide-refresh', 'POST');
+        $oResponse = $this->oController->tvGuideRefresh($this->oSmarty, $oRequest);
+
+        $this->assertInstanceOf(RedirectResponse::class, $oResponse);
+        $this->assertStringContainsString('msg=not_started', $oResponse->getTargetUrl());
+    }
+
+    // -------------------------------------------------------------------------
+    // webfaxRefresh() — mirrors weatherRefresh() above, plus an unknown
+    // --service branch since (unlike Teefax/Weather) there are two
+    // independent Webfax services to select between.
+    // -------------------------------------------------------------------------
+
+    public function testWebfaxRefreshRedirectsWhenProviderNotFound(): void
+    {
+        $this->oController->stubProvider = null;
+        $oRequest  = Request::create('/service/teletext/webfax-refresh?service=webfax1', 'GET');
+        $oResponse = $this->oController->webfaxRefresh($this->oSmarty, $oRequest);
+
+        $this->assertInstanceOf(RedirectResponse::class, $oResponse);
+    }
+
+    public function testWebfaxRefreshRedirectsWhenServiceIsUnknown(): void
+    {
+        $oRequest  = Request::create('/service/teletext/webfax-refresh?service=nonsense', 'GET');
+        $oResponse = $this->oController->webfaxRefresh($this->oSmarty, $oRequest);
+
+        $this->assertInstanceOf(RedirectResponse::class, $oResponse);
+        $this->assertSame(0, count($this->oProvider->capWebfaxTriggerCalls));
+    }
+
+    public function testWebfaxRefreshGetRendersConfirmationTemplate(): void
+    {
+        $oRequest = Request::create('/service/teletext/webfax-refresh?service=webfax1', 'GET');
+        $this->oController->webfaxRefresh($this->oSmarty, $oRequest);
+
+        $this->assertSame('teletext-webfax-refresh.tpl', $this->oController->lastTemplate);
+        $this->assertSame('webfax1', $this->oController->lastVars['sServiceKey']);
+        $this->assertSame('Webfax 1', $this->oController->lastVars['sLabel']);
+        $this->assertSame([], $this->oProvider->capWebfaxTriggerCalls);
+    }
+
+    public function testWebfaxRefreshGetPassesQueryMessageToTemplate(): void
+    {
+        $oRequest = Request::create('/service/teletext/webfax-refresh?service=webfax1&msg=started', 'GET');
+        $this->oController->webfaxRefresh($this->oSmarty, $oRequest);
+
+        $this->assertSame('started', $this->oController->lastVars['sMessage']);
+    }
+
+    public function testWebfaxRefreshPostCallsTriggerWebfaxImportWithTheSelectedService(): void
+    {
+        $oRequest = Request::create('/service/teletext/webfax-refresh?service=webfax2', 'POST');
+        $this->oController->webfaxRefresh($this->oSmarty, $oRequest);
+
+        $this->assertSame(['webfax2'], $this->oProvider->capWebfaxTriggerCalls);
+    }
+
+    public function testWebfaxRefreshPostRedirectsWithStartedMessageOnSuccess(): void
+    {
+        $this->oProvider->stubWebfaxTriggerResult = true;
+        $oRequest  = Request::create('/service/teletext/webfax-refresh?service=webfax1', 'POST');
+        $oResponse = $this->oController->webfaxRefresh($this->oSmarty, $oRequest);
+
+        $this->assertInstanceOf(RedirectResponse::class, $oResponse);
+        $this->assertStringContainsString('msg=started', $oResponse->getTargetUrl());
+    }
+
+    public function testWebfaxRefreshPostRedirectsWithNotStartedMessageOnFailure(): void
+    {
+        $this->oProvider->stubWebfaxTriggerResult = false;
+        $oRequest  = Request::create('/service/teletext/webfax-refresh?service=webfax1', 'POST');
+        $oResponse = $this->oController->webfaxRefresh($this->oSmarty, $oRequest);
 
         $this->assertInstanceOf(RedirectResponse::class, $oResponse);
         $this->assertStringContainsString('msg=not_started', $oResponse->getTargetUrl());

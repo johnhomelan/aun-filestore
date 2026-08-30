@@ -113,6 +113,106 @@ class NewsPageComposerTest extends TestCase
         }
     }
 
+    public function testIndexUsesMosaicHeadingWhenSupplied(): void
+    {
+        $aBuffers = $this->oComposer->composeIndex(
+            '101',
+            [],
+            $this->oNow,
+            'BBC NEWS',
+            'BBC NEWS HEADLINES',
+            NewsPageComposer::WHITE,
+            NewsPageComposer::RED,
+            [
+                'word1' => 'BBC', 'font1' => 'blocks', 'colour1' => NewsPageComposer::WHITE,
+                'word2' => 'NEWS', 'font2' => 'title', 'colour2' => NewsPageComposer::RED,
+            ]
+        );
+
+        // "BBC" (blocks, white) spans rows 1-3, "NEWS" (title, red) is
+        // baseline-aligned into rows 2-3 alongside it - see
+        // NewsPageComposer::_mosaicHeadingRows(). The plain banner text must
+        // not appear, and the double-height banner control byte must be
+        // gone too (mosaic lettering doesn't use it).
+        $sHeading = $this->_row($aBuffers[0], 1) . $this->_row($aBuffers[0], 2) . $this->_row($aBuffers[0], 3);
+        $this->assertStringContainsString(chr(0x10 | NewsPageComposer::WHITE), $sHeading, 'BBC (blocks/white) graphics-colour byte');
+        $this->assertStringContainsString(chr(0x10 | NewsPageComposer::RED), $sHeading, 'NEWS (title/red) graphics-colour byte');
+        $this->assertStringNotContainsString('BBC NEWS HEADLINES', $this->_plain($sHeading));
+        $this->assertStringNotContainsString(chr(0x0D), $sHeading, 'mosaic heading does not use the double-height banner byte');
+    }
+
+    public function testIndexHasABlankLineAfterAMosaicHeading(): void
+    {
+        $aEntries = [['page' => '101', 'headline' => 'A story']];
+        $aBuffers = $this->oComposer->composeIndex(
+            '101',
+            $aEntries,
+            $this->oNow,
+            'BBC NEWS',
+            'BBC NEWS HEADLINES',
+            NewsPageComposer::WHITE,
+            NewsPageComposer::RED,
+            [
+                'word1' => 'BBC', 'font1' => 'blocks', 'colour1' => NewsPageComposer::WHITE,
+                'word2' => 'NEWS', 'font2' => 'title', 'colour2' => NewsPageComposer::RED,
+            ]
+        );
+
+        // The heading itself fills rows 1-3 (no spare row within it, unlike
+        // the plain banner's rows 1-2 + row 3), so row 4 must be its own
+        // blank spacer, pushing the first entry down to row 5.
+        $this->assertSame(str_repeat(' ', 40), $this->_row($aBuffers[0], 4), 'blank line between the mosaic heading and the first entry');
+        $this->assertStringContainsString('A story', $this->_plain($this->_row($aBuffers[0], 5)));
+    }
+
+    public function testIndexWithMosaicHeadingPaginatesWithOneFewerRowPerSubpage(): void
+    {
+        // The mosaic heading's own blank spacer (see
+        // testIndexHasABlankLineAfterAMosaicHeading()) costs one body row
+        // per subpage compared to the plain banner, so the same 25 entries
+        // that fit 10-per-subpage under a banner (see
+        // testIndexPaginatesAcrossSubpagesWhenMoreThanTenEntriesPerSubpage())
+        // must fit only 9-per-subpage here.
+        $aEntries = [];
+        for ($i = 1; $i <= 19; $i++) {
+            $aEntries[] = ['page' => (string) (100 + $i), 'headline' => 'Story number ' . $i];
+        }
+        $aMosaicHeading = [
+            'word1' => 'BBC', 'font1' => 'blocks', 'colour1' => NewsPageComposer::WHITE,
+            'word2' => 'NEWS', 'font2' => 'title', 'colour2' => NewsPageComposer::RED,
+        ];
+
+        $aBuffers = $this->oComposer->composeIndex('101', $aEntries, $this->oNow, 'BBC NEWS', 'BBC NEWS HEADLINES', NewsPageComposer::WHITE, NewsPageComposer::RED, $aMosaicHeading);
+
+        $this->assertCount(3, $aBuffers);
+        $this->assertStringContainsString('109', $this->_plain($aBuffers[0]));
+        $this->assertStringNotContainsString('110', $this->_plain($aBuffers[0]));
+        $this->assertStringContainsString('110', $this->_plain($aBuffers[1]));
+    }
+
+    public function testBbcNewsFeedDefinitionSuppliesTheMosaicHeading(): void
+    {
+        $oFeed = NewsFeedDefinitions::get('bbc');
+        $aBuffers = $this->oComposer->composeIndex(
+            '101',
+            [],
+            $this->oNow,
+            $oFeed->sMastheadTitle,
+            $oFeed->sBannerText,
+            $oFeed->iBannerForeground,
+            $oFeed->iBannerBackground,
+            $oFeed->aIndexMosaicHeading
+        );
+
+        $sHeading = $this->_row($aBuffers[0], 1) . $this->_row($aBuffers[0], 2) . $this->_row($aBuffers[0], 3);
+        $this->assertStringContainsString(chr(0x10 | NewsPageComposer::WHITE), $sHeading, 'BBC graphics-colour byte');
+        $this->assertStringNotContainsString('BBC NEWS HEADLINES', $this->_plain($sHeading));
+
+        foreach (['guardian', 'sky'] as $sKey) {
+            $this->assertNull(NewsFeedDefinitions::get($sKey)->aIndexMosaicHeading, $sKey . ' keeps the plain banner');
+        }
+    }
+
     public function testIndexListsEntries(): void
     {
         $aEntries = [
@@ -148,7 +248,8 @@ class NewsPageComposerTest extends TestCase
         $this->assertNotFalse($iHeadlinePos);
         $this->assertNotFalse($iPagePos);
         $this->assertGreaterThan($iHeadlinePos, $iPagePos, 'page number should sit to the right of the title');
-        $this->assertGreaterThanOrEqual(35, $iPagePos, 'page number should be right-aligned in its own column');
+        $this->assertGreaterThanOrEqual(34, $iPagePos, 'page number should be right-aligned in its own column');
+        $this->assertSame(' ', substr($sRow4, -1), 'a blank space must follow the page number, not the hard right edge');
     }
 
     public function testIndexEntryTitleWrapsWithoutTextUnderThePageNumber(): void
@@ -223,6 +324,97 @@ class NewsPageComposerTest extends TestCase
         $this->assertStringContainsString('125', $this->_plain($aBuffers[2]));
         $this->assertStringContainsString('Subpage 1/3', $this->_plain($this->_row($aBuffers[0], 24)));
         $this->assertStringContainsString('Subpage 3/3', $this->_plain($this->_row($aBuffers[2], 24)));
+    }
+
+    // -------------------------------------------------------------------------
+    // Channel-hub index (BBC's page 100 - see NewsFeedDefinitions::$aChannelIndexEntries)
+    // -------------------------------------------------------------------------
+
+    public function testChannelIndexBufferIsExactlyPageSize(): void
+    {
+        $aEntries = [
+            ['page' => '101', 'headline' => 'News'],
+            ['page' => '600', 'headline' => 'Weather'],
+        ];
+        $aBuffers = $this->oComposer->composeChannelIndex('100', $aEntries, $this->oNow, 'BBC NEWS');
+
+        $this->assertCount(1, $aBuffers);
+        $this->assertSame(Storage::PAGE_SIZE, strlen($aBuffers[0]));
+    }
+
+    public function testChannelIndexMastheadUsesSuppliedTitle(): void
+    {
+        $aBuffers = $this->oComposer->composeChannelIndex('100', [], $this->oNow, 'BBC NEWS');
+
+        $sRow0 = $this->_plain($this->_row($aBuffers[0], 0));
+        $this->assertStringContainsString('P100', $sRow0);
+        $this->assertStringContainsString('BBC NEWS', $sRow0);
+    }
+
+    public function testChannelIndexListsEntries(): void
+    {
+        $aEntries = [
+            ['page' => '101', 'headline' => 'News'],
+            ['page' => '600', 'headline' => 'Weather'],
+        ];
+        $aBuffers = $this->oComposer->composeChannelIndex('100', $aEntries, $this->oNow, 'BBC NEWS');
+
+        $sPlain = $this->_plain($aBuffers[0]);
+        $this->assertStringContainsString('News', $sPlain);
+        $this->assertStringContainsString('101', $sPlain);
+        $this->assertStringContainsString('Weather', $sPlain);
+        $this->assertStringContainsString('600', $sPlain);
+    }
+
+    public function testChannelIndexEntriesAreDoubleHeight(): void
+    {
+        $aEntries = [
+            ['page' => '101', 'headline' => 'News'],
+            ['page' => '600', 'headline' => 'Weather'],
+        ];
+        $aBuffers = $this->oComposer->composeChannelIndex('100', $aEntries, $this->oNow, 'BBC NEWS');
+
+        // Entries start at row 5 (row 4 is the blank spacer after the
+        // mosaic heading - see testChannelIndexHasABlankLineAfterTheHeading())
+        // - one title row plus one blank spacer row each, see
+        // _entryRows()/_indexBlocks().
+        $sNewsRow = $this->_row($aBuffers[0], 5);
+        $sWeatherRow = $this->_row($aBuffers[0], 7);
+        $this->assertStringContainsString(chr(0x0D), $sNewsRow, 'News entry row should carry the double-height control byte');
+        $this->assertStringContainsString(chr(0x0D), $sWeatherRow, 'Weather entry row should carry the double-height control byte');
+    }
+
+    public function testChannelIndexHasABlankLineAfterTheHeading(): void
+    {
+        $aEntries = [['page' => '101', 'headline' => 'News']];
+        $aBuffers = $this->oComposer->composeChannelIndex('100', $aEntries, $this->oNow, 'BBC NEWS');
+
+        $this->assertSame(str_repeat(' ', 40), $this->_row($aBuffers[0], 4), 'blank line between the mosaic heading and the first entry');
+        $this->assertStringContainsString('News', $this->_plain($this->_row($aBuffers[0], 5)));
+    }
+
+    public function testIndexEntriesRemainSingleHeight(): void
+    {
+        // composeIndex() (the real per-source story index, unlike
+        // composeChannelIndex()'s handful of channel-hub entries) must not
+        // pick up double-height - only _entryRows()'s explicit opt-in does.
+        $aEntries = [['page' => '101', 'headline' => 'A story']];
+        $aBuffers = $this->oComposer->composeIndex('100', $aEntries, $this->oNow, 'BBC NEWS', 'BBC NEWS HEADLINES', NewsPageComposer::WHITE, NewsPageComposer::RED);
+
+        $this->assertStringNotContainsString(chr(0x0D), $this->_row($aBuffers[0], 4));
+    }
+
+    public function testChannelIndexHeadingUsesBothMosaicFonts(): void
+    {
+        $aBuffers = $this->oComposer->composeChannelIndex('100', [], $this->oNow, 'BBC NEWS');
+
+        // "BBC" (blocks, white) spans rows 1-3, "INDEX" (chonk, cyan) is
+        // baseline-aligned into rows 2-3 alongside it - see
+        // NewsPageComposer::_hubHeadingRows(). Rows 1-3 together must carry
+        // both fonts' graphics-colour control bytes (0x10 | colour).
+        $sHeading = $this->_row($aBuffers[0], 1) . $this->_row($aBuffers[0], 2) . $this->_row($aBuffers[0], 3);
+        $this->assertStringContainsString(chr(0x10 | NewsPageComposer::WHITE), $sHeading, 'BBC (blocks/white) graphics-colour byte');
+        $this->assertStringContainsString(chr(0x10 | NewsPageComposer::CYAN), $sHeading, 'INDEX (chonk/cyan) graphics-colour byte');
     }
 
     // -------------------------------------------------------------------------

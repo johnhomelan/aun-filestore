@@ -390,25 +390,25 @@ class JsonPacketTest extends TestCase
     public function testToStringReturnsAString(): void
     {
         $oPkt = $this->decodePacket($this->makePktJson(iAunType: 2, iPort: 0x01));
-        $this->assertIsString($oPkt->toString());
+        $this->assertIsString($oPkt->asString());
     }
 
     public function testToStringContainsPacketTypeName(): void
     {
         $oPkt = $this->decodePacket($this->makePktJson(iAunType: 2));
-        $this->assertStringContainsString('Unicast', $oPkt->toString());
+        $this->assertStringContainsString('Unicast', $oPkt->asString());
     }
 
     public function testToStringContainsPortNumber(): void
     {
         $oPkt = $this->decodePacket($this->makePktJson(iPort: 0x10));
-        $this->assertStringContainsString('16', $oPkt->toString());
+        $this->assertStringContainsString('16', $oPkt->asString());
     }
 
     public function testToStringContainsHeaderLabel(): void
     {
         $oPkt = $this->decodePacket($this->makePktJson());
-        $this->assertStringContainsString('Header', $oPkt->toString());
+        $this->assertStringContainsString('Header', $oPkt->asString());
     }
 
     // =========================================================================

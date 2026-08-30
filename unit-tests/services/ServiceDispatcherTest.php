@@ -102,7 +102,7 @@ class MockEncapsulation implements EncapsulationInterface
     public function getData(): string { return ''; }
     public function getSequence(): ?int { return $this->iSeq; }
     public function decode(string $s): void {}
-    public function toString(): string { return "mock:{$this->sType}:{$this->iPort}"; }
+    public function asString(): string { return "mock:{$this->sType}:{$this->iPort}"; }
 
     public function buildEconetPacket(): EconetPacket
     {

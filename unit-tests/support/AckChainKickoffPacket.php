@@ -38,5 +38,5 @@ class AckChainKickoffPacket implements EncapsulationInterface
         return $oPkt;
     }
 
-    public function toString(): string { return 'AckChainKickoffPacket'; }
+    public function asString(): string { return 'AckChainKickoffPacket'; }
 }

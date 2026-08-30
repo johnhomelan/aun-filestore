@@ -1,0 +1,15 @@
+#!/usr/bin/php
+<?php
+if (file_exists(__DIR__ . '/../vendor/autoload.php')) {
+    require_once __DIR__ . '/../vendor/autoload.php';
+} else {
+    require_once '/usr/share/aun-filestored/vendor/autoload.php';
+}
+
+use Symfony\Component\Console\Application;
+use HomeLan\FileStore\Command\WebfaxImport;
+
+$oApp = new Application('webfax-import', '1.0.0');
+$oApp->addCommand(new WebfaxImport());
+$oApp->setDefaultCommand('webfax-import', true);
+$oApp->run();

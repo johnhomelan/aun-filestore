@@ -99,7 +99,7 @@ class AckRelayRawLocalAck implements EncapsulationInterface
         return $oPacket;
     }
 
-    public function toString(): string
+    public function asString(): string
     {
         return "AckRelayRawLocalAck({$this->iSrcNet}.{$this->iSrcStn})";
     }

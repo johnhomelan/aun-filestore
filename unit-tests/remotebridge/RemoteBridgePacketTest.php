@@ -141,7 +141,7 @@ class RemoteBridgePacketTest extends TestCase
     {
         $oPkt = $this->makePkt(2, 5, 1, 254, 0x97, 0, '');
         $oDecoded = BridgePacket::fromLine(BridgePacket::encode($oPkt));
-        $s = $oDecoded->toString();
+        $s = $oDecoded->asString();
         $this->assertStringContainsString('2.5', $s);
         $this->assertStringContainsString('1.254', $s);
     }

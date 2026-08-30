@@ -28,8 +28,24 @@ class TeletextTestable extends Teletext
     /** @var array<string, int|null> channel => last-imported unix timestamp, or absent for "never" */
     public array $stubTeefaxImportedTimes = [];
 
+    /** @var array<string, int|null> channel => last-imported unix timestamp, or absent for "never" */
+    public array $stubWeatherImportedTimes = [];
+
+    /** @var array<string, int|null> channel => last-imported unix timestamp, or absent for "never" */
+    public array $stubWebfaxImportedTimes = [];
+
+    /** @var array<string, int|null> channel => last-imported unix timestamp, or absent for "never" */
+    public array $stubTvGuideImportedTimes = [];
+
     public array $capSpawnedChannels = [];
+    public array $capSpawnedWeatherChannels = [];
+    public array $capSpawnedTvGuideChannels = [];
+    /** @var array<int, array{0:string,1:string}> service key => spawned channel, in call order */
+    public array $capSpawnedWebfaxCalls = [];
     public $stubTeefaxProcess = null;
+    public $stubWeatherProcess = null;
+    public $stubWebfaxProcess = null;
+    public $stubTvGuideProcess = null;
 
     public function __construct(\Psr\Log\LoggerInterface $oLogger, ?Storage $oStorage = null)
     {
@@ -37,6 +53,12 @@ class TeletextTestable extends Teletext
         $this->stubNow = new \DateTimeImmutable('2026-06-15 14:32:07');
         $this->stubTeefaxProcess = Mockery::mock(\React\ChildProcess\Process::class, ['dummy'])->makePartial();
         $this->stubTeefaxProcess->shouldReceive('start')->andReturnNull()->byDefault();
+        $this->stubWeatherProcess = Mockery::mock(\React\ChildProcess\Process::class, ['dummy'])->makePartial();
+        $this->stubWeatherProcess->shouldReceive('start')->andReturnNull()->byDefault();
+        $this->stubWebfaxProcess = Mockery::mock(\React\ChildProcess\Process::class, ['dummy'])->makePartial();
+        $this->stubWebfaxProcess->shouldReceive('start')->andReturnNull()->byDefault();
+        $this->stubTvGuideProcess = Mockery::mock(\React\ChildProcess\Process::class, ['dummy'])->makePartial();
+        $this->stubTvGuideProcess->shouldReceive('start')->andReturnNull()->byDefault();
     }
 
     protected function now(): \DateTimeImmutable
@@ -58,6 +80,39 @@ class TeletextTestable extends Teletext
     {
         $this->capSpawnedChannels[] = $sChannel;
         return $this->stubTeefaxProcess;
+    }
+
+    protected function _readWeatherImportedMarker(string $sChannel): ?int
+    {
+        return $this->stubWeatherImportedTimes[$sChannel] ?? null;
+    }
+
+    protected function _spawnWeatherImport(string $sChannel): \React\ChildProcess\Process
+    {
+        $this->capSpawnedWeatherChannels[] = $sChannel;
+        return $this->stubWeatherProcess;
+    }
+
+    protected function _readTvGuideImportedMarker(string $sChannel): ?int
+    {
+        return $this->stubTvGuideImportedTimes[$sChannel] ?? null;
+    }
+
+    protected function _spawnTvGuideImport(string $sChannel): \React\ChildProcess\Process
+    {
+        $this->capSpawnedTvGuideChannels[] = $sChannel;
+        return $this->stubTvGuideProcess;
+    }
+
+    protected function _readWebfaxImportedMarker(string $sChannel): ?int
+    {
+        return $this->stubWebfaxImportedTimes[$sChannel] ?? null;
+    }
+
+    protected function _spawnWebfaxImport(string $sServiceKey, string $sChannel): \React\ChildProcess\Process
+    {
+        $this->capSpawnedWebfaxCalls[] = [$sServiceKey, $sChannel];
+        return $this->stubWebfaxProcess;
     }
 }
 
@@ -92,6 +147,11 @@ class TeletextTest extends TestCase
         config::resetValue('teletext_max_users');
         config::resetValue('teletext_teefax_channel');
         config::resetValue('teletext_teefax_refresh_interval');
+        config::resetValue('teletext_weather_channel');
+        config::resetValue('teletext_weather_refresh_interval');
+        config::resetValue('teletext_webfax_webfax1_channel');
+        config::resetValue('teletext_webfax_webfax1_refresh_interval');
+        config::resetValue('teletext_webfax_webfax2_channel');
     }
 
     // -------------------------------------------------------------------------
@@ -832,5 +892,544 @@ class TeletextTest extends TestCase
         $this->_restoreServiceDispatcherSingleton();
         $this->assertFalse($bResult);
         $this->assertSame([], $this->oProvider->capSpawnedChannels);
+    }
+
+    // -------------------------------------------------------------------------
+    // Weather refresh (housekeeping-driven background import) — single
+    // source like Teefax, so mirrors its tests above rather than News's
+    // per-feed ones.
+    // -------------------------------------------------------------------------
+
+    public function testCheckWeatherRefreshDoesNothingWhenNoChannelConfigured(): void
+    {
+        config::overrideValue('teletext_weather_channel', '');
+        $this->oProvider->checkWeatherRefresh();
+        $this->assertSame([], $this->oProvider->capSpawnedWeatherChannels);
+    }
+
+    public function testCheckWeatherRefreshDoesNothingWhenChannelIsNotASingleDigit(): void
+    {
+        config::overrideValue('teletext_weather_channel', '99');
+        $this->oProvider->checkWeatherRefresh();
+        $this->assertSame([], $this->oProvider->capSpawnedWeatherChannels);
+    }
+
+    public function testCheckWeatherRefreshSpawnsWhenNeverImported(): void
+    {
+        config::overrideValue('teletext_weather_channel', '4');
+        $this->oProvider->stubWeatherImportedTimes = [];
+
+        $this->oProvider->checkWeatherRefresh();
+
+        $this->assertSame(['4'], $this->oProvider->capSpawnedWeatherChannels);
+    }
+
+    public function testCheckWeatherRefreshSkipsWhenRecentlyImported(): void
+    {
+        config::overrideValue('teletext_weather_channel', '4');
+        config::overrideValue('teletext_weather_refresh_interval', 3600);
+        $this->oProvider->stubNowTimestamp = 1_000_000;
+        $this->oProvider->stubWeatherImportedTimes = ['4' => 999_000]; // 1000s ago, well within the hour
+
+        $this->oProvider->checkWeatherRefresh();
+
+        $this->assertSame([], $this->oProvider->capSpawnedWeatherChannels);
+    }
+
+    public function testCheckWeatherRefreshSpawnsWhenIntervalHasElapsed(): void
+    {
+        config::overrideValue('teletext_weather_channel', '4');
+        config::overrideValue('teletext_weather_refresh_interval', 3600);
+        $this->oProvider->stubNowTimestamp = 1_010_000;
+        $this->oProvider->stubWeatherImportedTimes = ['4' => 1_000_000]; // 10000s ago, over the hour
+
+        $this->oProvider->checkWeatherRefresh();
+
+        $this->assertSame(['4'], $this->oProvider->capSpawnedWeatherChannels);
+    }
+
+    public function testCheckWeatherRefreshDoesNotSpawnWhileAlreadyRunning(): void
+    {
+        config::overrideValue('teletext_weather_channel', '4');
+        $this->oProvider->stubWeatherImportedTimes = [];
+
+        $oRunningProcess = Mockery::mock(\React\ChildProcess\Process::class, ['dummy'])->makePartial();
+        $oRunningProcess->shouldReceive('isRunning')->andReturn(true);
+
+        $oRefl = new ReflectionProperty(Teletext::class, 'oWeatherProcess');
+        $oRefl->setAccessible(true);
+        $oRefl->setValue($this->oProvider, $oRunningProcess);
+
+        $this->oProvider->checkWeatherRefresh();
+
+        $this->assertSame([], $this->oProvider->capSpawnedWeatherChannels);
+    }
+
+    public function testCheckWeatherRefreshSpawnsAgainOnceThePreviousProcessHasFinished(): void
+    {
+        config::overrideValue('teletext_weather_channel', '4');
+        $this->oProvider->stubWeatherImportedTimes = [];
+
+        $oFinishedProcess = Mockery::mock(\React\ChildProcess\Process::class, ['dummy'])->makePartial();
+        $oFinishedProcess->shouldReceive('isRunning')->andReturn(false);
+
+        $oRefl = new ReflectionProperty(Teletext::class, 'oWeatherProcess');
+        $oRefl->setAccessible(true);
+        $oRefl->setValue($this->oProvider, $oFinishedProcess);
+
+        $this->oProvider->checkWeatherRefresh();
+
+        $this->assertSame(['4'], $this->oProvider->capSpawnedWeatherChannels);
+    }
+
+    public function testIsWeatherRefreshDueTrueWhenNeverImported(): void
+    {
+        $this->oProvider->stubWeatherImportedTimes = [];
+        $this->assertTrue($this->oProvider->isWeatherRefreshDue('4'));
+    }
+
+    public function testIsWeatherRefreshDueFalseWithinTheInterval(): void
+    {
+        config::overrideValue('teletext_weather_refresh_interval', 3600);
+        $this->oProvider->stubNowTimestamp = 1_000_000;
+        $this->oProvider->stubWeatherImportedTimes = ['4' => 999_500];
+
+        $this->assertFalse($this->oProvider->isWeatherRefreshDue('4'));
+    }
+
+    public function testIsWeatherRefreshDueTrueOnceTheIntervalHasElapsed(): void
+    {
+        config::overrideValue('teletext_weather_refresh_interval', 3600);
+        $this->oProvider->stubNowTimestamp = 1_010_000;
+        $this->oProvider->stubWeatherImportedTimes = ['4' => 1_000_000];
+
+        $this->assertTrue($this->oProvider->isWeatherRefreshDue('4'));
+    }
+
+    public function testSpawnWeatherImportBuildsTheExpectedCommand(): void
+    {
+        $oLogger = new Logger('teletext-real-spawn-test');
+        $oLogger->pushHandler(new NullHandler());
+        $oProvider = new Teletext($oLogger, $this->oStorage);
+
+        $oMethod = new ReflectionMethod(Teletext::class, '_spawnWeatherImport');
+        $oMethod->setAccessible(true);
+        $oProcess = $oMethod->invoke($oProvider, '4');
+
+        $this->assertInstanceOf(\React\ChildProcess\Process::class, $oProcess);
+        $this->assertStringContainsString('weather-import', $oProcess->getCommand());
+        $this->assertMatchesRegularExpression("/--channel='?4'?/", $oProcess->getCommand());
+    }
+
+    // -------------------------------------------------------------------------
+    // triggerWeatherImport() — the admin "refresh now" action.
+    // -------------------------------------------------------------------------
+
+    public function testTriggerWeatherImportReturnsFalseWhenNoChannelConfigured(): void
+    {
+        config::overrideValue('teletext_weather_channel', '');
+        $this->_swapServiceDispatcherSingleton();
+
+        $bResult = $this->oProvider->triggerWeatherImport();
+
+        $this->_restoreServiceDispatcherSingleton();
+        $this->assertFalse($bResult);
+        $this->assertSame([], $this->oProvider->capSpawnedWeatherChannels);
+    }
+
+    public function testTriggerWeatherImportStartsAnImportRegardlessOfDueTime(): void
+    {
+        config::overrideValue('teletext_weather_channel', '4');
+        config::overrideValue('teletext_weather_refresh_interval', 3600);
+        $this->oProvider->stubNowTimestamp = 1_000_000;
+        $this->oProvider->stubWeatherImportedTimes = ['4' => 999_999]; // just imported, not due
+        $this->_swapServiceDispatcherSingleton();
+
+        $bResult = $this->oProvider->triggerWeatherImport();
+
+        $this->_restoreServiceDispatcherSingleton();
+        $this->assertTrue($bResult);
+        $this->assertSame(['4'], $this->oProvider->capSpawnedWeatherChannels);
+    }
+
+    public function testTriggerWeatherImportReturnsFalseWhileAlreadyRunning(): void
+    {
+        config::overrideValue('teletext_weather_channel', '4');
+        $this->_swapServiceDispatcherSingleton();
+
+        $oRunningProcess = Mockery::mock(\React\ChildProcess\Process::class, ['dummy'])->makePartial();
+        $oRunningProcess->shouldReceive('isRunning')->andReturn(true);
+        $oRefl = new ReflectionProperty(Teletext::class, 'oWeatherProcess');
+        $oRefl->setAccessible(true);
+        $oRefl->setValue($this->oProvider, $oRunningProcess);
+
+        $bResult = $this->oProvider->triggerWeatherImport();
+
+        $this->_restoreServiceDispatcherSingleton();
+        $this->assertFalse($bResult);
+        $this->assertSame([], $this->oProvider->capSpawnedWeatherChannels);
+    }
+
+    // -------------------------------------------------------------------------
+    // TV guide refresh (housekeeping-driven background import) — single
+    // source like Weather, so mirrors its tests above.
+    // -------------------------------------------------------------------------
+
+    public function testCheckTvGuideRefreshDoesNothingWhenNoChannelConfigured(): void
+    {
+        config::overrideValue('teletext_tvguide_channel', '');
+        $this->oProvider->checkTvGuideRefresh();
+        $this->assertSame([], $this->oProvider->capSpawnedTvGuideChannels);
+    }
+
+    public function testCheckTvGuideRefreshDoesNothingWhenChannelIsNotASingleDigit(): void
+    {
+        config::overrideValue('teletext_tvguide_channel', '99');
+        $this->oProvider->checkTvGuideRefresh();
+        $this->assertSame([], $this->oProvider->capSpawnedTvGuideChannels);
+    }
+
+    public function testCheckTvGuideRefreshSpawnsWhenNeverImported(): void
+    {
+        config::overrideValue('teletext_tvguide_channel', '4');
+        $this->oProvider->stubTvGuideImportedTimes = [];
+
+        $this->oProvider->checkTvGuideRefresh();
+
+        $this->assertSame(['4'], $this->oProvider->capSpawnedTvGuideChannels);
+    }
+
+    public function testCheckTvGuideRefreshSkipsWhenRecentlyImported(): void
+    {
+        config::overrideValue('teletext_tvguide_channel', '4');
+        config::overrideValue('teletext_tvguide_refresh_interval', 3600);
+        $this->oProvider->stubNowTimestamp = 1_000_000;
+        $this->oProvider->stubTvGuideImportedTimes = ['4' => 999_000]; // 1000s ago, well within the hour
+
+        $this->oProvider->checkTvGuideRefresh();
+
+        $this->assertSame([], $this->oProvider->capSpawnedTvGuideChannels);
+    }
+
+    public function testCheckTvGuideRefreshSpawnsWhenIntervalHasElapsed(): void
+    {
+        config::overrideValue('teletext_tvguide_channel', '4');
+        config::overrideValue('teletext_tvguide_refresh_interval', 3600);
+        $this->oProvider->stubNowTimestamp = 1_010_000;
+        $this->oProvider->stubTvGuideImportedTimes = ['4' => 1_000_000]; // 10000s ago, over the hour
+
+        $this->oProvider->checkTvGuideRefresh();
+
+        $this->assertSame(['4'], $this->oProvider->capSpawnedTvGuideChannels);
+    }
+
+    public function testCheckTvGuideRefreshDoesNotSpawnWhileAlreadyRunning(): void
+    {
+        config::overrideValue('teletext_tvguide_channel', '4');
+        $this->oProvider->stubTvGuideImportedTimes = [];
+
+        $oRunningProcess = Mockery::mock(\React\ChildProcess\Process::class, ['dummy'])->makePartial();
+        $oRunningProcess->shouldReceive('isRunning')->andReturn(true);
+
+        $oRefl = new ReflectionProperty(Teletext::class, 'oTvGuideProcess');
+        $oRefl->setAccessible(true);
+        $oRefl->setValue($this->oProvider, $oRunningProcess);
+
+        $this->oProvider->checkTvGuideRefresh();
+
+        $this->assertSame([], $this->oProvider->capSpawnedTvGuideChannels);
+    }
+
+    public function testCheckTvGuideRefreshSpawnsAgainOnceThePreviousProcessHasFinished(): void
+    {
+        config::overrideValue('teletext_tvguide_channel', '4');
+        $this->oProvider->stubTvGuideImportedTimes = [];
+
+        $oFinishedProcess = Mockery::mock(\React\ChildProcess\Process::class, ['dummy'])->makePartial();
+        $oFinishedProcess->shouldReceive('isRunning')->andReturn(false);
+
+        $oRefl = new ReflectionProperty(Teletext::class, 'oTvGuideProcess');
+        $oRefl->setAccessible(true);
+        $oRefl->setValue($this->oProvider, $oFinishedProcess);
+
+        $this->oProvider->checkTvGuideRefresh();
+
+        $this->assertSame(['4'], $this->oProvider->capSpawnedTvGuideChannels);
+    }
+
+    public function testIsTvGuideRefreshDueTrueWhenNeverImported(): void
+    {
+        $this->oProvider->stubTvGuideImportedTimes = [];
+        $this->assertTrue($this->oProvider->isTvGuideRefreshDue('4'));
+    }
+
+    public function testIsTvGuideRefreshDueFalseWithinTheInterval(): void
+    {
+        config::overrideValue('teletext_tvguide_refresh_interval', 3600);
+        $this->oProvider->stubNowTimestamp = 1_000_000;
+        $this->oProvider->stubTvGuideImportedTimes = ['4' => 999_500];
+
+        $this->assertFalse($this->oProvider->isTvGuideRefreshDue('4'));
+    }
+
+    public function testIsTvGuideRefreshDueTrueOnceTheIntervalHasElapsed(): void
+    {
+        config::overrideValue('teletext_tvguide_refresh_interval', 3600);
+        $this->oProvider->stubNowTimestamp = 1_010_000;
+        $this->oProvider->stubTvGuideImportedTimes = ['4' => 1_000_000];
+
+        $this->assertTrue($this->oProvider->isTvGuideRefreshDue('4'));
+    }
+
+    public function testSpawnTvGuideImportBuildsTheExpectedCommand(): void
+    {
+        $oLogger = new Logger('teletext-real-spawn-test');
+        $oLogger->pushHandler(new NullHandler());
+        $oProvider = new Teletext($oLogger, $this->oStorage);
+
+        $oMethod = new ReflectionMethod(Teletext::class, '_spawnTvGuideImport');
+        $oMethod->setAccessible(true);
+        $oProcess = $oMethod->invoke($oProvider, '4');
+
+        $this->assertInstanceOf(\React\ChildProcess\Process::class, $oProcess);
+        $this->assertStringContainsString('tv-guide-import', $oProcess->getCommand());
+        $this->assertMatchesRegularExpression("/--channel='?4'?/", $oProcess->getCommand());
+    }
+
+    // -------------------------------------------------------------------------
+    // triggerTvGuideImport() — the admin "refresh now" action.
+    // -------------------------------------------------------------------------
+
+    public function testTriggerTvGuideImportReturnsFalseWhenNoChannelConfigured(): void
+    {
+        config::overrideValue('teletext_tvguide_channel', '');
+        $this->_swapServiceDispatcherSingleton();
+
+        $bResult = $this->oProvider->triggerTvGuideImport();
+
+        $this->_restoreServiceDispatcherSingleton();
+        $this->assertFalse($bResult);
+        $this->assertSame([], $this->oProvider->capSpawnedTvGuideChannels);
+    }
+
+    public function testTriggerTvGuideImportStartsAnImportRegardlessOfDueTime(): void
+    {
+        config::overrideValue('teletext_tvguide_channel', '4');
+        config::overrideValue('teletext_tvguide_refresh_interval', 3600);
+        $this->oProvider->stubNowTimestamp = 1_000_000;
+        $this->oProvider->stubTvGuideImportedTimes = ['4' => 999_999]; // just imported, not due
+        $this->_swapServiceDispatcherSingleton();
+
+        $bResult = $this->oProvider->triggerTvGuideImport();
+
+        $this->_restoreServiceDispatcherSingleton();
+        $this->assertTrue($bResult);
+        $this->assertSame(['4'], $this->oProvider->capSpawnedTvGuideChannels);
+    }
+
+    public function testTriggerTvGuideImportReturnsFalseWhileAlreadyRunning(): void
+    {
+        config::overrideValue('teletext_tvguide_channel', '4');
+        $this->_swapServiceDispatcherSingleton();
+
+        $oRunningProcess = Mockery::mock(\React\ChildProcess\Process::class, ['dummy'])->makePartial();
+        $oRunningProcess->shouldReceive('isRunning')->andReturn(true);
+        $oRefl = new ReflectionProperty(Teletext::class, 'oTvGuideProcess');
+        $oRefl->setAccessible(true);
+        $oRefl->setValue($this->oProvider, $oRunningProcess);
+
+        $bResult = $this->oProvider->triggerTvGuideImport();
+
+        $this->_restoreServiceDispatcherSingleton();
+        $this->assertFalse($bResult);
+        $this->assertSame([], $this->oProvider->capSpawnedTvGuideChannels);
+    }
+
+    // -------------------------------------------------------------------------
+    // Webfax refresh (housekeeping-driven background import) — per-service
+    // like News (Webfax 1 and Webfax 2 are independent sources, each with
+    // its own channel/config and its own "already running" guard), so these
+    // mirror the News shape rather than Teefax's/Weather's single-source one.
+    // -------------------------------------------------------------------------
+
+    public function testCheckWebfaxRefreshDoesNothingWhenNoChannelConfigured(): void
+    {
+        config::overrideValue('teletext_webfax_webfax1_channel', '');
+        $this->oProvider->checkWebfaxRefresh('webfax1');
+        $this->assertSame([], $this->oProvider->capSpawnedWebfaxCalls);
+    }
+
+    public function testCheckWebfaxRefreshDoesNothingWhenChannelIsNotASingleDigit(): void
+    {
+        config::overrideValue('teletext_webfax_webfax1_channel', '99');
+        $this->oProvider->checkWebfaxRefresh('webfax1');
+        $this->assertSame([], $this->oProvider->capSpawnedWebfaxCalls);
+    }
+
+    public function testCheckWebfaxRefreshSpawnsWhenNeverImported(): void
+    {
+        config::overrideValue('teletext_webfax_webfax1_channel', '7');
+        $this->oProvider->stubWebfaxImportedTimes = [];
+
+        $this->oProvider->checkWebfaxRefresh('webfax1');
+
+        $this->assertSame([['webfax1', '7']], $this->oProvider->capSpawnedWebfaxCalls);
+    }
+
+    public function testCheckWebfaxRefreshSkipsWhenRecentlyImported(): void
+    {
+        config::overrideValue('teletext_webfax_webfax1_channel', '7');
+        config::overrideValue('teletext_webfax_webfax1_refresh_interval', 3600);
+        $this->oProvider->stubNowTimestamp = 1_000_000;
+        $this->oProvider->stubWebfaxImportedTimes = ['7' => 999_000]; // 1000s ago, well within the hour
+
+        $this->oProvider->checkWebfaxRefresh('webfax1');
+
+        $this->assertSame([], $this->oProvider->capSpawnedWebfaxCalls);
+    }
+
+    public function testCheckWebfaxRefreshSpawnsWhenIntervalHasElapsed(): void
+    {
+        config::overrideValue('teletext_webfax_webfax1_channel', '7');
+        config::overrideValue('teletext_webfax_webfax1_refresh_interval', 3600);
+        $this->oProvider->stubNowTimestamp = 1_010_000;
+        $this->oProvider->stubWebfaxImportedTimes = ['7' => 1_000_000]; // 10000s ago, over the hour
+
+        $this->oProvider->checkWebfaxRefresh('webfax1');
+
+        $this->assertSame([['webfax1', '7']], $this->oProvider->capSpawnedWebfaxCalls);
+    }
+
+    public function testCheckWebfaxRefreshUsesEachServicesOwnChannelAndInterval(): void
+    {
+        config::overrideValue('teletext_webfax_webfax1_channel', '7');
+        config::overrideValue('teletext_webfax_webfax2_channel', '8');
+        $this->oProvider->stubWebfaxImportedTimes = [];
+
+        $this->oProvider->checkWebfaxRefresh('webfax1');
+        $this->oProvider->checkWebfaxRefresh('webfax2');
+
+        $this->assertSame([['webfax1', '7'], ['webfax2', '8']], $this->oProvider->capSpawnedWebfaxCalls);
+    }
+
+    public function testCheckWebfaxRefreshDoesNotSpawnWhileAlreadyRunning(): void
+    {
+        config::overrideValue('teletext_webfax_webfax1_channel', '7');
+        $this->oProvider->stubWebfaxImportedTimes = [];
+
+        $oRunningProcess = Mockery::mock(\React\ChildProcess\Process::class, ['dummy'])->makePartial();
+        $oRunningProcess->shouldReceive('isRunning')->andReturn(true);
+
+        $oRefl = new ReflectionProperty(Teletext::class, 'aWebfaxProcesses');
+        $oRefl->setAccessible(true);
+        $oRefl->setValue($this->oProvider, ['webfax1' => $oRunningProcess]);
+
+        $this->oProvider->checkWebfaxRefresh('webfax1');
+
+        $this->assertSame([], $this->oProvider->capSpawnedWebfaxCalls);
+    }
+
+    public function testCheckWebfaxRefreshOneServiceRunningDoesNotBlockTheOther(): void
+    {
+        config::overrideValue('teletext_webfax_webfax1_channel', '7');
+        config::overrideValue('teletext_webfax_webfax2_channel', '8');
+        $this->oProvider->stubWebfaxImportedTimes = [];
+
+        $oRunningProcess = Mockery::mock(\React\ChildProcess\Process::class, ['dummy'])->makePartial();
+        $oRunningProcess->shouldReceive('isRunning')->andReturn(true);
+
+        $oRefl = new ReflectionProperty(Teletext::class, 'aWebfaxProcesses');
+        $oRefl->setAccessible(true);
+        $oRefl->setValue($this->oProvider, ['webfax1' => $oRunningProcess]);
+
+        $this->oProvider->checkWebfaxRefresh('webfax1');
+        $this->oProvider->checkWebfaxRefresh('webfax2');
+
+        $this->assertSame([['webfax2', '8']], $this->oProvider->capSpawnedWebfaxCalls);
+    }
+
+    public function testIsWebfaxRefreshDueTrueWhenNeverImported(): void
+    {
+        $this->oProvider->stubWebfaxImportedTimes = [];
+        $this->assertTrue($this->oProvider->isWebfaxRefreshDue('webfax1', '7'));
+    }
+
+    public function testIsWebfaxRefreshDueFalseWithinTheInterval(): void
+    {
+        config::overrideValue('teletext_webfax_webfax1_refresh_interval', 3600);
+        $this->oProvider->stubNowTimestamp = 1_000_000;
+        $this->oProvider->stubWebfaxImportedTimes = ['7' => 999_500];
+
+        $this->assertFalse($this->oProvider->isWebfaxRefreshDue('webfax1', '7'));
+    }
+
+    public function testIsWebfaxRefreshDueTrueOnceTheIntervalHasElapsed(): void
+    {
+        config::overrideValue('teletext_webfax_webfax1_refresh_interval', 3600);
+        $this->oProvider->stubNowTimestamp = 1_010_000;
+        $this->oProvider->stubWebfaxImportedTimes = ['7' => 1_000_000];
+
+        $this->assertTrue($this->oProvider->isWebfaxRefreshDue('webfax1', '7'));
+    }
+
+    public function testSpawnWebfaxImportBuildsTheExpectedCommand(): void
+    {
+        $oLogger = new Logger('teletext-real-spawn-test');
+        $oLogger->pushHandler(new NullHandler());
+        $oProvider = new Teletext($oLogger, $this->oStorage);
+
+        $oMethod = new ReflectionMethod(Teletext::class, '_spawnWebfaxImport');
+        $oMethod->setAccessible(true);
+        $oProcess = $oMethod->invoke($oProvider, 'webfax1', '7');
+
+        $this->assertInstanceOf(\React\ChildProcess\Process::class, $oProcess);
+        $this->assertStringContainsString('webfax-import', $oProcess->getCommand());
+        $this->assertMatchesRegularExpression("/--service='?webfax1'?/", $oProcess->getCommand());
+        $this->assertMatchesRegularExpression("/--channel='?7'?/", $oProcess->getCommand());
+    }
+
+    public function testTriggerWebfaxImportReturnsFalseWhenNoChannelConfigured(): void
+    {
+        config::overrideValue('teletext_webfax_webfax1_channel', '');
+        $this->_swapServiceDispatcherSingleton();
+
+        $bResult = $this->oProvider->triggerWebfaxImport('webfax1');
+
+        $this->_restoreServiceDispatcherSingleton();
+        $this->assertFalse($bResult);
+        $this->assertSame([], $this->oProvider->capSpawnedWebfaxCalls);
+    }
+
+    public function testTriggerWebfaxImportStartsAnImportRegardlessOfDueTime(): void
+    {
+        config::overrideValue('teletext_webfax_webfax1_channel', '7');
+        config::overrideValue('teletext_webfax_webfax1_refresh_interval', 3600);
+        $this->oProvider->stubNowTimestamp = 1_000_000;
+        $this->oProvider->stubWebfaxImportedTimes = ['7' => 999_999]; // just imported, not due
+        $this->_swapServiceDispatcherSingleton();
+
+        $bResult = $this->oProvider->triggerWebfaxImport('webfax1');
+
+        $this->_restoreServiceDispatcherSingleton();
+        $this->assertTrue($bResult);
+        $this->assertSame([['webfax1', '7']], $this->oProvider->capSpawnedWebfaxCalls);
+    }
+
+    public function testTriggerWebfaxImportReturnsFalseWhileAlreadyRunning(): void
+    {
+        config::overrideValue('teletext_webfax_webfax1_channel', '7');
+        $this->_swapServiceDispatcherSingleton();
+
+        $oRunningProcess = Mockery::mock(\React\ChildProcess\Process::class, ['dummy'])->makePartial();
+        $oRunningProcess->shouldReceive('isRunning')->andReturn(true);
+        $oRefl = new ReflectionProperty(Teletext::class, 'aWebfaxProcesses');
+        $oRefl->setAccessible(true);
+        $oRefl->setValue($this->oProvider, ['webfax1' => $oRunningProcess]);
+
+        $bResult = $this->oProvider->triggerWebfaxImport('webfax1');
+
+        $this->_restoreServiceDispatcherSingleton();
+        $this->assertFalse($bResult);
+        $this->assertSame([], $this->oProvider->capSpawnedWebfaxCalls);
     }
 }

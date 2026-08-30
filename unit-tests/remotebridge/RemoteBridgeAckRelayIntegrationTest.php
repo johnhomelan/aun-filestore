@@ -83,7 +83,7 @@ class RawLocalAckPacket implements EncapsulationInterface
         return $oPkt;
     }
 
-    public function toString(): string { return "RawLocalAckPacket({$this->iSrcNet}.{$this->iSrcStn})"; }
+    public function asString(): string { return "RawLocalAckPacket({$this->iSrcNet}.{$this->iSrcStn})"; }
 }
 
 class RemoteBridgeAckRelayIntegrationTest extends TestCase

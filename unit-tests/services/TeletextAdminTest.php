@@ -183,4 +183,28 @@ class TeletextAdminTest extends TestCase
         $aUrls = array_column($this->oAdmin->getCommands(), 'url');
         $this->assertContains('/service/teletext/teefax-refresh', $aUrls);
     }
+
+    public function testGetCommandsIncludesRefreshWeatherNow(): void
+    {
+        $aUrls = array_column($this->oAdmin->getCommands(), 'url');
+        $this->assertContains('/service/teletext/weather-refresh', $aUrls);
+    }
+
+    public function testGetCommandsIncludesRefreshTvGuideNow(): void
+    {
+        $aUrls = array_column($this->oAdmin->getCommands(), 'url');
+        $this->assertContains('/service/teletext/tvguide-refresh', $aUrls);
+    }
+
+    public function testGetCommandsIncludesRefreshWebfax1Now(): void
+    {
+        $aUrls = array_column($this->oAdmin->getCommands(), 'url');
+        $this->assertContains('/service/teletext/webfax-refresh?service=webfax1', $aUrls);
+    }
+
+    public function testGetCommandsIncludesRefreshWebfax2Now(): void
+    {
+        $aUrls = array_column($this->oAdmin->getCommands(), 'url');
+        $this->assertContains('/service/teletext/webfax-refresh?service=webfax2', $aUrls);
+    }
 }

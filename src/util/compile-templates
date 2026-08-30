@@ -1,0 +1,69 @@
+#!/usr/bin/php
+<?php
+
+/*
+ * Ahead-of-time compile every Smarty template used by the admin web front ends
+ * into a shipped `templates_c/` directory beside each `templates/` directory.
+ *
+ * Once those directories exist, HomeLan\FileStore\Admin\Service\Smarty (and the
+ * ShareFs one) run Smarty with compile_check off and never invoke the Smarty
+ * template compiler at run time - which is what lets the code run from a phar,
+ * or be handed to an ahead-of-time PHP compiler, without the compiler and its
+ * filesystem writes.
+ *
+ * Run it after `composer install`. The build scripts (packaging/phar,
+ * packaging/typephp) call it automatically.
+ */
+
+if (file_exists(__DIR__ . '/../vendor/autoload.php')) {
+    require_once __DIR__ . '/../vendor/autoload.php';
+} else {
+    require_once '/usr/share/aun-filestored/vendor/autoload.php';
+}
+
+use HomeLan\FileStore\Admin\Service\Smarty as AdminSmarty;
+use HomeLan\FileStore\ShareFs\Admin\Service\Smarty as ShareFsSmarty;
+use Smarty\Smarty;
+
+$aClasses = __DIR__ . '/../include/classes';
+
+$aTargets = [
+    'Admin'   => [new AdminSmarty(),   $aClasses . '/Admin/templates_c'],
+    'ShareFs' => [new ShareFsSmarty(), $aClasses . '/ShareFs/Admin/templates_c'],
+];
+
+$iTotal = 0;
+
+foreach ($aTargets as $sName => [$oService, $sCompiledDir]) {
+    if (!is_dir($sCompiledDir) && !mkdir($sCompiledDir, 0755, true) && !is_dir($sCompiledDir)) {
+        fwrite(STDERR, "compile-templates: cannot create {$sCompiledDir}\n");
+        exit(1);
+    }
+
+    // Clean rebuild - drop any stale compiled files.
+    foreach (glob($sCompiledDir . '/*.php') ?: [] as $sStale) {
+        unlink($sStale);
+    }
+
+    // getSmarty() now sees templates_c/ and switches to compile-off mode; undo
+    // that just for this compilation pass.
+    $oSmarty = $oService->getSmarty();
+    $oSmarty->setForceCompile(true);
+    $oSmarty->setCompileCheck(Smarty::COMPILECHECK_ON);
+
+    // compileAllTemplates() prints a line per template to stdout; keep the
+    // build output quiet unless something failed.
+    ob_start();
+    $iCount = (int) $oSmarty->compileAllTemplates('.tpl', true);
+    $sLog = (string) ob_get_clean();
+
+    if (str_contains($sLog, '------>Error')) {
+        fwrite(STDERR, "compile-templates: {$sName} had compilation errors:\n{$sLog}\n");
+        exit(1);
+    }
+
+    $iTotal += $iCount;
+    fwrite(STDERR, sprintf("compile-templates: %-8s %2d templates -> %s\n", $sName, $iCount, realpath($sCompiledDir) ?: $sCompiledDir));
+}
+
+fwrite(STDERR, "compile-templates: {$iTotal} templates compiled\n");

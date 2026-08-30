@@ -187,6 +187,39 @@ class NewsImportTest extends TestCase
             $oCommand->capDownloadUrls
         );
         $this->assertFileExists($this->sStoreDir . '/2/100.dat');
+        $this->assertFileExists($this->sStoreDir . '/2/101.dat');
+    }
+
+    // -------------------------------------------------------------------------
+    // BBC's channel-hub page - see NewsFeedDefinitions::all()['bbc']->aChannelIndexEntries
+    // -------------------------------------------------------------------------
+
+    public function testBbcChannelHubIndexLinksNewsAndWeather(): void
+    {
+        $oCommand = new TestableNewsImport();
+        $oCommand->stubFeed = $this->_feedXml([]);
+        $this->_run($oCommand, ['--feed' => 'bbc']);
+
+        $sHubPlain = preg_replace('/[\x00-\x1f]/', '', file_get_contents($this->sStoreDir . '/2/100.dat'));
+        $this->assertStringContainsString('News', $sHubPlain);
+        $this->assertStringContainsString('101', $sHubPlain);
+        $this->assertStringContainsString('Weather', $sHubPlain);
+        $this->assertStringContainsString('600', $sHubPlain);
+    }
+
+    public function testGuardianAndSkyGetNoChannelHubPage(): void
+    {
+        foreach (['guardian' => '3', 'sky' => '5'] as $sFeed => $sChannel) {
+            $oCommand = new TestableNewsImport();
+            $oCommand->stubFeed = $this->_feedXml([]);
+            $this->_run($oCommand, ['--feed' => $sFeed]);
+
+            // Their own index stays on page 100, not shifted to 101 for a
+            // hub page - NewsFeedDefinitions gives them no
+            // aChannelIndexEntries of their own.
+            $this->assertFileExists($this->sStoreDir . '/' . $sChannel . '/100.dat', $sFeed . ' index');
+            $this->assertFileDoesNotExist($this->sStoreDir . '/' . $sChannel . '/101.dat', $sFeed . ' has no hub-pushed index');
+        }
     }
 
     public function testBbcSourceOptionOverridesCategoryFeedsWithASingleDownload(): void
@@ -213,12 +246,12 @@ class NewsImportTest extends TestCase
         $oTester = $this->_run($oCommand, ['--feed' => 'bbc']);
 
         $this->assertSame(0, $oTester->getStatusCode());
-        $this->assertFileExists($this->sStoreDir . '/2/101.dat');
-        $this->assertFileDoesNotExist($this->sStoreDir . '/2/102.dat', 'the shared story must be deduplicated, not imported once per category feed');
+        $this->assertFileExists($this->sStoreDir . '/2/102.dat');
+        $this->assertFileDoesNotExist($this->sStoreDir . '/2/103.dat', 'the shared story must be deduplicated, not imported once per category feed');
 
         $aCategories = array_keys(NewsFeedDefinitions::get('bbc')->aCategoryFeeds);
         $sFirstCategory = $aCategories[0];
-        $sIndexPlain = preg_replace('/[\x00-\x1f]/', '', file_get_contents($this->sStoreDir . '/2/100.dat'));
+        $sIndexPlain = preg_replace('/[\x00-\x1f]/', '', file_get_contents($this->sStoreDir . '/2/101.dat'));
         $this->assertStringContainsString(strtoupper($sFirstCategory), $sIndexPlain);
     }
 
@@ -263,15 +296,21 @@ class NewsImportTest extends TestCase
         $this->assertFileExists($this->sStoreDir . '/2/100.dat');
         $this->assertFileExists($this->sStoreDir . '/2/101.dat');
         $this->assertFileExists($this->sStoreDir . '/2/102.dat');
+        $this->assertFileExists($this->sStoreDir . '/2/103.dat');
 
-        $sIndex = file_get_contents($this->sStoreDir . '/2/100.dat');
-        $this->assertSame(1024, strlen($sIndex));
+        $sHub = file_get_contents($this->sStoreDir . '/2/100.dat');
+        $this->assertSame(1024, strlen($sHub));
+        $sHubPlain = preg_replace('/[\x00-\x1f]/', '', $sHub);
+        $this->assertStringContainsString('101', $sHubPlain);
+        $this->assertStringContainsString('600', $sHubPlain);
+
+        $sIndex = file_get_contents($this->sStoreDir . '/2/101.dat');
         $sIndexPlain = preg_replace('/[\x00-\x1f]/', '', $sIndex);
         $this->assertStringContainsString('First headline', $sIndexPlain);
         $this->assertStringContainsString('Second headline', $sIndexPlain);
         $this->assertStringContainsString('BBC NEWS', $sIndexPlain);
 
-        $sStory = file_get_contents($this->sStoreDir . '/2/101.dat');
+        $sStory = file_get_contents($this->sStoreDir . '/2/102.dat');
         $sStoryPlain = preg_replace('/[\x00-\x1f]/', '', $sStory);
         $this->assertStringContainsString('First headline', $sStoryPlain);
         $this->assertStringContainsString('First body.', $sStoryPlain);
@@ -293,10 +332,10 @@ class NewsImportTest extends TestCase
         $this->assertStringContainsString('Skipping', $oTester->getDisplay());
         $this->assertStringContainsString('connection reset', $oTester->getDisplay());
 
-        $this->assertFileExists($this->sStoreDir . '/2/101.dat');
-        $this->assertFileDoesNotExist($this->sStoreDir . '/2/102.dat');
+        $this->assertFileExists($this->sStoreDir . '/2/102.dat');
+        $this->assertFileDoesNotExist($this->sStoreDir . '/2/103.dat');
 
-        $sIndexPlain = preg_replace('/[\x00-\x1f]/', '', file_get_contents($this->sStoreDir . '/2/100.dat'));
+        $sIndexPlain = preg_replace('/[\x00-\x1f]/', '', file_get_contents($this->sStoreDir . '/2/101.dat'));
         $this->assertStringContainsString('Working story', $sIndexPlain);
         $this->assertStringNotContainsString('Broken story', $sIndexPlain);
     }
@@ -313,8 +352,8 @@ class NewsImportTest extends TestCase
 
         $this->_run($oCommand, ['--feed' => 'bbc']);
 
-        $this->assertFileExists($this->sStoreDir . '/2/101.dat');
-        $this->assertFileDoesNotExist($this->sStoreDir . '/2/102.dat');
+        $this->assertFileExists($this->sStoreDir . '/2/102.dat');
+        $this->assertFileDoesNotExist($this->sStoreDir . '/2/103.dat');
     }
 
     public function testDryRunWritesNothing(): void
@@ -347,8 +386,30 @@ class NewsImportTest extends TestCase
         $this->assertGreaterThanOrEqual($iBefore, (int) trim(file_get_contents($this->sStoreDir . '/2/.imported')));
     }
 
-    public function testAtomicInstallReplacesPreviousContents(): void
+    public function testInstallOverwritesAPageThisRunRegenerates(): void
     {
+        mkdir($this->sStoreDir . '/2', 0755, true);
+        file_put_contents($this->sStoreDir . '/2/102.dat', 'stale page');
+
+        $oCommand = new TestableNewsImport();
+        $oCommand->stubFeed = $this->_feedXml([
+            ['title' => 'Story one', 'link' => 'https://example.invalid/news/articles/one'],
+        ]);
+        $oCommand->articleFixtures['https://example.invalid/news/articles/one'] = $this->_articleHtml('Story one', 'Body.');
+
+        $this->_run($oCommand, ['--feed' => 'bbc']);
+
+        $sPage = file_get_contents($this->sStoreDir . '/2/102.dat');
+        $this->assertNotSame('stale page', $sPage);
+        $this->assertStringContainsString('Story one', preg_replace('/[\x00-\x1f]/', '', $sPage));
+    }
+
+    public function testInstallDoesNotDeleteAPageThisRunDoesNotRegenerate(): void
+    {
+        // A previously-installed page number this run has no story for
+        // (e.g. it rotated off teletext_news_bbc_max_stories, or its
+        // article failed to fetch) must be left in place, not deleted - see
+        // NewsImport's class docblock and _installChannel().
         mkdir($this->sStoreDir . '/2', 0755, true);
         file_put_contents($this->sStoreDir . '/2/999.dat', 'stale page');
 
@@ -360,7 +421,8 @@ class NewsImportTest extends TestCase
 
         $this->_run($oCommand, ['--feed' => 'bbc']);
 
-        $this->assertFileDoesNotExist($this->sStoreDir . '/2/999.dat');
-        $this->assertFileExists($this->sStoreDir . '/2/101.dat');
+        $this->assertFileExists($this->sStoreDir . '/2/999.dat');
+        $this->assertSame('stale page', file_get_contents($this->sStoreDir . '/2/999.dat'));
+        $this->assertFileExists($this->sStoreDir . '/2/102.dat');
     }
 }

@@ -9,66 +9,40 @@ variables:
   REPO_IMAGE: registry.home-lan.co.uk/aun-filestore
   IMAGE_VERSION: 2.0.2
   
-phpunit_phpstan_php81:
-   image: 
-    name: registry.home-lan.co.uk/php-81-testing:8.1.1
+# The codebase needs PHP 8.3 to parse (typed class constants) and its pinned
+# Symfony 8.x dependencies need PHP >= 8.4.1, so 8.4 is the only supported line.
+phpunit_phpstan_php84:
+   image:
+    name: registry.home-lan.co.uk/php-84-testing:latest
    stage: test
    script:
      - cat src/composer.json
      - cd src; composer --no-scripts install; cd ..
      - ./src/vendor/bin/phpstan analyse -n --no-ansi --no-progress src/include --memory-limit 512M src/filestored --level 10
 
-composer_dependency_analyser_php81:
-   image: 
-    name: registry.home-lan.co.uk/php-81-testing:8.1.1
+composer_dependency_analyser_php84:
+   image:
+    name: registry.home-lan.co.uk/php-84-testing:latest
    stage: test
    script:
      - cd src; composer --no-scripts install; cd ..
      - ./src/vendor/bin/composer-dependency-analyser --config  src/dev-tools/composer-dependency-analyser.php  --composer-json src/composer.json
 
 
-phpunit_tests_php83:
-   image: 
-    name: registry.home-lan.co.uk/php-83-testing:latest
+phpunit_tests_php84:
+   image:
+    name: registry.home-lan.co.uk/php-84-testing:latest
    stage: test
    script:
      - cd src; composer --no-scripts install; cd ..
      - mkdir coverage
-     - cp test-config/* . 
+     - cp test-config/* .
      - ./src/vendor/bin/phpunit --log-junit junit.xml --coverage-xml coverage --coverage-text --colors=never
    artifacts:
      paths:
       - coverage
-      - junit.xml   
+      - junit.xml
 
-phpunit_tests_php82:
-   image: 
-    name: registry.home-lan.co.uk/php-82-testing:latest
-   stage: test
-   script:
-     - cd src; composer --no-scripts install; cd ..
-     - mkdir coverage
-     - cp test-config/* . 
-     - ./src/vendor/bin/phpunit --log-junit junit.xml --coverage-xml coverage --coverage-text --colors=never
-   artifacts:
-     paths:
-      - coverage
-      - junit.xml   
-
-phpunit_tests_php81:
-   image: 
-    name: registry.home-lan.co.uk/php-81-testing:latest
-   stage: test
-   script:
-     - cd src; composer --no-scripts install; cd ..
-     - mkdir coverage
-     - cp test-config/* . 
-     - ./src/vendor/bin/phpunit --log-junit junit.xml --coverage-xml coverage --coverage-text --colors=never
-   artifacts:
-     paths:
-      - coverage
-      - junit.xml   
-      
 container_build:
   image: 
     name: gcr.io/kaniko-project/executor:v1.22.0-debug

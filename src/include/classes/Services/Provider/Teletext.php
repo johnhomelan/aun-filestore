@@ -12,6 +12,7 @@ use HomeLan\FileStore\Services\Provider\AdminInterface;
 use HomeLan\FileStore\Services\Provider\Teletext\Storage;
 use HomeLan\FileStore\Services\Provider\Teletext\Admin;
 use HomeLan\FileStore\Services\Provider\Teletext\NewsFeedDefinitions;
+use HomeLan\FileStore\Services\Provider\Teletext\WebfaxSourceDefinitions;
 use HomeLan\FileStore\Services\ServiceDispatcher;
 use HomeLan\FileStore\Messages\TeletextRequest;
 use HomeLan\FileStore\Messages\TeletextReply;
@@ -111,6 +112,32 @@ class Teletext implements ProviderInterface {
 	*/
 	protected array $aNewsProcesses = [];
 
+	/**
+	 * The currently in-flight weather import background process, if any —
+	 * see checkWeatherRefresh(). Single-source, same as $oTeefaxProcess
+	 * (unlike News, weather has one BBC source covering every configured
+	 * location in a single WeatherImport run, not several selectable feeds).
+	*/
+	protected ?Process $oWeatherProcess = null;
+
+	/**
+	 * The currently in-flight TV guide import background process, if any -
+	 * see checkTvGuideRefresh(). Single-source, same as $oWeatherProcess
+	 * (one TVHeadend instance covering every configured channel in a single
+	 * TvGuideImport run, not several selectable feeds).
+	*/
+	protected ?Process $oTvGuideProcess = null;
+
+	/**
+	 * The currently in-flight Webfax import background process for each
+	 * service (see WebfaxSourceDefinitions), keyed by service key. Same
+	 * "is one already running" guard as $aNewsProcesses, kept per-service
+	 * so one service's slow run never blocks the other's.
+	 *
+	 * @var array<string, ?Process>
+	*/
+	protected array $aWebfaxProcesses = [];
+
 	public function __construct(protected readonly \Psr\Log\LoggerInterface $oLogger, ?Storage $oStorage = null)
 	{
 		$this->oStorage = $oStorage ?? new Storage(config::getValueAsString('teletext_store_dir'));
@@ -165,6 +192,17 @@ class Teletext implements ProviderInterface {
 		foreach (NewsFeedDefinitions::keys() as $sFeedKey) {
 			$oServiceDispatcher->addHousingKeepingTask(function () use ($_this, $oLoop, $sFeedKey) {
 				$_this->checkNewsRefresh($sFeedKey, $oLoop);
+			});
+		}
+		$oServiceDispatcher->addHousingKeepingTask(function () use ($_this, $oLoop) {
+			$_this->checkWeatherRefresh($oLoop);
+		});
+		$oServiceDispatcher->addHousingKeepingTask(function () use ($_this, $oLoop) {
+			$_this->checkTvGuideRefresh($oLoop);
+		});
+		foreach (WebfaxSourceDefinitions::keys() as $sServiceKey) {
+			$oServiceDispatcher->addHousingKeepingTask(function () use ($_this, $oLoop, $sServiceKey) {
+				$_this->checkWebfaxRefresh($sServiceKey, $oLoop);
 			});
 		}
 	}
@@ -697,6 +735,324 @@ class Teletext implements ProviderInterface {
 	{
 		$sBinary = dirname(__DIR__, 4) . '/util/news-import';
 		$sCommand = escapeshellarg($sBinary) . ' --feed=' . escapeshellarg($sFeedKey) . ' --channel=' . escapeshellarg($sChannel);
+		if (defined('CONFIG_CONF_FILE_PATH') && is_scalar(CONFIG_CONF_FILE_PATH)) {
+			$sCommand .= ' --config=' . escapeshellarg((string) CONFIG_CONF_FILE_PATH);
+		}
+		return new Process($sCommand);
+	}
+
+	// -------------------------------------------------------------------------
+	// Weather refresh (housekeeping-driven background import — see
+	// registerService(), WeatherLocations, and
+	// src/include/classes/Command/WeatherImport.php). Single-source, so
+	// structured like the Teefax refresh methods above (one channel, one
+	// $oWeatherProcess guard) rather than the per-feed News ones - weather
+	// has exactly one BBC source covering every configured city in each run.
+	// -------------------------------------------------------------------------
+
+	/**
+	 * Runs on every housekeeping tick. A no-op unless a weather channel is
+	 * configured, no import is already running, and the last import
+	 * (recorded by WeatherImport itself, in the channel's own `.imported`
+	 * marker file) is older than teletext_weather_refresh_interval — in
+	 * which case this spawns `src/util/weather-import` as a detached
+	 * background process via ReactPHP.
+	*/
+	public function checkWeatherRefresh(?\React\EventLoop\LoopInterface $oLoop = null): void
+	{
+		$sChannel = config::getValueAsString('teletext_weather_channel');
+		if (!preg_match('/^[0-9]$/', $sChannel)) {
+			return;
+		}
+		if (!$this->isWeatherRefreshDue($sChannel)) {
+			return;
+		}
+		$this->_startWeatherImport($sChannel, $oLoop);
+	}
+
+	/**
+	 * Starts a weather import right now regardless of whether one is due,
+	 * for the admin web front end's "refresh now" action. Returns false
+	 * (without starting anything) if no channel is configured or an import
+	 * is already running.
+	*/
+	public function triggerWeatherImport(): bool
+	{
+		$sChannel = config::getValueAsString('teletext_weather_channel');
+		if (!preg_match('/^[0-9]$/', $sChannel)) {
+			return false;
+		}
+		return $this->_startWeatherImport($sChannel, ServiceDispatcher::create()->getLoop());
+	}
+
+	/**
+	 * Shared by checkWeatherRefresh() and triggerWeatherImport(): spawns the
+	 * background import, guarding against launching a second one while one
+	 * is already running.
+	*/
+	protected function _startWeatherImport(string $sChannel, ?\React\EventLoop\LoopInterface $oLoop): bool
+	{
+		if ($this->oWeatherProcess !== null && $this->oWeatherProcess->isRunning()) {
+			return false;
+		}
+
+		$this->oLogger->info("Teletext: starting background weather import for channel " . $sChannel);
+		$this->oWeatherProcess = $this->_spawnWeatherImport($sChannel);
+		if ($oLoop !== null) {
+			$this->oWeatherProcess->start($oLoop);
+		}
+		return true;
+	}
+
+	/**
+	 * True if the configured channel has never been imported, or its last
+	 * import is older than the configured refresh interval.
+	*/
+	public function isWeatherRefreshDue(string $sChannel): bool
+	{
+		$iLastImported = $this->_readWeatherImportedMarker($sChannel);
+		if ($iLastImported === null) {
+			return true;
+		}
+		$iInterval = config::getValueAsInt('teletext_weather_refresh_interval');
+		return ($this->_now() - $iLastImported) >= $iInterval;
+	}
+
+	protected function _readWeatherImportedMarker(string $sChannel): ?int
+	{
+		$sPath = (config::getValueAsString('teletext_store_dir')) . '/' . $sChannel . '/.imported';
+		if (!file_exists($sPath)) {
+			return null;
+		}
+		$sContent = file_get_contents($sPath);
+		return $sContent === false ? null : (int) trim($sContent);
+	}
+
+	/**
+	 * Builds (but does not start) the background import process, passing
+	 * through the currently-active config directory if one was set, so the
+	 * spawned process reads the same configuration as this one.
+	*/
+	protected function _spawnWeatherImport(string $sChannel): Process
+	{
+		$sBinary = dirname(__DIR__, 4) . '/util/weather-import';
+		$sCommand = escapeshellarg($sBinary) . ' --channel=' . escapeshellarg($sChannel);
+		if (defined('CONFIG_CONF_FILE_PATH') && is_scalar(CONFIG_CONF_FILE_PATH)) {
+			$sCommand .= ' --config=' . escapeshellarg((string) CONFIG_CONF_FILE_PATH);
+		}
+		return new Process($sCommand);
+	}
+
+	// -------------------------------------------------------------------------
+	// TV guide refresh (housekeeping-driven background import — see
+	// registerService(), TvGuideChannels, and
+	// src/include/classes/Command/TvGuideImport.php). Single-source, so
+	// structured identically to the Weather refresh methods above (one
+	// channel, one $oTvGuideProcess guard) - TV Guide has exactly one
+	// TVHeadend source covering every configured Freeview channel in each
+	// run.
+	// -------------------------------------------------------------------------
+
+	/**
+	 * Runs on every housekeeping tick. A no-op unless a TV guide channel is
+	 * configured, no import is already running, and the last import
+	 * (recorded by TvGuideImport itself, in the channel's own `.imported`
+	 * marker file) is older than teletext_tvguide_refresh_interval — in
+	 * which case this spawns `src/util/tv-guide-import` as a detached
+	 * background process via ReactPHP.
+	*/
+	public function checkTvGuideRefresh(?\React\EventLoop\LoopInterface $oLoop = null): void
+	{
+		$sChannel = config::getValueAsString('teletext_tvguide_channel');
+		if (!preg_match('/^[0-9]$/', $sChannel)) {
+			return;
+		}
+		if (!$this->isTvGuideRefreshDue($sChannel)) {
+			return;
+		}
+		$this->_startTvGuideImport($sChannel, $oLoop);
+	}
+
+	/**
+	 * Starts a TV guide import right now regardless of whether one is due,
+	 * for the admin web front end's "refresh now" action. Returns false
+	 * (without starting anything) if no channel is configured or an import
+	 * is already running.
+	*/
+	public function triggerTvGuideImport(): bool
+	{
+		$sChannel = config::getValueAsString('teletext_tvguide_channel');
+		if (!preg_match('/^[0-9]$/', $sChannel)) {
+			return false;
+		}
+		return $this->_startTvGuideImport($sChannel, ServiceDispatcher::create()->getLoop());
+	}
+
+	/**
+	 * Shared by checkTvGuideRefresh() and triggerTvGuideImport(): spawns the
+	 * background import, guarding against launching a second one while one
+	 * is already running.
+	*/
+	protected function _startTvGuideImport(string $sChannel, ?\React\EventLoop\LoopInterface $oLoop): bool
+	{
+		if ($this->oTvGuideProcess !== null && $this->oTvGuideProcess->isRunning()) {
+			return false;
+		}
+
+		$this->oLogger->info("Teletext: starting background TV guide import for channel " . $sChannel);
+		$this->oTvGuideProcess = $this->_spawnTvGuideImport($sChannel);
+		if ($oLoop !== null) {
+			$this->oTvGuideProcess->start($oLoop);
+		}
+		return true;
+	}
+
+	/**
+	 * True if the configured channel has never been imported, or its last
+	 * import is older than the configured refresh interval.
+	*/
+	public function isTvGuideRefreshDue(string $sChannel): bool
+	{
+		$iLastImported = $this->_readTvGuideImportedMarker($sChannel);
+		if ($iLastImported === null) {
+			return true;
+		}
+		$iInterval = config::getValueAsInt('teletext_tvguide_refresh_interval');
+		return ($this->_now() - $iLastImported) >= $iInterval;
+	}
+
+	protected function _readTvGuideImportedMarker(string $sChannel): ?int
+	{
+		$sPath = (config::getValueAsString('teletext_store_dir')) . '/' . $sChannel . '/.imported';
+		if (!file_exists($sPath)) {
+			return null;
+		}
+		$sContent = file_get_contents($sPath);
+		return $sContent === false ? null : (int) trim($sContent);
+	}
+
+	/**
+	 * Builds (but does not start) the background import process, passing
+	 * through the currently-active config directory if one was set, so the
+	 * spawned process reads the same configuration as this one.
+	*/
+	protected function _spawnTvGuideImport(string $sChannel): Process
+	{
+		$sBinary = dirname(__DIR__, 4) . '/util/tv-guide-import';
+		$sCommand = escapeshellarg($sBinary) . ' --channel=' . escapeshellarg($sChannel);
+		if (defined('CONFIG_CONF_FILE_PATH') && is_scalar(CONFIG_CONF_FILE_PATH)) {
+			$sCommand .= ' --config=' . escapeshellarg((string) CONFIG_CONF_FILE_PATH);
+		}
+		return new Process($sCommand);
+	}
+
+	// -------------------------------------------------------------------------
+	// Webfax refresh (housekeeping-driven background import — see
+	// registerService(), WebfaxSourceDefinitions, and
+	// src/include/classes/Command/WebfaxImport.php). Structured identically
+	// to the News refresh methods above, just keyed by service and reading
+	// that service's teletext_webfax_{service}_* config keys and its own
+	// channel's `.imported` marker - Webfax 1 and Webfax 2 are independent
+	// sources, not subpages of one feed, so each needs its own
+	// "is one already running" guard the way each News feed does.
+	// -------------------------------------------------------------------------
+
+	/**
+	 * Runs on every housekeeping tick, once per configured Webfax service. A
+	 * no-op unless that service's channel is configured, no import for it is
+	 * already running, and the last import (recorded by WebfaxImport itself,
+	 * in the channel's own `.imported` marker file) is older than
+	 * teletext_webfax_{service}_refresh_interval — in which case this spawns
+	 * `src/util/webfax-import --service={service}` as a detached background
+	 * process via ReactPHP.
+	*/
+	public function checkWebfaxRefresh(string $sServiceKey, ?\React\EventLoop\LoopInterface $oLoop = null): void
+	{
+		$sChannel = $this->_webfaxChannel($sServiceKey);
+		if (!preg_match('/^[0-9]$/', $sChannel)) {
+			return;
+		}
+		if (!$this->isWebfaxRefreshDue($sServiceKey, $sChannel)) {
+			return;
+		}
+		$this->_startWebfaxImport($sServiceKey, $sChannel, $oLoop);
+	}
+
+	/**
+	 * Starts a Webfax import for the given service right now regardless of
+	 * whether one is due, for the admin web front end's "refresh now"
+	 * action. Returns false (without starting anything) if no channel is
+	 * configured for that service or an import for it is already running.
+	*/
+	public function triggerWebfaxImport(string $sServiceKey): bool
+	{
+		$sChannel = $this->_webfaxChannel($sServiceKey);
+		if (!preg_match('/^[0-9]$/', $sChannel)) {
+			return false;
+		}
+		return $this->_startWebfaxImport($sServiceKey, $sChannel, ServiceDispatcher::create()->getLoop());
+	}
+
+	/**
+	 * Shared by checkWebfaxRefresh() and triggerWebfaxImport(): spawns the
+	 * background import, guarding against launching a second one for the
+	 * same service while one is already running.
+	*/
+	protected function _startWebfaxImport(string $sServiceKey, string $sChannel, ?\React\EventLoop\LoopInterface $oLoop): bool
+	{
+		$oExisting = $this->aWebfaxProcesses[$sServiceKey] ?? null;
+		if ($oExisting !== null && $oExisting->isRunning()) {
+			return false;
+		}
+
+		$this->oLogger->info("Teletext: starting background " . $sServiceKey . " webfax import for channel " . $sChannel);
+		$oProcess = $this->_spawnWebfaxImport($sServiceKey, $sChannel);
+		$this->aWebfaxProcesses[$sServiceKey] = $oProcess;
+		if ($oLoop !== null) {
+			$oProcess->start($oLoop);
+		}
+		return true;
+	}
+
+	/**
+	 * True if the given service's channel has never had a Webfax import, or
+	 * its last import is older than that service's configured refresh
+	 * interval.
+	*/
+	public function isWebfaxRefreshDue(string $sServiceKey, string $sChannel): bool
+	{
+		$iLastImported = $this->_readWebfaxImportedMarker($sChannel);
+		if ($iLastImported === null) {
+			return true;
+		}
+		$iInterval = config::getValueAsInt('teletext_webfax_' . $sServiceKey . '_refresh_interval');
+		return ($this->_now() - $iLastImported) >= $iInterval;
+	}
+
+	protected function _webfaxChannel(string $sServiceKey): string
+	{
+		return config::getValueAsString('teletext_webfax_' . $sServiceKey . '_channel');
+	}
+
+	protected function _readWebfaxImportedMarker(string $sChannel): ?int
+	{
+		$sPath = (config::getValueAsString('teletext_store_dir')) . '/' . $sChannel . '/.imported';
+		if (!file_exists($sPath)) {
+			return null;
+		}
+		$sContent = file_get_contents($sPath);
+		return $sContent === false ? null : (int) trim($sContent);
+	}
+
+	/**
+	 * Builds (but does not start) the background import process, passing
+	 * through the currently-active config directory if one was set, so the
+	 * spawned process reads the same configuration as this one.
+	*/
+	protected function _spawnWebfaxImport(string $sServiceKey, string $sChannel): Process
+	{
+		$sBinary = dirname(__DIR__, 4) . '/util/webfax-import';
+		$sCommand = escapeshellarg($sBinary) . ' --service=' . escapeshellarg($sServiceKey) . ' --channel=' . escapeshellarg($sChannel);
 		if (defined('CONFIG_CONF_FILE_PATH') && is_scalar(CONFIG_CONF_FILE_PATH)) {
 			$sCommand .= ' --config=' . escapeshellarg((string) CONFIG_CONF_FILE_PATH);
 		}

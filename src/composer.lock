@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "b12a5a90b83ba566d3d3f11298ec1ec1",
+    "content-hash": "4d1c70be3b6abb9a01fc7907d0841ff4",
     "packages": [
         {
             "name": "aws/aws-crt-php",
@@ -657,16 +657,16 @@
         },
         {
             "name": "homelan/acorn-disk",
-            "version": "1.1.0",
+            "version": "v1.1.2",
             "source": {
                 "type": "git",
                 "url": "https://github.com/johnhomelan/acorn-disk.git",
-                "reference": "7106553664a68dee188a19d45a350ac7ad6cfedf"
+                "reference": "a0b44b50c7d5ad6fc8953733d0cb53aa54bedb39"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/johnhomelan/acorn-disk/zipball/7106553664a68dee188a19d45a350ac7ad6cfedf",
-                "reference": "7106553664a68dee188a19d45a350ac7ad6cfedf",
+                "url": "https://api.github.com/repos/johnhomelan/acorn-disk/zipball/a0b44b50c7d5ad6fc8953733d0cb53aa54bedb39",
+                "reference": "a0b44b50c7d5ad6fc8953733d0cb53aa54bedb39",
                 "shasum": ""
             },
             "require": {
@@ -698,9 +698,9 @@
             ],
             "support": {
                 "issues": "https://github.com/johnhomelan/acorn-disk/issues",
-                "source": "https://github.com/johnhomelan/acorn-disk/tree/1.1.0"
+                "source": "https://github.com/johnhomelan/acorn-disk/tree/v1.1.2"
             },
-            "time": "2023-09-05T08:40:47+00:00"
+            "time": "2026-08-31T18:44:10+00:00"
         },
         {
             "name": "homelan/l3fsreader",

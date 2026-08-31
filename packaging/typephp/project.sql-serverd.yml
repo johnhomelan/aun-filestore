@@ -13,7 +13,7 @@
 # react_eventloop_factory,safe_define}.php).
 #
 # Engines: SQLite, PostgreSQL and MySQL/MariaDB - the Containerfile builds the
-# php:8.4-cli base with pdo_sqlite (stock) plus pdo_pgsql + pdo_mysql
+# php:8.4-cli-bookworm base with pdo_sqlite (stock) plus pdo_pgsql + pdo_mysql
 # (docker-php-ext-install), so all three drivers are in the libphp tpc links.
 # DatabaseRegistry still rejects a database whose engine's PDO driver is not
 # loaded with a clear RuntimeException.

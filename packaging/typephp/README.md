@@ -45,10 +45,10 @@ out entirely:
 - **The Symfony admin UI** (`Admin/`, `ShareFs/` — framework-bundle, the DI
   container, Smarty, reflection). Separate problem; `Admin/` and `ShareFs/` are
   not in `sources`.
-- The **outbound RemoteBridge client** - transpiles, but `main.php` does not
-  wire it and `ClientHandler` uses `new \React\Socket\Connector` (not
-  compiled). Plan to finish it: PORTING-REACT.md "Stage 6" (swap for
-  `TcpConnector` + synchronous `gethostbyname()`, ~0.5 day, no `react/dns`).
+- **RemoteBridge** - `ServerHandler` and `ClientHandler` are compiled and wired
+  in `main.php` (feature-gated on `remote_bridge_enabled`); the client's
+  hostname connects go through the compiled `react/dns` + `React\Socket\Connector`
+  facade (vendor patches `0010`-`0013`). Not exercised end to end against a peer.
 - The **Piconet serial interface** *is* compiled and wired
   (`UnixSerialDeviceConnector` via `react/socket`); it just can't be exercised
   without an Econet serial device (`stty` fails, `PiconetHandler` retries with
@@ -64,27 +64,32 @@ et al. (top-level code) are replaced by `main.php`, and Composer's `files`
 autoloads (`react/promise/functions_include.php`, `symfony/deprecation-contracts`,
 `ralouphie/getallheaders`) are handled by listing the real file or a shim.
 
-### The 5 files still excluded, and why
+### The `src/` files `project.yml` (filestored) excludes, and why
 
-`project.yml` `ignore` (beyond `src/include/external`) now lists only the
-ReactPHP / Ratchet network server shells:
+Nothing is excluded for a *blocker* any more — `evenement/evenement`,
+`cboden/ratchet` + `ratchet/rfc6455` + `guzzlehttp/psr7`, `react/*` are all in
+`sources`, so `implements Ratchet\MessageComponentInterface` /
+`extends Evenement\EventEmitter` classes compile. In particular
+**`WebSocket/Handler.php` is native** — `main.php` runs
+`new IoServer(new HttpServer(new WsServer($handler)), new TcpServer(…), $loop)`
+and a real browser-style client (HTTP/1.1 upgrade → `101` → masked text frame)
+round-trips through compiled `WsServer` → `WebSocket\Handler::onMessage` →
+`JsonPacket::decode`. Both relay listeners (`RemoteSocket\RelayServer`,
+`RemoteProvider\RelayServer`) and the RemoteBridge server/client handlers are
+compiled and wired the same way (feature-gated in `config`).
 
-| File | Blocker |
+`project.yml` `ignore` (beyond `src/include/external`) lists only the **outbound
+relay-client** half, which a *relay server* like filestored never runs:
+
+| File | Compiled instead in |
 |---|---|
-| `RemoteProvider/Client.php` | `extends Evenement\EventEmitter` (+ `React\Promise`, `Ratchet\Client` type hints) |
-| `RemoteProvider/RelayServer.php` | `implements Ratchet\MessageComponentInterface` |
-| `RemoteSocket/RelayServer.php` | `implements Ratchet\MessageComponentInterface` |
-| `RemoteSocket/RelayedUdpTransport.php` | `extends Evenement\EventEmitter implements React\Datagram\SocketInterface` |
-| `WebSocket/Handler.php` | `implements Ratchet\MessageComponentInterface` |
+| `RemoteProvider/Client.php` | `project.ecosyslogd.yml` (the Remote Provider host) |
+| `RemoteSocket/Client.php` | `project.{sharefsd,dnsd,ntpd}.yml` (the Remote Socket clients) |
+| `RemoteSocket/RelayedUdpTransport.php` | `project.{sharefsd,dnsd,ntpd}.yml` |
 
-`tpc` fatal-errors on a parent/interface it can't resolve. `evenement/evenement`
-is one small file that could be added to `sources`, and
-`Ratchet\MessageComponentInterface` is a behaviour-free 4-method contract that
-could be a local stub — but these classes' bodies *are* the React event loop /
-Ratchet socket server (`$conn->send()`, `SplObjectStorage` client sets, the
-promise API), none of which is compiled, so transpiling them produces inert
-code. They stay out unless the goal becomes compiling the event loop itself
-(vendoring React + Ratchet + Guzzle PSR-7).
+Each daemon's project file drops the role it doesn't play (`sharefsd`/`dnsd`/`ntpd`
+also drop `RemoteSocket/RelayServer.php`; `ecosyslogd` drops the transport). No
+class here is excluded from *every* build.
 
 ### Blockers that were ported rather than ignored
 

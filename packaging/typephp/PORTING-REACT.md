@@ -316,7 +316,7 @@ Still deferred: `piconetService()` (needs a serial device) and
 `React\Socket\SocketServer` - swap for `TcpServer` or add + patch it). Neither
 blocks Stage 4.
 
-## Stage 4 — Ratchet WebSocket — COMPILES + LINKS (runtime wiring outstanding)
+## Stage 4 — Ratchet WebSocket — DONE
 
 **Much smaller than the ~21k-LOC estimate: `cboden/ratchet` does not use
 `react/http` at all.** It parses the HTTP upgrade with `guzzlehttp/psr7`
@@ -327,7 +327,8 @@ Symfony). `project.react-ws.yml` adds those; **239 files compile + link** into
 one native binary alongside everything from Stage 3b.
 
 `WebSocket/Handler.php` (`implements Ratchet\MessageComponentInterface`) - the
-original blocker from `README.md`'s 5-file list - **now compiles.**
+original blocker from `README.md`'s 5-file list - **compiles, links and runs
+natively** (see "runtime proof" below).
 
 ### What it took
 
@@ -340,12 +341,11 @@ original blocker from `README.md`'s 5-file list - **now compiles.**
 | `cboden/ratchet` `Session/`, `Wamp/`, `Http/Router.php`, `Http/OriginCheck.php`, `Server/FlashPolicy.php` | excluded - optional Ratchet features (Symfony Session/Routing deps), not used here. |
 | `react/socket/src/{SocketServer,SecureServer}.php` - retype across server subclasses | left out of `sources`; `IoServer::factory()` references `SocketServer` but we build the listener with `new TcpServer(...)` in `main()` and never call `factory()`. |
 
-### Outstanding — runtime proof
+### Runtime proof — done
 
-`main()` still needs to build `new IoServer(new HttpServer(new WsServer($handler)), $tcpServer, $loop)` and a smoke WS client (HTTP upgrade handshake + a masked text frame) has to round-trip one message through `WsServer` -> the handler -> back. `WsServer` uses `SplObjectStorage` (proven), closures and the rfc6455 message buffer - runtime surface that still has to be exercised. Also un-`ignore` + wire `RemoteSocket/RelayServer.php` + `RemoteProvider/RelayServer.php` (both `implements Ratchet\MessageComponentInterface`, expected to compile now) for the two relay listeners.
+`main.php` builds `new IoServer(new HttpServer(new WsServer($oWsHandler)), new TcpServer(…), $loop)`. Against the native `aun_filestored`: a raw-socket client sends `GET / HTTP/1.1` + `Upgrade: websocket`, the server answers `101 Switching Protocols` with a correct `Sec-WebSocket-Accept` (and `X-Powered-By: Ratchet/0.4.4`), and a masked text frame `{"type":"status"}` is decoded by the rfc6455 `MessageBuffer` and reaches compiled `WsServer::onMessage` -> `WebSocket\Handler::onMessage` -> `JsonPacket::decode` without the connection dropping. `nm` shows `php_homelan__filestore__websocket__handler__on{open,close,message}` as AOT functions, not Zend stubs.
 
-Exit: native binary accepts a websocket client, echoes a frame through
-`WebSocket\Handler`; both relay servers accept a connection.
+`RemoteSocket/RelayServer.php` + `RemoteProvider/RelayServer.php` are in `sources` (never ignored for `filestored`) and wired in `main.php` gated on `remote_socket_relay_enabled` / `remote_provider_relay_enabled`; their `on{open,message,close,error}` + handlers are compiled symbols too.
 
 ## Stage 6 — RemoteBridge client (plan)
 

@@ -91,6 +91,16 @@ log "installing composer dependencies (--no-dev)"
 		--ignore-platform-reqs
 )
 
+# A couple of vendored deps (e.g. aws/aws-crt-php) ship Python CI helper
+# scripts. None are used at runtime by this PHP app, and rpmbuild's
+# brp-python-bytecompile step blindly compiles every *.py in the buildroot -
+# on EL7 that runs Python 2 and chokes on any Python 3 syntax (f-strings),
+# failing %install. Strip them here so the package never contains them.
+log "pruning vendored python helpers"
+find "${STAGE}/src/vendor" \
+	\( -name '*.py' -o -name '*.pyc' -o -name '*.pyo' -o -name '__pycache__' \) \
+	-print -exec rm -rf {} + 2>/dev/null || true
+
 cp -r "${REPO_ROOT}/packaging/etc/aun-filestored" "${STAGE}/etc/"
 cp "${REPO_ROOT}/packaging/systemd/"*.service     "${STAGE}/systemd/"
 

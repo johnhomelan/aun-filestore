@@ -32,8 +32,16 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: ${{ env.IMAGE_NAME }}
+          # The project versions as X.Y.Z.N (4-part), which the semver rules
+          # below cannot parse - so without type=ref a release tag yields no
+          # image tag at all and build-push-action fails with "tag is needed
+          # when pushing to registry". type=ref,event=tag uses the tag name
+          # verbatim and is the one that actually fires for our releases.
           tags: |
+            type=ref,event=tag
+            type=ref,event=branch
             type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
             type=raw,value=latest,enable={{is_default_branch}}
 
       - name: Build and push

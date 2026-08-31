@@ -24,12 +24,16 @@ jobs:
           - { target: fedora-44, image: "fedora:44",                     dist: ".fc44" }
           - { target: fedora-43, image: "fedora:43",                     dist: ".fc43" }
           - { target: fedora-42, image: "fedora:42",                     dist: ".fc42" }
-          # Enterprise Linux. CentOS 7 / 8 are EOL - build-in-container.sh
-          # repoints them at vault.centos.org and pulls PHP from remi.
-          - { target: centos-7,  image: "centos:7",                      dist: ".el7"  }
-          - { target: centos-8,  image: "quay.io/centos/centos:stream8", dist: ".el8"  }
-          - { target: rocky-9,   image: "rockylinux:9",                  dist: ".el9"  }
-          - { target: rocky-10,  image: "rockylinux:10",                 dist: ".el10" }
+          # Enterprise Linux. CentOS 7 is EOL - build-in-container.sh repoints it
+          # at vault.centos.org and pulls PHP from remi. EL8/9/10 use the Rocky
+          # project's own images on quay.io (the Docker Hub "rockylinux" library
+          # image is frozen at 9 and never got a :10 tag; CentOS Stream 8 is EOL
+          # and remi-release-8 no longer installs on it - needs redhat-release
+          # >= 8.10, which Stream 8 never shipped).
+          - { target: centos-7,  image: "centos:7",                          dist: ".el7"  }
+          - { target: rocky-8,   image: "quay.io/rockylinux/rockylinux:8",   dist: ".el8"  }
+          - { target: rocky-9,   image: "quay.io/rockylinux/rockylinux:9",   dist: ".el9"  }
+          - { target: rocky-10,  image: "quay.io/rockylinux/rockylinux:10",  dist: ".el10" }
 
     steps:
       - name: Checkout

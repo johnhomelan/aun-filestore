@@ -35,10 +35,21 @@ die() { printf 'error: %s\n' "$*" >&2; exit 1; }
 
 # --- tools ----------------------------------------------------------------
 command -v composer >/dev/null 2>&1 || die "composer not found on PATH"
+# ImageMagick 7 ships a single "magick" binary (with "magick identify" as a
+# sub-command); ImageMagick 6 - still what Ubuntu/Debian's "imagemagick"
+# package installs - ships separate "convert" and "identify" binaries and has
+# no "magick". "convert identify ..." is not valid on IM6, so pick the right
+# tool for each job.
 if command -v magick >/dev/null 2>&1; then
 	IM=(magick)
+	IDENTIFY=(magick identify)
 elif command -v convert >/dev/null 2>&1; then
 	IM=(convert)
+	if command -v identify >/dev/null 2>&1; then
+		IDENTIFY=(identify)
+	else
+		die "ImageMagick 'identify' not found on PATH - needed to build the menu icons"
+	fi
 else
 	die "ImageMagick (magick/convert) not found on PATH - needed to build the menu icons"
 fi
@@ -120,7 +131,9 @@ install -m 0755 "${SYNO_DIR}/ui/index.cgi" "${SPKROOT}/ui/index.cgi"
 
 # --- menu / package icons (generated from the admin favicon) ---------
 log "generating icons from $(basename "${ICON_SRC}")"
-frame="$("${IM[@]}" identify -format '%p:%w\n' "${ICON_SRC}" 2>/dev/null | sort -t: -k2 -n | tail -1 | cut -d: -f1)"
+# Largest frame in the .ico wins. Never let a hiccup here abort the script
+# (set -e + pipefail) - fall back to frame 0.
+frame="$({ "${IDENTIFY[@]}" -format '%p:%w\n' "${ICON_SRC}" 2>/dev/null || true; } | sort -t: -k2 -n | tail -1 | cut -d: -f1)"
 frame="${frame:-0}"
 for size in 16 24 32 48 64 72 256; do
 	"${IM[@]}" "${ICON_SRC}[${frame}]" \

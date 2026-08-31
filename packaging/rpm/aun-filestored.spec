@@ -7,12 +7,10 @@
 # some dev shell scripts). Don't let them leak into the package's dependencies.
 %global __requires_exclude ^(/usr/bin/python3|/usr/bin/env)$
 
-# This is a PHP application - there is nothing here to byte-compile. Disable the
-# automatic Python byte-compilation BRP so a stray vendored *.py (build-rpm.sh
-# prunes them, but be defensive) can never fail %install - notably on EL7 where
-# that step runs Python 2 and dies on any Python 3 syntax.
+# Nothing here is Python. build-rpm.sh prunes stray vendored .py helper scripts
+# from the tree; also neutralise the byte-compile BRP as a backstop, since on
+# EL7 it runs Python 2 and aborts the install on any Python 3 syntax it meets.
 %global __brp_python_bytecompile %{nil}
-%global __os_install_post %(echo '%{__os_install_post}' | sed -e 's!/usr/lib/rpm/brp-python-bytecompile[[:space:]].*$!!g')
 
 Name: %{_name}
 Version: %{_version}

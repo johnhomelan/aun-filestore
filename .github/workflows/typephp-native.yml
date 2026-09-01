@@ -13,6 +13,13 @@ name: Build TypePHP native binaries
 #
 # On a published release the tarballs are attached to it; a manual run uploads
 # them as workflow artifacts instead.
+#
+# Layout: the seven targets are compiled in PARALLEL, one job per
+# arch x daemon (build), each doing the one-time prep (make typephp-prep) then
+# its single "make <target>" with TYPEPHP_SKIP_PREP=1 / a per-target
+# --build-dir. A per-arch "package" job then collects the binaries and runs
+# assemble-dist.sh. The toolchain image is built once per arch and reused from
+# the GHA build cache by every job.
 
 on:
   release:
@@ -63,8 +70,79 @@ jobs:
       fail-fast: false
       matrix:
         target: ${{ fromJSON(needs.matrix.outputs.arches) }}
+        daemon:
+          - { make: typephp,           bin: aun_filestored }
+          - { make: sharefs-typephp,   bin: sharefsd }
+          - { make: dns-typephp,       bin: dnsd }
+          - { make: ntp-typephp,       bin: ntpd }
+          - { make: ecosyslog-typephp, bin: ecosyslogd }
+          - { make: sql-typephp,       bin: sql_serverd }
+          - { make: teletext-typephp,  bin: teletext_import }
     runs-on: ${{ matrix.target.runner }}
-    timeout-minutes: 180
+    timeout-minutes: 90
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up PHP 8.4 (host, for Smarty template pre-compilation)
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: dom, mbstring, xml, curl
+          tools: composer:v2
+
+      - name: Cache src/vendor
+        uses: actions/cache@v4
+        with:
+          path: src/vendor
+          key: typephp-vendor-${{ matrix.target.arch }}-${{ hashFiles('src/composer.lock') }}
+
+      - name: composer install (src/)
+        working-directory: src
+        run: composer install --no-dev --no-progress --no-interaction --prefer-dist
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build (or restore) the TypePHP toolchain image
+        uses: docker/build-push-action@v6
+        with:
+          context: packaging/typephp
+          file: packaging/typephp/Containerfile
+          tags: localhost/aun-filestore-typephp
+          load: true
+          cache-from: type=gha,scope=typephp-image-${{ matrix.target.arch }}
+          cache-to: type=gha,mode=max,scope=typephp-image-${{ matrix.target.arch }}
+
+      - name: Compile ${{ matrix.daemon.make }}
+        env:
+          PODMAN: docker
+          TYPEPHP_NO_BUILD_IMAGE: '1'
+          TYPEPHP_DRY: '0'
+        run: make ${{ matrix.daemon.make }}
+
+      - name: Reclaim ownership of container-written output
+        run: sudo chown -R "$(id -u):$(id -g)" build
+
+      - name: Check the binary exists
+        run: test -x "build/typephp/${{ matrix.daemon.bin }}"
+
+      - name: Upload the compiled binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: typephp-bin-${{ matrix.target.arch }}-${{ matrix.daemon.bin }}
+          path: build/typephp/${{ matrix.daemon.bin }}
+          if-no-files-found: error
+          retention-days: 1
+
+  package:
+    needs: [matrix, build]
+    strategy:
+      fail-fast: false
+      matrix:
+        target: ${{ fromJSON(needs.matrix.outputs.arches) }}
+    runs-on: ${{ matrix.target.runner }}
+    timeout-minutes: 30
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -75,46 +153,33 @@ jobs:
           V="${{ github.event.release.tag_name || inputs.version }}"
           [ -n "$V" ] || V="0.0.0-$(date +%Y%m%d%H%M%S)"
           echo "version=$V" >> "$GITHUB_OUTPUT"
-          echo "Building TypePHP natives $V for ${{ matrix.target.arch }}"
+          echo "Packaging TypePHP natives $V for ${{ matrix.target.arch }}"
 
-      - name: Install build prerequisites
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Restore the TypePHP toolchain image
+        uses: docker/build-push-action@v6
+        with:
+          context: packaging/typephp
+          file: packaging/typephp/Containerfile
+          tags: localhost/aun-filestore-typephp
+          load: true
+          cache-from: type=gha,scope=typephp-image-${{ matrix.target.arch }}
+          cache-to: type=gha,mode=max,scope=typephp-image-${{ matrix.target.arch }}
+
+      - name: Download the compiled binaries
+        uses: actions/download-artifact@v4
+        with:
+          pattern: typephp-bin-${{ matrix.target.arch }}-*
+          merge-multiple: true
+          path: build/typephp
+
+      - name: Restore the executable bit
         run: |
           set -eux
-          command -v docker >/dev/null
-          if ! command -v php >/dev/null; then
-            sudo apt-get update -qq
-            sudo apt-get install -y -qq php-cli php-xml php-mbstring php-curl
-          fi
-          command -v composer >/dev/null || sudo apt-get install -y -qq composer
-          command -v rsync >/dev/null
-
-      - name: Set up PHP 8.4 (host, for Smarty template pre-compilation)
-        uses: shivammathur/setup-php@v2
-        with:
-          php-version: '8.4'
-          extensions: dom, mbstring, xml, curl
-          tools: composer:v2
-
-      - name: composer install (src/)
-        working-directory: src
-        run: composer install --no-dev --no-progress --no-interaction --prefer-dist
-
-      - name: Build the TypePHP toolchain image
-        run: |
-          docker build \
-            -t localhost/aun-filestore-typephp \
-            -f packaging/typephp/Containerfile \
-            packaging/typephp
-
-      - name: Compile every native target
-        env:
-          PODMAN: docker
-          TYPEPHP_NO_BUILD_IMAGE: '1'
-          TYPEPHP_DRY: '0'
-        run: make native-daemons teletext-typephp
-
-      - name: Reclaim ownership of container-written output
-        run: sudo chown -R "$(id -u):$(id -g)" build
+          chmod 0755 build/typephp/*
+          ls -l build/typephp
 
       - name: Smoke test
         run: |

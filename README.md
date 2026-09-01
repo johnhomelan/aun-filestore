@@ -1048,7 +1048,8 @@ PODMAN=docker make typephp      # use docker instead
 The only host requirement is `podman` (or `docker` via `PODMAN=`); PHP 8.4, the
 C++ toolchain, `tpc` and the PHPX native library all live in the container built
 from `packaging/typephp/Containerfile`. Generated C++ lands in
-`build/typephp/obj/`, a native binary in `build/typephp/aun_filestored`.
+`build/typephp/obj/<target>/` (one dir per target), a native binary in
+`build/typephp/aun_filestored`.
 
 On a host with a very large routing table, rootless podman's pasta backend can
 fail to build the image — run `TYPEPHP_BUILD_ARGS=--network=host make typephp`.

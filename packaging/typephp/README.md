@@ -298,8 +298,10 @@ TYPEPHP_ARGS='--format' make typephp
 PODMAN=docker make typephp         # use docker instead of podman
 ```
 
-Generated C++ and the object / PCH cache land in `build/typephp/obj/`; a native
-binary (`TYPEPHP_DRY=0`) in `build/typephp/aun_filestored`.
+Generated C++ and the object / PCH cache land in `build/typephp/obj/<target>/`
+(one dir per target, so the daemon builds don't invalidate each other and can
+run in parallel); a native binary (`TYPEPHP_DRY=0`) in
+`build/typephp/aun_filestored`.
 
 The compiled binary links `libphpx.so` (and `libphp`), which live in the image
 under `/opt/typephp/vendor/swoole/phpx/lib`, so it runs inside the container but

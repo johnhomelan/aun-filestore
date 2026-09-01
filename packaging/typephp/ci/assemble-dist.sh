@@ -97,8 +97,13 @@ log "bundling the shared-library closure"
 	for pass in 1 2 3; do
 		for f in /stage/lib/*.so*; do [ -e "$f" ] && copy_closure "$f"; done
 	done
+	# Normalise perms here, inside the container: "podman cp" out of the image
+	# and this run both write /stage/lib as root, so a host-side "chmod -R" for
+	# a non-root builder (e.g. rootful docker in CI) fails with EPERM and, under
+	# "set -e", kills the whole tarball step. Container root can always chmod;
+	# the go+rX it sets is what lets the host tar the files regardless of owner.
+	chmod -R u+rwX,go+rX /stage/lib
 '
-chmod -R u+rwX,go+rX "${STAGE}/lib"
 
 # --- one-time configure + per-binary launchers --------------------------
 cat > "${STAGE}/configure.sh" <<'EOS'

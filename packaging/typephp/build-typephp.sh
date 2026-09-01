@@ -4,7 +4,7 @@
 # podman container.
 #
 # By default this does a --dry run: it only transpiles the configured sources to
-# C++ under build/typephp/obj/ and does NOT link a native binary (that needs
+# C++ under build/typephp/obj/<target>/ and does NOT link a native binary (that needs
 # libphp.so / the embed SAPI and is very unlikely to succeed for this app - see
 # packaging/typephp/README.md).
 #
@@ -28,6 +28,19 @@
 #   TYPEPHP_NO_BUILD_IMAGE  If set, skip "podman build" and use the tag as-is
 #   TYPEPHP_PROJECT  Path (repo-relative) to the tpc project file.
 #                    Default: packaging/typephp/project.yml
+#   TYPEPHP_BUILD_DIR  tpc --build-dir (repo-relative). Default:
+#                    build/typephp/obj/<TYPEPHP_OUT> - one dir per target, so the
+#                    six daemon builds don't invalidate each other's objects and
+#                    can run in parallel.
+#   TYPEPHP_PREP_ONLY  If set: build the toolchain image (unless
+#                    TYPEPHP_NO_BUILD_IMAGE), stage the vendored ReactPHP/Ratchet
+#                    tree, apply vendor-patches, regenerate config_defines.php +
+#                    stage/cmd/, pre-compile the Smarty templates, then exit
+#                    WITHOUT running tpc. Run once ("make typephp-prep") before a
+#                    batch build so the per-target builds can skip all of this.
+#   TYPEPHP_SKIP_PREP  If set: skip all of the above and go straight to tpc -
+#                    assumes a prior TYPEPHP_PREP_ONLY run populated
+#                    build/typephp/stage/ and pre-compiled the templates.
 #
 # Vendored ReactPHP / Ratchet:
 #   When the active project file references build/typephp/stage/ (see
@@ -50,6 +63,9 @@ OPT="${TYPEPHP_OPT:-2}"
 JOBS="${TYPEPHP_JOBS:-4}"
 PROJECT_FILE="${TYPEPHP_PROJECT:-packaging/typephp/project.yml}"
 TYPEPHP_OUT="${TYPEPHP_OUT:-aun-filestored}"   # basename of the linked binary under build/typephp/
+BUILD_DIR="${TYPEPHP_BUILD_DIR:-build/typephp/obj/${TYPEPHP_OUT}}"
+PREP_ONLY="${TYPEPHP_PREP_ONLY:-}"
+SKIP_PREP="${TYPEPHP_SKIP_PREP:-}"
 
 # Vendor packages that the React/Ratchet stages pull into `sources`. Staged as a
 # group (cheap) whenever the project file opts in; unused entries cost nothing.
@@ -71,9 +87,19 @@ if [ -z "${TYPEPHP_NO_BUILD_IMAGE:-}" ]; then
 fi
 
 mkdir -p "${OUTPUT_DIR}/typephp"
+mkdir -p "${REPO_ROOT}/${BUILD_DIR}"
 
 # --- Stage + patch the vendored ReactPHP / Ratchet tree, if the project opts in.
-if grep -q 'build/typephp/stage/' "${REPO_ROOT}/${PROJECT_FILE}"; then
+#
+# This whole section (vendor staging + patches + config_defines + stage/cmd/ +
+# Smarty pre-compile) is identical for every target, so a batch build runs it
+# once via "make typephp-prep" (TYPEPHP_PREP_ONLY=1) and then builds each daemon
+# with TYPEPHP_SKIP_PREP=1.
+if [ -n "${SKIP_PREP}" ]; then
+	log "skipping prep (TYPEPHP_SKIP_PREP set) - reusing build/typephp/stage/"
+	[ -f "${STAGE_DIR}/config_defines.php" ] \
+		|| die "TYPEPHP_SKIP_PREP set but ${STAGE_DIR#"${REPO_ROOT}/"}/config_defines.php is missing - run 'make typephp-prep' first"
+elif [ -n "${PREP_ONLY}" ] || grep -q 'build/typephp/stage/' "${REPO_ROOT}/${PROJECT_FILE}"; then
 	[ -d "${REPO_ROOT}/src/vendor" ] || die "src/vendor missing - run 'composer install' in src/ first"
 	command -v rsync >/dev/null 2>&1 || die "rsync not found (needed to stage vendor packages)"
 	command -v patch >/dev/null 2>&1 || die "patch not found (needed to apply vendor-patches)"
@@ -117,7 +143,7 @@ if grep -q 'build/typephp/stage/' "${REPO_ROOT}/${PROJECT_FILE}"; then
 	# Some Command/*.php files include_once system.inc.php at file scope
 	# (illegal in bin mode). Stage stripped copies for any project that opts in
 	# by listing build/typephp/stage/cmd/.
-	if grep -q 'build/typephp/stage/cmd/' "${REPO_ROOT}/${PROJECT_FILE}"; then
+	if [ -n "${PREP_ONLY}" ] || grep -q 'build/typephp/stage/cmd/' "${REPO_ROOT}/${PROJECT_FILE}"; then
 		log "staging stripped Command/*.php into stage/cmd/"
 		mkdir -p "${STAGE_DIR}/cmd"
 		for f in "${REPO_ROOT}"/src/include/classes/Command/*.php; do
@@ -132,11 +158,18 @@ fi
 # Pre-compile the Smarty templates so the Admin code never needs the Smarty
 # template compiler at run time (see src/util/compile-templates). Only possible
 # once the app's Composer deps are installed.
-if [ -f "${REPO_ROOT}/src/vendor/autoload.php" ]; then
+if [ -n "${SKIP_PREP}" ]; then
+	:
+elif [ -f "${REPO_ROOT}/src/vendor/autoload.php" ]; then
 	log "pre-compiling Smarty templates"
 	php "${REPO_ROOT}/src/util/compile-templates" || die "template pre-compilation failed"
 else
 	log "skipping Smarty pre-compilation (run 'composer install' in src/ first)"
+fi
+
+if [ -n "${PREP_ONLY}" ]; then
+	log "prep complete (TYPEPHP_PREP_ONLY) - stage/ populated, templates compiled; skipping tpc"
+	exit 0
 fi
 
 # tpc is invoked with the repo bind-mounted at /src; all paths in project.yml
@@ -146,7 +179,7 @@ tpc_args=(
 	-m "${MODE}"
 	-O "${OPT}"
 	-j "${JOBS}"
-	--build-dir build/typephp/obj
+	--build-dir "${BUILD_DIR}"
 	--no-progress
 	--no-color
 )

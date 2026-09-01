@@ -29,7 +29,7 @@ IPK_VERSION ?=
 # (the RPM container build sets a per-distro subdirectory).
 OUTPUT_DIR ?= $(CURDIR)/build
 
-.PHONY: all test test-coverage phpstan lint lint-fix deps synopackage spk phar rpm deb ipk typephp sharefs-typephp dns-typephp ntp-typephp ecosyslog-typephp sql-typephp teletext-typephp native-daemons clean
+.PHONY: all test test-coverage phpstan lint lint-fix deps synopackage spk phar rpm deb ipk typephp-prep typephp sharefs-typephp dns-typephp ntp-typephp ecosyslog-typephp sql-typephp teletext-typephp native-daemons clean
 
 all: test phpstan lint
 
@@ -82,6 +82,18 @@ rpm:
 deb:
 	DEB_VERSION="$(DEB_VERSION)" OUTPUT_DIR="$(OUTPUT_DIR)" packaging/deb/build-deb.sh
 
+# One-time preparation shared by *every* native target: build the tpc toolchain
+# image, stage + patch the vendored ReactPHP/Ratchet tree, regenerate
+# config_defines.php + stage/cmd/, and pre-compile the Smarty templates. Every
+# `*-typephp` target below depends on this, so a batch build (`native-daemons`)
+# runs it once instead of once per daemon; the per-target builds then share
+# build/typephp/stage/ read-only and each write their own
+# build/typephp/obj/<name>, so `make -j native-daemons` is safe.
+# Pass TYPEPHP_NO_BUILD_IMAGE=1 to reuse an already-built image (CI does this).
+typephp-prep:
+	PODMAN="$(PODMAN)" OUTPUT_DIR="$(OUTPUT_DIR)" TYPEPHP_PREP_ONLY=1 \
+		packaging/typephp/build-typephp.sh
+
 # Run the TypePHP (swoole/typephp) AOT compiler against the project inside a
 # podman container. Defaults to a --dry run (C++ generation only); pass
 # TYPEPHP_DRY=0 to compile + link the native daemon (build/typephp/aun_filestored).
@@ -90,14 +102,15 @@ deb:
 # Symfony admin UI is not compiled; the Piconet serial interface is (untested -
 # needs an Econet serial device).
 # See packaging/typephp/README.md and packaging/typephp/PORTING-REACT.md.
-typephp:
-	PODMAN="$(PODMAN)" OUTPUT_DIR="$(OUTPUT_DIR)" packaging/typephp/build-typephp.sh
+typephp: typephp-prep
+	PODMAN="$(PODMAN)" OUTPUT_DIR="$(OUTPUT_DIR)" TYPEPHP_SKIP_PREP=1 TYPEPHP_NO_BUILD_IMAGE=1 \
+		packaging/typephp/build-typephp.sh
 
 # Same as `typephp`, but builds the sharefsd daemon (ShareFS / Level-4 /
 # AccessPlus / Freeway) into build/typephp/sharefsd. Reuses the whole ReactPHP /
 # Ratchet vendor set + vendor-patches. See packaging/typephp/PORTING-REACT.md.
-sharefs-typephp:
-	PODMAN="$(PODMAN)" OUTPUT_DIR="$(OUTPUT_DIR)" \
+sharefs-typephp: typephp-prep
+	PODMAN="$(PODMAN)" OUTPUT_DIR="$(OUTPUT_DIR)" TYPEPHP_SKIP_PREP=1 TYPEPHP_NO_BUILD_IMAGE=1 \
 		TYPEPHP_PROJECT=packaging/typephp/project.sharefsd.yml TYPEPHP_OUT=sharefsd \
 		packaging/typephp/build-typephp.sh
 
@@ -105,18 +118,18 @@ sharefs-typephp:
 # All reuse the same ReactPHP / Ratchet vendor set + vendor-patches. dnsd and
 # ntpd receive UDP relayed over the Remote Socket Protocol; ecosyslogd hosts the
 # EcoSyslog provider over the Remote Provider Protocol and writes to syslog.
-dns-typephp:
-	PODMAN="$(PODMAN)" OUTPUT_DIR="$(OUTPUT_DIR)" \
+dns-typephp: typephp-prep
+	PODMAN="$(PODMAN)" OUTPUT_DIR="$(OUTPUT_DIR)" TYPEPHP_SKIP_PREP=1 TYPEPHP_NO_BUILD_IMAGE=1 \
 		TYPEPHP_PROJECT=packaging/typephp/project.dnsd.yml TYPEPHP_OUT=dnsd \
 		packaging/typephp/build-typephp.sh
 
-ntp-typephp:
-	PODMAN="$(PODMAN)" OUTPUT_DIR="$(OUTPUT_DIR)" \
+ntp-typephp: typephp-prep
+	PODMAN="$(PODMAN)" OUTPUT_DIR="$(OUTPUT_DIR)" TYPEPHP_SKIP_PREP=1 TYPEPHP_NO_BUILD_IMAGE=1 \
 		TYPEPHP_PROJECT=packaging/typephp/project.ntpd.yml TYPEPHP_OUT=ntpd \
 		packaging/typephp/build-typephp.sh
 
-ecosyslog-typephp:
-	PODMAN="$(PODMAN)" OUTPUT_DIR="$(OUTPUT_DIR)" \
+ecosyslog-typephp: typephp-prep
+	PODMAN="$(PODMAN)" OUTPUT_DIR="$(OUTPUT_DIR)" TYPEPHP_SKIP_PREP=1 TYPEPHP_NO_BUILD_IMAGE=1 \
 		TYPEPHP_PROJECT=packaging/typephp/project.ecosyslogd.yml TYPEPHP_OUT=ecosyslogd \
 		packaging/typephp/build-typephp.sh
 
@@ -124,8 +137,8 @@ ecosyslog-typephp:
 # over the Remote Provider Protocol, like ecosyslogd, but runs the real
 # Command\SqlServerd class directly. SQLite / PostgreSQL / MySQL - the
 # Containerfile builds the libphp with all three PDO drivers.
-sql-typephp:
-	PODMAN="$(PODMAN)" OUTPUT_DIR="$(OUTPUT_DIR)" \
+sql-typephp: typephp-prep
+	PODMAN="$(PODMAN)" OUTPUT_DIR="$(OUTPUT_DIR)" TYPEPHP_SKIP_PREP=1 TYPEPHP_NO_BUILD_IMAGE=1 \
 		TYPEPHP_PROJECT=packaging/typephp/project.sql-serverd.yml TYPEPHP_OUT=sql-serverd \
 		packaging/typephp/build-typephp.sh
 
@@ -134,12 +147,14 @@ sql-typephp:
 # dispatching on argv[1]. Plain CLI - no ReactPHP - so this shares only the
 # stage/config_defines step with the daemons, not the ReactPHP vendor set.
 # Replaces the five Symfony Console wrappers under src/util/*-import.
-teletext-typephp:
-	PODMAN="$(PODMAN)" OUTPUT_DIR="$(OUTPUT_DIR)" \
+teletext-typephp: typephp-prep
+	PODMAN="$(PODMAN)" OUTPUT_DIR="$(OUTPUT_DIR)" TYPEPHP_SKIP_PREP=1 TYPEPHP_NO_BUILD_IMAGE=1 \
 		TYPEPHP_PROJECT=packaging/typephp/project.teletext.yml TYPEPHP_OUT=teletext-import \
 		packaging/typephp/build-typephp.sh
 
-# Build every native daemon.
+# Build every native daemon. typephp-prep is a shared prerequisite so it runs
+# exactly once; the daemon builds that follow are independent (own obj dirs) and
+# parallelise with `make -j`.
 native-daemons: typephp sharefs-typephp dns-typephp ntp-typephp ecosyslog-typephp sql-typephp
 
 # Build the .ipk (opkg package) for OpenWrt / Alpine into build/. Needs

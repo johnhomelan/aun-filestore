@@ -1,4 +1,4 @@
-# TypePHP (swoole/typephp) build configuration for aun-filestored.
+# TypePHP (swoole/typephp) build configuration for sharefsd.
 #
 #   make typephp            -> podman build + a --dry transpile (generate C++)
 #   TYPEPHP_DRY=0 make typephp  -> full build: compile + link the native binary
@@ -10,11 +10,12 @@
 # packaging/typephp/PORTING-REACT.md for how each piece was brought in and
 # packaging/typephp/vendor-patches/ for the (small) vendor changes.
 #
-# Not compiled: the Symfony admin UI (Admin/, ShareFs/), the outbound
-# RemoteBridge client (needs react/dns), and Monolog (replaced by
-# shims/StderrLogger.php). The Piconet serial interface IS compiled and wired
-# (UnixSerialDeviceConnector via react/socket) - it just can't be exercised
-# here without an Econet serial device attached.
+# Replaced by shims (nothing runs interpreted): Monolog -> shims/StderrLogger.php;
+# aws-sdk-php -> shims/aws_s3_client.php; ext-ldap -> shims/ldap_openldap.cc;
+# ext-pcntl/posix -> shims/pcntl_posix.cc; smarty/smarty -> shims/smarty_runtime.php
+# + a build-time template transform; Symfony HttpKernel/DI/Routing -> a fixed-route
+# dispatcher (Symfony HttpFoundation Response side IS the real component). sharefsd
+# has no Piconet/RemoteBridge; its own admin UI is native. See PORTING-REACT.md.
 name: sharefsd
 mode: bin
 php-version: "8.5"
@@ -115,12 +116,36 @@ sources:
 
   - ../../build/typephp/stage/vendor/react/socket/src/SocketServer.php
   - ../../build/typephp/stage/vendor/react/socket/src/SecureServer.php
+
+  # --- Stage 10a/10d: native admin web UI (no Symfony HttpKernel/DI, no Smarty
+  # runtime) - same machinery as filestored's project.yml, see PORTING-REACT.md
+  - ../../build/typephp/stage/vendor/ringcentral/psr7/src
+  - ../../build/typephp/stage/vendor/react/http/src
+  - shims/smarty_runtime.php              # \Smarty\* + ShareFs\Admin\Service\Smarty
+  - shims/symfony_httpfoundation.php      # Request + BinaryFileResponse only now
+  # --- real symfony/http-foundation, Response side (see PORTING-REACT.md "Stage
+  # 10d - http-foundation"). Two files are hand-patched copies; the rest compile
+  # verbatim from src/vendor. Request + BinaryFileResponse stay in the shim above.
+  - shims/symfony_response.php            # patched: drop file-scope class_exists, de-hook $headers
+  - shims/symfony_headerutils.php         # patched: stub parseQuery, rename a groupParts loop var
+  - ../../src/vendor/symfony/http-foundation/RedirectResponse.php
+  - ../../src/vendor/symfony/http-foundation/ResponseHeaderBag.php
+  - ../../src/vendor/symfony/http-foundation/HeaderBag.php
+  - ../../src/vendor/symfony/http-foundation/Cookie.php
+  - ../../src/vendor/symfony/http-foundation/ParameterBag.php
+  - ../../src/vendor/symfony/http-foundation/InputBag.php
+  - ../../src/vendor/symfony/http-foundation/Exception/ExceptionInterface.php
+  - ../../src/vendor/symfony/http-foundation/Exception/RequestExceptionInterface.php
+  - ../../src/vendor/symfony/http-foundation/Exception/BadRequestException.php
+  - ../../src/vendor/symfony/http-foundation/Exception/UnexpectedValueException.php
+  - admin/sharefs_dispatcher.php          # 4-route switch, PSR-7 <-> shim
+  - ../../build/typephp/stage/sharefs-admin-templates  # stripped compiled templates + dispatch
+  - ../../build/typephp/stage/sharefs-admin-ctl        # controllers minus `extends AbstractController`
+  # the 2 encapsulation-admin support types ShareFs\{Share,Freeway,AccessPlus,ShareFsData}Admin need
+  - ../../src/include/classes/Encapsulation/EncapsulationAdminInterface.php
+  - ../../src/include/classes/Services/Provider/AdminEntity.php
 ignore:
-  - ../../src/include/classes/ShareFs/Admin
-  - ../../src/include/classes/ShareFs/AccessPlusAdmin.php
-  - ../../src/include/classes/ShareFs/FreewayAdmin.php
-  - ../../src/include/classes/ShareFs/ShareAdmin.php
-  - ../../src/include/classes/ShareFs/ShareFsDataAdmin.php
+  - ../../src/include/classes/ShareFs/Admin        # raw dir; the native UI uses stage/sharefs-admin-*
   - ../../src/include/classes/RemoteSocket/RelayServer.php
   - ../../src/include/external
   - ../../build/typephp/stage/vendor/react/promise/src/functions_include.php
@@ -133,3 +158,13 @@ ignore:
   - ../../build/typephp/stage/vendor/cboden/ratchet/src/Ratchet/Http/Router.php
   - ../../build/typephp/stage/vendor/cboden/ratchet/src/Ratchet/Http/OriginCheck.php
   - ../../build/typephp/stage/vendor/cboden/ratchet/src/Ratchet/Server/FlashPolicy.php
+  # react/http: server (listen) side only, and its legacy Server.php alias
+  - ../../build/typephp/stage/vendor/ringcentral/psr7/src/functions_include.php
+  - ../../build/typephp/stage/vendor/ringcentral/psr7/src/StreamWrapper.php
+  - ../../build/typephp/stage/vendor/ringcentral/psr7/src/InflateStream.php
+  - ../../build/typephp/stage/vendor/react/http/src/Server.php
+  - ../../build/typephp/stage/vendor/react/http/src/Browser.php
+  - ../../build/typephp/stage/vendor/react/http/src/Client
+  - ../../build/typephp/stage/vendor/react/http/src/Io/ClientConnectionManager.php
+  - ../../build/typephp/stage/vendor/react/http/src/Io/ClientRequestState.php
+  - ../../build/typephp/stage/vendor/react/http/src/Io/ClientRequestStream.php

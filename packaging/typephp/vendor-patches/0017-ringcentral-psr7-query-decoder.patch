@@ -1,0 +1,34 @@
+--- a/vendor/ringcentral/psr7/src/functions.php
++++ b/vendor/ringcentral/psr7/src/functions.php
+@@ -541,9 +541,13 @@
+             return rawurldecode(str_replace('+', ' ', $value));
+         };
+     } elseif ($urlEncoding == PHP_QUERY_RFC3986) {
+-        $decoder = 'rawurldecode';
++        $decoder = function ($value) {
++            return rawurldecode($value);
++        };
+     } elseif ($urlEncoding == PHP_QUERY_RFC1738) {
+-        $decoder = 'urldecode';
++        $decoder = function ($value) {
++            return urldecode($value);
++        };
+     } else {
+         $decoder = function ($str) { return $str; };
+     }
+@@ -587,9 +591,13 @@
+     if ($encoding === false) {
+         $encoder = function ($str) { return $str; };
+     } elseif ($encoding == PHP_QUERY_RFC3986) {
+-        $encoder = 'rawurlencode';
++        $encoder = function ($str) {
++            return rawurlencode($str);
++        };
+     } elseif ($encoding == PHP_QUERY_RFC1738) {
+-        $encoder = 'urlencode';
++        $encoder = function ($str) {
++            return urlencode($str);
++        };
+     } else {
+         throw new \InvalidArgumentException('Invalid type');
+     }

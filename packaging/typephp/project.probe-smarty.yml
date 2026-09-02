@@ -1,0 +1,28 @@
+# Admin HTTP UI plan, Stage 10c spike: does smarty/smarty's *runtime* (not its
+# template compiler - templates are pre-compiled at build time, COMPILECHECK_OFF)
+# transpile and run under tpc mode:bin? Minimal probe: construct a Smarty,
+# fetch() one pre-compiled template.
+# Dev harness - run:
+#   TYPEPHP_PROJECT=packaging/typephp/project.probe-smarty.yml TYPEPHP_OUT=probe-smarty \
+#     TYPEPHP_SKIP_PREP=1 TYPEPHP_NO_BUILD_IMAGE=1 packaging/typephp/build-typephp.sh
+#
+# OUTCOME (2026-09): fails the same structural way as Stage 10b - see
+# PORTING-REACT.md 'Stage 10c'. The pre-compiled templates_c/*.tpl.php are
+# each `if ($tpl->getCompiled()->isFresh(...)) { function content_xxx(){...} }`
+# at file scope -> tpc: 'Unsupported statement: Stmt_If'. They cannot be
+# `sources`. And Smarty's loader reaches them only via `include $filepath`
+# (Template/Compiled.php:259) + `$unifunc($tpl)` string dispatch
+# (Template/GeneratedPhpFile.php:111) - runtime PHP inclusion/dispatch, which
+# a mode:bin binary structurally lacks. Kept as a dry-compile probe.
+name: probe-smarty
+mode: bin
+php-version: "8.5"
+optimize: 0
+job: 4
+cxx-std: c++17
+sources:
+  - probe-smarty/entry.php
+  - ../../src/vendor/smarty/smarty/src
+  - ../../src/include/classes/Admin/templates_c
+ignore:
+  - ../../src/vendor/smarty/smarty/src/functions.php

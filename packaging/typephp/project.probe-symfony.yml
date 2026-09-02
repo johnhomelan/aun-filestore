@@ -1,0 +1,55 @@
+# Admin HTTP UI plan, Stage 10b spike: does the real Symfony DI container -
+# specifically the *pre-warmed/dumped* container class (src/var/cache/), not
+# the ContainerBuilder/compiler that generated it - compile and run under
+# tpc? Minimal probe: construct the dumped container, resolve one real
+# service graph edge (IndexController, via its autowired ServiceLocator).
+# Dev harness - run:
+#   TYPEPHP_PROJECT=packaging/typephp/project.probe-symfony.yml TYPEPHP_OUT=probe-symfony \
+#     TYPEPHP_SKIP_PREP=1 TYPEPHP_NO_BUILD_IMAGE=1 packaging/typephp/build-typephp.sh
+#
+# OUTCOME (2026-09): abandoned - see PORTING-REACT.md 'Stage 10b'. The
+# dumped container's own load()/createProxy() gate a runtime `require` of
+# unlisted service files on `class_exists($class, false)` (3 sites) - the
+# documented tpc trap (always true for an AOT class). In bin mode nothing
+# can be require()'d at run time anyway, so ALL 137 generated service
+# classes (cache pools, secrets vault, console tooling - only 33 are
+# admin-related) would have to compile just to resolve one controller.
+# Disproportionate; Stage 10d (native dispatcher, no DI container) instead.
+# Kept as a dry-compile probe - it was never linked or run.
+name: probe-symfony
+mode: bin
+php-version: "8.5"
+optimize: 0
+job: 4
+cxx-std: c++17
+sources:
+  - probe-symfony/entry.php
+
+  # --- the dumped/pre-warmed DI container itself (var/cache/) -------------
+  - ../../src/var/cache/ContainerDDwwb97
+
+  # --- symfony/dependency-injection: the Container base class + its deps -
+  - ../../src/vendor/symfony/dependency-injection/Container.php
+  - ../../src/vendor/symfony/dependency-injection/ContainerInterface.php
+  - ../../src/vendor/symfony/dependency-injection/Exception
+  - ../../src/vendor/symfony/dependency-injection/ParameterBag
+  - ../../src/vendor/symfony/dependency-injection/Argument/RewindableGenerator.php
+
+  - ../../src/vendor/psr/container/src
+  - ../../src/vendor/symfony/service-contracts/ServiceLocatorTrait.php
+  - ../../src/vendor/symfony/service-contracts/ServiceProviderInterface.php
+  - ../../src/vendor/symfony/service-contracts/ResetInterface.php
+
+  # --- one real admin controller + its Symfony surface --------------------
+  - ../../src/include/classes/Admin/Controller/IndexController.php
+  - ../../src/include/classes/Admin/Service/Smarty.php
+  - ../../src/include/classes/Aun/Admin.php
+  - ../../src/include/classes/WebSocket/Admin.php
+  - ../../src/include/classes/Piconet/Admin.php
+  - ../../src/include/classes/RemoteBridge/Admin.php
+  - ../../src/vendor/symfony/http-foundation/Response.php
+  - ../../src/vendor/symfony/http-foundation/HeaderBag.php
+  - ../../src/vendor/symfony/http-foundation/ResponseHeaderBag.php
+  - ../../src/vendor/symfony/framework-bundle/Controller/AbstractController.php
+ignore:
+  - ../../src/var/cache/ContainerDDwwb97/removed-ids.php

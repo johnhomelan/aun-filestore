@@ -1,0 +1,11 @@
+--- a/vendor/ringcentral/psr7/src/functions.php
++++ b/vendor/ringcentral/psr7/src/functions.php
+@@ -8,8 +8,6 @@
+ use Psr\Http\Message\UriInterface;
+
+ // Manually define missing constants for PHP 5.3
+-defined('PHP_QUERY_RFC1738') or define('PHP_QUERY_RFC1738', 1);
+-defined('PHP_QUERY_RFC3986') or define('PHP_QUERY_RFC3986', 2);
+
+ /**
+  * Returns the string representation of an HTTP message.

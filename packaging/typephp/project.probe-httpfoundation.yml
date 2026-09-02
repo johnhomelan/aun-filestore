@@ -1,0 +1,40 @@
+# "attempt point 1": probe the real symfony/http-foundation Response side under
+# tpc mode:bin (replace shims/symfony_httpfoundation.php). Dev harness:
+#   TYPEPHP_PROJECT=packaging/typephp/project.probe-httpfoundation.yml \
+#     TYPEPHP_OUT=probe-httpfoundation TYPEPHP_SKIP_PREP=1 TYPEPHP_NO_BUILD_IMAGE=1 \
+#     TYPEPHP_DRY=0 packaging/typephp/build-typephp.sh
+#
+# OUTCOME (2026-09): WORKS. The Response side of the real symfony/http-foundation
+# compiles, links and runs natively - real status-reason phrases, real header
+# normalisation, real RedirectResponse HTML. Two hand-patched copies:
+#   shims/symfony_response.php   - drop file-scope class_exists(), de-hook the
+#                                 PHP 8.4 `public ResponseHeaderBag $headers { set {} }`
+#   shims/symfony_headerutils.php - stub the (unreachable) parseQuery(), rename a
+#                                 groupParts() foreach var that shadows its array param
+# Everything else (RedirectResponse / ResponseHeaderBag / HeaderBag / Cookie /
+# ParameterBag / InputBag / Exception\*) compiles verbatim. Wired into
+# project.yml + project.sharefsd.yml; shims/symfony_httpfoundation.php shrank to
+# just Request + BinaryFileResponse. See PORTING-REACT.md 'Stage 10d - http-foundation'.
+name: probe-httpfoundation
+mode: bin
+php-version: "8.5"
+optimize: 0
+job: 4
+cxx-std: c++17
+sources:
+  - probe-httpfoundation/entry.php
+  - shims/deprecation_contracts.php
+
+  # Response side of the real component (Response.php is the hand-patched copy)
+  - shims/symfony_response.php
+  - ../../src/vendor/symfony/http-foundation/RedirectResponse.php
+  - ../../src/vendor/symfony/http-foundation/ResponseHeaderBag.php
+  - ../../src/vendor/symfony/http-foundation/HeaderBag.php
+  - shims/symfony_headerutils.php
+  - ../../src/vendor/symfony/http-foundation/Cookie.php
+  - ../../src/vendor/symfony/http-foundation/ParameterBag.php
+  - ../../src/vendor/symfony/http-foundation/InputBag.php
+  - ../../src/vendor/symfony/http-foundation/Exception/ExceptionInterface.php
+  - ../../src/vendor/symfony/http-foundation/Exception/RequestExceptionInterface.php
+  - ../../src/vendor/symfony/http-foundation/Exception/BadRequestException.php
+  - ../../src/vendor/symfony/http-foundation/Exception/UnexpectedValueException.php

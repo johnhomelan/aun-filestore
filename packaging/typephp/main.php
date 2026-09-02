@@ -19,15 +19,32 @@ declare(strict_types=1);
  * Everything on the Econet and WebSocket packet paths runs as compiled code.
  * See packaging/typephp/README.md and packaging/typephp/PORTING-REACT.md.
  *
- * NOT ported here: the Symfony admin UI, the Piconet serial interface, and the
- * outbound RemoteBridge client (needs react/dns). Those degrade gracefully -
- * their listeners simply are not started.
+ * Everything the daemon does is compiled: the Econet + WebSocket packet paths,
+ * both relay servers, the Piconet serial interface (wired - just idle with no
+ * /dev/econet hardware), the outbound RemoteBridge client (react/dns compiled),
+ * and the web admin UI (native dispatcher + build-time template transform, see
+ * PORTING-REACT.md "Stage 10d"). A tpc `mode: bin` binary embeds no PHP
+ * interpreter, so nothing runs interpreted - the pieces below are *replaced*,
+ * not fallen back to:
+ *   - Monolog            -> shims/StderrLogger.php (PSR-3 to stderr)
+ *   - aws/aws-sdk-php    -> shims/aws_s3_client.php (SigV4 + curl; S3 VFS plugin)
+ *   - ext-ldap           -> shims/ldap_openldap.cc (native, OpenLDAP client lib)
+ *   - ext-pcntl / posix  -> shims/pcntl_posix.cc (fork + signals + a few calls)
+ *   - smarty/smarty      -> shims/smarty_runtime.php + build-time template transform
+ *   - Symfony HttpKernel / DI / Routing -> a fixed-route dispatcher
+ *     (admin/dispatcher.php). No session cookie - the SessionCookie subscriber
+ *     only set one nothing read.
+ *   - Symfony HttpFoundation -> the REAL component (Response side compiled
+ *     verbatim bar two hand-patched files); only Request + BinaryFileResponse
+ *     stay in shims/symfony_httpfoundation.php.
  */
 
 use HomeLan\FileStore\Aun\Handler as AunHandler;
 use HomeLan\FileStore\Aun\Map as AunMap;
 use HomeLan\FileStore\Authentication\Plugins\AuthPluginFile;
+use HomeLan\FileStore\Authentication\Plugins\AuthPluginL3Password;
 use HomeLan\FileStore\Authentication\Plugins\AuthPluginLdap;
+use HomeLan\FileStore\Authentication\Plugins\AuthPluginMdfsPassword;
 use HomeLan\FileStore\Authentication\Security;
 use HomeLan\FileStore\Encapsulation\EncapsulationTypeMap;
 use HomeLan\FileStore\Encapsulation\PacketDispatcher;
@@ -54,12 +71,15 @@ use HomeLan\FileStore\RemoteSocket\RelayServer as RemoteSocketRelayServer;
 use HomeLan\FileStore\Vfs\Vfs;
 use HomeLan\FileStore\WebSocket\Handler as WebSocketHandler;
 use HomeLan\FileStore\WebSocket\Map as WebSocketMap;
+use Psr\Http\Message\ServerRequestInterface;
 use Ratchet\Http\HttpServer;
 use Ratchet\Server\IoServer;
 use Ratchet\WebSocket\WsServer;
 use React\Datagram\Socket as DatagramSocket;
 use React\EventLoop\StreamSelectLoop;
 use React\EventLoop\TimerInterface;
+use React\Http\HttpServer as AdminHttpServer;
+use React\Http\Message\Response as AdminHttpResponse;
 use React\Socket\TcpServer;
 
 const AUN_PKT_DELAY = 0.04;
@@ -102,14 +122,23 @@ function main(int $argc, array $argv): void
 
     Security::init($oLogger);
     // Security::_getAuthPlugins() gates AuthPlugin*::init() on
-    // class_exists($name, false), which is always true for an AOT class, so the
-    // file-backed user table would never load. Prime it explicitly.
+    // class_exists($name, false), which is always true for an AOT class, so no
+    // plugin's user table would ever load. Prime each configured one explicitly.
     AuthPluginFile::init($oLogger);
-    // Same for the LDAP backend (native via shims/ldap_openldap.cc), but only
-    // when it is actually configured - init() binds the service account and
-    // throws if the directory is unreachable.
-    if (\in_array('ldap', \array_map('trim', \explode(',', config::getValueAsString('security_auth_plugins'))), true)) {
+    $aAuthPlugins = \array_map('trim', \explode(',', config::getValueAsString('security_auth_plugins')));
+    // LDAP (native via shims/ldap_openldap.cc) binds the service account and
+    // throws if the directory is unreachable - only touch it when configured.
+    if (\in_array('ldap', $aAuthPlugins, true)) {
         AuthPluginLdap::init($oLogger);
+    }
+    // Level-3 / MDFS password-file backends. init() logs and returns (does not
+    // throw) if the file is absent, so gate on the plugin being configured to
+    // keep that off the startup log otherwise.
+    if (\in_array('l3password', $aAuthPlugins, true)) {
+        AuthPluginL3Password::init($oLogger);
+    }
+    if (\in_array('mdfspassword', $aAuthPlugins, true)) {
+        AuthPluginMdfsPassword::init($oLogger);
     }
     Vfs::init($oLogger, config::getValueAsString('vfs_plugins'), config::getValueAsString('security_mode') === 'multiuser');
     WebSocketMap::init($oLogger);
@@ -154,6 +183,14 @@ function main(int $argc, array $argv): void
         $oWsHandler,
         config::getValueAsString('websocket_listen_address') . ':' . config::getValueAsString('websocket_listen_port'),
         'WebSocket bridge',
+        $oLogger
+    );
+
+    // --- Admin web UI (transport only for now - see packaging/typephp's
+    // admin HTTP UI plan, Stage 10a) ---------------------------------------
+    aun_filestored_start_admin_http(
+        $oLoop,
+        config::getValueAsString('webadmin_listen_address') . ':' . config::getValueAsString('webadmin_listen_port'),
         $oLogger
     );
 
@@ -234,7 +271,42 @@ function main(int $argc, array $argv): void
     });
 
     $oLogger->info('core: entering primary loop');
-    $oLoop->run();
+    // A Throwable raised inside a React stream / timer callback unwinds straight
+    // out of run(). The AOT runtime makes this reachable in ways the interpreter
+    // does not - e.g. a TypeError from fclose() in DuplexResourceStream::close()
+    // on a peer socket that was abnormally reset, which is_resource() still
+    // reports as live under tpc (see packaging/typephp/PORTING-REACT.md). A
+    // single bad client connection must not take filestored down: log it and
+    // re-enter run(). StreamSelectLoop keeps its stream/timer state across the
+    // unwind, and the offending stream is already removeReadStream()'d before
+    // close() throws, so re-entry resumes cleanly; a clean shutdown via stop()
+    // still returns from run() normally and breaks the loop.
+    //
+    // (This wrapper is filestored-only. The pawl-client daemons - sql-serverd,
+    // ecosyslogd, dnsd, ntpd - deliberately let AuthenticationFailedException
+    // propagate out of run() so a bad shared secret stays fatal.)
+    $iLoopFaults  = 0;
+    $iLastFaultAt = 0;
+    while (true) {
+        try {
+            $oLoop->run();
+            break;
+        } catch (\Throwable $oError) {
+            $iNow         = \time();
+            $iLoopFaults  = ($iNow === $iLastFaultAt) ? $iLoopFaults + 1 : 1;
+            $iLastFaultAt = $iNow;
+            $oLogger->error(
+                'core: recovered from ' . \get_class($oError) . ' in event loop: '
+                . $oError->getMessage() . ' (' . $oError->getFile() . ':' . $oError->getLine() . ')'
+            );
+            // Backstop against a corrupted loop state spinning the CPU: many
+            // faults inside the same wall-clock second is not transient.
+            if ($iLoopFaults > 100) {
+                $oLogger->emergency('core: event loop faulting in a tight spin (' . $iLoopFaults . '/s); aborting');
+                throw $oError;
+            }
+        }
+    }
     $oLogger->info('core: primary loop exited');
 }
 
@@ -272,6 +344,27 @@ function aun_filestored_start_ws(StreamSelectLoop $oLoop, object $oComponent, st
     $oTransport = new TcpServer($sAddr, $oLoop);
     new IoServer(new HttpServer(new WsServer($oComponent)), $oTransport, $oLoop);
     $oLogger->info("{$sLabel}: listening on {$sAddr}");
+}
+
+/**
+ * Stand up the plain (non-WebSocket) admin HTTP listener on $sAddr, via the
+ * real react/http HttpServer (proven natively compilable - see
+ * packaging/typephp/PORTING-REACT.md Stage 10a - independent of
+ * Ratchet\Http\HttpServer above, which only ever does the WS upgrade
+ * handshake). Transport only for now: the interpreted daemon's Admin\Kernel
+ * (Symfony HttpKernel + Smarty) is not ported (see main.php's file header) -
+ * every request gets a plain placeholder response rather than a connection
+ * refused, until Stage 10b/10c/10d land the real admin app behind it.
+ */
+function aun_filestored_start_admin_http(StreamSelectLoop $oLoop, string $sAddr, StderrLogger $oLogger): void
+{
+    $oTransport = new TcpServer($sAddr, $oLoop);
+    $oHttp = new AdminHttpServer($oLoop, function (ServerRequestInterface $oRequest) use ($oLogger): AdminHttpResponse {
+        $oLogger->info('Admin HTTP: ' . $oRequest->getMethod() . ' ' . $oRequest->getUri()->getPath());
+        return \HomeLan\FileStore\Admin\Native\Dispatcher::handle($oRequest);
+    });
+    $oHttp->listen($oTransport);
+    $oLogger->info("Admin HTTP: listening on {$sAddr}");
 }
 
 /**

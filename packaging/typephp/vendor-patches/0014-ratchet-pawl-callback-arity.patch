@@ -1,0 +1,36 @@
+--- a/vendor/ratchet/pawl/src/Connector.php
++++ b/vendor/ratchet/pawl/src/Connector.php
+@@ -72,7 +72,7 @@
+             $stream = $conn;
+
+             $stream->on('close', $earlyClose);
+-            $futureWsConn->promise()->then(function() use ($stream, $earlyClose) {
++            $futureWsConn->promise()->then(function($mIgnoredConn = null) use ($stream, $earlyClose) {
+                 $stream->removeListener('close', $earlyClose);
+             }, function (\Exception $exception) use ($futureWsConn) {
+                 $futureWsConn->reject($exception);
+--- a/vendor/ratchet/pawl/src/WebSocket.php
++++ b/vendor/ratchet/pawl/src/WebSocket.php
+@@ -68,10 +68,10 @@
+
+         $streamer = new MessageBuffer(
+             new CloseFrameChecker,
+-            function(MessageInterface $msg) {
++            function(MessageInterface $msg, $mIgnoredBuffer = null) {
+                 $this->emit('message', [$msg, $this]);
+             },
+-            function(FrameInterface $frame) use (&$streamer) {
++            function(FrameInterface $frame, $mIgnoredBuffer = null) use (&$streamer) {
+                 switch ($frame->getOpcode()) {
+                     case Frame::OP_CLOSE:
+                         $frameContents = $frame->getPayload();
+--- a/vendor/ratchet/rfc6455/src/Messaging/MessageBuffer.php
++++ b/vendor/ratchet/rfc6455/src/Messaging/MessageBuffer.php
+@@ -105,7 +105,7 @@
+         $this->maxMessagePayloadSize = $maxMessagePayloadSize;
+     }
+
+-    public function onData(string $data): void {
++    public function onData(string $data, $mIgnoredConn = null): void {
+         $data = $this->leftovers . $data;
+         $dataLen = strlen($data);

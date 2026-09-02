@@ -11,11 +11,16 @@ declare(strict_types=1);
  * whole vendored ReactPHP / Ratchet stack + vendor-patches from the filestored
  * build. See packaging/typephp/PORTING-REACT.md "Stage 7".
  *
- * NOT ported: the ShareFS Symfony admin UI (ShareFs\Admin\Kernel).
+ * The ShareFS Symfony admin UI (ShareFs\Admin\Kernel) is NOT ported, but a
+ * native equivalent IS served here - a react/http listener + a fixed-route
+ * dispatcher (packaging/typephp/admin/sharefs_dispatcher.php), same approach as
+ * filestored's main.php. See PORTING-REACT.md "Stage 10d".
  */
 
 use HomeLan\FileStore\Authentication\Plugins\AuthPluginFile;
+use HomeLan\FileStore\Authentication\Plugins\AuthPluginL3Password;
 use HomeLan\FileStore\Authentication\Plugins\AuthPluginLdap;
+use HomeLan\FileStore\Authentication\Plugins\AuthPluginMdfsPassword;
 use HomeLan\FileStore\Authentication\Security;
 use HomeLan\FileStore\Logging\StderrLogger;
 use HomeLan\FileStore\RemoteSocket\Client as RemoteSocketClient;
@@ -26,10 +31,14 @@ use HomeLan\FileStore\ShareFs\ShareAuthTable;
 use HomeLan\FileStore\ShareFs\ShareFsHandler;
 use HomeLan\FileStore\ShareFs\ShareList;
 use HomeLan\FileStore\Vfs\Vfs;
+use Psr\Http\Message\ServerRequestInterface;
 use React\Datagram\Socket as DatagramSocket;
 use React\Datagram\SocketInterface as DatagramSocketInterface;
 use React\EventLoop\StreamSelectLoop;
 use React\EventLoop\TimerInterface;
+use React\Http\HttpServer as AdminHttpServer;
+use React\Http\Message\Response as AdminHttpResponse;
+use React\Socket\TcpServer;
 
 function main(int $argc, array $argv): void
 {
@@ -66,14 +75,22 @@ function main(int $argc, array $argv): void
     Security::init($oLogger);
     // Security::_getAuthPlugins() only calls AuthPlugin*::init() when
     // class_exists($name, false) is false - which is never true for an AOT
-    // class (registered at module init), so the file-backed plugin's user
-    // table would never load. Prime it explicitly.
+    // class (registered at module init), so no plugin's user table would ever
+    // load. Prime each configured one explicitly.
     AuthPluginFile::init($oLogger);
-    // Same for the LDAP backend (native via shims/ldap_openldap.cc), but only
-    // when it is actually configured - init() binds the service account and
-    // throws if the directory is unreachable.
-    if (\in_array('ldap', \array_map('trim', \explode(',', config::getValueAsString('security_auth_plugins'))), true)) {
+    $aAuthPlugins = \array_map('trim', \explode(',', config::getValueAsString('security_auth_plugins')));
+    // LDAP (native via shims/ldap_openldap.cc) binds the service account and
+    // throws if the directory is unreachable - only touch it when configured.
+    if (\in_array('ldap', $aAuthPlugins, true)) {
         AuthPluginLdap::init($oLogger);
+    }
+    // Level-3 / MDFS password-file backends. init() logs and returns (does not
+    // throw) if the file is absent, so gate on the plugin being configured.
+    if (\in_array('l3password', $aAuthPlugins, true)) {
+        AuthPluginL3Password::init($oLogger);
+    }
+    if (\in_array('mdfspassword', $aAuthPlugins, true)) {
+        AuthPluginMdfsPassword::init($oLogger);
     }
     ShareList::init($oLogger);
 
@@ -115,6 +132,13 @@ function main(int $argc, array $argv): void
     aun_sharefsd_bind($oLoop, $oRelayClient, config::getValueAsInt('sharefs_sharefsdata_port'), 'ShareFS-data',
         function (string $m, string $p) use ($oShareFs): void { $oShareFs->receive($m, $p); },
         function (DatagramSocketInterface $s) use ($oShareFs): void { $oShareFs->setSocket($s); }, $oLogger);
+
+    // --- native admin web UI (see packaging/typephp/admin/sharefs_dispatcher.php)
+    aun_sharefsd_start_admin_http(
+        $oLoop,
+        config::getValueAsString('sharefs_webadmin_listen_address') . ':' . config::getValueAsString('sharefs_webadmin_listen_port'),
+        $oLogger
+    );
 
     $oLoop->addPeriodicTimer(FreewayPacket::DEFAULT_BROADCAST_INTERVAL, function (TimerInterface $oTimer) use ($oFreeway): void {
         $oFreeway->broadcast();
@@ -169,4 +193,20 @@ function aun_sharefsd_bind(
     });
     $fSetSocket($oSock);
     $oLogger->info("{$sLabel}: listening on {$sAddr}");
+}
+
+/**
+ * Stand up sharefsd's native admin HTTP listener (react/http) on $sAddr and
+ * route each request through the fixed-route dispatcher. Mirrors filestored's
+ * aun_filestored_start_admin_http().
+ */
+function aun_sharefsd_start_admin_http(StreamSelectLoop $oLoop, string $sAddr, StderrLogger $oLogger): void
+{
+    $oTransport = new TcpServer($sAddr, $oLoop);
+    $oHttp = new AdminHttpServer($oLoop, function (ServerRequestInterface $oRequest) use ($oLogger): AdminHttpResponse {
+        $oLogger->info('sharefsd admin HTTP: ' . $oRequest->getMethod() . ' ' . $oRequest->getUri()->getPath());
+        return \HomeLan\FileStore\ShareFs\Admin\Native\Dispatcher::handle($oRequest);
+    });
+    $oHttp->listen($oTransport);
+    $oLogger->info("sharefsd admin HTTP: listening on {$sAddr}");
 }

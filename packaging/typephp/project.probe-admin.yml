@@ -1,0 +1,23 @@
+# Admin HTTP UI plan, Stage 10d probe: render one real admin template natively
+# through the compile-only Smarty shim + the build-time-stripped compiled
+# templates (build/typephp/stage/admin-templates/, produced by
+# build-admin-templates.php during typephp-prep). Dev harness - run:
+#   TYPEPHP_PROJECT=packaging/typephp/project.probe-admin.yml TYPEPHP_OUT=probe-admin \
+#     TYPEPHP_SKIP_PREP=1 TYPEPHP_NO_BUILD_IMAGE=1 TYPEPHP_DRY=0 packaging/typephp/build-typephp.sh
+#
+# OUTCOME (2026-09): WORKS. Needs a 3rd transform pass (admin-tpl-hoist.php:
+# hoist $tpl->getVariable('x')->{value,iteration} lvalue targets into locals -
+# tpc C++ codegen can't assign through a method-call result). With all three
+# passes (strip wrapper / hoist lvalues / de-inline HTML) the probe compiles,
+# links, and the native binary renders index.tpl byte-identical to the
+# interpreter. See PORTING-REACT.md 'Stage 10d'.
+name: probe-admin
+mode: bin
+php-version: "8.5"
+optimize: 0
+job: 4
+cxx-std: c++17
+sources:
+  - probe-admin/entry.php
+  - shims/smarty_runtime.php
+  - ../../build/typephp/stage/admin-templates

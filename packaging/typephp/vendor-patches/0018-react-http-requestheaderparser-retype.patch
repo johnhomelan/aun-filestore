@@ -1,0 +1,51 @@
+--- a/vendor/react/http/src/Io/RequestHeaderParser.php
++++ b/vendor/react/http/src/Io/RequestHeaderParser.php
+@@ -87,20 +87,28 @@
+                 $contentLength = (int)$request->getHeaderLine('Content-Length');
+             }
+ 
++            // TypePHP (packaging/typephp): declared unconditionally (nullable) so
++            // the "immediately end stream" check below - a second, separate
++            // `$contentLength === 0` test - has a definitely-assigned variable
++            // to read, rather than one only assigned on one static branch.
++            $oEmptyBodyStream = null;
+             if ($contentLength === 0) {
+                 // happy path: request body is known to be empty
+-                $stream = new EmptyBodyStream();
+-                $request = $request->withBody($stream);
++                $oEmptyBodyStream = new EmptyBodyStream();
++                $request = $request->withBody($oEmptyBodyStream);
+             } else {
+                 // otherwise body is present => delimit using Content-Length or ChunkedDecoder
+-                $stream = new CloseProtectionStream($conn);
++                // TypePHP (packaging/typephp): a single $stream local can't hold
++                // CloseProtectionStream/LengthLimitedStream/ChunkedDecoder in turn -
++                // one local per wrapping stage instead (same value flow).
++                $oCloseProtected = new CloseProtectionStream($conn);
+                 if ($contentLength !== null) {
+-                    $stream = new LengthLimitedStream($stream, $contentLength);
++                    $oLengthLimited = new LengthLimitedStream($oCloseProtected, $contentLength);
++                    $request = $request->withBody(new HttpBodyStream($oLengthLimited, $contentLength));
+                 } else {
+-                    $stream = new ChunkedDecoder($stream);
++                    $oChunkedDecoder = new ChunkedDecoder($oCloseProtected);
++                    $request = $request->withBody(new HttpBodyStream($oChunkedDecoder, $contentLength));
+                 }
+-
+-                $request = $request->withBody(new HttpBodyStream($stream, $contentLength));
+             }
+ 
+             $bodyBuffer = isset($buffer[$endOfHeader + 4]) ? \substr($buffer, $endOfHeader + 4) : '';
+@@ -112,9 +120,9 @@
+             }
+ 
+             // happy path: request body is known to be empty => immediately end stream
+-            if ($contentLength === 0) {
+-                $stream->emit('end');
+-                $stream->close();
++            if ($oEmptyBodyStream !== null) {
++                $oEmptyBodyStream->emit('end');
++                $oEmptyBodyStream->close();
+             }
+         });
+     }

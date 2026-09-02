@@ -7,61 +7,87 @@ producing a native executable, a PHP extension, or a shared library.
 ## What builds today
 
 `TYPEPHP_DRY=0 make typephp` compiles and links the **real native daemon**:
-`build/typephp/aun_filestored` (~13 MB ELF, `Successfully compiled 243 files`).
+`build/typephp/aun_filestored` (~23 MB ELF, `Successfully compiled 364 files`).
 It is `main.php` — a de-dynamised port of `HomeLan\FileStore\Command\React::MainLoop()`
-— plus the project's own domain code plus the vendored ReactPHP event loop /
-sockets / datagram and the Ratchet WebSocket stack (`guzzlehttp/psr7`,
-`ratchet/rfc6455`, `cboden/ratchet`).
+— plus the project's own domain code, the vendored ReactPHP event loop / sockets /
+datagram / dns, the Ratchet WebSocket stack (`guzzlehttp/psr7`, `ratchet/rfc6455`,
+`cboden/ratchet`), the plain-HTTP `react/http` server, and the **web admin UI**
+(a fixed-route dispatcher over the real `symfony/http-foundation` Response
+classes + a build-time transform of the pre-compiled Smarty templates).
 
-Run it and it boots for real:
+`make native-daemons` also builds `sharefsd`, `dnsd`, `ntpd`, `ecosyslogd`,
+`sql-serverd`; `make teletext-typephp` builds `teletext_import`.
+
+Run `aun_filestored` and it boots for real:
 
 ```
 [INFO] aun-filestored (TypePHP native build) starting
 [INFO] core: event loop is React\EventLoop\StreamSelectLoop
 [INFO] AUN: listening on 0.0.0.0:32768
 [INFO] WebSocket bridge: listening on 0.0.0.0:8090
+[INFO] Admin HTTP: listening on 0.0.0.0:8080
 [INFO] RemoteSocket relay: listening on 127.0.0.1:8091
 [INFO] RemoteProvider relay: listening on 0.0.0.0:8092
 [INFO] core: entering primary loop
 ```
 
-Both packet paths were smoke-tested end to end with no interpreted fallback: a
-synthetic AUN `*I AM` FS request runs decode -> OSCLI -> `FileServer::login` ->
-`Security` -> reply -> AUN encapsulation -> transmit; a WebSocket client does the
-HTTP/1.1 upgrade and its frame reaches `WebSocket\Handler::onMessage`. See
-[`PORTING-REACT.md`](PORTING-REACT.md) for the stage-by-stage record and
-`packaging/typephp/vendor-patches/` for the nine small vendor changes.
+Everything was smoke-tested end to end with no interpreted fallback: a synthetic
+AUN `*I AM` FS request runs decode -> OSCLI -> `FileServer::login` -> `Security`
+-> reply -> AUN encapsulation -> transmit; a WebSocket client does the HTTP/1.1
+upgrade and its frame reaches `WebSocket\Handler::onMessage`; `curl` against the
+admin port renders every page (`/`, `/service`, `/users`, `/encapsulation`, …)
+from live daemon state; the RemoteBridge client connects to a peer and emits its
+`HELLO` handshake. See [`PORTING-REACT.md`](PORTING-REACT.md) for the
+stage-by-stage record and `packaging/typephp/vendor-patches/` for the 20 small
+vendor changes (every one a semantic no-op under the interpreter).
 
 `make typephp` without `TYPEPHP_DRY=0` is a `--dry` transpile (C++ generation,
-~239 files, no link) — a fast "does it still compile" check.
+no link) — a fast "does it still compile" check.
 `TYPEPHP_PROJECT=packaging/typephp/project.domain-only.yml make typephp` compiles
 just the domain classes (the pre-Stage-3 config), faster still.
 
-## Reality check — what is *not* compiled
+## Reality check — a `bin`-mode binary has no interpreter
 
-TypePHP supports **a defined subset of PHP**, so some things stay interpreted or
-out entirely:
+TypePHP `mode: bin` embeds **no PHP interpreter**, so nothing "falls back to
+interpreted" — a construct either compiles, is *replaced* by a shim, or is left
+out. What is replaced / left out for `aun_filestored`:
 
-- **The Symfony admin UI** (`Admin/`, `ShareFs/` — framework-bundle, the DI
-  container, Smarty, reflection). Separate problem; `Admin/` and `ShareFs/` are
-  not in `sources`.
-- **RemoteBridge** - `ServerHandler` and `ClientHandler` are compiled and wired
-  in `main.php` (feature-gated on `remote_bridge_enabled`); the client's
-  hostname connects go through the compiled `react/dns` + `React\Socket\Connector`
-  facade (vendor patches `0010`-`0013`). Not exercised end to end against a peer.
+- **Monolog** → `shims/StderrLogger.php` (one stderr line per record).
+- **`smarty/smarty` runtime** → `shims/smarty_runtime.php` + a build-time
+  transform of the pre-compiled templates (see **Web admin UI** below). The real
+  runtime loads templates with `include $file` + a `$unifunc()` string call —
+  impossible in an AOT binary.
+- **Symfony HttpKernel / DI container / Routing / FrameworkBundle** → a
+  hand-written fixed-route dispatcher (`admin/dispatcher.php`). The dumped DI
+  container gates a runtime `require` on `class_exists($x, false)` (always true
+  for an AOT class) across 100+ lazy service files — see `PORTING-REACT.md`
+  "Stage 10b". No sessions (the `SessionCookie` subscriber only set a cookie
+  nothing read).
+- **Symfony HttpFoundation** → **the real component** on the Response side
+  (`Response`, `RedirectResponse`, `ResponseHeaderBag`, `HeaderBag`, `Cookie`,
+  `ParameterBag`, `InputBag`) — compiled verbatim from `src/vendor` bar two
+  hand-patched copies; only `Request` + `BinaryFileResponse` stay shimmed. See
+  **Web admin UI** below.
+- **`aws/aws-sdk-php`** → `shims/aws_s3_client.php` (see **S3** below).
+- **`ext-ldap`** → `shims/ldap_openldap.cc` (see **LDAP** below).
+- **`ext-pcntl`** → `shims/pcntl_posix.cc` (see **pcntl** below).
 - The **Piconet serial interface** *is* compiled and wired
   (`UnixSerialDeviceConnector` via `react/socket`); it just can't be exercised
   without an Econet serial device (`stty` fails, `PiconetHandler` retries with
-  exponential backoff - verified).
-- **Monolog** — replaced by `shims/StderrLogger.php` (one stderr line per record).
-- **Dynamic dispatch** — the auth/VFS plugin *loaders* (`$class::init()` on a
-  string class name), `config`'s `constant()`/`defined()` lookups, and Ratchet's
-  dynamic `$conn->decor` property go through TypePHP's Zend runtime fallback
-  (interpreted). None are on the packet hot path.
+  exponential backoff — verified).
+- **RemoteBridge** — `ServerHandler` + `ClientHandler` compiled and wired
+  in `main.php` (gated on `remote_bridge_enabled`); the client's hostname
+  connects go through the compiled `react/dns` + `React\Socket\Connector` facade.
+  Verified end to end: a native `aun_filestored` connects to a listening peer and
+  emits its `HELLO <ts> <versions>` handshake, and the exponential-backoff
+  reconnect works (three timer callbacks needed a `?TimerInterface $t = null`
+  trailing param for tpc's strict arg-count — `PORTING-REACT.md` "Stage 6").
+- **Reserved keyword methods.** `config`'s `constant()`/`defined()` lookups
+  resolve at compile time to the generated `config_defines.php` consts.
 
-`bin` mode also forbids executable statements at file scope, so `src/filestored`
-et al. (top-level code) are replaced by `main.php`, and Composer's `files`
-autoloads (`react/promise/functions_include.php`, `symfony/deprecation-contracts`,
+`bin` mode forbids executable statements at file scope, so `src/filestored` et
+al. (top-level code) are replaced by `main.php`, and Composer `files` autoloads
+(`react/promise/functions_include.php`, `symfony/deprecation-contracts`,
 `ralouphie/getallheaders`) are handled by listing the real file or a shim.
 
 ### The `src/` files `project.yml` (filestored) excludes, and why
@@ -117,14 +143,15 @@ class here is excluded from *every* build.
   and `Services/Provider/Torchnet.php` reused a `foreach ($x as $k => $v)` key
   variable that a `string` local already held; the loop key was renamed.
 
-Individual blockers are still being knocked down as prep — see **Smarty** and
-**pcntl** below.
+See **Web admin UI**, **LDAP**, **S3** and **pcntl** below for the bigger
+dependency substitutions.
 
 ## Files
 
 | File | Purpose |
 |---|---|
-| `project.yml` | `tpc` build config — mode, PHP syntax level, `sources` (the 13 domain directories compiled today) and `ignore` (the 5 ReactPHP/Ratchet shells left out). |
+| `project.yml` | `tpc` build config for `aun_filestored` — mode, PHP syntax level, `sources` (the domain tree + vendored React/Ratchet/`react-http` + the admin-UI shims and staged transforms) and a short `ignore` (client-only halves + a few unused vendor files). `project.{sharefsd,dnsd,ntpd,ecosyslogd,sql-serverd,teletext}.yml` for the other targets. |
+| `admin/`, `shims/symfony_*`, `build-admin-templates.php`, `admin-tpl-hoist.php` | The native web admin UI — see **Web admin UI**. |
 | `main.php` | `bin`-mode entry point (`main(int $argc, array $argv): void`). |
 | `Containerfile` | `php:8.4-cli-bookworm` + C++ toolchain + `composer require swoole/typephp`. |
 | `build-typephp.sh` | Builds the image and runs `tpc` under podman. |
@@ -206,6 +233,30 @@ test-vector signature; `listObjectsV2` parses `CommonPrefixes` + `Contents`
 (`Key` / `Size` / `LastModified` as a `\DateTimeImmutable`); `doesObjectExist`
 (HEAD) and `getObject` round-trip.
 
+## Web admin UI (`Admin/`, `ShareFs/Admin/`)
+
+The interpreted daemon serves its admin pages through a Symfony micro-app
+(`Admin\Kernel` — `HttpKernel` + a dumped DI container + Routing + Smarty). None
+of that compiles under `mode: bin` (`PORTING-REACT.md` "Stage 10b/10c"). The
+native build replaces the framework, keeping the controllers and `.tpl`
+templates:
+
+| Piece | Native replacement |
+|---|---|
+| Routing | `admin/dispatcher.php` — a fixed `switch ($path)` over the 27 static routes in `Admin/config/routes.yaml` (zero `{placeholders}`), PSR-7 in via `react/http`, `React\Http\Message\Response` out. `sharefsd`'s 4 routes: `admin/sharefs_dispatcher.php`. |
+| Controllers | `build-typephp.sh` stages `stage/admin-ctl/` — a copy of `Admin/Controller/*.php` with `extends AbstractController` stripped (they never call an `AbstractController` helper) and the two `file_get_contents(__DIR__.'/../static/…')` reads rewritten to `base64_decode(ADMIN_STATIC[…])` (`__DIR__` is meaningless in an AOT binary; the assets are embedded via a generated `stage/admin-static.php`). |
+| Smarty runtime | `shims/smarty_runtime.php` — compile-only `\Smarty\Template` / `\Smarty\Variable` / `\Smarty\Smarty` / `\Smarty\Runtime\ForeachRuntime` + a replacement `Admin\Service\Smarty`, covering exactly the API the templates call. |
+| Smarty templates | `build-admin-templates.php` (+ `admin-tpl-hoist.php`) — a 3-pass build-time transform of `templates_c/*.tpl.php`: (1) strip the file-scope `if (isFresh()) { function content_*(){…} }` wrapper so the bare functions can be `sources`; (2) hoist `$tpl->getVariable('x')->value` method-call lvalues into locals (tpc's C++ codegen can't assign through a method result); (3) rewrite inline-HTML islands (`?>…<?php`) to `echo` (tpc rejects `Stmt_InlineHTML` inside a function). Emits `stage/admin-templates/` + a generated `admin_template_dispatch.php` (name → `content_*` `switch`, no variable-function call). |
+| `Request` / `Response` | The real `symfony/http-foundation` **Response side** compiled from `src/vendor` — `Response` / `RedirectResponse` / `ResponseHeaderBag` / `HeaderBag` / `Cookie` / `ParameterBag` / `InputBag` / `Exception\*` — verbatim except two hand-patched `shims/` copies: `symfony_response.php` (drop a file-scope `class_exists()` preload hint; reduce the PHP 8.4 `public ResponseHeaderBag $headers { set {…} }` property hook to a plain property) and `symfony_headerutils.php` (stub the unreachable `parseQuery()`; rename a `groupParts()` loop var). `Request` (needs another hook + `request_parse_body()` + the `File\`/`Session\` subtrees) and `BinaryFileResponse` (the real one streams) stay in `shims/symfony_httpfoundation.php`. |
+
+Verified: `curl` against a running native `aun_filestored` renders `/`,
+`/service?port=…`, `/users`, `/encapsulation?type=…` (including the nested
+keyed-`{foreach}` templates) from live `ServiceDispatcher` / `Security` state;
+`/nonesuch` → real `HTTP/1.1 404 Not Found`; a not-found `/users/delete` → real
+`302 Found` + `Location:`; every response carries the real `Cache-Control` /
+`Date` headers `ResponseHeaderBag` adds. `sharefsd`'s admin UI is the same
+machinery (`stage/sharefs-admin-{templates,ctl}/`).
+
 ## Command classes (Symfony Console)
 
 The `HomeLan\FileStore\Command\*` classes `extend
@@ -249,13 +300,16 @@ paging — the `\PDO` / `\PDOStatement` signature hints and all three drivers
 compile and run natively.
 
 **`filestored` (`Command\React`), `sharefsd` (`Command\ShareFsd`),
-`ecosyslogd` (`Command\EcoSyslogd`)** still use a bespoke `main*.php` (`ecosyslogd`
-unlike `sql-serverd` because of Monolog): `React`
-pulls in the Symfony **HttpKernel** admin service and `React\Http`; `ShareFsd`
-builds real UDP sockets via `React\Datagram\Factory` (which eagerly constructs a
-`react/dns` resolver) and the ShareFS Symfony admin kernel; `EcoSyslogd` builds
-a **Monolog** `Logger` with syslog handlers. None of those compile, and they are
-more than a loop-factory swap away.
+`ecosyslogd` (`Command\EcoSyslogd`)** keep a bespoke `main*.php` — a
+de-dynamised port of each command's `MainLoop()` — rather than compiling the
+command class itself. Not because the loop body can't compile (it does — that is
+the whole point) but because each class's *construction* graph is awkward:
+`React` builds the Symfony admin `HttpKernel` (replaced — see **Web admin UI**),
+`ShareFsd` the ShareFS admin kernel + `React\Datagram\Factory` (which eagerly
+constructs a `react/dns` resolver — the port bypasses it with a raw
+`stream_socket_server()`), `EcoSyslogd` a **Monolog** `Logger` (replaced by
+`shims/SyslogLogger.php`). The ports wire the same handlers, timers and
+listeners by hand; everything they call is compiled.
 
 ## ext-hash, ext-sockets, ReactPHP, Ratchet
 
@@ -350,8 +404,9 @@ TYPEPHP_BUILD_ARGS=--network=host make typephp
 
 ## Growing `sources`
 
-The 13 domain directories are already in `sources` and `ignore` is down to the
-5 framework shells. Growth from here means pulling in a *new* directory:
+The domain tree, the React/Ratchet/`react-http` vendor set and the admin UI are
+all in `sources`; `ignore` is down to client-only halves and a handful of unused
+vendor files. Growth from here means pulling in a *new* directory:
 
 1. Add the directory to `sources` in `project.yml`.
 2. `make typephp` and read the first `Fatal error:` — it names the file and line.
@@ -365,9 +420,10 @@ The 13 domain directories are already in `sources` and `ignore` is down to the
 
 `tpc` tolerates unresolved type hints in signatures, so a file only fails if it
 *extends/implements* a missing class, *reads a constant/static* off one, or hits
-a subset limit in a method body. `Admin/`, `ShareFs/`, `Command/` and
-`Console/` are the remaining trees — each is coupled to Symfony, Smarty or
-top-level launcher code and would need that dependency resolved first.
+a subset limit in a method body. `Admin/` and `ShareFs/Admin/` are now handled
+(via `stage/admin-ctl/` + the template transform — see **Web admin UI**);
+`Command/` and `Console/` stay out (each `Command\*` daemon has a bespoke
+`main*.php` port, and `Console/` is the interactive admin CLI).
 
 Compiling the ReactPHP loop + Ratchet themselves — so the Econet packet hot path
 (datagram -> loop -> encapsulation -> providers) is native end to end — is a

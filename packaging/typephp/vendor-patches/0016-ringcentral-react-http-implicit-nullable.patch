@@ -1,0 +1,33 @@
+--- a/vendor/ringcentral/psr7/src/CachingStream.php
++++ b/vendor/ringcentral/psr7/src/CachingStream.php
+@@ -24,7 +24,7 @@
+      */
+     public function __construct(
+         StreamInterface $stream,
+-        StreamInterface $target = null
++        ?StreamInterface $target = null
+     ) {
+         $this->remoteStream = $stream;
+         parent::__construct($target ?: new Stream(fopen('php://temp', 'r+')));
+--- a/vendor/ringcentral/psr7/src/StreamDecoratorTrait.php
++++ b/vendor/ringcentral/psr7/src/StreamDecoratorTrait.php
+@@ -12,7 +12,7 @@
+     /**
+      * @param StreamInterface $stream Stream to decorate
+      */
+-    public function __construct(StreamInterface $stream = null)
++    public function __construct(?StreamInterface $stream = null)
+     {
+         if ($stream) $this->stream = $stream;
+     }
+--- a/vendor/react/http/src/Io/Sender.php
++++ b/vendor/react/http/src/Io/Sender.php
+@@ -48,7 +48,7 @@
+      * @param ConnectorInterface|null $connector
+      * @return self
+      */
+-    public static function createFromLoop(LoopInterface $loop, ConnectorInterface $connector = null)
++    public static function createFromLoop(LoopInterface $loop, ?ConnectorInterface $connector = null)
+     {
+         if ($connector === null) {
+             $connector = new Connector(array(), $loop);

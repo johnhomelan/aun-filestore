@@ -1,0 +1,18 @@
+--- a/vendor/react/http/src/HttpServer.php
++++ b/vendor/react/http/src/HttpServer.php
+@@ -204,9 +204,13 @@
+      * @param callable[] ...$requestHandler
+      * @see self::listen()
+      */
+-    public function __construct($requestHandlerOrLoop)
++    public function __construct($requestHandlerOrLoop, ...$requestHandlerArgs)
+     {
+-        $requestHandlers = \func_get_args();
++        // TypePHP (packaging/typephp): strict arg-count on a declared 1-param
++        // constructor rejects the caller's 2nd+ handler args before
++        // func_get_args() ever runs - declare them variadic and rebuild the
++        // same array func_get_args() would have produced.
++        $requestHandlers = \array_merge([$requestHandlerOrLoop], $requestHandlerArgs);
+         if (reset($requestHandlers) instanceof LoopInterface) {
+             $loop = \array_shift($requestHandlers);
+         } else {

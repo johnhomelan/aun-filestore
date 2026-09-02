@@ -1,0 +1,60 @@
+# Admin HTTP UI plan (docs/plans - see the chat that produced this), Stage 10a:
+# probe the real react/http stack (HttpServer + ringcentral/psr7 message
+# parsing) standing on its own, independent of the Ratchet WebSocket stack
+# (Ratchet's own HttpServer only ever does the WS upgrade handshake - see
+# project.smoke-ws.yml). Dev harness - run:
+#   TYPEPHP_PROJECT=packaging/typephp/project.smoke-http.yml TYPEPHP_OUT=smoke-http \
+#     TYPEPHP_SKIP_PREP=1 packaging/typephp/build-typephp.sh
+name: smoke-http
+mode: bin
+php-version: "8.5"
+optimize: 0
+job: 4
+cxx-std: c++17
+sources:
+  - smoke/http.php
+  - shims/signals.php
+  - shims/pcntl_posix.stub.php
+  - shims/pcntl_posix.cc
+  - shims/StderrLogger.php
+  - shims/deprecation_contracts.php
+
+  # psr/log contract
+  - ../../build/typephp/stage/vendor/psr/log/Psr/Log/LoggerInterface.php
+
+  # --- Stage 1-2 vendored ReactPHP (mirrors project.smoke-ws.yml) ---------
+  - ../../build/typephp/stage/vendor/evenement/evenement/src
+  - ../../build/typephp/stage/vendor/react/promise/src
+  - ../../build/typephp/stage/vendor/react/event-loop/src/TimerInterface.php
+  - ../../build/typephp/stage/vendor/react/event-loop/src/Timer
+  - ../../build/typephp/stage/vendor/react/event-loop/src/Tick
+  - ../../build/typephp/stage/vendor/react/event-loop/src/SignalsHandler.php
+  - ../../build/typephp/stage/vendor/react/event-loop/src/LoopInterface.php
+  - ../../build/typephp/stage/vendor/react/event-loop/src/StreamSelectLoop.php
+  - ../../build/typephp/stage/vendor/react/stream/src
+  - ../../build/typephp/stage/vendor/react/socket/src/ConnectionInterface.php
+  - ../../build/typephp/stage/vendor/react/socket/src/ServerInterface.php
+  - ../../build/typephp/stage/vendor/react/socket/src/ConnectorInterface.php
+  - ../../build/typephp/stage/vendor/react/socket/src/Connection.php
+  - ../../build/typephp/stage/vendor/react/socket/src/TcpServer.php
+  - ../../build/typephp/stage/vendor/react/socket/src/TcpConnector.php
+  - ../../build/typephp/stage/vendor/react/socket/src/SocketServer.php
+  - ../../build/typephp/stage/vendor/react/socket/src/SecureServer.php
+
+  # --- Stage 10a: PSR-7 + react/http ---------------------------------------
+  - ../../build/typephp/stage/vendor/psr/http-message/src
+  - ../../build/typephp/stage/vendor/fig/http-message-util/src
+  - ../../build/typephp/stage/vendor/ringcentral/psr7/src
+  - ../../build/typephp/stage/vendor/react/http/src
+ignore:
+  - ../../build/typephp/stage/vendor/react/promise/src/functions_include.php
+  - ../../build/typephp/stage/vendor/ringcentral/psr7/src/functions_include.php
+  - ../../build/typephp/stage/vendor/ringcentral/psr7/src/StreamWrapper.php
+  - ../../build/typephp/stage/vendor/ringcentral/psr7/src/InflateStream.php
+  # Client-only: this probe is the server (listen) side only.
+  - ../../build/typephp/stage/vendor/react/http/src/Browser.php
+  - ../../build/typephp/stage/vendor/react/http/src/Client
+  - ../../build/typephp/stage/vendor/react/http/src/Io/ClientConnectionManager.php
+  - ../../build/typephp/stage/vendor/react/http/src/Io/ClientRequestState.php
+  - ../../build/typephp/stage/vendor/react/http/src/Io/ClientRequestStream.php
+  - ../../build/typephp/stage/vendor/react/http/src/Server.php

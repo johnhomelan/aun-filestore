@@ -38,7 +38,7 @@ plan's biggest risk is retired.
 
 ### Vendor patches (`packaging/typephp/vendor-patches/`)
 
-All thirteen are semantic no-ops under the interpreter — verified with `php -l` on
+All fourteen are semantic no-ops under the interpreter — verified with `php -l` on
 every changed file plus functional checks (`_reflectCallable`, guzzle `Query`
 round-trip). Applied to `build/typephp/stage/` at build time; `src/vendor` is
 never touched.
@@ -58,6 +58,7 @@ never touched.
 | `0011-react-socket-connector-argswap` | `react/socket` `Connector.php` | Legacy 1-arg `new Connector($loop)` detection used `\func_num_args() <= 1` (tpc can't see the caller's arg count) → `$loop === null`. |
 | `0012-react-dns-socket-timer-arity` | `react/dns` `CoopExecutor`/`TimeoutExecutor`/`TcpTransportExecutor`, `react/socket` `TimeoutConnector`/`HappyEyeBallsConnectionBuilder` | 0-arg `->then()` / `addTimer()` callbacks that the caller invokes with a value or `TimerInterface` → ignored trailing param. |
 | `0013-react-socket-errhandler-arity` | `react/socket` `TcpConnector.php`, `UnixServer.php`, `FdServer.php` | 2-arg `set_error_handler(function ($_, $error) …)` → 4-arg (tpc calls PHP error handlers with all 4). `SocketServer.php`'s own :116 handler left as-is (patch `0006` already edits that file). |
+| `0014-ratchet-pawl-callback-arity` | `ratchet/pawl` `Connector.php`, `WebSocket.php`, `ratchet/rfc6455` `MessageBuffer.php` | The **inbound pawl handshake path** (only exercised once a relay peer actually accepts): `Connector.php`'s post-handshake `$futureWsConn->promise()->then(function() …)` is resolved with the `WebSocket` → `+$mIgnoredConn = null`. `WebSocket.php`'s `MessageBuffer` message/control callbacks (declared 1 / 1 param) are called with `($x, $buffer)` → ignored trailing param, same shape as `0008` did for `WsServer`. `MessageBuffer::onData(string $data)` is registered as a `data` listener and pawl re-`emit()`s that event with `[$body, $stream]` (Connector.php:110) → `+$mIgnoredConn = null`. Without these, `sql-serverd` (and any pawl client — `ecosyslogd`, `dnsd`, `ntpd`) throws `ArgumentCountError` the moment the relay completes the WebSocket upgrade. |
 
 ### Rules learned (feed into Stage 4+)
 
@@ -347,7 +348,39 @@ natively** (see "runtime proof" below).
 
 `RemoteSocket/RelayServer.php` + `RemoteProvider/RelayServer.php` are in `sources` (never ignored for `filestored`) and wired in `main.php` gated on `remote_socket_relay_enabled` / `remote_provider_relay_enabled`; their `on{open,message,close,error}` + handlers are compiled symbols too.
 
-## Stage 6 — RemoteBridge client (plan)
+## Stage 6 — RemoteBridge client — DONE
+
+The bridge-to-bridge TCP link (one filestored connecting to another as a
+peer). **All six `RemoteBridge/*.php` classes compile and are wired in
+`main.php`**, gated on `remote_bridge_enabled`:
+`RemoteBridgeMap::init()` -> a `ServerHandler` per `SERVER` map entry -> one
+`ClientHandler` for all `CLIENT` entries.
+
+The plan's "skip react/dns, resolve synchronously" was overtaken by events -
+Stage 8's work brought the **full** `React\Socket\Connector` facade +
+`react/dns` + `react/cache` into `sources` (patches `0010`-`0012`), so
+`ClientHandler` uses the real async `new \React\Socket\Connector(['tls' => false], $loop)`
+unchanged - hostname bridge targets resolve natively.
+
+Three timer-callback arities were the only fix needed (our code, so `src/`
+edits, same shape as Piconet/pawl): `ClientHandler::scheduleReconnect()`'s
+`addTimer(..., function () ...)` and `Connection`'s two
+`addPeriodicTimer(..., function (): void ...)` (ping + idle) all get
+`?TimerInterface $oTimer = null` - `StreamSelectLoop` invokes timer callbacks
+with a `TimerInterface`, and strict arg-count rejected the 0-arg form (it
+surfaced at run time as a recovered `ArgumentCountError` spin in
+`main.php`'s loop-recovery wrapper).
+
+Verified: native `aun_filestored -c <conf>` with `remote_bridge_enabled=true`
+and a `CLIENT 127.0.0.1:19999 <secret> 5,6` map entry (nothing listening) logs
+`RemoteBridge: connecting to 127.0.0.1:19999` -> `failed to connect ... Connection
+refused` -> `will retry ... in 5 seconds` and the loop stays up - the whole
+Map-parse -> ClientHandler -> Connector -> TcpConnector -> connect -> backoff
+path runs compiled.
+
+---
+
+*(original plan below)*
 
 The last daemon feature not yet on a runtime path. `remote_bridge_enabled`
 defaults **false**, so `main.php` never calls a `remoteBridgeService()`.
@@ -454,13 +487,19 @@ the react/dns + Ratchet groundwork.
 | `src/include/classes/RemoteSocket/Client.php` (our code) | `new Connector($loop)` → `new Connector($loop, new \React\Socket\Connector(['tls' => false], $loop))` (pawl over `ws://`, no `SecureConnector`/openssl); `'message'` listener `(MessageInterface $m)` → `+mixed $mConn = null` (pawl emits `[$msg,$conn]`); `'close'` listener `()` → `+3 ignored params` (`[$code,$reason,$conn]`); reconnect timer `function ()` → `function (?TimerInterface $t = null)`. phpstan clean, 3451 tests pass. |
 | `main-sharefsd.php` + `main.php` | explicit `AuthPluginFile::init($logger)` — see the `class_exists($name, false)` rule above |
 
-### Not compiled (same as filestored)
+### Relay client — verified against a live relay
 
-The ShareFS Symfony admin UI (`ShareFs/Admin/` + `*Admin.php`). The `RemoteSocket`
-relay *client* path (pawl → `ws://` relay) is compiled and wired but off by
-default (`sharefs_remote_socket_relay_enabled=false`) and untested against a live
-relay — the stronger check (run a native `filestored` with its relay on, point
-`sharefs_remote_socket_relay_address` at it) is the remaining verification.
+The `RemoteSocket` relay *client* path (pawl → `ws://` relay) is compiled and
+wired, off by default. **Verified end to end (2026-09)** with the
+structurally-identical `dnsd`: native `aun_filestored`
+(`remote_socket_relay_enabled`, secret set) + native `dnsd`
+(`dns_remote_socket_relay_address` pointed at it, matching secret) → `dnsd` logs
+`RemoteSocket\Client: registered UDP/53` and `filestored` logs
+`RemoteSocket: registered udp.53` — the full pawl connect → `hello <secret>` →
+`hello_ok` → `register` → `register_ok` exchange runs between two tpc binaries.
+`sharefsd` / `ntpd` use the same `RemoteSocket\Client`.
+
+(The ShareFS admin UI is native — see the Stage 10d follow-up.)
 
 ---
 
@@ -583,6 +622,253 @@ is the only remaining unknown.
 `Vfs/Plugin/S3.php`'s `Aws\S3\*` is still not compiled (the AWS SDK is large and
 dynamic; `S3` is not in the default `vfs_plugins`).
 
+## Stage 10a — native admin HTTP transport (`react/http`) — DONE
+
+The admin HTTP UI plan's first sub-stage: prove `React\Http\HttpServer` (plain
+HTTP, as opposed to `Ratchet\Http\HttpServer` which only ever does the WebSocket
+upgrade handshake) compiles and runs natively, independent of whatever happens
+with the Symfony `HttpKernel` stack itself (Stage 10b). Verified with a new dev
+harness, `project.smoke-http.yml` / `smoke/http.php` (same shape as
+`project.smoke-ws.yml`): a real `HttpServer` bound to a native `TcpServer`,
+hit by an in-process HTTP/1.1 client, both compiled and linked into
+`build/typephp/smoke_http` — `podman run` reports
+`PASS (statusLine=y body=y)`. Nothing interpreted on this path.
+
+react/http depends on `ringcentral/psr7` (a guzzle/psr7 fork), not
+`guzzlehttp/psr7` — a new `STAGE_PKGS` entry in `build-typephp.sh`. Six new
+patches, same shape as the existing series:
+
+| Patch | File(s) | Change |
+|---|---|---|
+| `0015-ringcentral-psr7-stray-defines` | `ringcentral/psr7` `functions.php` | Two top-level `defined(...) or define(...)` guard statements (PHP 5.3 back-compat; both constants are native since PHP 5.4) — illegal stray code in `bin` mode. Deleted; nothing in this tree calls this file's free functions anyway. |
+| `0016-ringcentral-react-http-implicit-nullable` | `ringcentral/psr7` `CachingStream.php`/`StreamDecoratorTrait.php`, `react/http` `Io/Sender.php` | Three `Type $x = null` params (implicit nullable, deprecated since PHP 8.4) → `?Type $x = null`. |
+| `0017-ringcentral-psr7-query-decoder` | `ringcentral/psr7` `functions.php` | `parse_query()`/`build_query()`'s `$decoder`/`$encoder` locals hold a string callable (`'rawurldecode'`) in one branch, a `Closure` in others — the exact same pattern `0005` already fixed in guzzle's `Query.php`. Every branch now a `Closure`. |
+| `0018-react-http-requestheaderparser-retype` | `react/http` `Io/RequestHeaderParser.php` | A `$stream` local held `EmptyBodyStream`/`CloseProtectionStream`/`LengthLimitedStream`/`ChunkedDecoder` across branches, then was read again in a *later*, separately-flow-checked `if ($contentLength === 0)`. Split into one local per wrapping stage (each `withBody()`'d immediately, no cross-branch merge); the empty-body local is now predeclared `null` and the later check reads it directly instead of re-testing `$contentLength`. |
+| `0019-react-http-httpserver-ctor-arity` | `react/http` `HttpServer.php` | `__construct($requestHandlerOrLoop)` declares one param but relies on `\func_get_args()` to accept a variadic handler list — strict arg-count rejects a 2-arg call before the body ever runs. Declared `...$requestHandlerArgs`, body rebuilds the same array by hand. |
+| `0020-react-stream-resourcestream-aliased-fclose` | `react/stream` `{Readable,Writable,Duplex}ResourceStream.php` | **The same bug as the `main.php`/`sql-serverd` `fclose(): supplied resource is not a valid stream resource` crash reported against the interpreted-vs-native mismatch earlier** — now root-caused, not just worked around. `React\Socket\Connection` wires a `DuplexResourceStream` with an *injected* `WritableResourceStream` over the *same* `$resource` (standard ReactPHP: the duplex delegates its write half to the buffer). Both classes' `close()` end with `if (is_resource($this->stream)) fclose($this->stream);` — under the interpreter the second call's `is_resource()` correctly reports `false` (the fd is already gone) so it's a harmless no-op; under tpc, `is_resource()` does not reliably track liveness across the *aliased* handle held by the sibling object, so the second `fclose()` throws where Zend PHP wouldn't. Reproduced from a genuine, ordinary `Connection: close` request in the `smoke-http` harness — **not** limited to an abnormally-reset peer as first suspected. Fix: wrap each class's closing `fclose()` in a `try`/`catch (\Throwable)` that swallows exactly this "already closed via the aliased handle" case — a no-op under the interpreter, a fix under tpc. This supersedes the loop-recovery wrapper added to `main.php`'s `main()` as a blanket defense — that wrapper stays (cheap insurance against *other* unknown `Throwable`s) but this patch removes the specific trigger.
+
+`main.php` now calls `aun_filestored_start_admin_http()` (mirrors
+`aun_filestored_start_ws()`): a native `React\Http\HttpServer` bound to
+`webadmin_listen_address:webadmin_listen_port`. Full `aun-filestored` compiles at
+322 files, links, and — verified with `curl` against the running binary — the
+admin port answers `HTTP/1.1 200` with a plain placeholder body. **Transport
+only**: there is no admin *app* behind it yet (Stage 10b/10c/10d).
+
+## Stage 10b — real Symfony `HttpKernel` / DI stack — SPIKED, NOT PURSUED
+
+Per the admin HTTP UI plan, before falling back to a hand-rolled dispatcher we
+spiked whether the **pre-warmed / dumped** Symfony container
+(`src/var/cache/ContainerDDwwb97/…`, generated by a prior `cache:warmup`) — not
+the `ContainerBuilder` / YAML loader that produced it — could compile and resolve
+one real service-graph edge under tpc. Probe: `project.probe-symfony.yml` +
+`probe-symfony/entry.php` (construct the dumped container, `get()` the
+`IndexController`). Dry-compile only; never linked or run.
+
+**Outcome: abandoned.** Two independent, decisive findings:
+
+1. **The documented `class_exists($x, false)` trap, load-bearing this time.** The
+   dumped container's own `load()` and `createProxy()` (in
+   `HomeLan_FileStore_Admin_KernelProdContainer.php`) have **three** sites of the
+   form `class_exists($class = …, false) ? … : (require …)` — i.e. they gate a
+   **runtime `require` of an un-`sources`d PHP file** on `class_exists(…, false)`,
+   which "is always true for an AOT class" (see *Rules learned* above). Unlike
+   `Security::_getAuthPlugins()` — where we could hand-prime the one class — this
+   is core, generated Symfony DI machinery that governs *every* lazy service.
+2. **Lazy loading is structurally incompatible with `mode: bin`.** A tpc binary
+   has no runtime PHP compiler, so the `require $file` fallback can never fire —
+   which means **every** service class the container might touch must be in
+   `sources` up front. The dumped container for FrameworkBundle's default service
+   set is **137 generated files**; only **33** are admin-related. The other ~104
+   (cache-pool clearers, the secrets vault, ~40 `console.command.*` lazy stubs,
+   router-debug/YAML-lint tooling, session factories) would all have to transpile
+   cleanly under tpc's constraints — reserved `to*()` methods, no DOM/`SimpleXML`
+   param hints, strict arg-count, no `func_get_args`, no stray file-scope code
+   (already hit: `Container.php`'s two `class_exists()` opcache-preload hints,
+   `removed-ids.php`'s bare `return`) — purely to serve 27 static admin routes.
+
+Disproportionate and fragile. The native dispatcher (Stage 10d) — static route
+table → controller `[class, method]`, direct instantiation, no DI container, no
+`HttpKernel` — is the way, behind the Stage 10a transport.
+
+## Stage 10c — real `smarty/smarty` runtime — SPIKED, FAILS THE SAME WAY
+
+Probe: `project.probe-smarty.yml` + `probe-smarty/entry.php` — construct a
+`Smarty`, `fetch()` one **pre-compiled** template (`COMPILECHECK_OFF`; the
+template *compiler* is never in scope, only the runtime + loader). Dry-compile
+only.
+
+**Outcome: not viable under `mode: bin`**, same structural reason as 10b:
+
+- Every one of the ~20 non-trivial `templates_c/*.tpl.php` files opens, at **file
+  scope**, with `if ($_smarty_tpl->getCompiled()->isFresh(…)) { function
+  content_xxx(\Smarty\Template $_smarty_tpl) { … } }`. tpc rejects it outright:
+  `Fatal error: Unsupported statement: Stmt_If in …file_std-head.tpl.php:6`. bin
+  mode allows only class / function / const declarations at file scope. So the
+  compiled templates **cannot be `sources`**.
+- Smarty's loader reaches them only via `include $this->filepath`
+  (`Template/Compiled.php:259`) then calls the unit function through a **string
+  variable**, `$unifunc($_template)` (`Template/GeneratedPhpFile.php:111`), with
+  `function_exists($unifunc)` guards. Runtime PHP file inclusion + variable-function
+  dispatch — exactly what an AOT binary structurally lacks (cf. Stage 10b's
+  dumped-container `require`).
+- (`getRuntime()` / `getModifierCallback()` themselves are plain `switch`/loop —
+  *not* the `class_exists` trap — so those were never the problem.)
+
+So Stage 10d cannot lean on the `smarty/smarty` runtime either - it uses a
+build-time transform of the compiled templates + a compile-only shim instead.
+See **Stage 10d** below (it works). Both probe projects are kept as
+documentation; their headers record the outcome.
+
+## Stage 10d — native admin UI — DONE (dispatcher + 3-pass template transform + shims)
+
+The "build-time strip + Smarty shim" path from the Stage 10c note, in three
+build-time passes over each compiled `templates_c/*.tpl.php`
+(`packaging/typephp/build-admin-templates.php` + `admin-tpl-hoist.php`, run in
+`typephp-prep`):
+
+1. **Strip the file-scope `if (isFresh()) { … }` wrapper** (regex) → a bare
+   `function content_XXXX(\Smarty\Template $_smarty_tpl) { … }` that CAN be a
+   tpc `source`.
+2. **Hoist method-call lvalue targets** (AST, nikic/php-parser, format-preserving).
+   Smarty compiles `{foreach}` headers and loop counters to
+   `$_smarty_tpl->getVariable('x')->value` / `->iteration` used as an
+   **assignment / foreach-key-value target**. tpc transpiles it but its C++
+   codegen then emits `methodcall(…).attr(name, AttrMode::Update) = …`, which
+   g++ rejects — a method-call result is not an lvalue in tpc's generated C++.
+   This pass rewrites each to
+   `$__sm_oN = $_smarty_tpl->getVariable('x'); $__sm_oN->value = …;` (and the
+   `foreach (… as $k->value => $v->value)` header form to a plain
+   `as $__sm_kN => $__sm_vN` + two hoisted assigns in the body). 11 of 22
+   templates needed it.
+3. **De-inline the HTML islands** (`token_get_all`): every `?>…<?php` / `<?= … ?>`
+   run becomes `echo '…';`. tpc rejects `Stmt_InlineHTML` inside a function, and
+   Smarty's compiled output is built entirely on it.
+
+Output: `stage/admin-templates/` (the transformed `content_*()` functions,
+listed as `sources`) + a generated `admin_template_dispatch.php` (name→unifunc
+table + `switch()` invoker — no variable-function call, which tpc also lacks).
+
+`packaging/typephp/shims/smarty_runtime.php` — compile-only `\Smarty\Template` /
+`\Smarty\Variable` / `\Smarty\Smarty` / `\Smarty\Runtime\ForeachRuntime` + a
+replacement `HomeLan\FileStore\Admin\Service\Smarty` — covers exactly the API
+surface the transformed templates call: `getValue`/`getVariable`/`setVariable`/
+`hasVariable`/`assign`/`getSmarty`/`renderSubTemplate`, `getRuntime('Foreach')`
+→ `init`/`restore`, `getModifierCallback('count'|'implodemod'|'ucfirst')`.
+
+Coupling to note: the transform tracks Smarty's *compiled-output* shape (the
+`isFresh()` wrapper, `getVariable()->value` lvalues, inline-HTML islands). A
+`smarty/smarty` major bump could change any of those; `build-admin-templates.php`
+fails loudly (not silently) if a wrapper prefix or an inline-HTML token survives,
+so a break is a build error, not a runtime surprise.
+
+### The dispatcher + controllers
+
+- **`build-typephp.sh` `stage/admin-ctl/` step** — copies the 8
+  `Admin/Controller/*` classes with `extends AbstractController` + its `use`
+  removed (they never call an AbstractController helper — every `$this->…()` is
+  their own private/protected method), and rewrites the two
+  `file_get_contents(__DIR__ . '/../static/…')` reads (favicon.ico,
+  teletext-render.js — `__DIR__` is meaningless in an AOT binary) to
+  `base64_decode(ADMIN_STATIC['…'])`, from a generated `stage/admin-static.php`.
+  `src/` is untouched. Same non-invasive pattern as `stage/cmd/`.
+- **`packaging/typephp/shims/symfony_httpfoundation.php`** — compile-only
+  `Request` / `Response` / `RedirectResponse` / `BinaryFileResponse` + param /
+  header bags. Thin slice: `->getMethod()`, `->query->get()`, `->request->all()`,
+  `new Response($body[,$status[,$headers]])`, `->headers->set()`, `Response::HTTP_OK`.
+- **`packaging/typephp/admin/dispatcher.php`** — `Dispatcher::handle(PSR-7) →
+  react/http Response`: a 27-arm `switch ($path)` (routes.yaml is all static
+  paths) → direct `new XController()->method(…)` → Symfony-shim ↔ PSR-7 adapters,
+  wrapped in `try/catch` → 500. No `HttpKernel`, no DI container, no Routing
+  component, no session (the interpreted daemon's `SessionCookie` only sets a
+  cookie nothing reads — dropped).
+- **`main.php`** — `aun_filestored_start_admin_http()` now calls
+  `Dispatcher::handle()` in place of the Stage 10a placeholder.
+
+`project.yml` wires in the two shims, the dispatcher, and
+`stage/admin-{templates,ctl,static.php}`.
+
+### Verified
+
+`TYPEPHP_DRY=0 make typephp` → `Build successful` (356 files). Running the native
+`aun_filestored` and `curl`-ing every route family:
+
+| Route | Result |
+|---|---|
+| `GET /` | 200 — `index.tpl` with **live** `ServiceDispatcher` data (File Server 153/151, Print Server 159/209, Bridge 156, …) |
+| `GET /service?port=153` | 200 — `service.tpl` (nested `{foreach}`) |
+| `GET /encapsulation?type=aun` | 200 — `encapsulation.tpl` (nested keyed `{foreach}` + `->iteration`) |
+| `GET /encapsulation` (no type) | 200 — `error.tpl` path |
+| `GET /users`, `/users/create` | 200 — live `Security::` user table / `users-form.tpl` |
+| `GET /service/teletext/browse`, `/service/macemail/broadcast` | 200 |
+| `GET /service/torchnet/browse?port=155` | 404 — controller's own "service not found" (correct) |
+| `GET /static/teletext-render.js` | 200 `text/javascript` — embedded asset |
+| `GET /favicon.ico` | 200 `image/x-icon` — embedded asset |
+| `GET /nonesuch` | 404 |
+
+All 8 controllers respond, every template family renders (including the ones the
+transform's pass 2 was needed for), against real in-process daemon state.
+
+### sharefsd's own admin UI — also DONE (same machinery)
+
+`sharefsd` has its own small Symfony admin micro-app (`ShareFs\Admin\Kernel`) —
+4 routes (`/`, `/component`, `/kube/{live,ready}`), 2 controllers, 5 templates.
+Given the same treatment, **reusing without change**: `build-admin-templates.php`
++ `admin-tpl-hoist.php` (the 3-pass template transform), `shims/smarty_runtime.php`
+(a second `ShareFs\Admin\Service\Smarty` class added), `shims/symfony_httpfoundation.php`.
+
+New / changed for `sharefsd`:
+- `build-typephp.sh` — parallel `stage/sharefs-admin-{templates,ctl}/` steps
+  (no static-asset embedding — ShareFs's admin has none). The stripped templates
+  keep the `HomeLan\FileStore\Admin\Compiled` namespace; each binary compiles
+  only its own `admin_template_dispatch.php`, so there is no clash.
+- `packaging/typephp/admin/sharefs_dispatcher.php` — ~85 lines, a 4-arm `switch`.
+- `main-sharefsd.php` — `aun_sharefsd_start_admin_http()`, mirrors filestored's,
+  bound to `sharefs_webadmin_listen_{address,port}`.
+- `project.sharefsd.yml` — adds `ringcentral/psr7` + `react/http` + the shims +
+  dispatcher + `stage/sharefs-admin-*`; un-ignores `ShareFs/{Share,Freeway,
+  AccessPlus,ShareFsData}Admin.php` (the controllers' `getComponents()` needs
+  them) and adds the two support types they use
+  (`Encapsulation/EncapsulationAdminInterface.php`,
+  `Services/Provider/AdminEntity.php`).
+
+Verified: `TYPEPHP_DRY=0 … project.sharefsd.yml` → `Build successful` (263 files).
+Native `sharefsd` (with a service-identity login it can satisfy) serves `GET /`
+(all 4 `ShareFs\*Admin` components listed), `GET /component?type=shares` (nested
+keyed `{foreach}` entity table), `GET /component?type=bogus` → `error.tpl`,
+`/kube/live` → 200, `/nonesuch` → 404.
+
+Still not ported: nothing admin-related. (The filestored / sharefsd admin UIs are
+both native now.)
+
+### Stage 10d follow-up — real `symfony/http-foundation` Response side — DONE
+
+`shims/symfony_httpfoundation.php` originally hand-rolled `Request` / `Response` /
+`RedirectResponse` / the bags. The **Response side is now the real component**,
+compiled: `Response`, `RedirectResponse`, `ResponseHeaderBag`, `HeaderBag`,
+`Cookie`, `ParameterBag`, `InputBag`, `Exception\*` — listed in
+`project{,.sharefsd}.yml`, compiling **verbatim from `src/vendor`** except two
+hand-patched copies in `shims/`:
+
+| Copy | Edit (both semantic no-ops) |
+|---|---|
+| `symfony_response.php` | drop the file-scope `class_exists(ResponseHeaderBag::class);` preload hint (stray code in bin mode); reduce the PHP 8.4 property hook `public ResponseHeaderBag $headers { set { … } }` to a plain typed property (the hook only fired a deprecation on direct external assignment, which the dispatcher never does) |
+| `symfony_headerutils.php` | `parseQuery()` (only called by `Request::__construct`, not compiled) reassigns its `string $query` param to an array and reuses `$k` across two differently-typed `foreach`es — body stubbed to `return []`; `groupParts()` rebinds its `array $matches` param as a loop var — renamed to `$matchGroup` |
+
+Still shimmed, deliberately: **`Request`** (the real one needs another 8.4
+property hook, `request_parse_body()`, and the `File\` / `Session\` subtrees — all
+dead weight for an input carrier the dispatcher builds itself; the shim is just
+two real `InputBag`s + `getMethod()`/`getPathInfo()`) and **`BinaryFileResponse`**
+(the real one streams — `getContent()` returns `false` — so a `Response` subclass
+that slurps the file; used once, `ServiceController::download`).
+
+Both dispatchers gained a `reactHeaders()` helper: `ResponseHeaderBag::all()` is
+`[name => list<?string>]`, react/http's `Response` wants null-free scalar-or-list
+(same normalisation `Command\React::adminService()` does). Payoff: real HTTP
+status-reason phrases, real header casing/normalisation, real `RedirectResponse`
+HTML body, real `Cache-Control`/`Date` headers — for free. Probe:
+`project.probe-httpfoundation.yml` → `PASS`. filestored transpiles at 360 files,
+sharefsd at 267.
+
 ## Stage 8 — native `dnsd`, `ntpd`, `ecosyslogd` — DONE
 
 `make dns-typephp` / `ntp-typephp` / `ecosyslog-typephp` →
@@ -609,9 +895,11 @@ reconnect-timer arity). New `shims/SyslogLogger.php` — PSR-3 over `openlog()`/
 point); `ecosyslogd` uses the full `project.yml` set + `RemoteProvider` +
 `ratchet/pawl` + `SyslogLogger`.
 
-Not verified against a live relay (the stronger check: run a native `filestored`
-with relays on, point the addresses at it, send an EcoSyslog packet and confirm
-it reaches `syslog()`).
+The Remote Socket path (`dnsd`/`ntpd`) is **verified against a live native
+`filestored` relay** (2026-09) - see Stage 7. `ecosyslogd`'s Remote *Provider*
+path uses the structurally-identical `RemoteProvider\Client` (same pawl +
+`Frame` + auth/register machinery, different frame subclass); a full
+EcoSyslog-packet-to-`syslog()` check is still the stronger unrun test.
 
 ---
 

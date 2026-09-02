@@ -10,11 +10,15 @@
 # packaging/typephp/PORTING-REACT.md for how each piece was brought in and
 # packaging/typephp/vendor-patches/ for the (small) vendor changes.
 #
-# Not compiled: the Symfony admin UI (Admin/, ShareFs/), the outbound
-# RemoteBridge client (needs react/dns), and Monolog (replaced by
-# shims/StderrLogger.php). The Piconet serial interface IS compiled and wired
-# (UnixSerialDeviceConnector via react/socket) - it just can't be exercised
-# here without an Econet serial device attached.
+# Replaced by shims (nothing runs interpreted - a bin-mode binary has no PHP
+# interpreter): Monolog -> shims/StderrLogger.php; aws-sdk-php -> shims/aws_s3_client.php;
+# ext-ldap -> shims/ldap_openldap.cc; ext-pcntl/posix -> shims/pcntl_posix.cc;
+# smarty/smarty -> shims/smarty_runtime.php + a build-time template transform;
+# Symfony HttpKernel / DI / Routing -> a fixed-route dispatcher. Symfony
+# HttpFoundation IS the real component (Response side compiled verbatim bar two
+# hand-patched files; only Request + BinaryFileResponse stay shimmed). See
+# PORTING-REACT.md "Stage 10d". The web admin UI, the Piconet serial interface
+# and the outbound RemoteBridge client are all compiled and wired.
 name: aun-filestored
 mode: bin
 php-version: "8.5"
@@ -119,6 +123,34 @@ sources:
 
   - ../../build/typephp/stage/vendor/react/socket/src/SocketServer.php
   - ../../build/typephp/stage/vendor/react/socket/src/SecureServer.php
+
+  # --- Stage 10a: admin HTTP transport (react/http, plain HTTP - distinct
+  # from Ratchet's HttpServer above, which only ever does the WS upgrade) --
+  - ../../build/typephp/stage/vendor/ringcentral/psr7/src
+  - ../../build/typephp/stage/vendor/react/http/src
+
+  # --- Stage 10d: native admin UI (no Symfony HttpKernel/DI, no Smarty runtime)
+  - shims/smarty_runtime.php              # \Smarty\* + Admin\Service\Smarty shim
+  - shims/symfony_httpfoundation.php      # Request + BinaryFileResponse only now
+  # --- real symfony/http-foundation, Response side (see PORTING-REACT.md "Stage
+  # 10d - http-foundation"). Two files are hand-patched copies; the rest compile
+  # verbatim from src/vendor. Request + BinaryFileResponse stay in the shim above.
+  - shims/symfony_response.php            # patched: drop file-scope class_exists, de-hook $headers
+  - shims/symfony_headerutils.php         # patched: stub parseQuery, rename a groupParts loop var
+  - ../../src/vendor/symfony/http-foundation/RedirectResponse.php
+  - ../../src/vendor/symfony/http-foundation/ResponseHeaderBag.php
+  - ../../src/vendor/symfony/http-foundation/HeaderBag.php
+  - ../../src/vendor/symfony/http-foundation/Cookie.php
+  - ../../src/vendor/symfony/http-foundation/ParameterBag.php
+  - ../../src/vendor/symfony/http-foundation/InputBag.php
+  - ../../src/vendor/symfony/http-foundation/Exception/ExceptionInterface.php
+  - ../../src/vendor/symfony/http-foundation/Exception/RequestExceptionInterface.php
+  - ../../src/vendor/symfony/http-foundation/Exception/BadRequestException.php
+  - ../../src/vendor/symfony/http-foundation/Exception/UnexpectedValueException.php
+  - admin/dispatcher.php                  # path -> controller switch, PSR-7 <-> shim
+  - ../../build/typephp/stage/admin-templates   # stripped compiled templates + dispatch
+  - ../../build/typephp/stage/admin-ctl         # controllers, minus `extends AbstractController`
+  - ../../build/typephp/stage/admin-static.php  # favicon.ico + teletext-render.js, base64
 ignore:
   - ../../src/include/external
   - ../../build/typephp/stage/vendor/react/promise/src/functions_include.php
@@ -133,3 +165,13 @@ ignore:
   - ../../build/typephp/stage/vendor/cboden/ratchet/src/Ratchet/Http/Router.php
   - ../../build/typephp/stage/vendor/cboden/ratchet/src/Ratchet/Http/OriginCheck.php
   - ../../build/typephp/stage/vendor/cboden/ratchet/src/Ratchet/Server/FlashPolicy.php
+  - ../../build/typephp/stage/vendor/ringcentral/psr7/src/functions_include.php
+  - ../../build/typephp/stage/vendor/ringcentral/psr7/src/StreamWrapper.php
+  - ../../build/typephp/stage/vendor/ringcentral/psr7/src/InflateStream.php
+  # Client-only: filestored is the server (listen) side only.
+  - ../../build/typephp/stage/vendor/react/http/src/Browser.php
+  - ../../build/typephp/stage/vendor/react/http/src/Client
+  - ../../build/typephp/stage/vendor/react/http/src/Io/ClientConnectionManager.php
+  - ../../build/typephp/stage/vendor/react/http/src/Io/ClientRequestState.php
+  - ../../build/typephp/stage/vendor/react/http/src/Io/ClientRequestStream.php
+  - ../../build/typephp/stage/vendor/react/http/src/Server.php

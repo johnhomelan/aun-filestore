@@ -1,0 +1,64 @@
+--- a/vendor/react/stream/src/ReadableResourceStream.php
++++ b/vendor/react/stream/src/ReadableResourceStream.php
+@@ -125,7 +125,17 @@
+         $this->removeAllListeners();
+
+         if (\is_resource($this->stream)) {
+-            \fclose($this->stream);
++            // TypePHP (packaging/typephp): see DuplexResourceStream::close() -
++            // a sibling wrapper over the same aliased resource handle (e.g.
++            // React\Socket\Connection's injected WritableResourceStream) may
++            // already have fclose()'d it; tpc's is_resource() doesn't reliably
++            // detect that on this handle, so fclose() here can throw where the
++            // interpreter would silently no-op.
++            try {
++                \fclose($this->stream);
++            } catch (\Throwable $e) {
++                // already closed via the aliased handle - nothing to do.
++            }
+         }
+     }
+
+--- a/vendor/react/stream/src/WritableResourceStream.php
++++ b/vendor/react/stream/src/WritableResourceStream.php
+@@ -118,7 +118,17 @@
+         $this->removeAllListeners();
+
+         if (\is_resource($this->stream)) {
+-            \fclose($this->stream);
++            // TypePHP (packaging/typephp): see DuplexResourceStream::close() -
++            // a sibling wrapper over the same aliased resource handle (e.g. the
++            // DuplexResourceStream this buffer is injected into) may already
++            // have fclose()'d it; tpc's is_resource() doesn't reliably detect
++            // that on this handle, so fclose() here can throw where the
++            // interpreter would silently no-op.
++            try {
++                \fclose($this->stream);
++            } catch (\Throwable $e) {
++                // already closed via the aliased handle - nothing to do.
++            }
+         }
+     }
+
+--- a/vendor/react/stream/src/DuplexResourceStream.php
++++ b/vendor/react/stream/src/DuplexResourceStream.php
+@@ -157,7 +157,18 @@
+         $this->removeAllListeners();
+
+         if (\is_resource($this->stream)) {
+-            \fclose($this->stream);
++            // TypePHP (packaging/typephp): $this->buffer (an injected
++            // WritableResourceStream - e.g. React\Socket\Connection wires one
++            // over this same $stream) may already have fclose()'d it just
++            // above. The interpreter's is_resource() correctly reports that
++            // as no longer a resource on this second check; tpc's does not
++            // reliably track liveness across the aliased handle, so fclose()
++            // here can throw where the interpreter would silently no-op.
++            try {
++                \fclose($this->stream);
++            } catch (\Throwable $e) {
++                // already closed via $this->buffer - nothing to do.
++            }
+         }
+     }
+

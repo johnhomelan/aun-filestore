@@ -729,7 +729,7 @@ build-time passes over each compiled `templates_c/*.tpl.php`
 1. **Strip the file-scope `if (isFresh()) { … }` wrapper** (regex) → a bare
    `function content_XXXX(\Smarty\Template $_smarty_tpl) { … }` that CAN be a
    tpc `source`.
-2. **Hoist method-call lvalue targets** (AST, nikic/php-parser, format-preserving).
+2. **Hoist method-call lvalue targets** (`admin-tpl-hoist.php` - line-oriented regex, no nikic/php-parser: it is a dev-only dep, absent from the `--no-dev` typephp-prep vendor set).
    Smarty compiles `{foreach}` headers and loop counters to
    `$_smarty_tpl->getVariable('x')->value` / `->iteration` used as an
    **assignment / foreach-key-value target**. tpc transpiles it but its C++

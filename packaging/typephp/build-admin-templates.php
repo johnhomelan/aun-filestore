@@ -17,23 +17,27 @@ declare(strict_types=1);
  * tpc `mode: bin` rejects the file-scope `if` ("Unsupported statement: Stmt_If")
  * and cannot `include` a PHP file at run time to pull the function in anyway.
  *
- * This script strips the `if (...isFresh...) {` prefix and its matching closing
- * `}`, leaving a bare `function content_XXXX(...) { ... }` that CAN be listed in
- * a tpc project's `sources`. It also emits admin_template_dispatch.php - a
- * name -> unifunc table plus a `match()`-based invoker - so the Smarty runtime
- * shim (packaging/typephp/shims/smarty_runtime.php) can resolve
- * fetch('index.tpl') / renderSubTemplate('file:std-head.tpl') to the right
- * compiled function without a variable-function call.
+* Three passes per compiled template:
  *
- * A second pass rewrites every inline-HTML island (`?>...<?php`, `<?= ... ?>`)
- * into an `echo '...';` / `echo (...);` statement: tpc `mode: bin` also rejects
- * `Stmt_InlineHTML` inside a function body, and Smarty's compiled output is
- * built entirely on `?>html<?php` interleaving.
+ *   1. Strip the `if (...isFresh...) {` prefix and its matching closing `}`,
+ *      leaving a bare `function content_XXXX(...) { ... }` that CAN be a
+ *      `sources` entry. Also emits admin_template_dispatch.php - a name ->
+ *      unifunc table plus a `switch()` invoker - so the Smarty runtime shim
+ *      (shims/smarty_runtime.php) resolves fetch('index.tpl') /
+ *      renderSubTemplate('file:std-head.tpl') without a variable-function call.
+ *   2. Hoist Smarty's method-call lvalue targets
+ *      (`$_smarty_tpl->getVariable('x')->value` / `->iteration` as a foreach or
+ *      assignment target) into plain locals - tpc's C++ codegen cannot assign
+ *      through a method-call result (admin-tpl-hoist.php; line-oriented regex,
+ *      no nikic/php-parser).
+ *   3. Rewrite every inline-HTML island (`?>...<?php`, `<?= ... ?>`) into an
+ *      `echo '...';` statement - tpc `mode: bin` rejects `Stmt_InlineHTML`
+ *      inside a function body, and Smarty's compiled output is built entirely
+ *      on `?>html<?php` interleaving.
  *
- * A third pass (admin-tpl-hoist.php) hoists Smarty's method-call lvalue targets
- * (`$_smarty_tpl->getVariable('x')->value` as a foreach / assignment target)
- * into plain locals - tpc's C++ codegen cannot assign through a method-call
- * result.
+ * tpc `mode: bin` rejects the original file-scope `if` ("Unsupported statement:
+ * Stmt_If") and cannot `include` a PHP file at run time to pull the function in
+ * anyway - hence pass 1.
  *
  * Usage: php build-admin-templates.php <templates_c dir> <out dir>
  */
@@ -147,7 +151,9 @@ foreach (glob($sSrcDir . '/*.tpl.php') as $sPath) {
     $sStripped = preg_replace('/\}\s*$/', '', rtrim($sStripped) . "\n");
     $sStripped = rtrim($sStripped) . "\n";
 
-    // Pass 2: hoist method-call lvalue targets into locals (AST, format-preserving).
+    // Pass 2: hoist Smarty method-call lvalue targets into locals (line-oriented
+    // regex - admin-tpl-hoist.php; no nikic/php-parser, which is dev-only and
+    // absent from the --no-dev typephp-prep vendor set).
     $sStripped = admin_tpl_hoist_lvalues($sStripped);
 
     // Pass 3: rewrite inline-HTML islands to `echo` statements.

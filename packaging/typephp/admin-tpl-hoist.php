@@ -3,8 +3,8 @@
 declare(strict_types=1);
 
 /*
- * Pass 3 of the admin-template transform (see build-admin-templates.php and
- * PORTING-REACT.md "Stage 10d - templating").
+ * Pass 2 of the admin-template transform (see build-admin-templates.php and
+ * PORTING-REACT.md "Stage 10d").
  *
  * Smarty compiles {foreach} headers and loop counters to expressions like
  *
@@ -20,156 +20,73 @@ declare(strict_types=1);
  * the assignment target is `$local->prop` (which tpc codegens fine):
  *
  *     foreach ($src as $__sm_v1) {
- *         $__sm_o1 = $_smarty_tpl->getVariable('x'); $__sm_o1->value = $__sm_v1;
+ *         $__sm_ov1 = $_smarty_tpl->getVariable('x'); $__sm_ov1->value = $__sm_v1;
  *         ...
  *     }
  *     $__sm_o2 = $_smarty_tpl->getVariable('x'); $__sm_o2->iteration = 0;
  *
- * AST-based (nikic/php-parser, format-preserving) so it is robust against the
- * exact whitespace of Smarty's output.
+ * Smarty's compiled output is regular enough that this is line-oriented regex,
+ * NOT an AST pass - deliberately: nikic/php-parser is a dev-only dependency and
+ * this script runs in the typephp-prep step where `src/vendor` is installed
+ * `--no-dev`. Every match anchors `^` (each construct is on its own line in the
+ * compiled .tpl.php).
  *
  * require this file; call admin_tpl_hoist_lvalues(string $phpSource): string.
  */
 
-require_once __DIR__ . '/../../src/vendor/autoload.php';
-
-use PhpParser\Node;
-use PhpParser\Node\Expr;
-use PhpParser\NodeTraverser;
-use PhpParser\NodeVisitorAbstract;
-use PhpParser\ParserFactory;
-use PhpParser\PrettyPrinter;
-
 function admin_tpl_hoist_lvalues(string $sCode): string
 {
-    $oParserFactory = new ParserFactory();
-    $oParser = $oParserFactory->createForHostVersion();
+    $iN = 0;
 
-    $oLexerTokens = null;
-    $aOld = $oParser->parse($sCode);
-    if ($aOld === null) {
-        throw new \RuntimeException('admin_tpl_hoist_lvalues: parse failed');
+    // --- keyed foreach: `foreach (SRC as $tpl->getVariable('K')->value => $tpl->getVariable('V')->value) {`
+    $sCode = \preg_replace_callback(
+        '#^foreach \((?<src>.+?) as \$_smarty_tpl->getVariable\(\x27(?<k>[^\x27]+)\x27\)->value'
+        . ' => \$_smarty_tpl->getVariable\(\x27(?<v>[^\x27]+)\x27\)->value\) \{$#m',
+        static function (array $aM) use (&$iN): string {
+            $iN++;
+            return \sprintf(
+                "foreach (%s as \$__sm_k%d => \$__sm_v%d) {\n"
+                . "\$__sm_ok%d = \$_smarty_tpl->getVariable('%s'); \$__sm_ok%d->value = \$__sm_k%d;\n"
+                . "\$__sm_ov%d = \$_smarty_tpl->getVariable('%s'); \$__sm_ov%d->value = \$__sm_v%d;",
+                $aM['src'], $iN, $iN,
+                $iN, $aM['k'], $iN, $iN,
+                $iN, $aM['v'], $iN, $iN,
+            );
+        },
+        $sCode,
+    );
+
+    // --- unkeyed foreach: `foreach (SRC as $tpl->getVariable('V')->value) {`
+    $sCode = \preg_replace_callback(
+        '#^foreach \((?<src>.+?) as \$_smarty_tpl->getVariable\(\x27(?<v>[^\x27]+)\x27\)->value\) \{$#m',
+        static function (array $aM) use (&$iN): string {
+            $iN++;
+            return \sprintf(
+                "foreach (%s as \$__sm_v%d) {\n"
+                . "\$__sm_ov%d = \$_smarty_tpl->getVariable('%s'); \$__sm_ov%d->value = \$__sm_v%d;",
+                $aM['src'], $iN,
+                $iN, $aM['v'], $iN, $iN,
+            );
+        },
+        $sCode,
+    );
+
+    // --- bare lvalue statement: `$tpl->getVariable('X')->iteration = ...;` / `...++;` / `...--;`
+    $sCode = \preg_replace_callback(
+        '#^\$_smarty_tpl->getVariable\(\x27(?<n>[^\x27]+)\x27\)->(?<prop>iteration|value)(?<op>\s*=\s*(?!=)|\+\+|--)#m',
+        static function (array $aM) use (&$iN): string {
+            $iN++;
+            return \sprintf(
+                "\$__sm_o%d = \$_smarty_tpl->getVariable('%s'); \$__sm_o%d->%s%s",
+                $iN, $aM['n'], $iN, $aM['prop'], $aM['op'],
+            );
+        },
+        $sCode,
+    );
+
+    if ($sCode === null) {
+        throw new \RuntimeException('admin_tpl_hoist_lvalues: preg_replace_callback failed');
     }
-    $aOldTokens = $oParser->getTokens();
 
-    $oTraverser = new NodeTraverser();
-    $oCloner = new \PhpParser\NodeVisitor\CloningVisitor();
-    $oTraverser->addVisitor($oCloner);
-    $aNew = $oTraverser->traverse($aOld);
-
-    $oTraverser2 = new NodeTraverser();
-    $oTraverser2->addVisitor(new class extends NodeVisitorAbstract {
-        private int $iN = 0;
-
-        /**
-         * A `$_smarty_tpl->getVariable('NAME')->PROP` property-fetch, or null.
-         * @return array{0: Expr\MethodCall, 1: string}|null
-         */
-        private function matchGetVarProp(Node $oNode): ?array
-        {
-            if (!$oNode instanceof Expr\PropertyFetch) {
-                return null;
-            }
-            $oInner = $oNode->var;
-            if (!$oInner instanceof Expr\MethodCall) {
-                return null;
-            }
-            if (!$oInner->name instanceof Node\Identifier || $oInner->name->toString() !== 'getVariable') {
-                return null;
-            }
-            if (!$oInner->var instanceof Expr\Variable || $oInner->var->name !== '_smarty_tpl') {
-                return null;
-            }
-            if (!$oNode->name instanceof Node\Identifier) {
-                return null;
-            }
-            return [$oInner, $oNode->name->toString()];
-        }
-
-        public function leaveNode(Node $oNode)
-        {
-            // --- foreach ($src as [$k =>] $v)  with method-call targets ------
-            if ($oNode instanceof Node\Stmt\Foreach_) {
-                $aPrepend = [];
-
-                foreach (['keyVar', 'valueVar'] as $sSlot) {
-                    $oTarget = $oNode->{$sSlot};
-                    if ($oTarget === null) {
-                        continue;
-                    }
-                    $aMatch = $this->matchGetVarProp($oTarget);
-                    if ($aMatch === null) {
-                        continue;
-                    }
-                    [$oMethodCall, $sProp] = $aMatch;
-                    $this->iN++;
-                    $sObjVar  = '__sm_o' . $this->iN;
-                    $sLoopVar = '__sm_' . ($sSlot === 'keyVar' ? 'k' : 'v') . $this->iN;
-
-                    // foreach target -> plain local
-                    $oNode->{$sSlot} = new Expr\Variable($sLoopVar);
-
-                    // body preamble: $__sm_oN = $_smarty_tpl->getVariable('x');
-                    //                $__sm_oN->PROP = $__sm_(k|v)N;
-                    $aPrepend[] = new Node\Stmt\Expression(new Expr\Assign(
-                        new Expr\Variable($sObjVar),
-                        $oMethodCall
-                    ));
-                    $aPrepend[] = new Node\Stmt\Expression(new Expr\Assign(
-                        new Expr\PropertyFetch(new Expr\Variable($sObjVar), $sProp),
-                        new Expr\Variable($sLoopVar)
-                    ));
-                }
-
-                if ($aPrepend !== []) {
-                    $oNode->stmts = array_merge($aPrepend, $oNode->stmts);
-                    return $oNode;
-                }
-                return null;
-            }
-
-            // --- bare `<mc>->PROP = ...` / `++` / `--` statements -----------
-            if ($oNode instanceof Node\Stmt\Expression) {
-                $oExpr = $oNode->expr;
-                $oLval = null;
-                if ($oExpr instanceof Expr\Assign || $oExpr instanceof Expr\AssignOp) {
-                    $oLval = $oExpr->var;
-                } elseif (
-                    $oExpr instanceof Expr\PostInc || $oExpr instanceof Expr\PostDec
-                    || $oExpr instanceof Expr\PreInc || $oExpr instanceof Expr\PreDec
-                ) {
-                    $oLval = $oExpr->var;
-                }
-                if ($oLval === null) {
-                    return null;
-                }
-                $aMatch = $this->matchGetVarProp($oLval);
-                if ($aMatch === null) {
-                    return null;
-                }
-                [$oMethodCall, $sProp] = $aMatch;
-                $this->iN++;
-                $sObjVar = '__sm_o' . $this->iN;
-
-                // rewrite the op's target to $__sm_oN->PROP
-                $oNewLval = new Expr\PropertyFetch(new Expr\Variable($sObjVar), $sProp);
-                if ($oExpr instanceof Expr\Assign || $oExpr instanceof Expr\AssignOp) {
-                    $oExpr->var = $oNewLval;
-                } else {
-                    $oExpr->var = $oNewLval;
-                }
-
-                return [
-                    new Node\Stmt\Expression(new Expr\Assign(new Expr\Variable($sObjVar), $oMethodCall)),
-                    $oNode,
-                ];
-            }
-
-            return null;
-        }
-    });
-    $aNew = $oTraverser2->traverse($aNew);
-
-    $oPrinter = new PrettyPrinter\Standard();
-    return $oPrinter->printFormatPreserving($aNew, $aOld, $aOldTokens);
+    return $sCode;
 }

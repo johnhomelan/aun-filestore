@@ -371,14 +371,16 @@ class Connection
 			return;
 		}
 
-		$this->oPingTimer = $this->oLoop->addPeriodicTimer(self::PING_INTERVAL_SECONDS, function (): void {
+		// tpc: StreamSelectLoop calls periodic-timer callbacks with a
+		// TimerInterface; declare the (ignored) param for strict arg-count.
+		$this->oPingTimer = $this->oLoop->addPeriodicTimer(self::PING_INTERVAL_SECONDS, function (?TimerInterface $oTimer = null): void {
 			if ($this->sState !== self::STATE_AUTHENTICATED) {
 				return;
 			}
 			$this->oTcpConn->write("PING\n");
 		});
 
-		$this->oIdleTimer = $this->oLoop->addPeriodicTimer(1, function (): void {
+		$this->oIdleTimer = $this->oLoop->addPeriodicTimer(1, function (?TimerInterface $oTimer = null): void {
 			if ($this->sState !== self::STATE_AUTHENTICATED) {
 				return;
 			}

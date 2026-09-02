@@ -9,6 +9,7 @@ namespace HomeLan\FileStore\RemoteBridge;
 
 use React\Socket\ConnectionInterface;
 use React\EventLoop\LoopInterface;
+use React\EventLoop\TimerInterface;
 use HomeLan\FileStore\Services\ServiceDispatcher;
 use HomeLan\FileStore\Encapsulation\PacketDispatcher;
 use config;
@@ -126,7 +127,9 @@ class ClientHandler
 		$aState = &$this->aEntryState[$sKey];
 		$iDelay = $aState['delay'];
 		$this->oLogger->info("RemoteBridge: will retry {$sKey} in {$iDelay} seconds");
-		$this->oLoop->addTimer($iDelay, function () use ($sKey) {
+		// tpc: StreamSelectLoop calls the timer callback with a TimerInterface;
+		// declare the (ignored) param for strict arg-count (same as Piconet).
+		$this->oLoop->addTimer($iDelay, function (?TimerInterface $oTimer = null) use ($sKey) {
 			$this->connect($sKey);
 		});
 		$aState['delay'] = min($iDelay * 2, self::RECONNECT_DELAY_MAX);

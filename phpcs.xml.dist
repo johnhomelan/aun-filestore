@@ -25,6 +25,7 @@
 
     <!-- Never lint third-party code -->
     <exclude-pattern>*/vendor/*</exclude-pattern>
+    <exclude-pattern>*/templates_c/*</exclude-pattern>
 
     <!-- Base: PSR-12, minus the bits we deliberately override below -->
     <rule ref="PSR12">

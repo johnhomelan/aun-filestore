@@ -125,7 +125,8 @@ class Handler Implements HandleInterface {
 					$this->oLogger->debug("Aun Handler: ".$oAunPacket->getPacketType()." Sending Ack packet");
 					$this->oAunServer->send($sAck,$sSrcAddress);
 				} elseif ($oAunPacket->getPacketType() === 'Immediate') {
-					$this->oLogger->debug("Aun Handler: Immediate packet with unhandled cb=0x" . dechex((int) $oAunPacket->getCb()) . " from {$sSrcAddress}, no reply sent");
+					$iCb = $oAunPacket->getCb();
+					$this->oLogger->debug("Aun Handler: Immediate packet with unhandled cb=0x" . dechex($iCb) . " from {$sSrcAddress}, no reply sent");
 				}
 
 				//Dispatch packet to all the services so the relevant one can deal with it
